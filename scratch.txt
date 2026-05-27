@@ -1,0 +1,3 @@
+16: # ─── CONSUMABLES (python-2d-game buff_effects.py pattern) ────────────────────
+19: CONSUMABLES = {
+39: WILD_ITEMS = {

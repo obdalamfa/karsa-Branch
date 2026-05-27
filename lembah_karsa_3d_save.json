@@ -1,0 +1,762 @@
+{
+  "scene_name": "farm",
+  "player_x": 19.450286865234375,
+  "player_y": 4.847787857055664,
+  "facing": "right",
+  "day": 1,
+  "year": 1,
+  "day_in_season": 1,
+  "season_index": 0,
+  "time_minutes": 418.16175999999984,
+  "weather": "Cerah",
+  "energy": 100,
+  "max_energy": 100,
+  "gold": 100,
+  "tool_index": 0,
+  "seed_key": "lobak",
+  "hp": 100,
+  "max_hp": 100,
+  "invuln_timer_ms": 0.0,
+  "hp_regen_rate": 0.8,
+  "buffs": {},
+  "pickaxe_tier": 0,
+  "sword_id": "",
+  "inventory": {
+    "lobak_seed": 3
+  },
+  "soil": {},
+  "npc_hearts": {
+    "arya": 0,
+    "sari": 0,
+    "raka": 0,
+    "maya": 0,
+    "budi": 0,
+    "joko": 0,
+    "cici": 0,
+    "bowo": 0,
+    "ningsih": 0,
+    "pak_guru": 0,
+    "mbok_jum": 0,
+    "jaka_ronda": 0,
+    "kapten_kuro": 0,
+    "kru_kuro": 0,
+    "naga_bijak": 0,
+    "jin_kebun": 0,
+    "demit_tua": 0,
+    "tuyul_pencuri": 0,
+    "kuntilanak": 0,
+    "pocong": 0,
+    "genderuwo": 0,
+    "wewe_gombel": 0,
+    "banaspati": 0,
+    "leak_bali": 0,
+    "bidadari": 0,
+    "dewa_angin": 0,
+    "petapa_srimana": 0,
+    "sapi_betsy": 0,
+    "ayam_kuning": 0,
+    "kambing_jenggot": 0,
+    "bebek_donald": 0,
+    "domba_woolly": 0,
+    "kuda_pegasus": 0,
+    "kucing_oren": 0,
+    "rubah_hutan": 0,
+    "kelinci_putih": 0
+  },
+  "npc_dialog_index": {
+    "arya": 0,
+    "sari": 0,
+    "raka": 0,
+    "maya": 0,
+    "budi": 0,
+    "joko": 0,
+    "cici": 0,
+    "bowo": 0,
+    "ningsih": 0,
+    "pak_guru": 0,
+    "mbok_jum": 0,
+    "jaka_ronda": 0,
+    "kapten_kuro": 0,
+    "kru_kuro": 0,
+    "naga_bijak": 0,
+    "jin_kebun": 0,
+    "demit_tua": 0,
+    "tuyul_pencuri": 0,
+    "kuntilanak": 0,
+    "pocong": 0,
+    "genderuwo": 0,
+    "wewe_gombel": 0,
+    "banaspati": 0,
+    "leak_bali": 0,
+    "bidadari": 0,
+    "dewa_angin": 0,
+    "petapa_srimana": 0,
+    "sapi_betsy": 0,
+    "ayam_kuning": 0,
+    "kambing_jenggot": 0,
+    "bebek_donald": 0,
+    "domba_woolly": 0,
+    "kuda_pegasus": 0,
+    "kucing_oren": 0,
+    "rubah_hutan": 0,
+    "kelinci_putih": 0
+  },
+  "npc_positions": {
+    "arya": {
+      "scene": "farm",
+      "x": 12.0,
+      "y": 12.0,
+      "target_x": 12.0,
+      "target_y": 12.0,
+      "activity": "walking",
+      "facing": "down"
+    },
+    "sari": {
+      "scene": "shop",
+      "x": 4.0,
+      "y": 4.0,
+      "target_x": 4.0,
+      "target_y": 4.0,
+      "activity": "preparing",
+      "facing": "down"
+    },
+    "raka": {
+      "scene": "clinic",
+      "x": 6.0,
+      "y": 6.0,
+      "target_x": 6.0,
+      "target_y": 6.0,
+      "activity": "working",
+      "facing": "down"
+    },
+    "maya": {
+      "scene": "studio",
+      "x": 10.0,
+      "y": 10.0,
+      "target_x": 10.0,
+      "target_y": 10.0,
+      "activity": "painting",
+      "facing": "down"
+    },
+    "budi": {
+      "scene": "smith",
+      "x": 7.0,
+      "y": 7.0,
+      "target_x": 7.0,
+      "target_y": 7.0,
+      "activity": "forging",
+      "facing": "down"
+    },
+    "joko": {
+      "scene": "lake",
+      "x": 8.0,
+      "y": 8.0,
+      "target_x": 8.0,
+      "target_y": 8.0,
+      "activity": "fishing",
+      "facing": "down"
+    },
+    "cici": {
+      "scene": "farm",
+      "x": 10.0,
+      "y": 14.0,
+      "target_x": 10.0,
+      "target_y": 14.0,
+      "activity": "playing",
+      "facing": "down"
+    },
+    "bowo": {
+      "scene": "farm",
+      "x": 7.0,
+      "y": 16.0,
+      "target_x": 7.0,
+      "target_y": 16.0,
+      "activity": "helping",
+      "facing": "down"
+    },
+    "ningsih": {
+      "scene": "farm",
+      "x": 4.0,
+      "y": 4.0,
+      "target_x": 4.0,
+      "target_y": 4.0,
+      "activity": "cooking",
+      "facing": "down"
+    },
+    "pak_guru": {
+      "scene": "town",
+      "x": 12.0,
+      "y": 8.0,
+      "target_x": 12.0,
+      "target_y": 8.0,
+      "activity": "teaching",
+      "facing": "down"
+    },
+    "mbok_jum": {
+      "scene": "town",
+      "x": 18.0,
+      "y": 14.0,
+      "target_x": 18.0,
+      "target_y": 14.0,
+      "activity": "cooking",
+      "facing": "down"
+    },
+    "jaka_ronda": {
+      "scene": "hidden",
+      "x": -1.0,
+      "y": -1.0,
+      "target_x": -1.0,
+      "target_y": -1.0,
+      "activity": "sleeping",
+      "facing": "down"
+    },
+    "kapten_kuro": {
+      "scene": "nowhere",
+      "x": 20.0,
+      "y": 16.0,
+      "target_x": 20.0,
+      "target_y": 16.0,
+      "activity": "jaga_kapal",
+      "facing": "down"
+    },
+    "kru_kuro": {
+      "scene": "nowhere",
+      "x": 21.0,
+      "y": 15.0,
+      "target_x": 21.0,
+      "target_y": 15.0,
+      "activity": "bersih_bersih",
+      "facing": "down"
+    },
+    "naga_bijak": {
+      "scene": "naga_cave",
+      "x": 7.0,
+      "y": 6.0,
+      "target_x": 7.0,
+      "target_y": 6.0,
+      "activity": "meditating",
+      "facing": "down"
+    },
+    "jin_kebun": {
+      "scene": "hidden",
+      "x": -1.0,
+      "y": -1.0,
+      "target_x": -1.0,
+      "target_y": -1.0,
+      "activity": "dormant",
+      "facing": "down"
+    },
+    "demit_tua": {
+      "scene": "hidden",
+      "x": -1.0,
+      "y": -1.0,
+      "target_x": -1.0,
+      "target_y": -1.0,
+      "activity": "dormant",
+      "facing": "down"
+    },
+    "tuyul_pencuri": {
+      "scene": "hidden",
+      "x": -1.0,
+      "y": -1.0,
+      "target_x": -1.0,
+      "target_y": -1.0,
+      "activity": "sleeping",
+      "facing": "down"
+    },
+    "kuntilanak": {
+      "scene": "hidden",
+      "x": -1.0,
+      "y": -1.0,
+      "target_x": -1.0,
+      "target_y": -1.0,
+      "activity": "dormant",
+      "facing": "down"
+    },
+    "pocong": {
+      "scene": "hidden",
+      "x": -1.0,
+      "y": -1.0,
+      "target_x": -1.0,
+      "target_y": -1.0,
+      "activity": "dormant",
+      "facing": "down"
+    },
+    "genderuwo": {
+      "scene": "hidden",
+      "x": -1.0,
+      "y": -1.0,
+      "target_x": -1.0,
+      "target_y": -1.0,
+      "activity": "dormant",
+      "facing": "down"
+    },
+    "wewe_gombel": {
+      "scene": "hidden",
+      "x": -1.0,
+      "y": -1.0,
+      "target_x": -1.0,
+      "target_y": -1.0,
+      "activity": "dormant",
+      "facing": "down"
+    },
+    "banaspati": {
+      "scene": "hidden",
+      "x": -1.0,
+      "y": -1.0,
+      "target_x": -1.0,
+      "target_y": -1.0,
+      "activity": "dormant",
+      "facing": "down"
+    },
+    "leak_bali": {
+      "scene": "hidden",
+      "x": -1.0,
+      "y": -1.0,
+      "target_x": -1.0,
+      "target_y": -1.0,
+      "activity": "dormant",
+      "facing": "down"
+    },
+    "bidadari": {
+      "scene": "swarga",
+      "x": 10.0,
+      "y": 15.0,
+      "target_x": 10.0,
+      "target_y": 15.0,
+      "activity": "meditating",
+      "facing": "down"
+    },
+    "dewa_angin": {
+      "scene": "swarga",
+      "x": 15.0,
+      "y": 5.0,
+      "target_x": 15.0,
+      "target_y": 5.0,
+      "activity": "hovering",
+      "facing": "down"
+    },
+    "petapa_srimana": {
+      "scene": "swarga",
+      "x": 20.0,
+      "y": 15.0,
+      "target_x": 20.0,
+      "target_y": 15.0,
+      "activity": "meditating",
+      "facing": "down"
+    },
+    "sapi_betsy": {
+      "scene": "farm",
+      "x": 19.0,
+      "y": 6.0,
+      "target_x": 19.0,
+      "target_y": 6.0,
+      "activity": "grazing",
+      "facing": "down"
+    },
+    "ayam_kuning": {
+      "scene": "farm",
+      "x": 16.0,
+      "y": 5.0,
+      "target_x": 16.0,
+      "target_y": 5.0,
+      "activity": "pecking",
+      "facing": "down"
+    },
+    "kambing_jenggot": {
+      "scene": "farm",
+      "x": 19.0,
+      "y": 6.0,
+      "target_x": 19.0,
+      "target_y": 6.0,
+      "activity": "grazing",
+      "facing": "down"
+    },
+    "bebek_donald": {
+      "scene": "lake",
+      "x": 9.0,
+      "y": 9.0,
+      "target_x": 9.0,
+      "target_y": 9.0,
+      "activity": "swimming",
+      "facing": "down"
+    },
+    "domba_woolly": {
+      "scene": "farm",
+      "x": 18.0,
+      "y": 6.0,
+      "target_x": 18.0,
+      "target_y": 6.0,
+      "activity": "grazing",
+      "facing": "down"
+    },
+    "kuda_pegasus": {
+      "scene": "farm",
+      "x": 20.0,
+      "y": 5.0,
+      "target_x": 20.0,
+      "target_y": 5.0,
+      "activity": "grazing",
+      "facing": "down"
+    },
+    "kucing_oren": {
+      "scene": "farm",
+      "x": 7.0,
+      "y": 9.0,
+      "target_x": 7.0,
+      "target_y": 9.0,
+      "activity": "lounging",
+      "facing": "down"
+    },
+    "rubah_hutan": {
+      "scene": "mountain",
+      "x": 22.0,
+      "y": 18.0,
+      "target_x": 22.0,
+      "target_y": 18.0,
+      "activity": "prowling",
+      "facing": "down"
+    },
+    "kelinci_putih": {
+      "scene": "mountain",
+      "x": 15.0,
+      "y": 18.0,
+      "target_x": 15.0,
+      "target_y": 18.0,
+      "activity": "hopping",
+      "facing": "down"
+    }
+  },
+  "wild_entities": [
+    {
+      "kind": "mandrake",
+      "x": 12,
+      "y": 9,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "mandrake",
+      "x": 14,
+      "y": 6,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "mandrake",
+      "x": 4,
+      "y": 22,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "running_mushroom",
+      "x": 6,
+      "y": 11,
+      "scene": "farm",
+      "moving": true
+    },
+    {
+      "kind": "running_mushroom",
+      "x": 6,
+      "y": 13,
+      "scene": "farm",
+      "moving": true
+    },
+    {
+      "kind": "running_mushroom",
+      "x": 12,
+      "y": 5,
+      "scene": "farm",
+      "moving": true
+    },
+    {
+      "kind": "running_mushroom",
+      "x": 7,
+      "y": 11,
+      "scene": "mountain",
+      "moving": true
+    },
+    {
+      "kind": "running_mushroom",
+      "x": 18,
+      "y": 6,
+      "scene": "mountain",
+      "moving": true
+    },
+    {
+      "kind": "running_mushroom",
+      "x": 12,
+      "y": 6,
+      "scene": "mountain",
+      "moving": true
+    },
+    {
+      "kind": "firefly",
+      "x": 11,
+      "y": 9,
+      "scene": "farm",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "firefly",
+      "x": 3,
+      "y": 12,
+      "scene": "farm",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "firefly",
+      "x": 4,
+      "y": 6,
+      "scene": "farm",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "firefly",
+      "x": 13,
+      "y": 12,
+      "scene": "farm",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "firefly",
+      "x": 3,
+      "y": 12,
+      "scene": "farm",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "firefly",
+      "x": 12,
+      "y": 9,
+      "scene": "town",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "firefly",
+      "x": 3,
+      "y": 6,
+      "scene": "town",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "firefly",
+      "x": 3,
+      "y": 11,
+      "scene": "town",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "firefly",
+      "x": 5,
+      "y": 7,
+      "scene": "town",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "firefly",
+      "x": 9,
+      "y": 5,
+      "scene": "town",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "firefly",
+      "x": 11,
+      "y": 4,
+      "scene": "lake",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "firefly",
+      "x": 12,
+      "y": 7,
+      "scene": "lake",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "firefly",
+      "x": 11,
+      "y": 5,
+      "scene": "lake",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "firefly",
+      "x": 4,
+      "y": 12,
+      "scene": "lake",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "firefly",
+      "x": 12,
+      "y": 6,
+      "scene": "lake",
+      "moving": true,
+      "night_only": true
+    },
+    {
+      "kind": "wild_herb",
+      "x": 13,
+      "y": 8,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "wild_herb",
+      "x": 20,
+      "y": 6,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "wild_berry",
+      "x": 17,
+      "y": 22,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "wild_berry",
+      "x": 26,
+      "y": 15,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "wild_berry",
+      "x": 20,
+      "y": 19,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "wild_herb",
+      "x": 11,
+      "y": 12,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "wild_herb",
+      "x": 24,
+      "y": 12,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "wild_berry",
+      "x": 20,
+      "y": 14,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "wild_berry",
+      "x": 12,
+      "y": 19,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "wild_herb",
+      "x": 21,
+      "y": 7,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "wild_herb",
+      "x": 18,
+      "y": 18,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "wild_herb",
+      "x": 26,
+      "y": 15,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "wild_herb",
+      "x": 17,
+      "y": 18,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "wild_berry",
+      "x": 23,
+      "y": 7,
+      "scene": "mountain",
+      "moving": false
+    },
+    {
+      "kind": "wild_berry",
+      "x": 12,
+      "y": 16,
+      "scene": "mountain",
+      "moving": false
+    }
+  ],
+  "mobs": [],
+  "dungeon_level": 0,
+  "dungeon_tiles": [],
+  "dungeon_seed": 0,
+  "naga_defeated": false,
+  "naga_fountain_used_today": false,
+  "upgrades": {
+    "hoe": false,
+    "water": false,
+    "bag": false,
+    "axe": false
+  },
+  "lapar": 98.83676480000001,
+  "sosial": 99.4397278167999,
+  "senang": 99.30205888000015,
+  "char_name": "Petani Muda",
+  "char_skin": 0,
+  "char_hair": 0,
+  "char_shirt": 0,
+  "char_pants": 0,
+  "char_hat": 0,
+  "quest_stage": 0,
+  "mail_read": false,
+  "shop_unlocked": false,
+  "greenhouse_open": false,
+  "met_jin": false,
+  "captured_supernatural": 0,
+  "lore_collected": [],
+  "post_game": false,
+  "lighthouse_fixed": false,
+  "stats": {
+    "lobak_planted": 0,
+    "watered": 0,
+    "lobak_harvested": 0,
+    "corn_harvested": 0,
+    "earned": 0,
+    "gifts": 0,
+    "mobs_killed": 0,
+    "minerals_mined": 0,
+    "deepest_level": 0,
+    "seasons_harvested": []
+  }
+}

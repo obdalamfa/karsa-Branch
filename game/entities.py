@@ -63,11 +63,36 @@ NPC_APPEARANCES = {
 }
 
 def get_npc_model_name(npc_id):
-    if npc_id == 'naga_bijak':
-        return 'naga'
+    mapping = {
+        'naga_bijak': 'naga',
+        'genderuwo': 'mob_genderuwo',
+        'pocong': 'mob_pocong',
+        'kuntilanak': 'mob_kuntilanak',
+        'tuyul_pencuri': 'mob_tuyul',
+        'wewe_gombel': 'mob_wewe',
+        'banaspati': 'mob_banaspati',
+        'leak_bali': 'mob_leak',
+        'jin_kebun': 'mob_jin',
+        'demit_tua': 'mob_demit',
+        'bidadari': 'mob_bidadari',
+        'dewa_angin': 'mob_dewa',
+        'petapa_srimana': 'mob_petapa',
+        'kucing_oren': 'mob_kucing',
+        'sapi_betsy': 'mob_sapi',
+        'kambing_jenggot': 'mob_kambing',
+        'bebek_donald': 'mob_bebek',
+        'domba_woolly': 'mob_domba',
+        'kuda_pegasus': 'mob_kuda',
+        'rubah_hutan': 'mob_rubah',
+        'kelinci_putih': 'mob_kelinci',
+        'ayam_kuning': 'mob_ayam',
+    }
+    if npc_id in mapping:
+        return mapping[npc_id]
     if npc_id in ['genderuwo', 'kelelawar', 'pocong']:
         return f"mob_{npc_id}"
     return 'humanoid' # Fallback
+
 
 def _can_walk(tx, ty, scene_name, dungeon_tiles=None):
     tx, ty = int(round(tx)), int(round(ty))
@@ -89,6 +114,8 @@ class EntitiesManager:
         self.scene_name = None
         self.actors = {}       # id -> BaseActor (NPC, FarmAnimal, Monster)
         self.wild_ents = {}    # idx -> Entity
+        self._actor_pool = {}  # Object pooling untuk actors
+        self._wild_pool = []   # Object pooling untuk wild entities
         self._npc_sched_t = 0.0
         self._wild_update_t = 0.0
         self.brains = None
@@ -193,12 +220,68 @@ class EntitiesManager:
             if pos.get('scene') != self.scene_name: continue
             if pos.get('x', -1) < 0: continue
             
-            # Determine class
-            if actor_id in ANIMAL_NPCS:
-                actor = FarmAnimal(s, actor_id)
-            else:
-                actor = NPC(s, actor_id)
+            # Reuse from pool if available
+            actor = self._actor_pool.get(actor_id)
+            if not actor:
+                # Determine class
+                if actor_id in ANIMAL_NPCS:
+                    actor = FarmAnimal(s, actor_id)
+                else:
+                    actor = NPC(s, actor_id)
                 
+                # Setup Model
+                apr_list = NPC_APPEARANCES.get(actor_id)
+                if apr_list:
+                    from .vitaboy import VitaboyAvatar
+                    sc = 0.19 if actor_id in ('cici', 'bowo') else 0.32
+                    actor._va = VitaboyAvatar(actor, apr_list, scale=sc)
+                    actor._va.set_animation("a2a-talk-idle-loop")
+                    actor.model = 'cube'  # dummy parent
+                    actor.color = color.clear # hide dummy
+                else:
+                    model_name = get_npc_model_name(actor_id)
+                    panda_model = load_model_file(model_name)
+                    if panda_model:
+                        actor.model = panda_model
+                        actor.scale = 1.0
+                    else:
+                        # Fallback model if missing
+                        panda_fallback = load_model_file('humanoid')
+                        if panda_fallback:
+                            actor.model = panda_fallback
+                        else:
+                            actor.model = 'cube'
+                # Apply Slum Grunge Tint
+                # (Will be applied below to both new and pooled actors)
+
+                # Step 6: Blob shadow
+                actor._shadow = Entity(parent=actor, model='quad', position=(0, 0.02, 0), rotation=(90, 0, 0), scale=(1.2, 1.2, 1), color=color.rgba(0, 0, 0, 120))
+                        
+                # Setup Label
+                all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
+                name = all_d.get(actor_id, {}).get('name', actor_id)
+                actor._lbl = Text(name, parent=actor, billboard=True,
+                                 position=(0, GH + 3.1, 0),
+                                 scale=5, color=color.rgb(255, 240, 160),
+                                 background=True)
+            else:
+                actor.enabled = True
+                if hasattr(actor, '_lbl') and actor._lbl:
+                    actor._lbl.enabled = True
+
+            # Dynamic Slum Grunge Tint
+            if self.scene_name == 'town':
+                grunge_tint = color.rgb(160, 150, 140)
+                if hasattr(actor, '_va') and actor._va:
+                    actor._va.color = grunge_tint
+                else:
+                    actor.color = grunge_tint
+            else:
+                if hasattr(actor, '_va') and actor._va:
+                    actor._va.color = color.white
+                else:
+                    actor.color = color.white
+
             actor.logical_x = pos['x']
             actor.logical_y = pos['y']
             actor.target_x = pos.get('target_x', pos['x'])
@@ -213,37 +296,6 @@ class EntitiesManager:
             # Position visually
             actor.position = (actor.logical_x * TS, 0, actor.logical_y * TS)
             
-            # Setup Model
-            apr_list = NPC_APPEARANCES.get(actor_id)
-            if apr_list:
-                from .vitaboy import VitaboyAvatar
-                sc = 0.19 if actor_id in ('cici', 'bowo') else 0.32
-                actor._va = VitaboyAvatar(actor, apr_list, scale=sc)
-                actor._va.set_animation("a2a-talk-idle-loop")
-                actor.model = 'cube'  # dummy parent
-                actor.color = color.clear # hide dummy
-            else:
-                model_name = get_npc_model_name(actor_id)
-                panda_model = load_model_file(model_name)
-                if panda_model:
-                    actor.model = panda_model
-                    actor.scale = 1.0
-                else:
-                    # Fallback model if missing
-                    panda_fallback = load_model_file('humanoid')
-                    if panda_fallback:
-                        actor.model = panda_fallback
-                    else:
-                        actor.model = 'cube'
-                    
-            # Setup Label
-            all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
-            name = all_d.get(actor_id, {}).get('name', actor_id)
-            actor._lbl = Text(name, parent=actor, billboard=True,
-                             position=(0, GH + 3.1, 0),
-                             scale=5, color=color.rgb(255, 240, 160),
-                             background=True)
-                             
             self.actors[actor_id] = actor
 
         # Spawn Wild
@@ -251,8 +303,38 @@ class EntitiesManager:
             if w['scene'] != self.scene_name: continue
             if w.get('night_only') and not s.is_night(): continue
             px, py = w['x'] * TS, w['y'] * TS
-            # Simple fallback for wild entities, no complex procedural shapes
-            e = Entity(model='quad', position=(px, GH + 0.25, py), scale=0.5, billboard=True)
+            
+            if self._wild_pool:
+                e = self._wild_pool.pop()
+                e.enabled = True
+                e.position = (px, GH + 0.25, py)
+            else:
+                # Procedural Low-Poly 3D Mesh
+                e = Entity(model='cube', position=(px, GH + 0.25, py), scale=0.4, billboard=True)
+                from .smooth_shader import apply_smooth
+                apply_smooth(e, has_texture=False)
+            
+            # Sesuaikan warna/bentuk berdasarkan jenis (Step 7: Procedural 3D Modeling)
+            k = w['kind']
+            if k == 'running_mushroom':
+                e.color = color.rgb(255, 100, 100)
+                e.scale = (0.5, 0.6, 0.5)
+            elif k == 'firefly':
+                e.color = color.rgb(200, 255, 100, 150)
+                e.scale = (0.15, 0.15, 0.15)
+            elif k == 'mandrake':
+                e.color = color.rgb(150, 100, 50)
+                e.scale = (0.4, 0.7, 0.4)
+            elif k == 'wild_herb':
+                e.color = color.rgb(80, 200, 80)
+                e.scale = (0.5, 0.3, 0.5)
+            elif k == 'wild_berry':
+                e.color = color.rgb(220, 50, 150)
+                e.scale = (0.4, 0.4, 0.4)
+            else:
+                e.color = color.white
+                e.scale = 0.5
+
             self.wild_ents[i] = e
             
         # Spawn Mobs
@@ -291,6 +373,9 @@ class EntitiesManager:
                 else:
                     actor.model = 'cube'
                 actor.scale = sc
+                
+            # Step 6: Blob shadow for Mobs
+            actor._shadow = Entity(parent=actor, model='quad', position=(0, 0.02, 0), rotation=(90, 0, 0), scale=(1.6 * sc, 1.6 * sc, 1), color=color.rgba(0, 0, 0, 120))
                 
             # HP Bar
             hp_y = GH + (3.5 if is_boss else 2.4) * sc
@@ -428,11 +513,16 @@ class EntitiesManager:
                 e.enabled = s.is_night()
 
     def _clear_all(self):
-        for actor in self.actors.values():
-            destroy(actor)
+        for actor_id, actor in self.actors.items():
+            actor.enabled = False
+            if hasattr(actor, '_lbl') and actor._lbl:
+                actor._lbl.enabled = False
+            self._actor_pool[actor_id] = actor
         self.actors.clear()
+        
         for e in self.wild_ents.values():
-            destroy(e)
+            e.enabled = False
+            self._wild_pool.append(e)
         self.wild_ents.clear()
 
     def get_nearest_npc(self, tx: int, ty: int, max_dist_tiles: float = 3.0):

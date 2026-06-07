@@ -48,7 +48,13 @@ uniform sampler2D p3d_Texture0;
 in vec2 uv;
 out vec4 fragColor;
 void main() {
-    fragColor = texture(p3d_Texture0, uv);
+    vec4 t = texture(p3d_Texture0, uv);
+    // Lembah Karsa: tarik rumput hijau-neon ke arah keruh/suram (Disco Elysium).
+    // 1) desaturasi sebagian ke luminance, 2) gelapkan + geser ke hijau-coklat.
+    float lum = dot(t.rgb, vec3(0.299, 0.587, 0.114));
+    vec3 desat = mix(t.rgb, vec3(lum), 0.55);          // 55% desaturated
+    vec3 mud   = desat * vec3(0.62, 0.66, 0.50);        // gelap + condong olive
+    fragColor = vec4(mud, t.a);
 }
 """
 

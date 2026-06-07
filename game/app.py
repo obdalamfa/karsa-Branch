@@ -43,7 +43,7 @@ class Game3D:
         self.app = Ursina(size=(SCREEN_W, SCREEN_H),
                           title='Lembah Karsa 3D — v0.10 [Cozy Edition]',
                           borderless=False)
-        window.color = color.rgb(30, 20, 40)
+        window.color = color.rgb(48, 52, 56)   # abu netral (bukan ungu → cegah grid magenta bocor)
         window.fps_counter.enabled = True
         
         # Pencahayaan — arah lebih datar agar detail karakter chibi terlihat
@@ -210,6 +210,33 @@ class Game3D:
         # Handler untuk Game Loop
         self.handler = GameHandler(self)
 
+        # ── AUTO-SCREENSHOT (untuk feedback desain) ──────────────────────────
+        # Otomatis ambil beberapa screenshot setelah scene termuat, supaya
+        # hasil visual bisa ditinjau. Tekan F12 kapan saja untuk manual.
+        from ursina import invoke as _invoke
+        self._shot_count = 0
+        for _delay in (3.0, 5.0, 7.0):
+            _invoke(self.capture_screenshot, delay=_delay)
+
+    def capture_screenshot(self, label: str = 'auto'):
+        """Simpan screenshot window ke folder screenshots/ (bisa dibaca untuk review)."""
+        try:
+            from panda3d.core import Filename
+            from direct.showbase.ShowBaseGlobal import base
+            shot_dir = _Path(__file__).resolve().parent.parent / 'screenshots'
+            shot_dir.mkdir(exist_ok=True)
+            self._shot_count += 1
+            scene_name = getattr(self.state, 'scene_name', 'scene')
+            fname = f"{self._shot_count:02d}_{scene_name}_{label}.png"
+            fpath = shot_dir / fname
+            ok = base.win.saveScreenshot(Filename.fromOsSpecific(str(fpath)))
+            if ok:
+                logging.info(f"[SCREENSHOT] tersimpan: {fpath}")
+            else:
+                logging.warning("[SCREENSHOT] gagal menyimpan (saveScreenshot=False)")
+        except Exception as e:
+            logging.error(f"[SCREENSHOT] error: {e}")
+
     def update(self, dt):
         s = self.state
 
@@ -320,6 +347,14 @@ class Game3D:
                 self._right_mouse_down = False
                 mouse.locked = False
 
+            # ── Putar kamera dengan Q / E (tahan untuk berputar) ──
+            if self.panels.mode == 'hud':
+                CAM_ROT_SPEED = 95.0   # derajat / detik
+                if held_keys['q']:
+                    self.camera_yaw -= CAM_ROT_SPEED * dt
+                if held_keys['e']:
+                    self.camera_yaw += CAM_ROT_SPEED * dt
+
             # Kunci sudut kemiringan (pitch) agar tidak terbalik atau menembus tanah
             self.camera_pitch = max(5.0, min(80, self.camera_pitch))
             
@@ -366,17 +401,17 @@ class Game3D:
                 # Catatan: ambient + sun×dot ≤ 100% agar warna tidak overflow putih
                 # ambient max ~70, sun max ~185 (di floor dot≈0.82: 70/255+185/255×0.82 ≈ 87%)
                 if 6 <= hour < 17:
-                    # Siang: sinar matahari hangat keemasan (Animal Crossing golden feel)
-                    target_sun = color.rgb(255, 248, 215) if not is_raining else color.rgb(145, 145, 158)
-                    target_amb = color.rgb(95, 90, 78, 255) if not is_raining else color.rgb(62, 62, 72, 255)
-                    target_sky = color.rgb(128, 205, 248) if not is_raining else color.rgb(88, 98, 115)
-                    target_cloud = color.rgb(248, 248, 255, 175) if not is_raining else color.rgb(145, 148, 162, 215)
+                    # Siang: overcast suram Disco Elysium — abu-kebiruan, desaturated
+                    target_sun = color.rgb(192, 188, 178) if not is_raining else color.rgb(125, 128, 138)
+                    target_amb = color.rgb(82, 84, 88, 255) if not is_raining else color.rgb(58, 60, 68, 255)
+                    target_sky = color.rgb(118, 122, 125) if not is_raining else color.rgb(82, 90, 102)
+                    target_cloud = color.rgb(150, 152, 155, 180) if not is_raining else color.rgb(128, 132, 142, 210)
                 elif 17 <= hour < 19:
-                    # Senja: oranye kemerahan lembut
-                    target_sun = color.rgb(255, 162, 72) if not is_raining else color.rgb(148, 95, 72)
-                    target_amb = color.rgb(88, 55, 45, 255) if not is_raining else color.rgb(55, 38, 35, 255)
-                    target_sky = color.rgb(248, 138, 88) if not is_raining else color.rgb(115, 82, 82)
-                    target_cloud = color.rgb(255, 195, 148, 145) if not is_raining else color.rgb(135, 108, 102, 195)
+                    # Senja: oranye-kecoklatan kusam, melankolis
+                    target_sun = color.rgb(205, 142, 88) if not is_raining else color.rgb(128, 95, 78)
+                    target_amb = color.rgb(78, 62, 55, 255) if not is_raining else color.rgb(52, 44, 42, 255)
+                    target_sky = color.rgb(168, 118, 92) if not is_raining else color.rgb(102, 82, 80)
+                    target_cloud = color.rgb(178, 142, 118, 165) if not is_raining else color.rgb(122, 105, 100, 200)
                 else:
                     # Malam: biru gelap lembut (bukan hitam total)
                     target_sun   = color.rgb(35, 48, 92)
@@ -390,7 +425,8 @@ class Game3D:
             
             from ursina import scene
             scene.fog_color = window.color
-            scene.fog_density = 0.0 if is_indoor else 0.035
+            # Kabut atmosferik (ala Forest) — cukup tipis agar dunia terlihat, beri kedalaman
+            scene.fog_density = 0.010 if is_indoor else 0.016
             
             self._sync_smooth_lighting()
 
@@ -430,6 +466,15 @@ class Game3D:
                         drop.y = random.uniform(10, 20)
 
     def input(self, key):
+        # Screenshot global — backspace, berfungsi di mode apa pun
+        if key == 'backspace':
+            self.capture_screenshot('manual')
+            try:
+                self.panels.flash_msg("[Backspace] Screenshot tersimpan di screenshots/", 2.0)
+            except Exception:
+                pass
+            return
+
         # Chargen mode — semua input ke ChargenScreen
         if self.panels.mode == 'chargen':
             if self._chargen:
@@ -612,15 +657,15 @@ class Game3D:
             sky_col   = color.rgb(20, 15, 25)
             cloud_col = color.rgb(0, 0, 0, 0)
         elif 6 <= hour < 17:
-            sun_col   = color.rgb(255, 248, 215)
-            amb_col   = color.rgb(95, 90, 78, 255)
-            sky_col   = color.rgb(128, 205, 248)
-            cloud_col = color.rgb(248, 248, 255, 175)
+            sun_col   = color.rgb(192, 188, 178)
+            amb_col   = color.rgb(82, 84, 88, 255)
+            sky_col   = color.rgb(118, 122, 125)
+            cloud_col = color.rgb(150, 152, 155, 180)
         elif 17 <= hour < 19:
-            sun_col   = color.rgb(255, 162, 72)
-            amb_col   = color.rgb(88, 55, 45, 255)
-            sky_col   = color.rgb(248, 138, 88)
-            cloud_col = color.rgb(255, 195, 148, 145)
+            sun_col   = color.rgb(205, 142, 88)
+            amb_col   = color.rgb(78, 62, 55, 255)
+            sky_col   = color.rgb(168, 118, 92)
+            cloud_col = color.rgb(178, 142, 118, 165)
         else:
             sun_col   = color.rgb(35, 48, 92)
             amb_col   = color.rgb(28, 28, 52, 255)

@@ -80,6 +80,7 @@ class UIManager:
         self._build_hud()
         self._build_dialog_box()
         self._build_panel_bg()
+        self._build_inventory_grid()
         self._build_pie_menu()
 
         # Previous motives cache for Arrow indicators
@@ -106,35 +107,53 @@ class UIManager:
 
     # ─── PUBLIC: HUD ─────────────────────────────────────
     def _build_hud(self):
-        """HUD minimalis gaya Harvest Moon AWL."""
-        TIME_C   = color.rgb(255, 255, 255)
-        GOLD_C   = color.rgb(255, 215,  60)
-        
-        # ── Kanan Atas: Jam & Tanggal ──
-        self._time_txt    = _txt('06:00',         pos=(0.70, 0.45), scale=1.3, col=TIME_C)
-        self._date_txt    = _txt('Hari 1 | Semi', pos=(0.70, 0.40), scale=0.8, col=color.rgb(170, 200, 255))
-        self._weather_txt = _txt('^ Cerah',       pos=(0.70, 0.36), scale=0.8, col=color.rgb(255, 240, 130))
-        self._scene_txt   = _txt('> Kebun',       pos=(0.70, 0.32), scale=0.8, col=color.rgb(140, 255, 160))
-        self._gold_txt    = _txt('§ 0G',          pos=(0.70, 0.28), scale=1.0, col=GOLD_C)
+        """HUD bawah gaya DOOM — status bar rapi di bawah layar (wajah di tengah)."""
+        GOLD_C = color.rgb(255, 215, 60)
+        WHITE  = color.rgb(238, 236, 226)
+        BAR_TOP = -0.405
+        BAR_BOT = -0.455
 
-        # ── Kiri Atas: Tool & Stamina ──
-        X_L = -0.85
-        self._tool_name = _txt('Cangkul', pos=(X_L, 0.45), scale=1.1, col=color.rgb(255, 240, 100))
-        self._seed_txt  = _txt('',        pos=(X_L, 0.41), scale=0.8, col=color.rgb(155, 255, 155))
-        
-        self._BAR_W       = 0.22
-        self._BAR_X_LEFT  = X_L
-        
-        hy = 0.36
-        self._hp_bar = _ui(scale=(self._BAR_W, 0.015), position=(X_L + self._BAR_W/2, hy), color=color.rgb(55, 210, 80))
-        self._hp_val = _txt('HP', pos=(X_L, hy + 0.015), scale=0.7, col=color.white)
+        # ── Panel bar penuh di bawah ──
+        self._hud_bar    = _ui(scale=(1.95, 0.17), position=(0, -0.435),
+                               color=color.rgb(26, 22, 20, 240), z=1.0)
+        self._hud_border = _ui(scale=(1.95, 0.010), position=(0, -0.352),
+                               color=color.rgb(128, 100, 72), z=0.95)
 
-        ey = 0.32
-        self._en_bar = _ui(scale=(self._BAR_W, 0.015), position=(X_L + self._BAR_W/2, ey), color=color.rgb(55, 205, 75))
-        self._en_val = _txt('EN', pos=(X_L, ey + 0.015), scale=0.7, col=color.white)
+        # ── Wajah karakter (tengah) ──
+        self._face_frame = _ui(scale=(0.115, 0.150), position=(0.0, -0.425), color=color.rgb(78, 58, 44), z=0.6)
+        self._face       = _ui(scale=(0.095, 0.130), position=(0.0, -0.425), color=color.rgb(178, 138, 102), z=0.5)
+        self._face_eye_l = _ui(scale=(0.013, 0.017), position=(-0.022, -0.405), color=color.rgb(32, 26, 22), z=0.4)
+        self._face_eye_r = _ui(scale=(0.013, 0.017), position=(0.022, -0.405), color=color.rgb(32, 26, 22), z=0.4)
+        self._face_mouth = _ui(scale=(0.040, 0.009), position=(0.0, -0.455), color=color.rgb(120, 74, 62), z=0.4)
 
-        self._buff_txt = _txt('', pos=(X_L, 0.28), scale=0.75, col=color.rgb(120, 255, 180))
-        self._queue_txt = _txt('', pos=(X_L, 0.24), scale=0.75, col=color.rgb(255, 210, 80))
+        # ── Kiri jauh: Alat aktif ──
+        X_TOOL = -0.82
+        self._tool_icon = _ui(scale=(0.055, 0.075), position=(X_TOOL, BAR_TOP), color=color.rgb(205, 180, 90), z=0.5)
+        self._tool_name = _txt('Cangkul', pos=(X_TOOL + 0.04, BAR_TOP + 0.012), scale=0.85, col=color.rgb(255, 240, 120))
+        self._seed_txt  = _txt('',        pos=(X_TOOL + 0.04, BAR_BOT + 0.005), scale=0.68, col=color.rgb(160, 255, 160))
+
+        # ── Kiri-tengah: HP & EN bar (track + fill) ──
+        self._BAR_W      = 0.24
+        self._BAR_X_LEFT = -0.55
+        self._hp_track = _ui(scale=(self._BAR_W, 0.024), position=(self._BAR_X_LEFT + self._BAR_W/2, BAR_TOP), color=color.rgb(46, 36, 33), z=0.4)
+        self._hp_bar   = _ui(scale=(self._BAR_W, 0.024), position=(self._BAR_X_LEFT + self._BAR_W/2, BAR_TOP), color=color.rgb(210, 55, 50), z=0.3)
+        self._hp_val   = _txt('HP', pos=(self._BAR_X_LEFT - 0.045, BAR_TOP + 0.012), scale=0.68, col=WHITE)
+        self._en_track = _ui(scale=(self._BAR_W, 0.024), position=(self._BAR_X_LEFT + self._BAR_W/2, BAR_BOT), color=color.rgb(46, 36, 33), z=0.4)
+        self._en_bar   = _ui(scale=(self._BAR_W, 0.024), position=(self._BAR_X_LEFT + self._BAR_W/2, BAR_BOT), color=color.rgb(70, 180, 80), z=0.3)
+        self._en_val   = _txt('EN', pos=(self._BAR_X_LEFT - 0.045, BAR_BOT + 0.010), scale=0.68, col=WHITE)
+
+        self._buff_txt  = _txt('', pos=(-0.26, BAR_TOP + 0.012), scale=0.65, col=color.rgb(120, 255, 180))
+        self._queue_txt = _txt('', pos=(-0.26, BAR_BOT + 0.005), scale=0.65, col=color.rgb(255, 210, 80))
+
+        # ── Kanan-tengah: Emas ──
+        self._gold_txt = _txt('§ 0G', pos=(0.16, BAR_TOP + 0.006), scale=1.05, col=GOLD_C)
+
+        # ── Kanan jauh: Waktu / tanggal / cuaca / scene ──
+        X_R = 0.50
+        self._time_txt    = _txt('06:00',  pos=(X_R, BAR_TOP + 0.010), scale=1.15, col=WHITE)
+        self._date_txt    = _txt('Hari 1',  pos=(X_R, BAR_BOT + 0.005), scale=0.66, col=color.rgb(170, 200, 255))
+        self._weather_txt = _txt('^ Cerah', pos=(X_R + 0.26, BAR_TOP + 0.012), scale=0.66, col=color.rgb(255, 240, 130))
+        self._scene_txt   = _txt('> Kebun', pos=(X_R + 0.26, BAR_BOT + 0.005), scale=0.66, col=color.rgb(140, 255, 160))
 
         self._need_lbl_ents  = []
         self._need_bg_ents   = []
@@ -142,15 +161,15 @@ class UIManager:
         self._NBAR_W = 0
         self._NBAR_X = 0
 
-        # ── Flash message tengah ───────────────────────────────
-        self._flash_ent = _txt('', pos=(0, 0.108), scale=1.1,
+        # ── Flash message tengah ──
+        self._flash_ent = _txt('', pos=(0, 0.15), scale=1.1,
                                col=color.rgb(255, 245, 80), origin=(0, 0))
         self._flash_ent.enabled = False
 
-        # ── Bawah Kanan: Action Prompts dinamis ───────
+        # ── Hint kontrol (tepat di atas bar) ──
         self._control_hint = _txt(
-            '', pos=(0.60, -0.45), scale=0.8,
-            col=color.rgb(220, 235, 255), origin=(0, 0)
+            '', pos=(0, -0.335), scale=0.68,
+            col=color.rgb(205, 222, 245), origin=(0, 0)
         )
 
     def _refresh_hud(self):
@@ -192,7 +211,7 @@ class UIManager:
         if s.tool_index in (2, 3):
             seed_name = CROPS.get(s.seed_key, {}).get('name', s.seed_key)
             seed_qty  = s.inventory.get(s.seed_key + '_seed', 0)
-            self._seed_txt.text = f'Q/R: {seed_name} x{seed_qty}'
+            self._seed_txt.text = f'O/P: {seed_name} x{seed_qty}'
         else:
             self._seed_txt.text = '[1-8] pilih alat'
 
@@ -213,7 +232,7 @@ class UIManager:
         if hasattr(s, 'action_prompt'):
             self._control_hint.text = s.action_prompt
         else:
-            self._control_hint.text = '[WASD] Jalan  ·  [SPACE] Pakai  ·  [E] Aksi  ·  [F1] Panduan  ·  [J] Jurnal  ·  [I] Inv'
+            self._control_hint.text = '[WASD] Jalan  ·  [Q/E] Putar Kamera  ·  [SPACE] Pakai  ·  [R] Aksi  ·  [F1] Panduan  ·  [I] Inv'
 
     # ─── PUBLIC: FLASH MESSAGE ───────────────────────────
     def flash_msg(self, text: str, duration: float = 1.2):
@@ -417,7 +436,10 @@ class UIManager:
         self._set_dialog_visible(False)
         self.mode = 'hud'
         if hasattr(self, 'player') and self.player:
-            self.player._check_quest_progress(self)
+            if hasattr(self.player, '_check_quest_progress'):
+                self.player._check_quest_progress(self)
+            elif getattr(self.player, 'quest_controller', None):
+                self.player.quest_controller.check_quest_progress(self)
 
     def _refresh_dialog_choices_ui(self):
         for i, ent in enumerate(self._dlg_choice_ents):
@@ -508,6 +530,97 @@ class UIManager:
         for e in (self._panel_bg, self._panel_title,
                   self._panel_body, self._panel_hint):
             e.enabled = v
+        if not v:
+            self._hide_inventory_grid()
+
+    # ─── INVENTORY GRID (gaya Harvest Moon) ──────────────────
+    _INV_COLS = 7
+    _INV_ROWS = 5
+
+    def _build_inventory_grid(self):
+        """Grid slot inventory: border + bg + ikon + jumlah, disembunyikan dulu."""
+        self._inv_slots = []
+        x0, y0 = -0.46, 0.28
+        dx, dy = 0.155, 0.150
+        for r in range(self._INV_ROWS):
+            for c in range(self._INV_COLS):
+                px = x0 + c * dx
+                py = y0 - r * dy
+                # z negatif → di DEPAN panel_bg (z=0). Lebih negatif = lebih depan.
+                border = _ui(scale=(0.135, 0.135), position=(px, py), color=color.rgb(95, 74, 52), z=-0.06)
+                bg     = _ui(scale=(0.122, 0.122), position=(px, py), color=color.rgb(38, 32, 28, 240), z=-0.08)
+                icon   = _ui(scale=(0.088, 0.088), position=(px, py + 0.010), color=color.rgb(120, 120, 120), z=-0.12)
+                qty    = _txt('', pos=(px + 0.028, py - 0.052), scale=0.62, col=color.rgb(255, 255, 230), z=-0.16)
+                nm     = _txt('', pos=(px, py - 0.062), scale=0.40, col=color.rgb(205, 205, 215), origin=(0, 0), z=-0.16)
+                for e in (border, bg, icon, qty, nm):
+                    e.enabled = False
+                self._inv_slots.append({'border': border, 'bg': bg, 'icon': icon, 'qty': qty, 'nm': nm})
+
+    def _hide_inventory_grid(self):
+        for slot in getattr(self, '_inv_slots', []):
+            for e in slot.values():
+                e.enabled = False
+
+    @staticmethod
+    def _item_icon_color(item_id: str):
+        """Warna kategori untuk fallback ikon (Harvest Moon vibe)."""
+        if item_id.endswith('_seed'):            return color.rgb(110, 180, 90)   # benih hijau
+        if item_id in CROPS:                     return color.rgb(225, 150, 70)   # hasil panen oranye
+        if item_id in ('kayu', 'batu'):          return color.rgb(140, 105, 65)   # bahan coklat
+        if 'besi' in item_id or 'tembaga' in item_id or 'emas' in item_id or 'ore' in item_id or 'kristal' in item_id or 'mithril' in item_id:
+            return color.rgb(165, 170, 190)      # logam abu
+        if 'wild' in item_id or 'herb' in item_id or 'berry' in item_id or 'jamur' in item_id or 'mandrake' in item_id:
+            return color.rgb(90, 175, 150)       # liar teal
+        if item_id in ('susu', 'telur', 'wol'):  return color.rgb(235, 225, 200)  # produk hewan
+        return color.rgb(190, 165, 120)          # default
+
+    def _item_icon_tex(self, item_id: str):
+        """Coba muat tekstur ikon (crop) dari assets/textures, else None."""
+        cache = getattr(self, '_inv_tex_cache', None)
+        if cache is None:
+            cache = self._inv_tex_cache = {}
+        if item_id in cache:
+            return cache[item_id]
+        base = item_id[:-5] if item_id.endswith('_seed') else item_id
+        tex = None
+        for cand in (f'crop_{base}', base, item_id):
+            p = _Path(__file__).resolve().parent.parent / 'assets' / 'textures' / f'{cand}.png'
+            if p.exists():
+                try:
+                    tex = Texture(_PILImg.open(p)); break
+                except Exception:
+                    pass
+        cache[item_id] = tex
+        return tex
+
+    def _render_inventory_grid(self):
+        """Isi slot dari state.inventory (qty>0)."""
+        s = self.state
+        items = [(k, v) for k, v in sorted(s.inventory.items()) if v > 0]
+        n = len(self._inv_slots)
+        for i, slot in enumerate(self._inv_slots):
+            if i < len(items):
+                item_id, qty = items[i]
+                slot['border'].enabled = True
+                slot['bg'].enabled = True
+                ic = slot['icon']
+                tex = self._item_icon_tex(item_id)
+                if tex is not None:
+                    ic.texture = tex
+                    ic.color = color.white
+                else:
+                    ic.texture = None
+                    ic.color = self._item_icon_color(item_id)
+                ic.enabled = True
+                slot['qty'].text = str(qty) if qty > 1 else ''
+                slot['qty'].enabled = True
+                # nama pendek (≤8 char)
+                disp = CROPS.get(item_id, {}).get('name') or item_id.replace('_seed', '~').replace('_', ' ')
+                slot['nm'].text = disp[:9]
+                slot['nm'].enabled = True
+            else:
+                for e in slot.values():
+                    e.enabled = False
 
     def open_panel(self, name: str):
         self._panel_name = name
@@ -528,6 +641,9 @@ class UIManager:
             'catatan':   'Catatan Lembah',
         }
         self._panel_title.text = titles.get(name, name.capitalize())
+        # Grid inventory hanya muncul di panel inventory
+        if name != 'inventory':
+            self._hide_inventory_grid()
         # Update hint sesuai panel
         if name == 'shop':
             self._panel_hint.text = '[1-9: Beli]   [ESC: Tutup]'
@@ -537,15 +653,13 @@ class UIManager:
             self._panel_hint.text = '[ESC: tutup]'
 
         if name == 'inventory':
-            lines = [f"Emas: {s.gold}G   HP: {s.hp}/{s.max_hp}   Energi: {s.energy}/{s.max_energy}",
-                     f"Pickaxe: Tier {s.pickaxe_tier}   Pedang: {s.sword_id or 'Tidak punya'}", '']
-            if s.inventory:
-                for item, qty in sorted(s.inventory.items()):
-                    if qty > 0:
-                        lines.append(f"  {item}: {qty}")
-            else:
-                lines.append("  (Kosong)")
-            self._panel_body.text = '\n'.join(lines[:28])
+            # Header ringkas di atas, grid slot bergambar di bawah (Harvest Moon)
+            self._panel_body.text = (
+                f"Emas: {s.gold}G    Pickaxe: Tier {s.pickaxe_tier}    "
+                f"Pedang: {s.sword_id or '-'}"
+            )
+            self._panel_hint.text = '[I/ESC: tutup]   — Inventori —'
+            self._render_inventory_grid()
 
         elif name == 'quest':
             qs   = s.quest_stage
@@ -648,9 +762,12 @@ class UIManager:
                 "── GERAK ──\n"
                 "  WASD / Arrow  : Jalan\n"
                 "  Shift+WASD    : Lari (pakai energi)\n\n"
+                "── KAMERA ──\n"
+                "  Q / E  : Putar kamera kiri/kanan\n"
+                "  Klik kanan + geser : Putar bebas\n\n"
                 "── AKSI ──\n"
                 "  SPACE  : Pakai alat aktif\n"
-                "  E      : Pie Menu interaksi NPC\n"
+                "  R      : Interaksi NPC / objek\n"
                 "  Z      : Serang (butuh pedang)\n"
                 "  X      : Tambah/hapus tile ke Antrian\n"
                 "  C      : Jalankan semua Antrian Aksi\n"
@@ -663,7 +780,7 @@ class UIManager:
                 "── ALAT (angka 1-8) ──\n"
                 "  1-CNG  2-SRM  3-TNM  4-PNS\n"
                 "  5-KPK  6-HDH  7-PCK  8-PDG\n"
-                "  Q/R    : Ganti bibit\n\n"
+                "  O/P    : Ganti bibit\n\n"
                 "── MENU ──\n"
                 "  I: Inventori   M: Peta\n"
                 "  J: Quest       H: Relasi NPC\n"

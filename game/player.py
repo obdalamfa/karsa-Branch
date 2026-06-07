@@ -799,7 +799,7 @@ class Player3D(Entity):
             self.interaction_controller.use_tool(entities_mgr, panels)
             return True
 
-        if key == 'e':
+        if key == 'r':   # interaksi (dipindah dari E — E kini putar kamera)
             self.interaction_controller.interact(entities_mgr, panels)
             return True
 
@@ -838,14 +838,14 @@ class Player3D(Entity):
                 sound_play('menu_move', 0.6)
                 return True
 
-        if key == 'q':
+        if key == 'o':   # pilih benih mundur (dipindah dari Q)
             keys = list(CROPS.keys())
             idx  = keys.index(s.seed_key) if s.seed_key in keys else 0
             s.seed_key = keys[(idx - 1) % len(keys)]
             sound_play('menu_move', 0.6)
             return True
 
-        if key == 'r':
+        if key == 'p':   # pilih benih maju (dipindah dari R)
             keys = list(CROPS.keys())
             idx  = keys.index(s.seed_key) if s.seed_key in keys else 0
             s.seed_key = keys[(idx + 1) % len(keys)]

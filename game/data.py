@@ -140,7 +140,7 @@ HUMAN_NPCS = {
             'quest_11': [["Masakan dengan bahan dari lembah yang sehat... tidak ada yang mengalahkannya."]],
         },
         'gift_r':"Sehat!"},
-    'pak_guru':   {'name':'Pak Guru','type':'human','gift':'lobak',
+    'pak_guru':   {'name':'Pak Hadi','type':'human','gift':'lobak',
         'talks':{
             'default': [["Pendidikan kunci kemajuan."],["Murid-muridku perlu buku."]],
             'hearts_3': [["Pendidikan tanpa alam adalah kosong. Aku mengajar anak-anak tentang lembah."]],

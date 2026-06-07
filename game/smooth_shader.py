@@ -79,15 +79,16 @@ void main() {
     vec3 N = normalize(v_world_normal);
     vec3 L = normalize(-sm_sun_dir);  // dari permukaan ke sumber cahaya
 
-    // Toon / Cel-Shading (Cartoon effect)
+    // Toon / Cel-Shading (Cartoon effect) — band gelap diangkat agar
+    // permukaan yang membelakangi matahari (mis. atap) tidak jadi hitam.
     float ndl = dot(N, L);
     float diff;
     if (ndl > 0.3) {
-        diff = 1.0;          // Bagian yang kena sinar matahari (Terang)
+        diff = 1.0;          // Kena sinar matahari (terang)
     } else if (ndl > -0.1) {
-        diff = 0.6;          // Batas bayangan (Sedang)
+        diff = 0.75;         // Batas bayangan (sedang)
     } else {
-        diff = 0.3;          // Bagian yang tidak kena cahaya (Gelap)
+        diff = 0.55;         // Membelakangi cahaya (gelap tapi kebaca)
     }
 
     vec3 cam_pos = p3d_ViewMatrixInverse[3].xyz;
@@ -95,7 +96,7 @@ void main() {
     float ndv = max(0.0, dot(N, V));
     // Outline subtract: tepi gelap tapi tidak memakan warna terang
     float edge = 1.0 - smoothstep(0.0, 0.18, ndv);  // 1 di tepi, 0 di tengah
-    float outline_darken = 1.0 - edge * 0.55;        // max gelap 55% di tepi
+    float outline_darken = 1.0 - edge * 0.32;        // tepi sedikit gelap saja (tak hitam)
 
     // Fake AO berdasarkan world Y — entity yang rendah lebih gelap di bawah
     float ao = mix(1.0 - sm_ao_strength * 0.5, 1.0,

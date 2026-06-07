@@ -22,7 +22,8 @@ from .config import (TILE_SIZE, GROUND_H, WALL_H, TREE_H, HOUSE_H, OBJ_H, SMALL_
                      G, D, P, W, FL, WL, TR, H, MB, DR, FN, GT, BD, ST, TB, BS,
                      MR, FP, CL, PP, CH, CT, SH, GR, LN, DT, CV_W, CV_F, PEN, STR_T,
                      DCK, BOT, LLY, CRYS, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH,
-                     STAIRS_DOWN, STAIRS_UP, MINED, SD, LGH_B, LGH_F, CLOUD, GOLD_W, PALM, TV, CHR, CAL)
+                     STAIRS_DOWN, STAIRS_UP, MINED, SD, LGH_B, LGH_F, CLOUD, GOLD_W, PALM, TV, CHR, CAL,
+                     WARUNG, RUMAH_PG, UNION_HL, SHRINE, DEBRIS, LAUNDRY, GRAFFITI_W)
 from .scenes import SCENES
 from .data import CROPS
 
@@ -43,11 +44,9 @@ def _tex(name: str):
         try:
             img = Image.open(p)
             t = Texture(img)
-            # Enable high-quality bilinear filtering for high-resolution ground textures
-            if name in ('grass_tso', 'rock_ground', 'sand_ground', 'snow_ground'):
-                t.filtering = True
-            else:
-                t.filtering = False
+            # Pixel-art crisp (point filtering) untuk SEMUA tekstur — konsisten dgn
+            # look pixelation Shaman Quest (pola PyAO: Texture.default_filtering=None).
+            t.filtering = False
             _TEX_CACHE[name] = t
             return t
         except Exception:
@@ -88,17 +87,18 @@ def _c(r, g_, b):
 
 # Roof texture variants moved to props.py
 
-# Checkerboard outdoor — hijau hangat Sims 1 (tidak terlalu neon)
-_CB_LIGHT = color.rgb(148, 205, 105)
-_CB_DARK  = color.rgb(125, 182, 85)
+# Checkerboard outdoor — hijau-coklat lumpur, sangat desaturated (Disco Elysium)
+# Tint ini MENGALIKAN tekstur grass_tso yang terang → tarik jauh ke arah gelap/keruh.
+_CB_LIGHT = color.rgb(70,  82,  52)
+_CB_DARK  = color.rgb(54,  64,  40)
 
-# Checkerboard indoor — warm honey wood
-_FL_LIGHT = color.rgb(228, 200, 148)
-_FL_DARK  = color.rgb(200, 170, 115)
+# Checkerboard indoor — papan kayu (cukup terang agar furniture menonjol)
+_FL_LIGHT = color.rgb(122, 100, 72)
+_FL_DARK  = color.rgb(104, 84, 60)
 
-# Cave floor — cool purple-grey
-_CV_LIGHT = color.rgb(132, 118, 152)
-_CV_DARK  = color.rgb(108, 95, 128)
+# Cave floor — abu-ungu gelap
+_CV_LIGHT = color.rgb(108, 95, 125)
+_CV_DARK  = color.rgb(88,  78, 102)
 
 def _cb(tx, ty):
     return _CB_DARK if (tx + ty) % 2 == 1 else _CB_LIGHT
@@ -185,42 +185,45 @@ OBJ_TEX = {
     GOLD_W:  'ore_gold',
 }
 
-# Fallback warna untuk objek tanpa tekstur
+# Fallback warna — palet decay tropis (Disco Elysium × Indonesia)
 OBJ_COLORS = {
-    WL:  _c(118, 105, 138),
-    TR:  _c(95, 200, 65),    # vivid green
-    H:   _c(248, 235, 200),  # cream warm
-    MB:  _c(88, 128, 228),   # bright blue mailbox
-    LGH_B: _c(150, 150, 150),
-    LGH_F: _c(245, 245, 220),
-    CLOUD: _c(235, 245, 255),
-    GOLD_W: _c(255, 223, 0),
-    DR:  _c(168, 112, 62),
-    FN:  _c(178, 148, 95),   # warmer fence
-    GT:  _c(168, 130, 72),
-    BD:  _c(238, 205, 162),  # warm bed
-    ST:  _c(145, 115, 95),
-    TB:  _c(205, 168, 112),  # warm table
-    BS:  _c(162, 118, 72),
-    MR:  _c(165, 225, 255),  # brighter mirror
-    FP:  _c(255, 148, 55),   # vivid fireplace
-    CL:  _c(105, 85, 68),
-    PP:  _c(88, 215, 88),    # vivid plant
-    CH:  _c(185, 138, 82),
-    CT:  _c(198, 158, 105),
-    SH:  _c(185, 145, 95),
-    GR:  _c(148, 132, 165),  # softer grave
-    LN:  _c(255, 248, 120),  # bright lantern
-    DT:  _c(112, 85, 55),
-    CV_W:_c(88, 75, 108),
-    PEN: _c(155, 115, 65),
-    BOT: _c(215, 165, 102),
-    CRYS:_c(208, 168, 255),  # soft purple crystal
-    ORE_TBG:_c(215, 138, 72),
-    ORE_BSI:_c(165, 168, 195),
-    ORE_EMS:_c(255, 238, 95),
-    ORE_KRS:_c(198, 158, 255),
-    ORE_MTH:_c(165, 245, 255),
+    WL:    _c( 95,  88, 105),   # dinding plester tua
+    TR:    _c( 52, 105,  38),   # dedaunan hijau tua, tidak neon
+    H:     _c(162, 148, 128),   # dinding rumah lapuk
+    MB:    _c( 72, 105, 158),   # kotak pos biru pudar
+    LGH_B: _c(125, 118, 112),
+    LGH_F: _c(205, 195, 175),
+    CLOUD: _c(218, 225, 235),
+    GOLD_W:_c(188, 162,  55),   # emas pudar, bukan kuning neon
+    DR:    _c(105,  75,  45),   # pintu kayu tua
+    FN:    _c(138, 112,  72),   # pagar lapuk
+    GT:    _c(128, 100,  62),
+    # ─── FURNITURE INTERIOR (gelap, lapuk) ─────────────────
+    BD:    _c( 75,  62,  48),   # kasur usang, bernoda
+    ST:    _c( 88,  82,  75),   # kompor tua, abu kehitaman
+    TB:    _c( 92,  75,  55),   # meja kayu tua
+    BS:    _c( 78,  60,  42),   # rak buku gelap
+    MR:    _c( 72,  82,  95),   # cermin berdebu, biru abu
+    FP:    _c(188, 102,  42),   # perapian, oranye gelap
+    CL:    _c( 88,  72,  58),   # jam dinding usang
+    PP:    _c( 58, 105,  52),   # tanaman pot, setengah layu
+    CH:    _c(105,  80,  52),   # peti kayu tua
+    CT:    _c( 88,  70,  50),   # counter kayu gelap
+    SH:    _c( 82,  65,  45),   # rak gelap
+    # ─── ALAM / OUTDOOR ────────────────────────────────────
+    GR:    _c(105,  92, 118),   # batu nisan
+    LN:    _c(195, 175, 105),   # lampu redup, kuning pudar
+    DT:    _c( 88,  65,  40),   # pohon mati
+    CV_W:  _c( 75,  62,  92),   # dinding gua
+    PEN:   _c(125,  92,  55),   # tiang kandang
+    BOT:   _c(158, 118,  72),   # perahu kayu lapuk
+    # ─── ORE (tetap bisa dibaca tapi lebih gelap) ──────────
+    CRYS:  _c(162, 128, 205),
+    ORE_TBG:_c(175, 110,  55),
+    ORE_BSI:_c(128, 132, 155),
+    ORE_EMS:_c(195, 178,  65),
+    ORE_KRS:_c(155, 118, 205),
+    ORE_MTH:_c(125, 195, 205),
 }
 
 CROP_TEX = {
@@ -316,14 +319,14 @@ class World3D:
             self._destroy_crop(soil_key)
 
     def update(self, dt: float):
-        """Animasi air — tint shimmer perlahan di atas tekstur water."""
+        """Animasi air — warna keruh/kotor, bergerak lambat (sungai Lembah Karsa)."""
         if not self._water_ents:
             return
         self._water_t += dt
-        # Tint terang agar tekstur water tetap terlihat (nilai 200-255)
-        r  = 195 + int(abs(math.sin(self._water_t * 1.5)) * 30)
-        g_ = 220 + int(abs(math.sin(self._water_t * 1.0)) * 20)
-        b  = 245 + int(abs(math.sin(self._water_t * 2.0)) * 10)
+        # Air keruh — hijau-abu gelap, bukan biru jernih
+        r  = 62  + int(abs(math.sin(self._water_t * 0.8)) * 15)
+        g_ = 88  + int(abs(math.sin(self._water_t * 0.5)) * 18)
+        b  = 82  + int(abs(math.sin(self._water_t * 1.2)) * 12)
         col = color.rgb(min(255, r), min(255, g_), min(255, b))
         for e in self._water_ents:
             e.color = col
@@ -352,7 +355,8 @@ class World3D:
     def _build_tiles(self):
         sc = self.scene_obj
         is_dungeon = (self.scene_name == 'dungeon' and self.state.dungeon_tiles)
-        default_tex = 'cave_floor' if is_dungeon else ('floor_wood' if sc.indoor else 'grass')
+        # 'grass.png' adalah placeholder rusak (grid magenta!) → pakai 'grass_tso' yang bersih
+        default_tex = 'cave_floor' if is_dungeon else ('floor_wood' if sc.indoor else 'grass_tso')
 
         tiles_to_build = self.state.dungeon_tiles if is_dungeon else sc.tiles
         h = len(tiles_to_build)
@@ -376,16 +380,17 @@ class World3D:
 
         # ── Horizon Lingkungan Luas (Menutupi efek "Piring di tengah bola") ──
         if getattr(sc, 'has_horizon', not sc.indoor and not is_dungeon):
-            # Digital Alice style: bright neon sky reflection / white void
+            # Lembah Karsa: kabut abu suram di horizon (bukan void putih)
             horizon = _e('quad', (w * TS / 2.0, -0.05, h * TS / 2.0),
-                         (1000, 1000, 1), None, color.rgb(255, 255, 255), soft=False, rotation=(90, 0, 0))
+                         (1000, 1000, 1), None, color.rgb(78, 82, 88), soft=False, rotation=(90, 0, 0))
             self._tile_ents.append(horizon)
         
-        # ── Pencahayaan Indoor (PointLight) ──
+        # ── Pencahayaan Indoor — bohlam redup, amber hangat (Disco Elysium) ──
         if sc.indoor:
-            from ursina import PointLight, scene
-            pl = PointLight(parent=scene, position=(w * TS / 2.0, 5, h * TS / 2.0))
-            pl.color = color.rgb(255, 40, 200) # Neon magenta indoor
+            from ursina import PointLight, scene as ursina_scene
+            pl = PointLight(parent=ursina_scene,
+                            position=(w * TS / 2.0, 4.5, h * TS / 2.0))
+            pl.color = color.rgb(215, 172, 98)   # kuning-amber bohlam usang
             pl.shadows = True
             self._obj_ents.append(pl)
 
@@ -399,7 +404,8 @@ class World3D:
             tint = _cb(tx, ty)
 
         if tid in BLOCKING or tid == MB:
-            ge = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS), default_tex, tint, soft=False)
+            # TS*1.04 → tile saling tumpang sedikit, menutup celah (cegah "grid" background bocor)
+            ge = _e('cube', (wx, GROUND_H/2, wz), (TS*1.04, GROUND_H, TS*1.04), default_tex, tint, soft=False)
             self._tile_ents.append(ge)
             self._make_blocking_obj(tid, wx, wz)
 
@@ -413,13 +419,13 @@ class World3D:
             # Hanya buat satu bidang datar, tanpa efek voxel bertingkat
             nv = _noise_val(tx, ty) if self._is_outdoor() else 0.0
             
-            # Base dirt cube
-            base = _e('cube', (wx, GROUND_H / 2, wz), (TS, GROUND_H, TS), dirt_tex, tint, soft=False)
+            # Base dirt cube (overlap menutup celah background)
+            base = _e('cube', (wx, GROUND_H / 2, wz), (TS*1.04, GROUND_H, TS*1.04), dirt_tex, tint, soft=False)
             self._tile_ents.append(base)
 
-            # Grass cap di atas rata
+            # Grass cap di atas rata (overlap lebih besar agar tak ada garis pemisah)
             cap_y = GROUND_H + 0.02
-            cap   = _e('cube', (wx, cap_y, wz), (TS * 1.005, 0.04, TS * 1.005), grass_tex,
+            cap   = _e('cube', (wx, cap_y, wz), (TS * 1.04, 0.04, TS * 1.04), grass_tex,
                        tint, soft=False)
             self._tile_ents.append(cap)
             self._grass_ents.append(cap)   # kumpulkan untuk grass shader
@@ -433,7 +439,7 @@ class World3D:
 
         elif tid == W:
             we = _e('cube', (wx, 0.05, wz), (TS, 0.10, TS), 'water',
-                    color.rgb(88, 210, 218), soft=False)  # teal turquoise
+                    color.rgb(62, 88, 82), soft=False)    # air sungai keruh
             self._tile_ents.append(we)
             self._water_ents.append(we)
 
@@ -450,10 +456,10 @@ class World3D:
             bm   = self._road_bitmask(tx, ty)
             
             # Add solid dirt base so transparent road doesn't show sky
-            base_dirt = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS), 'sand_ground', tint, soft=False)
+            base_dirt = _e('cube', (wx, GROUND_H/2, wz), (TS*1.04, GROUND_H, TS*1.04), 'sand_ground', tint, soft=False)
             self._tile_ents.append(base_dirt)
-            
-            base = _e('cube', (wx, GROUND_H/2 + 0.01, wz), (TS, GROUND_H, TS),
+
+            base = _e('cube', (wx, GROUND_H/2 + 0.01, wz), (TS*1.04, GROUND_H, TS*1.04),
                       f'terrain/road{bm:02d}', tint, soft=False)
             self._tile_ents.append(base)
             nv2 = _noise2(tx, ty)
@@ -465,7 +471,7 @@ class World3D:
                 self._tile_ents.append(pebble)
 
         elif tid == CV_F:
-            base = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS), 'cave_floor', _cb_cave(tx, ty), soft=False)
+            base = _e('cube', (wx, GROUND_H/2, wz), (TS*1.04, GROUND_H, TS*1.04), 'cave_floor', _cb_cave(tx, ty), soft=False)
             self._tile_ents.append(base)
             nv2 = _noise2(tx, ty)
             if nv2 > 0.70:
@@ -484,33 +490,48 @@ class World3D:
                 tex = 'sand_ground'
             elif tex == 'path_stone':
                 tex = 'rock_ground'
-            ge = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS), tex, tint, soft=False)
+            ge = _e('cube', (wx, GROUND_H/2, wz), (TS*1.04, GROUND_H, TS*1.04), tex, tint, soft=False)
             self._tile_ents.append(ge)
 
     # ─── INTERNAL: OUTDOOR DECORATION ───────────────────────
     def _add_outdoor_deco(self, wx, wz, surface_y, tx, ty, nv):
-        """Surreal digital deco: floating cubes, wireframe pyramids"""
-        ox = math.sin(tx * 53.7 + ty * 89.1) * 0.42
-        oz = math.cos(tx * 73.2 + ty * 47.5) * 0.42
-        dtype = int(abs(math.sin(tx * 200.3 + ty * 150.7)) * 3)
+        """Dekorasi organik outdoor — rumput tinggi, batu, genangan lumpur."""
+        ox = math.sin(tx * 53.7 + ty * 89.1) * 0.40
+        oz = math.cos(tx * 73.2 + ty * 47.5) * 0.40
+        dtype = int(abs(math.sin(tx * 200.3 + ty * 150.7)) * 4)
 
-        if dtype == 0:   # Floating abstract cube
-            c1 = _e('cube', (wx + ox, surface_y + 0.8, wz + oz),
-                      (0.2, 0.2, 0.2), None, _c(0, 255, 255), rotation=(45, 45, 0))
-            self._tile_ents.append(c1)
+        if dtype == 0:   # Batu kecil lapuk
+            stone_col = _c(int(95 + nv*20), int(88 + nv*18), int(82 + nv*15))
+            stone = _e('cube', (wx + ox, surface_y + 0.06, wz + oz),
+                       (0.22, 0.12, 0.18), 'rock_ground', stone_col,
+                       rotation=(0, tx*37.0, 0))
+            self._tile_ents.append(stone)
 
-        elif dtype == 1:  # Wireframe pillar
-            c2 = _e('cylinder', (wx + ox, surface_y + 0.4, wz + oz),
-                      (0.05, 0.8, 0.05), None, _c(255, 0, 255))
-            self._tile_ents.append(c2)
+        elif dtype == 1:  # Rumput tinggi (clump)
+            grass_col = _c(int(55 + nv*25), int(88 + nv*30), int(42 + nv*18))
+            for i in range(2):
+                gx = ox + math.sin(i * 2.1) * 0.15
+                gz = oz + math.cos(i * 2.1) * 0.15
+                grass = _e('cube', (wx + gx, surface_y + 0.18, wz + gz),
+                           (0.06, 0.34, 0.06), None, grass_col,
+                           rotation=(0, i*45.0, 0))
+                self._tile_ents.append(grass)
 
-        else:             # Glowing orb
-            flower = _e('sphere', (wx + ox, surface_y + 0.6, wz + oz),
-                        (0.2, 0.2, 0.2), 'lamp_glow', _c(255, 255, 255))
-            self._tile_ents.append(flower)
+        elif dtype == 2:  # Genangan lumpur kecil
+            puddle = _e('cube', (wx + ox*0.5, surface_y + 0.01, wz + oz*0.5),
+                        (0.38, 0.02, 0.30), None, _c(58, 52, 45))
+            self._tile_ents.append(puddle)
+
+        else:             # Ranting/dahan kering jatuh
+            twig = _e('cube', (wx + ox, surface_y + 0.04, wz + oz),
+                      (0.38, 0.05, 0.07), 'tree_trunk', _c(72, 52, 32),
+                      rotation=(0, tx*63.0, 0))
+            self._tile_ents.append(twig)
 
     def _make_blocking_obj(self, tid, wx, wz):
-        if tid in (TR, PALM, DT, LN, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS, H, FP, GR, TV, CHR, CAL):
+        if tid in (TR, PALM, DT, LN, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS, H, FP, GR, TV, CHR, CAL,
+                   WARUNG, RUMAH_PG, UNION_HL, SHRINE, DEBRIS, LAUNDRY, GRAFFITI_W,
+                   BD, TB, ST, BS, SH, CT, CH, PP, MR, CL):   # furniture → props.py
             # Handled by Scene builder/props.py
             return
 
@@ -529,8 +550,8 @@ class World3D:
             if tid == WL:
                 sc = 1.0
                 if getattr(self.scene_obj, 'indoor', False):
-                    tex = 'wood_plank'
-                    col = _c(235, 215, 185) # Warm indoor wallpaper
+                    tex = 'wall_stone'
+                    col = _c(88, 82, 78)   # plester beton tua, gelap kusam
             elif tid == CV_W:
                 sc = 0.98
             elif tid == DR:

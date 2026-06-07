@@ -22,6 +22,159 @@ _ASSET_DIR = Path(__file__).resolve().parent.parent / 'assets' / 'textures'
 _MODEL_CACHE: dict = {}
 _TEX_CACHE: dict = {}
 
+
+def load_texture_file(name: str):
+    """Load & cache tekstur PNG dari assets/textures/ via PIL (bypass string-search Ursina)."""
+    if not name:
+        return None
+    if name in _TEX_CACHE:
+        return _TEX_CACHE[name]
+    p = _ASSET_DIR / f'{name}.png'
+    tex = None
+    if p.exists():
+        try:
+            from PIL import Image
+            tex = Texture(Image.open(p))
+        except Exception as e:
+            import logging
+            logging.warning(f"Gagal load tekstur '{name}': {e}")
+    _TEX_CACHE[name] = tex
+    return tex
+
+
+# ─── MATERIAL RELIK ARKEOLOGIS (gaya @archaeologyart) ─────────────────────────
+# Makhluk halus & mob = artefak kuno yang hidup. (tekstur, tint warna)
+_RELIC_MATERIAL = {
+    'mob_pocong':    ('relic_terracotta', color.rgb(205, 195, 178)),  # mumi terakota
+    'mob_genderuwo': ('relic_bronze',     color.rgb(190, 200, 180)),  # arca perunggu raksasa
+    'mob_kelelawar': ('relic_andesite',   color.rgb(175, 180, 185)),  # kelelawar batu
+    'naga':          ('relic_bronze',     color.rgb(185, 195, 175)),  # naga perunggu purba
+}
+_RELIC_DEFAULT = ('relic_andesite', color.rgb(180, 182, 180))  # arca batu generik
+
+# Roh humanlike = ARCA-HUMANOID RELIK (basis humanoid + permukaan artefak, gaya DE).
+# (tekstur, tint warna, skala) — skala basis humanoid 0.62 (~1.86m); disesuaikan peran.
+_SPIRIT_RELIC = {
+    'kuntilanak':    ('relic_andesite',   color.rgb(180, 185, 190), 0.70),  # arca wanita, tinggi-ramping
+    'genderuwo':     ('relic_bronze',     color.rgb(190, 200, 175), 0.92),  # arca perunggu raksasa
+    'pocong':        ('relic_terracotta', color.rgb(205, 195, 178), 0.60),  # mumi terakota
+    'wewe_gombel':   ('relic_terracotta', color.rgb(198, 188, 170), 0.52),  # terakota anak (kecil)
+    'banaspati':     ('relic_bronze',     color.rgb(200, 160, 120), 0.66),  # api → perunggu membara
+    'leak_bali':     ('relic_andesite',   color.rgb(185, 180, 175), 0.62),  # topeng batu
+    'bidadari':      ('relic_andesite',   color.rgb(205, 205, 198), 0.68),  # arca bidadari pucat
+    'dewa_angin':    ('relic_bronze',     color.rgb(195, 200, 185), 0.78),  # arca dewa
+    'jin_kebun':     ('relic_andesite',   color.rgb(175, 182, 168), 0.64),
+    'demit_tua':     ('relic_andesite',   color.rgb(168, 172, 165), 0.58),
+    'tuyul_pencuri': ('relic_terracotta', color.rgb(195, 180, 160), 0.45),  # terakota kecil
+}
+
+# Mob/roh NON-manusia yang tetap pakai mesh khusus (bukan humanoid)
+_NONHUMAN_RELIC_IDS = {'naga_bijak', 'kelelawar'}
+
+# Dewa-pertapa (ala Siwa Mahayogi) — arca emas-perunggu yang menjulang & beraura
+_DEITY_IDS = {'petapa_srimana'}
+
+def _add_deity_aura(actor):
+    """Aura ilahi untuk dewa-pertapa (ala Siwa): halo + tetesan cahaya melayang."""
+    try:
+        # Halo cincin di belakang kepala
+        halo = Entity(parent=actor, model='circle', position=(0, 2.2, 0.15),
+                      scale=1.6, color=color.rgb(255, 226, 150),
+                      double_sided=True, billboard=True)
+        try: halo.setLightOff()
+        except Exception: pass
+        actor._halo = halo
+        # Tetesan cahaya (motif air Ganga turun dari rambut) — beberapa titik
+        actor._aura_motes = []
+        for i in range(5):
+            m = Entity(parent=actor, model='sphere',
+                       position=(math.sin(i*1.3)*0.5, 1.6 + i*0.18, math.cos(i*1.3)*0.5),
+                       scale=0.10, color=color.rgb(150, 210, 255))
+            try: m.setLightOff()
+            except Exception: pass
+            actor._aura_motes.append(m)
+    except Exception as e:
+        import logging
+        logging.warning(f"deity aura gagal: {e}")
+
+
+# ─── AKSESORI PER-PERAN untuk NPC Vitaboy (model, pos, scale, rgb) ─────────────
+# Diposisikan di ruang actor (figur Vitaboy ~1.8 unit tinggi). Front = +z.
+_ROLE_ACCESSORIES = {
+    'sari': [   # Warung — celemek putih kusam + ikat kepala
+        ('cube', (0, 0.80, 0.15), (0.50, 0.66, 0.06), (205, 200, 188)),
+        ('cube', (0, 1.14, 0.14), (0.30, 0.28, 0.05), (205, 200, 188)),
+        ('cube', (0, 1.60, 0.00), (0.44, 0.20, 0.44), (165, 95, 85)),
+    ],
+    'budi': [   # Pandai besi — apron kulit + palu
+        ('cube',     (0, 0.82, 0.15),    (0.52, 0.70, 0.07), (112, 80, 50)),
+        ('cube',     (0, 1.16, 0.14),    (0.32, 0.30, 0.06), (95, 66, 40)),
+        ('cylinder', (0.36, 0.95, 0.10), (0.05, 0.40, 0.05), (120, 85, 50)),
+        ('cube',     (0.36, 1.18, 0.10), (0.16, 0.12, 0.12), (110, 112, 118)),
+    ],
+    'raka': [   # Dokter klinik — jas putih + tas
+        ('cube', (0, 0.95, 0.14),    (0.48, 0.86, 0.10), (222, 224, 226)),
+        ('cube', (0.32, 0.78, 0.10), (0.20, 0.18, 0.12), (90, 70, 55)),
+    ],
+    'maya': [   # Studio — selempang + buku
+        ('cube', (0.0, 0.95, 0.16),  (0.10, 0.70, 0.05), (120, 90, 140)),
+        ('cube', (0.30, 0.80, 0.10), (0.18, 0.24, 0.12), (150, 70, 55)),
+    ],
+    'kapten_kuro': [  # Kapten — topi + lis
+        ('cube', (0, 1.62, 0.00), (0.52, 0.16, 0.52), (38, 42, 58)),
+        ('cube', (0, 1.60, 0.22), (0.52, 0.06, 0.18), (30, 34, 48)),
+    ],
+    'pak_guru': [  # Pak Hadi (guru) — kacamata + buku
+        ('cube', (0, 1.55, 0.20),    (0.30, 0.05, 0.05), (40, 40, 45)),
+        ('cube', (0.30, 0.82, 0.10), (0.16, 0.22, 0.10), (90, 120, 90)),
+    ],
+    'jaka_ronda': [  # Ronda — selempang merah
+        ('cube', (0, 0.98, 0.16), (0.55, 0.12, 0.05), (160, 60, 55)),
+    ],
+    'mbok_jum': [   # Nenek — selendang
+        ('cube', (0, 1.22, 0.00), (0.52, 0.32, 0.30), (150, 110, 130)),
+    ],
+}
+
+def _add_role_accessories(actor, npc_id):
+    """Tempel aksesori sesuai peran NPC (celemek/apron/topi/palu) di atas avatar."""
+    specs = _ROLE_ACCESSORIES.get(npc_id)
+    if not specs:
+        return
+    actor._role_acc = []
+    for model, pos, scale, col in specs:
+        try:
+            e = Entity(parent=actor, model=model, position=pos, scale=scale,
+                       color=color.rgb(*col))
+            try:
+                from .smooth_shader import apply_smooth
+                apply_smooth(e, has_texture=False)
+            except Exception:
+                try: e.setLightOff()
+                except Exception: pass
+            actor._role_acc.append(e)
+        except Exception as ex:
+            import logging
+            logging.warning(f"role accessory gagal ({npc_id}): {ex}")
+
+
+def _apply_relic_material(actor, model_name, override=None):
+    """Pasang tekstur artefak + smooth_shader ke actor (makhluk relik).
+    override=(tex_name, tint) untuk per-id (roh humanoid)."""
+    if override is not None:
+        tex_name, tint = override
+    else:
+        tex_name, tint = _RELIC_MATERIAL.get(model_name, _RELIC_DEFAULT)
+    tex = load_texture_file(tex_name)
+    if tex is not None:
+        actor.texture = tex
+        actor.color = tint
+        try:
+            from .smooth_shader import apply_smooth
+            apply_smooth(actor, has_texture=True)
+        except Exception:
+            pass
+
 def load_model_file(name: str):
     """Load model from assets/models/."""
     if not name: return None
@@ -60,6 +213,53 @@ NPC_APPEARANCES = {
     'kapten_kuro': ['mabd000_leathers3.apr', 'mahd002_asian.apr'],
     'cici': ['fabd001_summer01.apr'],
     'bowo': ['mabd000_sl__teepjs2.apr'],
+    # Tambahan: semua human NPC pakai Vitaboy (sebelumnya fallback humanoid)
+    'joko':     ['mabd000_sl__teepjs.apr', 'mahd001_ross.apr'],
+    'ningsih':  ['fabd002_mom01.apr', 'fahd001_sharon.apr', 'fahl001_sharon.apr'],
+    'pak_guru': ['mabd000_leathers.apr', 'mahd000_proxy.apr'],   # Pak Hadi
+    'kru_kuro': ['mabd000_sl__teepjs2.apr', 'mahd002_asian.apr'],
+    # Petapa Srimana — humanoid Vitaboy (jubah), deity aura ditambah saat spawn
+    'petapa_srimana': ['mabd000_leathers.apr', 'mahd000_proxy.apr'],
+}
+
+# ─── PALET WARNA NPC (Disco Elysium decay aesthetic) ──────────────────────────
+# Untuk NPC yang tidak punya Vitaboy/model khusus — tinted fallback humanoid
+_ACTOR_PALETTE = {
+    # Manusia — warna kulit/baju lapuk, tone tanah
+    'arya':        color.rgb(155, 132, 105),   # pemuda kerja, coklat hangat
+    'sari':        color.rgb(148, 125, 100),   # pemilik warung, lelah
+    'raka':        color.rgb(138, 118,  92),   # nelayan, terbakar matahari
+    'maya':        color.rgb(145, 128, 108),   # dokter, abu pudar
+    'mbok_jum':    color.rgb(128, 108,  85),   # nenek, sangat lapuk
+    'budi':        color.rgb(142, 120,  95),   # pandai besi, abu gelap
+    'jaka_ronda':  color.rgb(118, 108,  92),   # penjaga, grim
+    'kapten_kuro': color.rgb(108,  98,  82),   # kapten, paling gelap
+    'cici':        color.rgb(158, 138, 115),   # anak, sedikit lebih cerah
+    'bowo':        color.rgb(150, 132, 110),
+    # Makhluk supernatural — pucat/abu/gelap
+    'naga_bijak':  color.rgb( 68,  90, 115),   # biru-abu dalam
+    'genderuwo':   color.rgb( 82, 102,  82),   # olive gelap, berat
+    'kelelawar':   color.rgb( 55,  52,  72),   # ungu-abu gelap
+    'pocong':      color.rgb(185, 178, 168),   # putih kain kafan kusam
+}
+
+# ─── VISUAL WILD ENTITIES (size, color) ───────────────────────────────────────
+_WILD_VISUALS = {
+    'mandrake':         (0.38, color.rgb( 52,  82,  45)),   # tanaman gelap
+    'running_mushroom': (0.30, color.rgb(105,  82,  62)),   # jamur coklat
+    'firefly':          (0.14, color.rgb(185, 215, 140)),   # kunang-kunang pucat
+    'wild_herb':        (0.24, color.rgb( 68, 115,  62)),   # herbal hijau
+    'wild_berry':       (0.20, color.rgb(128,  42,  42)),   # beri merah tua
+}
+
+# ─── TRANSFORM PER-MODEL (skala, offset Y) — perbaiki proporsi/posisi aneh ─────
+# Model .obj punya tinggi/origin berbeda; tanpa ini NPC raksasa & bat tenggelam.
+_MODEL_TRANSFORM = {
+    'humanoid':      (0.62, 0.0),   # 3.0 tall → ~1.86 (seukuran orang, sebanding player)
+    'mob_pocong':    (0.85, 0.0),   # 2.25 → ~1.9
+    'mob_genderuwo': (0.80, 0.0),   # 2.85 → ~2.3 (roh besar)
+    'mob_kelelawar': (1.10, 0.55),  # bat: angkat dari tanah (Y model negatif) → melayang
+    'naga':          (0.60, 0.0),   # naga panjang
 }
 
 def get_npc_model_name(npc_id):
@@ -91,7 +291,7 @@ def get_npc_model_name(npc_id):
         return mapping[npc_id]
     if npc_id in ['genderuwo', 'kelelawar', 'pocong']:
         return f"mob_{npc_id}"
-    return 'humanoid' # Fallback
+    return 'humanoid'
 
 
 def _can_walk(tx, ty, scene_name, dungeon_tiles=None):
@@ -295,7 +495,80 @@ class EntitiesManager:
             
             # Position visually
             actor.position = (actor.logical_x * TS, 0, actor.logical_y * TS)
-            
+
+            # Setup Model
+            # ── HEWAN: cek aset GLB/OBJ dulu (wiring upgrade), else mesh prosedural ──
+            if actor_id in ANIMAL_NPCS:
+                from .animal_models import build_animal, get_animal_model_file
+                animal_type = ANIMAL_NPCS[actor_id].get('type', 'kucing')
+                asset = get_animal_model_file(animal_type)
+                pm = load_model_file(asset) if asset else None
+                if pm is not None:
+                    actor.model = pm
+                    actor.scale = 1.0
+                else:
+                    build_animal(actor, animal_type)   # prosedural
+                # Label + lanjut (lewati blok model manusia/roh)
+                all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
+                name = all_d.get(actor_id, {}).get('name', actor_id)
+                actor._lbl = Text(name, parent=actor, billboard=True,
+                                 position=(0, GH + 2.4, 0), scale=4,
+                                 color=color.rgb(195, 185, 162), background=True)
+                self.actors[actor_id] = actor
+                continue
+
+            apr_list = NPC_APPEARANCES.get(actor_id)
+            if apr_list:
+                from .vitaboy import VitaboyAvatar
+                sc = 0.19 if actor_id in ('cici', 'bowo') else 0.32
+                if actor_id in _DEITY_IDS:
+                    sc *= 1.5   # dewa-pertapa menjulang
+                actor._va = VitaboyAvatar(actor, apr_list, scale=sc)
+                actor._va.set_animation("a2a-talk-idle-loop")
+                actor.model = 'cube'  # dummy parent
+                actor.color = color.clear # hide dummy
+                if actor_id in _DEITY_IDS:
+                    _add_deity_aura(actor)   # halo + tetesan cahaya Ganga
+                _add_role_accessories(actor, actor_id)   # celemek/apron/topi per-peran
+            else:
+                model_name = get_npc_model_name(actor_id)
+                panda_model = load_model_file(model_name)
+                if panda_model:
+                    actor.model = panda_model
+                else:
+                    model_name = 'humanoid'
+                    panda_fallback = load_model_file('humanoid')
+                    actor.model = panda_fallback if panda_fallback else 'cube'
+                # Skala & offset Y sesuai model (perbaiki proporsi raksasa / tenggelam)
+                msc, moff = _MODEL_TRANSFORM.get(model_name, (1.0, 0.0))
+                actor.scale = msc
+                actor._model_y_off = moff
+                if actor_id in _DEITY_IDS:
+                    # Dewa-pertapa ala Siwa: arca emas-perunggu menjulang + aura
+                    _apply_relic_material(actor, 'naga')  # tekstur perunggu verdigris
+                    actor.color = color.rgb(212, 188, 120)  # rona emas ilahi
+                    actor.scale = msc * 1.55                # menjulang, agung
+                    _add_deity_aura(actor)
+                elif actor_id in _SPIRIT_RELIC:
+                    # Roh humanlike = arca-humanoid relik (basis humanoid + permukaan artefak)
+                    tex_name, tint, spirit_sc = _SPIRIT_RELIC[actor_id]
+                    _apply_relic_material(actor, model_name, override=(tex_name, tint))
+                    actor.scale = spirit_sc
+                elif actor_id in _NONHUMAN_RELIC_IDS:
+                    # Naga / kelelawar — mesh khusus + relik
+                    _apply_relic_material(actor, model_name)
+                else:
+                    # Human NPC: palet warna decay biasa (bukan arca)
+                    actor.color = _ACTOR_PALETTE.get(actor_id, color.rgb(138, 122, 100))
+
+            # Setup Label — gaya Disco Elysium: teks kecil, warna kertas tua
+            all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
+            name = all_d.get(actor_id, {}).get('name', actor_id)
+            actor._lbl = Text(name, parent=actor, billboard=True,
+                             position=(0, GH + 3.1, 0),
+                             scale=4, color=color.rgb(195, 185, 162),
+                             background=True)
+
             self.actors[actor_id] = actor
 
         # Spawn Wild
@@ -303,18 +576,15 @@ class EntitiesManager:
             if w['scene'] != self.scene_name: continue
             if w.get('night_only') and not s.is_night(): continue
             px, py = w['x'] * TS, w['y'] * TS
-            
             if self._wild_pool:
                 e = self._wild_pool.pop()
                 e.enabled = True
                 e.position = (px, GH + 0.25, py)
             else:
-                # Procedural Low-Poly 3D Mesh
                 e = Entity(model='cube', position=(px, GH + 0.25, py), scale=0.4, billboard=True)
                 from .smooth_shader import apply_smooth
                 apply_smooth(e, has_texture=False)
-            
-            # Sesuaikan warna/bentuk berdasarkan jenis (Step 7: Procedural 3D Modeling)
+
             k = w['kind']
             if k == 'running_mushroom':
                 e.color = color.rgb(255, 100, 100)
@@ -334,7 +604,6 @@ class EntitiesManager:
             else:
                 e.color = color.white
                 e.scale = 0.5
-
             self.wild_ents[i] = e
             
         # Spawn Mobs
@@ -359,28 +628,34 @@ class EntitiesManager:
             
             kind = mob['kind']
             is_boss = mob.get('is_boss', False)
-            sc = 1.4 if is_boss else 1.0
-            
+
             model_name = 'naga' if is_boss else f"mob_{kind}"
             panda_model = load_model_file(model_name)
             if panda_model:
                 actor.model = panda_model
-                actor.scale = sc
             else:
+                model_name = 'humanoid'
                 panda_fallback = load_model_file('humanoid')
-                if panda_fallback:
-                    actor.model = panda_fallback
-                else:
-                    actor.model = 'cube'
-                actor.scale = sc
-                
-            # Step 6: Blob shadow for Mobs
-            actor._shadow = Entity(parent=actor, model='quad', position=(0, 0.02, 0), rotation=(90, 0, 0), scale=(1.6 * sc, 1.6 * sc, 1), color=color.rgba(0, 0, 0, 120))
-                
-            # HP Bar
-            hp_y = GH + (3.5 if is_boss else 2.4) * sc
-            actor._bg_bar = Entity(parent=actor, model='cube', position=(0, hp_y, 0), scale=(0.9*sc, 0.10, 0.10), color=color.rgb(45, 45, 45))
-            actor._hp_bar = Entity(parent=actor, model='cube', position=(0, hp_y, -0.02), scale=(0.9*sc, 0.08, 0.08), color=color.rgb(225, 48, 48))
+                actor.model = panda_fallback if panda_fallback else 'cube'
+
+            # Skala & offset Y per-model (perbaiki bat tenggelam, NPC raksasa, dll.)
+            msc, moff = _MODEL_TRANSFORM.get(model_name, (1.0, 0.0))
+            boss_mult = 1.6 if is_boss else 1.0
+            sc = msc * boss_mult
+            actor.scale = sc
+            if moff:
+                actor.y = moff
+
+            # Semua mob dungeon = artefak relik (batu/terakota/perunggu)
+            _apply_relic_material(actor, model_name)
+
+            # HP Bar — warna suram, gaya Disco Elysium
+            hp_y = GH + (3.0 if is_boss else 2.2)
+            actor._bg_bar = Entity(parent=actor, model='cube', position=(0, hp_y, 0),
+                                   scale=(0.9*sc, 0.09, 0.09), color=color.rgb(28, 25, 22))
+            actor._hp_bar = Entity(parent=actor, model='cube', position=(0, hp_y, -0.02),
+                                   scale=(0.9*sc, 0.07, 0.07),
+                                   color=color.rgb(188, 62, 48) if not is_boss else color.rgb(158, 45, 82))
             
             self.actors[actor_id] = actor
 

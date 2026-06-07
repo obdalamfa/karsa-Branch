@@ -83,14 +83,16 @@ def _get_sky_shader():
     return _sky_shader
 
 
-# ─── Palet warna langit per kondisi (port FreeSO OutsideTime interpolation) ───
+# ─── Palet langit Disco Elysium × Lembah Karsa ────────────────────────────────
+# Langit overcast tropis yang suram — jarang cerah sempurna.
+# Warna lebih redup, desaturated, melankolis. Matahari ada tapi tertutup awan.
 # Format: (zenith_rgb, horizon_rgb, sun_glow_rgb, sun_dir_xyz)
-_SKY_NIGHT   = ((0.15, 0.05, 0.15), (0.10, 0.80, 1.00), (1.00, 0.20, 0.80), ( 0.0,  1.0,  0.0))
-_SKY_DAWN    = ((1.00, 0.80, 0.90), (1.00, 0.20, 0.80), (0.00, 1.00, 1.00), ( 0.7,  0.2, -0.1))
-_SKY_MORNING = ((1.00, 0.90, 1.00), (0.20, 1.00, 0.80), (1.00, 0.20, 0.80), ( 0.5,  0.5, -0.4))
-_SKY_DAY     = ((0.90, 0.80, 1.00), (1.00, 0.50, 0.80), (0.20, 0.80, 1.00), ( 0.0,  1.0, -0.4))
-_SKY_DUSK    = ((1.00, 0.50, 0.80), (0.20, 0.80, 1.00), (1.00, 0.80, 1.00), (-0.7,  0.2, -0.1))
-_SKY_EVENING = ((0.50, 0.10, 0.50), (0.10, 0.80, 1.00), (1.00, 0.20, 0.80), (-0.9, -0.1,  0.0))
+_SKY_NIGHT   = ((0.05, 0.06, 0.12), (0.08, 0.10, 0.18), (0.20, 0.15, 0.30), ( 0.0,  1.0,  0.0))
+_SKY_DAWN    = ((0.45, 0.38, 0.42), (0.72, 0.48, 0.38), (0.85, 0.55, 0.30), ( 0.7,  0.2, -0.1))
+_SKY_MORNING = ((0.52, 0.55, 0.62), (0.68, 0.65, 0.58), (0.75, 0.60, 0.35), ( 0.5,  0.5, -0.4))
+_SKY_DAY     = ((0.48, 0.52, 0.60), (0.65, 0.65, 0.62), (0.80, 0.70, 0.45), ( 0.0,  1.0, -0.4))
+_SKY_DUSK    = ((0.42, 0.35, 0.40), (0.68, 0.48, 0.35), (0.78, 0.50, 0.28), (-0.7,  0.2, -0.1))
+_SKY_EVENING = ((0.18, 0.15, 0.22), (0.28, 0.22, 0.30), (0.45, 0.28, 0.20), (-0.9, -0.1,  0.0))
 
 # Modifikasi cuaca — mengurangi saturasi (FreeSO Weather pattern)
 _WEATHER_MUL = {

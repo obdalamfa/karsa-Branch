@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Save game
+lembah_karsa_3d_save.json
+*.save
+
+# Dev tooling / capture harness output (jangan di-push)
+screenshots/
+tools/cap_*.png
+tools/_*.py
+tools/_*.png
+
+# Aset/refs yang diunduh (besar; bukan bagian kode)
+tools/assets_dl/
+tools/refs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp

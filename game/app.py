@@ -514,6 +514,19 @@ class Game3D:
         if self.panels.mode == 'panel':
             if key == 'escape':
                 self.panels.close_all()
+            elif getattr(self.panels, '_panel_name', '') == 'inventory':
+                if key == 'up arrow':
+                    self.panels.navigate_inventory(-1, 0)
+                elif key == 'down arrow':
+                    self.panels.navigate_inventory(1, 0)
+                elif key == 'left arrow':
+                    self.panels.navigate_inventory(0, -1)
+                elif key == 'right arrow':
+                    self.panels.navigate_inventory(0, 1)
+                elif key in ('q', 'page up'):
+                    self.panels.navigate_inventory_cat(-1)
+                elif key in ('e', 'page down'):
+                    self.panels.navigate_inventory_cat(1)
             elif key.isdigit():
                 msg = self.panels.panel_action(int(key))
                 if msg:

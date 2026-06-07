@@ -384,6 +384,12 @@ class World3D:
             horizon = _e('quad', (w * TS / 2.0, -0.05, h * TS / 2.0),
                          (1000, 1000, 1), None, color.rgb(78, 82, 88), soft=False, rotation=(90, 0, 0))
             self._tile_ents.append(horizon)
+
+            # Kabut tanah tipis — mist layer setinggi pinggang, atmosfer rimba
+            mist = _e('quad', (w * TS / 2.0, 0.35, h * TS / 2.0),
+                      (w * TS + 20, h * TS + 20, 1), None,
+                      color.rgba(148, 158, 142, 38), soft=False, rotation=(90, 0, 0))
+            self._tile_ents.append(mist)
         
         # ── Pencahayaan Indoor — bohlam redup, amber hangat (Disco Elysium) ──
         if sc.indoor:

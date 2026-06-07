@@ -104,6 +104,17 @@ class UIManager:
                     self._flash_bg.enabled = False
 
     _TOOL_NAMES = ['Cangkul','Siram','Tanam','Panen','Kapak','Hadiah','Pickaxe','Pedang']
+    # (simbol, warna_bg, warna_teks) per tool index
+    _TOOL_ICON_DATA = [
+        ('CGK', color.rgb(120, 88,  50),  color.rgb(255, 220, 120)),  # Cangkul
+        (' ~ ', color.rgb(30,  90, 160),  color.rgb(120, 200, 255)),  # Siram
+        (' * ', color.rgb(30, 100,  40),  color.rgb(140, 255, 120)),  # Tanam
+        (' H ', color.rgb(80, 110,  30),  color.rgb(200, 255,  80)),  # Panen
+        ('KPK', color.rgb(140,  70,  20), color.rgb(255, 170,  60)),  # Kapak
+        (' + ', color.rgb(130,  30,  70), color.rgb(255, 120, 160)),  # Hadiah
+        ('PKX', color.rgb(60,   60, 100), color.rgb(180, 180, 255)),  # Pickaxe
+        ('PDG', color.rgb(130,  20,  20), color.rgb(255, 100, 100)),  # Pedang
+    ]
 
     # ─── PUBLIC: HUD ─────────────────────────────────────
     def _build_hud(self):
@@ -119,12 +130,13 @@ class UIManager:
         self._hud_border = _ui(scale=(1.95, 0.010), position=(0, -0.352),
                                color=color.rgb(128, 100, 72), z=0.95)
 
-        # ── Wajah karakter (tengah) ──
-        self._face_frame = _ui(scale=(0.115, 0.150), position=(0.0, -0.425), color=color.rgb(78, 58, 44), z=0.6)
-        self._face       = _ui(scale=(0.095, 0.130), position=(0.0, -0.425), color=color.rgb(178, 138, 102), z=0.5)
-        self._face_eye_l = _ui(scale=(0.013, 0.017), position=(-0.022, -0.405), color=color.rgb(32, 26, 22), z=0.4)
-        self._face_eye_r = _ui(scale=(0.013, 0.017), position=(0.022, -0.405), color=color.rgb(32, 26, 22), z=0.4)
-        self._face_mouth = _ui(scale=(0.040, 0.009), position=(0.0, -0.455), color=color.rgb(120, 74, 62), z=0.4)
+        # ── Item aktif (tengah) — menggantikan wajah ──
+        sym0, bg0, fg0 = self._TOOL_ICON_DATA[0]
+        self._item_frame = _ui(scale=(0.115, 0.150), position=(0.0, -0.422), color=color.rgb(48, 38, 28), z=0.6)
+        self._item_bg    = _ui(scale=(0.095, 0.128), position=(0.0, -0.422), color=bg0, z=0.5)
+        self._item_sym   = _txt(sym0, pos=(0.0, -0.418), scale=1.25, col=fg0, origin=(0, 0))
+        self._item_lbl   = _txt(self._TOOL_NAMES[0], pos=(0.0, -0.454), scale=0.58,
+                                col=color.rgb(210, 195, 165), origin=(0, 0))
 
         # ── Kiri jauh: Alat aktif ──
         X_TOOL = -0.82
@@ -204,8 +216,14 @@ class UIManager:
         self._gold_txt.text = f'§ {s.gold}G'
         self._buff_txt.text = '+'.join(b.upper() for b in s.buffs) if s.buffs else ''
 
-        # Active tool name
-        self._tool_name.text = self._TOOL_NAMES[min(s.tool_index, len(self._TOOL_NAMES) - 1)]
+        # Active tool name + center icon
+        ti = min(s.tool_index, len(self._TOOL_NAMES) - 1)
+        self._tool_name.text = self._TOOL_NAMES[ti]
+        sym, bg, fg = self._TOOL_ICON_DATA[ti]
+        self._item_bg.color  = bg
+        self._item_sym.text  = sym
+        self._item_sym.color = fg
+        self._item_lbl.text  = self._TOOL_NAMES[ti]
 
         # Seed hint (shown when Tanam/Panen active)
         if s.tool_index in (2, 3):
@@ -536,30 +554,55 @@ class UIManager:
     # ─── INVENTORY GRID (gaya Harvest Moon) ──────────────────
     _INV_COLS = 7
     _INV_ROWS = 5
+    _INV_CATS = ['Semua', 'Benih', 'Panen', 'Bahan', 'Alat']
 
     def _build_inventory_grid(self):
-        """Grid slot inventory: border + bg + ikon + jumlah, disembunyikan dulu."""
-        self._inv_slots = []
+        """Grid slot inventory: kategori tab + border + bg + ikon + jumlah + kursor."""
+        self._inv_slots   = []
+        self._inv_cursor  = 0   # index slot terpilih
+        self._inv_cat_idx = 0   # index kategori aktif
         x0, y0 = -0.46, 0.28
         dx, dy = 0.155, 0.150
+
+        # ── Kategori tab di atas grid ──
+        self._inv_cat_tabs = []
+        cat_x0 = -0.48
+        for i, cat in enumerate(self._INV_CATS):
+            tab = _txt(cat, pos=(cat_x0 + i * 0.24, y0 + 0.075), scale=0.68,
+                       col=color.rgb(255, 220, 100) if i == 0 else color.rgb(150, 140, 120),
+                       origin=(0, 0))
+            tab.enabled = False
+            self._inv_cat_tabs.append(tab)
+
+        # ── Detail item (bawah grid) ──
+        self._inv_detail = _txt('', pos=(x0, y0 - self._INV_ROWS * dy - 0.01),
+                                scale=0.60, col=color.rgb(200, 190, 165), origin=(0, 0))
+        self._inv_detail.enabled = False
+
         for r in range(self._INV_ROWS):
             for c in range(self._INV_COLS):
                 px = x0 + c * dx
                 py = y0 - r * dy
-                # z negatif → di DEPAN panel_bg (z=0). Lebih negatif = lebih depan.
-                border = _ui(scale=(0.135, 0.135), position=(px, py), color=color.rgb(95, 74, 52), z=-0.06)
-                bg     = _ui(scale=(0.122, 0.122), position=(px, py), color=color.rgb(38, 32, 28, 240), z=-0.08)
-                icon   = _ui(scale=(0.088, 0.088), position=(px, py + 0.010), color=color.rgb(120, 120, 120), z=-0.12)
-                qty    = _txt('', pos=(px + 0.028, py - 0.052), scale=0.62, col=color.rgb(255, 255, 230), z=-0.16)
-                nm     = _txt('', pos=(px, py - 0.062), scale=0.40, col=color.rgb(205, 205, 215), origin=(0, 0), z=-0.16)
+                border  = _ui(scale=(0.135, 0.135), position=(px, py), color=color.rgb(95, 74, 52), z=-0.06)
+                bg      = _ui(scale=(0.122, 0.122), position=(px, py), color=color.rgb(38, 32, 28, 240), z=-0.08)
+                icon    = _ui(scale=(0.088, 0.088), position=(px, py + 0.010), color=color.rgb(120, 120, 120), z=-0.12)
+                qty     = _txt('', pos=(px + 0.028, py - 0.052), scale=0.62, col=color.rgb(255, 255, 230), z=-0.16)
+                nm      = _txt('', pos=(px, py - 0.062), scale=0.40, col=color.rgb(205, 205, 215), origin=(0, 0), z=-0.16)
+                cursor  = _ui(scale=(0.140, 0.140), position=(px, py), color=color.rgb(255, 215, 60, 180), z=-0.04)
+                cursor.enabled = False
                 for e in (border, bg, icon, qty, nm):
                     e.enabled = False
-                self._inv_slots.append({'border': border, 'bg': bg, 'icon': icon, 'qty': qty, 'nm': nm})
+                self._inv_slots.append({'border': border, 'bg': bg, 'icon': icon,
+                                        'qty': qty, 'nm': nm, 'cursor': cursor})
 
     def _hide_inventory_grid(self):
         for slot in getattr(self, '_inv_slots', []):
             for e in slot.values():
                 e.enabled = False
+        for tab in getattr(self, '_inv_cat_tabs', []):
+            tab.enabled = False
+        if hasattr(self, '_inv_detail'):
+            self._inv_detail.enabled = False
 
     @staticmethod
     def _item_icon_color(item_id: str):
@@ -593,34 +636,76 @@ class UIManager:
         cache[item_id] = tex
         return tex
 
+    def _inv_filter_items(self):
+        """Kembalikan list (item_id, qty) sesuai kategori aktif."""
+        s   = self.state
+        cat = self._INV_CATS[getattr(self, '_inv_cat_idx', 0)]
+        all_items = [(k, v) for k, v in sorted(s.inventory.items()) if v > 0]
+        if cat == 'Semua':
+            return all_items
+        if cat == 'Benih':
+            return [(k, v) for k, v in all_items if k.endswith('_seed')]
+        if cat == 'Panen':
+            return [(k, v) for k, v in all_items if k in CROPS]
+        if cat == 'Bahan':
+            return [(k, v) for k, v in all_items
+                    if k in ('kayu', 'batu') or any(x in k for x in
+                       ('besi', 'tembaga', 'emas', 'ore', 'kristal', 'mithril', 'wild', 'herb', 'berry', 'mandrake'))]
+        if cat == 'Alat':
+            return [(k, v) for k, v in all_items if k in ('susu', 'telur', 'wol') or
+                    not (k.endswith('_seed') or k in CROPS or
+                         k in ('kayu', 'batu') or
+                         any(x in k for x in ('besi', 'tembaga', 'emas', 'ore', 'kristal', 'mithril',
+                                               'wild', 'herb', 'berry', 'mandrake')))]
+        return all_items
+
     def _render_inventory_grid(self):
-        """Isi slot dari state.inventory (qty>0)."""
-        s = self.state
-        items = [(k, v) for k, v in sorted(s.inventory.items()) if v > 0]
-        n = len(self._inv_slots)
+        """Isi slot dari state.inventory (filter kategori, tampilkan kursor)."""
+        items   = self._inv_filter_items()
+        cursor  = getattr(self, '_inv_cursor', 0)
+        cursor  = min(cursor, max(0, len(items) - 1))
+        self._inv_cursor = cursor
+
+        # Update tab warna
+        for i, tab in enumerate(getattr(self, '_inv_cat_tabs', [])):
+            tab.color = color.rgb(255, 215, 60) if i == getattr(self, '_inv_cat_idx', 0) else color.rgb(150, 140, 120)
+            tab.enabled = True
+
         for i, slot in enumerate(self._inv_slots):
+            is_cursor = (i == cursor)
             if i < len(items):
                 item_id, qty = items[i]
                 slot['border'].enabled = True
                 slot['bg'].enabled = True
+                slot['cursor'].enabled = is_cursor
                 ic = slot['icon']
                 tex = self._item_icon_tex(item_id)
                 if tex is not None:
                     ic.texture = tex
-                    ic.color = color.white
+                    ic.color   = color.white
                 else:
                     ic.texture = None
-                    ic.color = self._item_icon_color(item_id)
+                    ic.color   = self._item_icon_color(item_id)
                 ic.enabled = True
-                slot['qty'].text = str(qty) if qty > 1 else ''
+                slot['qty'].text    = str(qty) if qty > 1 else ''
                 slot['qty'].enabled = True
-                # nama pendek (≤8 char)
                 disp = CROPS.get(item_id, {}).get('name') or item_id.replace('_seed', '~').replace('_', ' ')
-                slot['nm'].text = disp[:9]
+                slot['nm'].text    = disp[:9]
                 slot['nm'].enabled = True
             else:
-                for e in slot.values():
+                for k, e in slot.items():
                     e.enabled = False
+
+        # Detail item terpilih
+        if hasattr(self, '_inv_detail'):
+            if items and cursor < len(items):
+                item_id, qty = items[cursor]
+                disp = CROPS.get(item_id, {}).get('name') or item_id.replace('_seed', '~').replace('_', ' ')
+                self._inv_detail.text    = f'{disp}  x{qty}'
+                self._inv_detail.enabled = True
+            else:
+                self._inv_detail.text    = 'Inventori kosong'
+                self._inv_detail.enabled = True
 
     def open_panel(self, name: str):
         self._panel_name = name
@@ -658,7 +743,7 @@ class UIManager:
                 f"Emas: {s.gold}G    Pickaxe: Tier {s.pickaxe_tier}    "
                 f"Pedang: {s.sword_id or '-'}"
             )
-            self._panel_hint.text = '[I/ESC: tutup]   — Inventori —'
+            self._panel_hint.text = '[↑↓←→] Pilih  ·  [Q/E] Kategori  ·  [I/ESC] Tutup'
             self._render_inventory_grid()
 
         elif name == 'quest':
@@ -956,6 +1041,32 @@ class UIManager:
         self._pie_callback = None
         if self.mode == 'pie':
             self.mode = 'hud'
+
+    # ─── INVENTORY NAVIGATION ────────────────────────────────
+    def navigate_inventory(self, dr: int, dc: int):
+        """Gerakkan kursor inventory. dr=baris, dc=kolom."""
+        if getattr(self, '_panel_name', '') != 'inventory':
+            return
+        items  = self._inv_filter_items()
+        if not items:
+            return
+        cur    = getattr(self, '_inv_cursor', 0)
+        cols   = self._INV_COLS
+        r, c   = divmod(cur, cols)
+        c      = max(0, min(cols - 1, c + dc))
+        r      = max(0, min(self._INV_ROWS - 1, r + dr))
+        new    = r * cols + c
+        self._inv_cursor = min(new, len(items) - 1)
+        self._render_inventory_grid()
+
+    def navigate_inventory_cat(self, delta: int):
+        """Ganti tab kategori inventory."""
+        if getattr(self, '_panel_name', '') != 'inventory':
+            return
+        n = len(self._INV_CATS)
+        self._inv_cat_idx = (getattr(self, '_inv_cat_idx', 0) + delta) % n
+        self._inv_cursor  = 0
+        self._render_inventory_grid()
 
     def _refresh_pie_ui(self):
         from .data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS

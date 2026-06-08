@@ -595,8 +595,39 @@ def build_union_hall(world, scene, tx, ty, wx, wz):
 
 # ─── RUMAH KAMPUNG (revamp build_house_block) ─────────────────────────────────
 
+def _add_window(world, ents, cx, cy, cz, face, w_size, h_size, is_boarded, wall_thick=0.12):
+    """Tambah jendela (frame + kaca/tripleks) di salah satu face bangunan.
+    face: 'front'|'back'|'left'|'right'
+    w_size, h_size: lebar & tinggi jendela.
+    """
+    off = wall_thick
+    if face == 'front':   px, pz, fw, fz = cx,   cz + off,  w_size, 0.08
+    elif face == 'back':  px, pz, fw, fz = cx,   cz - off,  w_size, 0.08
+    elif face == 'right': px, pz, fw, fz = cx + off, cz,    0.08,   w_size
+    else:                 px, pz, fw, fz = cx - off, cz,    0.08,   w_size
+
+    # Frame kayu — sedikit lebih besar dari kaca
+    frame = world._create_entity('cube', (px, cy, pz),
+                (fw + 0.10, h_size + 0.10, fz + 0.10), None, C_WOOD_DARK)
+    ents.append(frame)
+    if is_boarded:
+        board = world._create_entity('cube', (px, cy, pz),
+                    (fw + 0.04, h_size + 0.04, fz + 0.16), None, C_PLYWOOD)
+        ents.append(board)
+    else:
+        # Kaca — warna biru-abu gelap dengan sedikit tint hangat (lampu dalam)
+        glass = world._create_entity('cube', (px, cy, pz),
+                    (fw, h_size, fz + 0.14), None, color.rgb(52, 62, 72))
+        ents.append(glass)
+        # Pantulan/cahaya interior — strip tipis kuning di dalam kaca
+        glow = world._create_entity('cube', (px, cy, pz),
+                   (fw * 0.55, h_size * 0.55, fz + 0.16),
+                   None, color.rgb(190, 158, 88))
+        ents.append(glow)
+
+
 def build_house_block(world, scene, tx, ty, wx, wz):
-    """Rumah kampung lapuk — bukan vila eropa, tapi bangunan tropis yang sudah aus."""
+    """Rumah kampung lapuk — dinding, jendela & detail terlihat jelas dari luar."""
     left_is_H = tx > 0 and scene.tiles[ty][tx-1] == H
     up_is_H   = ty > 0 and scene.tiles[ty-1][tx] == H
     if left_is_H or up_is_H:
@@ -618,102 +649,128 @@ def build_house_block(world, scene, tx, ty, wx, wz):
     ri = int(h * len(ROOF_TEXTURES)) % len(ROOF_TEXTURES)
     r_tex, r_col = ROOF_TEXTURES[ri]
 
-    # Fondasi — beton kusam
-    foundation = world._create_entity('cube',
-                    (cx, GROUND_H + 0.10, cz),
-                    (sx, 0.20, sz), None, C_CONCRETE_DARK)
+    wallh  = HOUSE_H * 1.45        # ~4.64 — menjulang jelas di atas player
+    base_y = GROUND_H + 0.20       # di atas fondasi
+    ents   = []                    # kumpulkan semua entity
 
-    # Tinggi dinding — JELAS menjulang di atas player (player ~3.0 unit).
-    # Rumah kampung 2-lantai kumuh: ~4.6 unit.
-    wallh = HOUSE_H * 1.45
-    base_y = GROUND_H + 0.20   # di atas fondasi
+    # ── Fondasi beton — plinth yang menonjol ──────────────────────────────────
+    ents.append(world._create_entity('cube',
+        (cx, GROUND_H + 0.14, cz), (sx + 0.12, 0.28, sz + 0.12), None, C_CONCRETE))
 
-    # Dinding utama — cat usang, warna pudar tidak seragam
-    wall_r = int(170 + h*30)
-    wall_g = int(156 + h*26)
-    wall_b = int(132 + h*22)
-    body = world._create_entity('cube',
-              (cx, base_y + wallh*0.5, cz),
-              (sx, wallh, sz), None,
-              color.rgb(wall_r, wall_g, wall_b))
+    # ── Dinding utama — plesteran pudar dengan tekstur house_wall ─────────────
+    wall_r = int(168 + h * 32);  wall_g = int(154 + h * 28);  wall_b = int(128 + h * 24)
+    wall_col = color.rgb(wall_r, wall_g, wall_b)
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh * 0.5, cz), (sx, wallh, sz), 'house_wall', wall_col))
 
-    # Garis pemisah lantai (papan horizontal) — perkuat kesan 2 lantai
-    floor_line = world._create_entity('cube',
-              (cx, base_y + wallh*0.5, cz),
-              (sx + 0.06, 0.12, sz + 0.06), None, C_WOOD_DARK)
+    # ── Strip plint bawah — beton gelap (beda material dari dinding) ──────────
+    plint_h = wallh * 0.22
+    plint_col = color.rgb(int(105 + h * 22), int(92 + h * 18), int(72 + h * 14))
+    ents.append(world._create_entity('cube',
+        (cx, base_y + plint_h * 0.5, cz),
+        (sx + 0.06, plint_h, sz + 0.06), None, plint_col))
 
-    # Strip seng berkarat di bagian bawah dinding (material campuran)
-    seng = world._create_entity('cube',
-              (cx, base_y + wallh*0.14, cz),
-              (sx + 0.06, wallh*0.26, sz + 0.06), None,
-              color.rgb(int(150 + h*28), int(108 + h*20), int(64 + h*15)))
+    # ── Garis pemisah antar-lantai — papan kayu horizontal ────────────────────
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh * 0.50, cz),
+        (sx + 0.10, 0.14, sz + 0.10), None, C_WOOD_DARK))
 
-    # Pintu kayu tua (proporsi ~tinggi manusia)
-    door_col = color.rgb(int(95 + h*25), int(65 + h*18), int(38 + h*12))
-    door = world._create_entity('cube',
-              (cx, base_y + 0.95, cz + sz*0.5 + 0.02),
-              (TS*0.7, 1.9, 0.10), 'wood_plank', door_col)
-    if h > 0.55:  # beberapa rumah dipalang
-        door_bar = world._create_entity('cube',
-                      (cx, base_y + 1.0, cz + sz*0.5 + 0.13),
-                      (TS*0.68, 0.10, 0.06), None, C_WOOD_DARK)
-        world._obj_ents.append(door_bar)
+    # ── Lisplang/trim atas dinding — batas dinding-atap ──────────────────────
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh + 0.06, cz),
+        (sx + 0.14, 0.13, sz + 0.14), None, C_CONCRETE_DARK))
 
-    # Jendela lantai atas — depan, beberapa dipalang tripleks
-    for side_x in [-sx*0.26, sx*0.26]:
-        wy = base_y + wallh*0.74
-        frame = world._create_entity('cube',
-                   (cx + side_x, wy, cz + sz*0.5 + 0.03),
-                   (TS*0.42, 0.95, 0.10), None, C_WOOD_DARK)
-        world._obj_ents.append(frame)
-        if _hash(cx + side_x, wy) > 0.45:  # boarded
-            board = world._create_entity('cube',
-                       (cx + side_x, wy, cz + sz*0.5 + 0.09),
-                       (TS*0.36, 0.78, 0.05), None, C_PLYWOOD)
-            world._obj_ents.append(board)
-        else:  # kaca gelap
-            glass = world._create_entity('cube',
-                       (cx + side_x, wy, cz + sz*0.5 + 0.08),
-                       (TS*0.34, 0.72, 0.04), None, color.rgb(38, 44, 52))
-            world._obj_ents.append(glass)
+    # ── JENDELA di 4 sisi ────────────────────────────────────────────────────
+    win_y_lo = base_y + wallh * 0.30   # lantai bawah
+    win_y_hi = base_y + wallh * 0.74   # lantai atas
+    win_w    = TS * 0.38
+    win_h    = 0.82
+    wt       = sx * 0.5 + 0.06        # tebal sisi dari center ke face
 
-    # Teras + tiang penyangga di depan pintu
-    porch = world._create_entity('cube',
-               (cx, base_y + 2.0, cz + sz*0.5 + TS*0.32),
-               (TS*1.3, 0.14, TS*0.7), r_tex, r_col)
-    pillar1 = world._create_entity('cylinder',
-                 (cx - TS*0.5, base_y + 1.0, cz + sz*0.5 + TS*0.6),
-                 (0.10, 2.0, 0.10), 'wood_plank', C_WOOD_OLD)
-    pillar2 = world._create_entity('cylinder',
-                 (cx + TS*0.5, base_y + 1.0, cz + sz*0.5 + TS*0.6),
-                 (0.10, 2.0, 0.10), 'wood_plank', C_WOOD_OLD)
+    # Tentukan posisi X jendela berdasarkan lebar bangunan
+    win_x_offsets = []
+    if w_tiles == 1:
+        win_x_offsets = [-sx * 0.22, sx * 0.22]
+    else:
+        step = sx / (w_tiles + 1)
+        win_x_offsets = [(-sx * 0.5 + step * (i + 1)) for i in range(w_tiles)]
 
-    # Atap seng pelana — jelas kontras di atas dinding
+    win_z_offsets = []
+    if h_tiles == 1:
+        win_z_offsets = [-sz * 0.22, sz * 0.22]
+    else:
+        step = sz / (h_tiles + 1)
+        win_z_offsets = [(-sz * 0.5 + step * (i + 1)) for i in range(h_tiles)]
+
+    # Front & back — jendela per-kolom
+    for xo in win_x_offsets:
+        for wy_level in [win_y_lo, win_y_hi]:
+            boarded = _hash(cx + xo, wy_level) > 0.52
+            _add_window(world, ents, cx + xo, wy_level, cz + sz * 0.5,
+                        'front', win_w, win_h, boarded, wall_thick=0.07)
+            _add_window(world, ents, cx + xo, wy_level, cz - sz * 0.5,
+                        'back', win_w, win_h, boarded, wall_thick=0.07)
+
+    # Left & right — jendela per-baris kedalaman
+    for zo in win_z_offsets:
+        for wy_level in [win_y_lo, win_y_hi]:
+            boarded = _hash(cz + zo, wy_level) > 0.52
+            _add_window(world, ents, cx + sx * 0.5, wy_level, cz + zo,
+                        'right', win_w * sz / sx, win_h, boarded, wall_thick=0.07)
+            _add_window(world, ents, cx - sx * 0.5, wy_level, cz + zo,
+                        'left', win_w * sz / sx, win_h, boarded, wall_thick=0.07)
+
+    # ── Pintu kayu di depan — frame + daun pintu ──────────────────────────────
+    door_col = color.rgb(int(88 + h * 28), int(60 + h * 20), int(35 + h * 14))
+    # Frame pintu (lebih terang dari dinding)
+    ents.append(world._create_entity('cube',
+        (cx, base_y + 1.05, cz + sz * 0.5 + 0.04),
+        (TS * 0.76, 2.10, 0.12), None, C_CONCRETE_DARK))
+    # Daun pintu
+    ents.append(world._create_entity('cube',
+        (cx, base_y + 0.98, cz + sz * 0.5 + 0.07),
+        (TS * 0.62, 1.96, 0.09), 'wood_plank', door_col))
+    # Panel jendela kecil di atas pintu (fanlight)
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh * 0.26, cz + sz * 0.5 + 0.09),
+        (TS * 0.38, 0.38, 0.07), None, color.rgb(52, 62, 72)))
+    if h > 0.55:  # palang horizontal
+        ents.append(world._create_entity('cube',
+            (cx, base_y + 1.05, cz + sz * 0.5 + 0.17),
+            (TS * 0.60, 0.10, 0.06), None, C_WOOD_DARK))
+
+    # ── Teras + tiang + railing ───────────────────────────────────────────────
+    ents.append(world._create_entity('cube',
+        (cx, base_y + 2.05, cz + sz * 0.5 + TS * 0.34),
+        (sx * 0.80, 0.14, TS * 0.72), r_tex, r_col))
+    for px_off in [-sx * 0.34, sx * 0.34]:
+        ents.append(world._create_entity('cylinder',
+            (cx + px_off, base_y + 1.0, cz + sz * 0.5 + TS * 0.58),
+            (0.12, 2.0, 0.12), None, C_CONCRETE_DARK))
+    # Railing teras — palang horizontal
+    ents.append(world._create_entity('cube',
+        (cx, base_y + 1.85, cz + sz * 0.5 + TS * 0.60),
+        (sx * 0.70, 0.08, 0.08), None, C_WOOD_DARK))
+
+    # ── Atap seng pelana — jelas menonjol ─────────────────────────────────────
     from ursina.models.procedural.cone import Cone
     roof_y = base_y + wallh
-    roof = world._create_entity(Cone(resolution=4),
-              (cx, roof_y + HOUSE_H*0.40, cz),
-              (sx*1.4, HOUSE_H*0.85, sz*1.4), r_tex, r_col, rotation=(0, 45, 0))
-    eave = world._create_entity('cube',
-              (cx, roof_y + 0.05, cz),
-              (sx*1.42, 0.10, sz*1.42), None, r_col)
+    ents.append(world._create_entity(Cone(resolution=4),
+        (cx, roof_y + HOUSE_H * 0.42, cz),
+        (sx * 1.42, HOUSE_H * 0.90, sz * 1.42), r_tex, r_col, rotation=(0, 45, 0)))
+    # Lisplang atap
+    ents.append(world._create_entity('cube',
+        (cx, roof_y + 0.07, cz), (sx * 1.44, 0.12, sz * 1.44), None, r_col))
 
-    # Pipa berkarat di sisi dinding
-    pipe = world._create_entity('cylinder',
-              (cx + sx*0.52, base_y + wallh*0.5, cz - sz*0.22),
-              (0.07, wallh, 0.07), None, C_RUST)
+    # ── Detail sisi — pipa + noda air ─────────────────────────────────────────
+    ents.append(world._create_entity('cylinder',
+        (cx + sx * 0.48, base_y + wallh * 0.5, cz - sz * 0.22),
+        (0.08, wallh, 0.08), None, C_RUST))
+    ents.append(world._create_entity('cube',
+        (cx - sx * 0.46, base_y + wallh * 0.20, cz - sz * 0.38),
+        (TS * 0.18, wallh * 0.32, 0.05), None, C_MOLD))
 
-    # Noda jamur pojok bawah + noda air vertikal
-    mold = world._create_entity('cube',
-              (cx - sx*0.5, base_y + wallh*0.18, cz - sz*0.40),
-              (TS*0.22, wallh*0.34, 0.05), None, C_MOLD)
-    water_stain = world._create_entity('cube',
-                     (cx + sx*0.30, base_y + wallh*0.45, cz - sz*0.52),
-                     (TS*0.10, wallh*0.7, 0.04), None, C_STAIN)
-
-    world._obj_ents.extend([foundation, body, floor_line, seng, door,
-                             porch, pillar1, pillar2, roof, eave, pipe,
-                             mold, water_stain])
+    world._obj_ents.extend(ents)
 
 
 # ─── DERMAGA LAPUK ────────────────────────────────────────────────────────────

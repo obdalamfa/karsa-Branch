@@ -54,5 +54,14 @@ def build_greenhouse():
     # ── Tanaman pot (contoh tanaman di dalam) ──
     m[5][7]  = PP
 
-    return Scene('greenhouse', 'Rumah Kaca', m,
-                 portals=[(7, 11, 'town', 21, 22)], indoor=True)
+    from game.scenes.scene_base import _add_indoor_atmosphere
+
+    def _greenhouse_builder(world):
+        from game.scenes.props import default_prop_builder
+        default_prop_builder(world, scene_gh)
+        _add_indoor_atmosphere(world, scene_gh, 'greenhouse')
+
+    scene_gh = Scene('greenhouse', 'Rumah Kaca', m,
+                     portals=[(7, 11, 'town', 21, 22)], indoor=True,
+                     builder=_greenhouse_builder)
+    return scene_gh

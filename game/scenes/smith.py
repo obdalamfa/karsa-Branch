@@ -43,4 +43,4 @@ def build_smith():
         (4, 5, CT),
     ]
     return _build_indoor_room('smith', 'Bengkel Budi', objects,
-                               ('town', 7, 22), w=15, h=8)
+                               ('town', 7, 22), w=15, h=8, theme='smith')

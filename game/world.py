@@ -23,7 +23,8 @@ from .config import (TILE_SIZE, GROUND_H, WALL_H, TREE_H, HOUSE_H, OBJ_H, SMALL_
                      MR, FP, CL, PP, CH, CT, SH, GR, LN, DT, CV_W, CV_F, PEN, STR_T,
                      DCK, BOT, LLY, CRYS, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH,
                      STAIRS_DOWN, STAIRS_UP, MINED, SD, LGH_B, LGH_F, CLOUD, GOLD_W, PALM, TV, CHR, CAL,
-                     WARUNG, RUMAH_PG, UNION_HL, SHRINE, DEBRIS, LAUNDRY, GRAFFITI_W)
+                     WARUNG, RUMAH_PG, UNION_HL, SHRINE, DEBRIS, LAUNDRY, GRAFFITI_W,
+                     SHOP_EXT, CLINIC_EXT, SMITH_EXT, GREENHOUSE_EXT)
 from .scenes import SCENES
 from .data import CROPS
 
@@ -183,6 +184,10 @@ OBJ_TEX = {
     LGH_B:   'wall_stone',
     LGH_F:   'house_wall',
     GOLD_W:  'ore_gold',
+    SHOP_EXT:       'house_wall',
+    CLINIC_EXT:     'house_wall',
+    SMITH_EXT:      'house_wall',
+    GREENHOUSE_EXT: 'house_wall',
 }
 
 # Fallback warna — palet decay tropis (Disco Elysium × Indonesia)

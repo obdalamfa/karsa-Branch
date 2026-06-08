@@ -39,4 +39,4 @@ def build_clinic():
         (7, 1, CAL),
     ]
     return _build_indoor_room('clinic', 'Klinik Pak Raka', objects,
-                               ('town', 11, 9), w=15, h=8)
+                               ('town', 11, 9), w=15, h=8, theme='clinic')

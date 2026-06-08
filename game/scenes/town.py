@@ -3,6 +3,9 @@ from game.scenes.scene_base import Scene
 import random
 import math
 
+# Import tile types bangunan berportal (eksterior bertema)
+from game.config import SHOP_EXT, CLINIC_EXT, SMITH_EXT, GREENHOUSE_EXT
+
 def build_town():
     """
     Desa Karsa — district suram ala Martinaise Nusantara.
@@ -37,12 +40,12 @@ def build_town():
 
     # Toko (shop) — portal tetap di (4,8)
     for y in range(5, 8):
-        for x in range(2, 7): m[y][x] = H
+        for x in range(2, 7): m[y][x] = SHOP_EXT
     m[8][4] = DR
 
     # Klinik (clinic) — portal tetap di (11,8)
     for y in range(5, 8):
-        for x in range(9, 13): m[y][x] = H
+        for x in range(9, 13): m[y][x] = CLINIC_EXT
     m[8][11] = DR
 
     # Studio (studio) — portal tetap di (22,8) — sebagai RUMAH_PG
@@ -70,12 +73,12 @@ def build_town():
 
     # Bengkel/smith — portal tetap di (7,21)
     for y in range(17, 21):
-        for x in range(5, 9): m[y][x] = H
+        for x in range(5, 9): m[y][x] = SMITH_EXT
     m[21][7] = DR
 
     # Greenhouse — portal tetap di (21,21)
     for y in range(17, 21):
-        for x in range(18, 23): m[y][x] = H
+        for x in range(18, 23): m[y][x] = GREENHOUSE_EXT
     m[21][21] = DR
 
     # Rumah panggung di selatan kiri

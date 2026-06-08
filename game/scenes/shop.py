@@ -40,4 +40,4 @@ def build_shop():
         ]
     )
     return _build_indoor_room('shop', 'Warung Bu Sari', objects,
-                               ('town', 4, 9), w=15, h=8)
+                               ('town', 4, 9), w=15, h=8, theme='shop')

@@ -47,4 +47,4 @@ def build_studio():
         (10, 1, CAL),
     ]
     return _build_indoor_room('studio', 'Studio Maya', objects,
-                               ('town', 22, 9), w=15, h=8)
+                               ('town', 22, 9), w=15, h=8, theme='studio')

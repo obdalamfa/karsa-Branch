@@ -1,4 +1,5 @@
 from game.config import *
+from game.config import SHOP_EXT, CLINIC_EXT, SMITH_EXT, GREENHOUSE_EXT
 from ursina import color
 import math
 import random
@@ -773,6 +774,440 @@ def build_house_block(world, scene, tx, ty, wx, wz):
     world._obj_ents.extend(ents)
 
 
+# ─── EKSTERIOR BANGUNAN BERTEMA ───────────────────────────────────────────────
+
+def _collect_block(scene, tx, ty, tile_type):
+    """Bantu: hitung ukuran blok tile yang bersebelahan untuk tile_type tertentu."""
+    w_tiles = 1
+    while tx + w_tiles < scene.w and scene.tiles[ty][tx + w_tiles] == tile_type:
+        w_tiles += 1
+    h_tiles = 1
+    while ty + h_tiles < scene.h and scene.tiles[ty + h_tiles][tx] == tile_type:
+        h_tiles += 1
+    return w_tiles, h_tiles
+
+
+def build_shop_exterior(world, scene, tx, ty, wx, wz):
+    """Toko kelontong — eksterior krem-kuning, awning merah, etalase kaca."""
+    left_same = tx > 0 and scene.tiles[ty][tx-1] == SHOP_EXT
+    up_same   = ty > 0 and scene.tiles[ty-1][tx] == SHOP_EXT
+    if left_same or up_same:
+        return
+
+    w_tiles, h_tiles = _collect_block(scene, tx, ty, SHOP_EXT)
+
+    cx = wx + (w_tiles - 1) * TS / 2.0
+    cz = wz + (h_tiles - 1) * TS / 2.0
+    sx = TS * w_tiles * 0.93
+    sz = TS * h_tiles * 0.93
+    h  = _hash(wx, wz)
+    ents = []
+
+    wallh  = HOUSE_H * 1.20
+    base_y = GROUND_H + 0.20
+
+    ri = int(h * len(ROOF_TEXTURES)) % len(ROOF_TEXTURES)
+    r_tex, r_col = ROOF_TEXTURES[ri]
+
+    # Fondasi
+    ents.append(world._create_entity('cube',
+        (cx, GROUND_H + 0.14, cz), (sx + 0.12, 0.28, sz + 0.12), None, C_CONCRETE))
+
+    # Dinding utama — krem-kuning pudar
+    wall_col = color.rgb(195, 178, 130)
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh * 0.5, cz), (sx, wallh, sz), 'house_wall', wall_col))
+
+    # Plint bawah
+    plint_h = wallh * 0.18
+    ents.append(world._create_entity('cube',
+        (cx, base_y + plint_h * 0.5, cz),
+        (sx + 0.06, plint_h, sz + 0.06), None, color.rgb(168, 152, 110)))
+
+    # Papan nama di atas awning
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh * 0.78, cz + sz * 0.5 + 0.06),
+        (sx * 0.82, wallh * 0.12, 0.08), None, color.rgb(212, 195, 145)))
+
+    # Awning/tenda di atas etalase depan
+    awning_col = color.rgb(175, 88, 55)
+    awning_y = base_y + wallh * 0.60
+    ents.append(world._create_entity('cube',
+        (cx, awning_y, cz + sz * 0.5 + TS * 0.25),
+        (sx * 0.88, 0.06, TS * 0.55), None, awning_col))
+
+    # Tiang awning — 2 silinder kecil
+    for pole_x in [cx - sx * 0.30, cx + sx * 0.30]:
+        ents.append(world._create_entity('cylinder',
+            (pole_x, base_y + wallh * 0.30, cz + sz * 0.5 + TS * 0.50),
+            (0.07, wallh * 0.60, 0.07), None, color.rgb(148, 108, 68)))
+
+    # Etalase kaca besar di depan
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh * 0.38, cz + sz * 0.5 + 0.07),
+        (TS * 0.62, 1.20, 0.10), None, C_WOOD_DARK))   # frame
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh * 0.38, cz + sz * 0.5 + 0.12),
+        (TS * 0.50, 1.10, 0.05), None, color.rgb(48, 58, 68)))  # kaca
+    # Kilap kaca
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh * 0.38, cz + sz * 0.5 + 0.14),
+        (TS * 0.22, 0.45, 0.04), None, color.rgb(88, 110, 138)))
+
+    # Jendela samping kiri & kanan
+    win_y = base_y + wallh * 0.55
+    win_w = TS * 0.32
+    win_h_val = 0.68
+    _add_window(world, ents, cx - sx * 0.32, win_y, cz + sz * 0.5,
+                'front', win_w, win_h_val, False, wall_thick=0.07)
+    _add_window(world, ents, cx + sx * 0.32, win_y, cz + sz * 0.5,
+                'front', win_w, win_h_val, False, wall_thick=0.07)
+    _add_window(world, ents, cx + sx * 0.5, win_y, cz,
+                'right', win_w, win_h_val, False, wall_thick=0.07)
+    _add_window(world, ents, cx - sx * 0.5, win_y, cz,
+                'left', win_w, win_h_val, False, wall_thick=0.07)
+
+    # Pintu kayu depan
+    door_col = color.rgb(128, 78, 42)
+    ents.append(world._create_entity('cube',
+        (cx - sx * 0.30, base_y + 0.95, cz + sz * 0.5 + 0.04),
+        (TS * 0.58, 1.90, 0.10), 'wood_plank', door_col))
+    # Step/anak tangga kecil di depan
+    ents.append(world._create_entity('cube',
+        (cx - sx * 0.30, GROUND_H + 0.10, cz + sz * 0.5 + TS * 0.22),
+        (TS * 0.62, 0.12, TS * 0.20), None, C_CONCRETE_DARK))
+
+    # Atap pelana rendah
+    from ursina.models.procedural.cone import Cone
+    roof_y = base_y + wallh
+    ents.append(world._create_entity(Cone(resolution=4),
+        (cx, roof_y + HOUSE_H * 0.28, cz),
+        (sx * 1.38, HOUSE_H * 0.62, sz * 1.38), r_tex, r_col, rotation=(0, 45, 0)))
+    ents.append(world._create_entity('cube',
+        (cx, roof_y + 0.06, cz), (sx * 1.40, 0.11, sz * 1.40), None, r_col))
+
+    world._obj_ents.extend(ents)
+
+
+def build_clinic_exterior(world, scene, tx, ty, wx, wz):
+    """Klinik — dinding putih-abu bersih, palang merah, jendela kaca semua."""
+    left_same = tx > 0 and scene.tiles[ty][tx-1] == CLINIC_EXT
+    up_same   = ty > 0 and scene.tiles[ty-1][tx] == CLINIC_EXT
+    if left_same or up_same:
+        return
+
+    w_tiles, h_tiles = _collect_block(scene, tx, ty, CLINIC_EXT)
+
+    cx = wx + (w_tiles - 1) * TS / 2.0
+    cz = wz + (h_tiles - 1) * TS / 2.0
+    sx = TS * w_tiles * 0.93
+    sz = TS * h_tiles * 0.93
+    h  = _hash(wx, wz)
+    ents = []
+
+    wallh  = HOUSE_H * 1.35
+    base_y = GROUND_H + 0.20
+
+    ri = int(h * len(ROOF_TEXTURES)) % len(ROOF_TEXTURES)
+    r_tex, r_col = ROOF_TEXTURES[ri]
+
+    # Fondasi beton bersih
+    ents.append(world._create_entity('cube',
+        (cx, GROUND_H + 0.14, cz), (sx + 0.12, 0.28, sz + 0.12), None, color.rgb(195, 192, 185)))
+
+    # Dinding utama — putih-abu bersih
+    wall_col = color.rgb(218, 215, 210)
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh * 0.5, cz), (sx, wallh, sz), 'house_wall', wall_col))
+
+    # Plint bawah (lebih terang dari rumah biasa)
+    plint_h = wallh * 0.18
+    ents.append(world._create_entity('cube',
+        (cx, base_y + plint_h * 0.5, cz),
+        (sx + 0.06, plint_h, sz + 0.06), None, color.rgb(188, 185, 178)))
+
+    # Lisplang atas
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh + 0.06, cz),
+        (sx + 0.14, 0.13, sz + 0.14), None, color.rgb(175, 172, 165)))
+
+    # Kanopi/overhang di atas pintu masuk
+    kanopi_col = color.rgb(188, 55, 55)
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh * 0.62, cz + sz * 0.5 + TS * 0.18),
+        (sx * 0.58, 0.07, TS * 0.40), None, kanopi_col))
+
+    # Simbol palang merah di atas pintu — 2 cube saling silang
+    cross_col = color.rgb(188, 55, 55)
+    cross_y = base_y + wallh * 0.78
+    ents.append(world._create_entity('cube',
+        (cx, cross_y, cz + sz * 0.5 + 0.08),
+        (0.10, 0.52, 0.06), None, cross_col))  # vertikal
+    ents.append(world._create_entity('cube',
+        (cx, cross_y, cz + sz * 0.5 + 0.08),
+        (0.52, 0.10, 0.06), None, cross_col))  # horizontal
+
+    # Pintu depan — bersih, terang
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh * 0.28, cz + sz * 0.5 + 0.04),
+        (TS * 0.70, 0.56, 0.12), None, color.rgb(188, 185, 178)))  # frame
+    ents.append(world._create_entity('cube',
+        (cx, base_y + 0.95, cz + sz * 0.5 + 0.07),
+        (TS * 0.60, 1.90, 0.09), 'wood_plank', color.rgb(155, 148, 138)))
+
+    # Jendela kaca — semua tidak dipalang (klinik terawat)
+    win_y_lo = base_y + wallh * 0.32
+    win_y_hi = base_y + wallh * 0.70
+    win_w = TS * 0.36
+    win_h_val = 0.78
+    for xo in [-sx * 0.28, sx * 0.28]:
+        for wy_lvl in [win_y_lo, win_y_hi]:
+            _add_window(world, ents, cx + xo, wy_lvl, cz + sz * 0.5,
+                        'front', win_w, win_h_val, False, wall_thick=0.07)
+            _add_window(world, ents, cx + xo, wy_lvl, cz - sz * 0.5,
+                        'back', win_w, win_h_val, False, wall_thick=0.07)
+    for zo in [-sz * 0.22, sz * 0.22]:
+        for wy_lvl in [win_y_lo, win_y_hi]:
+            _add_window(world, ents, cx + sx * 0.5, wy_lvl, cz + zo,
+                        'right', win_w, win_h_val, False, wall_thick=0.07)
+            _add_window(world, ents, cx - sx * 0.5, wy_lvl, cz + zo,
+                        'left', win_w, win_h_val, False, wall_thick=0.07)
+
+    # Atap pelana normal
+    from ursina.models.procedural.cone import Cone
+    roof_y = base_y + wallh
+    ents.append(world._create_entity(Cone(resolution=4),
+        (cx, roof_y + HOUSE_H * 0.38, cz),
+        (sx * 1.42, HOUSE_H * 0.82, sz * 1.42), r_tex, r_col, rotation=(0, 45, 0)))
+    ents.append(world._create_entity('cube',
+        (cx, roof_y + 0.06, cz), (sx * 1.44, 0.12, sz * 1.44), None, r_col))
+
+    world._obj_ents.extend(ents)
+
+
+def build_smith_exterior(world, scene, tx, ty, wx, wz):
+    """Bengkel pandai besi — dinding batu gelap, cerobong, cahaya api dari jendela."""
+    left_same = tx > 0 and scene.tiles[ty][tx-1] == SMITH_EXT
+    up_same   = ty > 0 and scene.tiles[ty-1][tx] == SMITH_EXT
+    if left_same or up_same:
+        return
+
+    w_tiles, h_tiles = _collect_block(scene, tx, ty, SMITH_EXT)
+
+    cx = wx + (w_tiles - 1) * TS / 2.0
+    cz = wz + (h_tiles - 1) * TS / 2.0
+    sx = TS * w_tiles * 0.93
+    sz = TS * h_tiles * 0.93
+    h  = _hash(wx, wz)
+    ents = []
+
+    wallh  = HOUSE_H * 1.60
+    base_y = GROUND_H + 0.20
+
+    ri = int(h * len(ROOF_TEXTURES)) % len(ROOF_TEXTURES)
+    r_tex, _ = ROOF_TEXTURES[ri]
+    # Warna atap bengkel selalu gelap — besi berkarat tua
+    r_col = color.rgb(62, 55, 48)
+
+    # Fondasi masif
+    ents.append(world._create_entity('cube',
+        (cx, GROUND_H + 0.16, cz), (sx + 0.16, 0.32, sz + 0.16), None, color.rgb(58, 52, 45)))
+
+    # Dinding utama — batu bata gelap
+    wall_col = color.rgb(85, 78, 68)
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh * 0.5, cz), (sx, wallh, sz), 'house_wall', wall_col))
+
+    # Strip batu kasar di plint bawah
+    plint_h = wallh * 0.22
+    ents.append(world._create_entity('cube',
+        (cx, base_y + plint_h * 0.5, cz),
+        (sx + 0.08, plint_h, sz + 0.08), None, color.rgb(62, 55, 46)))
+
+    # Lisplang atas gelap
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh + 0.06, cz),
+        (sx + 0.16, 0.16, sz + 0.16), None, color.rgb(48, 42, 36)))
+
+    # Pintu forge besar
+    ents.append(world._create_entity('cube',
+        (cx, base_y + 1.15, cz + sz * 0.5 + 0.05),
+        (TS * 0.95, 2.30, 0.14), None, color.rgb(52, 46, 40)))  # frame besi
+    ents.append(world._create_entity('cube',
+        (cx, base_y + 1.05, cz + sz * 0.5 + 0.10),
+        (TS * 0.82, 2.10, 0.09), 'wood_plank', color.rgb(68, 55, 42)))  # daun pintu
+
+    # Jendela dengan cahaya api oranye — bukan kaca biru
+    forge_win_y = base_y + wallh * 0.45
+    win_w = TS * 0.30
+    for xo in [-sx * 0.30, sx * 0.30]:
+        # Frame
+        ents.append(world._create_entity('cube',
+            (cx + xo, forge_win_y, cz + sz * 0.5 + 0.06),
+            (win_w + 0.10, 0.72, 0.12), None, color.rgb(48, 42, 36)))
+        # Cahaya api
+        ents.append(world._create_entity('cube',
+            (cx + xo, forge_win_y, cz + sz * 0.5 + 0.12),
+            (win_w, 0.62, 0.06), None, color.rgb(255, 140, 40)))
+        # Kilap merah di dalam
+        ents.append(world._create_entity('cube',
+            (cx + xo, forge_win_y, cz + sz * 0.5 + 0.15),
+            (win_w * 0.55, 0.28, 0.04), None, color.rgb(220, 80, 25)))
+
+    # Jendela sisi
+    side_win_y = base_y + wallh * 0.48
+    _add_window(world, ents, cx + sx * 0.5, side_win_y, cz,
+                'right', TS * 0.28, 0.65, False, wall_thick=0.07)
+    _add_window(world, ents, cx - sx * 0.5, side_win_y, cz,
+                'left', TS * 0.28, 0.65, False, wall_thick=0.07)
+    # Override warna kaca jendela sisi ke oranye
+    # (kaca sudah ditambahkan via _add_window, tidak perlu override — efek cukup)
+
+    # Cerobong asap — besar di atas atap
+    chimney_x = cx + sx * 0.25
+    chimney_z = cz - sz * 0.22
+    chimney_base_y = base_y + wallh
+    ents.append(world._create_entity('cylinder',
+        (chimney_x, chimney_base_y + HOUSE_H * 0.40, chimney_z),
+        (0.28, HOUSE_H * 0.80, 0.28), None, color.rgb(55, 48, 40)))
+    # Tutup cerobong
+    ents.append(world._create_entity('cube',
+        (chimney_x, chimney_base_y + HOUSE_H * 0.82, chimney_z),
+        (0.44, 0.08, 0.44), None, color.rgb(42, 36, 30)))
+    # Asap/soot ring
+    ents.append(world._create_entity('cylinder',
+        (chimney_x, chimney_base_y + HOUSE_H * 0.79, chimney_z),
+        (0.32, 0.06, 0.32), None, color.rgb(28, 25, 22)))
+
+    # Pipa-pipa di sisi dinding
+    for px_off, pz_off in [(sx*0.50, sz*0.25), (sx*0.50, -sz*0.15)]:
+        ents.append(world._create_entity('cylinder',
+            (cx + px_off, base_y + wallh * 0.55, cz + pz_off),
+            (0.07, wallh * 0.65, 0.07), None, C_RUST))
+
+    # Atap pelana berat
+    from ursina.models.procedural.cone import Cone
+    roof_y = base_y + wallh
+    ents.append(world._create_entity(Cone(resolution=4),
+        (cx, roof_y + HOUSE_H * 0.40, cz),
+        (sx * 1.42, HOUSE_H * 0.85, sz * 1.42), r_tex, r_col, rotation=(0, 45, 0)))
+    ents.append(world._create_entity('cube',
+        (cx, roof_y + 0.07, cz), (sx * 1.44, 0.14, sz * 1.44), None, color.rgb(48, 42, 36)))
+
+    # Noda jelaga di dinding sekitar jendela
+    ents.append(world._create_entity('cube',
+        (cx, base_y + wallh * 0.72, cz + sz * 0.5 + 0.06),
+        (sx * 0.65, wallh * 0.22, 0.04), None, color.rgb(28, 24, 20)))
+
+    world._obj_ents.extend(ents)
+
+
+def build_greenhouse_exterior(world, scene, tx, ty, wx, wz):
+    """Rumah kaca — frame logam hijau-abu, panel kaca transparan, tanaman terlihat."""
+    left_same = tx > 0 and scene.tiles[ty][tx-1] == GREENHOUSE_EXT
+    up_same   = ty > 0 and scene.tiles[ty-1][tx] == GREENHOUSE_EXT
+    if left_same or up_same:
+        return
+
+    w_tiles, h_tiles = _collect_block(scene, tx, ty, GREENHOUSE_EXT)
+
+    cx = wx + (w_tiles - 1) * TS / 2.0
+    cz = wz + (h_tiles - 1) * TS / 2.0
+    sx = TS * w_tiles * 0.93
+    sz = TS * h_tiles * 0.93
+    h  = _hash(wx, wz)
+    ents = []
+
+    wallh  = HOUSE_H * 1.30
+    base_y = GROUND_H + 0.08
+
+    frame_col = color.rgb(95, 115, 95)   # logam hijau-abu
+    glass_col = color.rgb(140, 195, 155) # panel kaca hijau-biru muda
+
+    # Fondasi tipis
+    ents.append(world._create_entity('cube',
+        (cx, GROUND_H + 0.08, cz), (sx + 0.10, 0.16, sz + 0.10), None, color.rgb(105, 118, 98)))
+
+    # ── Frame vertikal di sudut dan tengah ─────────────────────────────────────
+    frame_posts = [
+        (cx - sx*0.48, cz - sz*0.48), (cx + sx*0.48, cz - sz*0.48),
+        (cx - sx*0.48, cz + sz*0.48), (cx + sx*0.48, cz + sz*0.48),
+        (cx,          cz - sz*0.48), (cx,          cz + sz*0.48),
+        (cx - sx*0.48, cz),          (cx + sx*0.48, cz),
+    ]
+    for fpx, fpz in frame_posts:
+        ents.append(world._create_entity('cylinder',
+            (fpx, base_y + wallh * 0.5, fpz),
+            (0.08, wallh, 0.08), None, frame_col))
+
+    # ── Frame horizontal — sisi depan/belakang ────────────────────────────────
+    for frame_y in [base_y + wallh * 0.25, base_y + wallh * 0.60, base_y + wallh]:
+        ents.append(world._create_entity('cube',
+            (cx, frame_y, cz - sz * 0.48), (sx * 0.97, 0.07, 0.08), None, frame_col))
+        ents.append(world._create_entity('cube',
+            (cx, frame_y, cz + sz * 0.48), (sx * 0.97, 0.07, 0.08), None, frame_col))
+        ents.append(world._create_entity('cube',
+            (cx - sx * 0.48, frame_y, cz), (0.08, 0.07, sz * 0.97), None, frame_col))
+        ents.append(world._create_entity('cube',
+            (cx + sx * 0.48, frame_y, cz), (0.08, 0.07, sz * 0.97), None, frame_col))
+
+    # ── Panel kaca dinding — beberapa section ────────────────────────────────
+    panel_h = wallh * 0.32
+    panel_y_lo = base_y + wallh * 0.13
+    panel_y_hi = base_y + wallh * 0.46
+
+    # Depan — 2 panel terpisah (ada pintu di tengah)
+    for pxo in [-sx * 0.25, sx * 0.25]:
+        for pyl in [panel_y_lo, panel_y_hi]:
+            ents.append(world._create_entity('cube',
+                (cx + pxo, pyl, cz + sz * 0.48),
+                (sx * 0.40, panel_h, 0.05), None, glass_col))
+    # Belakang & sisi — panel penuh
+    for pyl in [panel_y_lo, panel_y_hi]:
+        ents.append(world._create_entity('cube',
+            (cx, pyl, cz - sz * 0.48), (sx * 0.90, panel_h, 0.05), None, glass_col))
+        ents.append(world._create_entity('cube',
+            (cx + sx * 0.48, pyl, cz), (0.05, panel_h, sz * 0.90), None, glass_col))
+        ents.append(world._create_entity('cube',
+            (cx - sx * 0.48, pyl, cz), (0.05, panel_h, sz * 0.90), None, glass_col))
+
+    # Pintu greenhouse di depan-tengah
+    ents.append(world._create_entity('cube',
+        (cx, base_y + 1.00, cz + sz * 0.48 + 0.05),
+        (TS * 0.65, 2.00, 0.08), None, frame_col))
+
+    # Tanaman terlihat dari luar — beberapa cube hijau di dalam
+    plant_cols = [color.rgb(55, 140, 58), color.rgb(38, 115, 45), color.rgb(72, 165, 65)]
+    plant_positions = [
+        (cx - sx*0.30, cz - sz*0.25), (cx + sx*0.30, cz - sz*0.25),
+        (cx - sx*0.20, cz + sz*0.18), (cx + sx*0.22, cz + sz*0.20),
+        (cx,           cz - sz*0.10),
+    ]
+    for i, (ppx, ppz) in enumerate(plant_positions):
+        pc = plant_cols[i % len(plant_cols)]
+        ents.append(world._create_entity('sphere',
+            (ppx, base_y + wallh * 0.28, ppz),
+            (TS * 0.42, TS * 0.40, TS * 0.42), 'cloth_green', pc))
+
+    # Atap segitiga greenhouse — frame + panel kaca
+    roof_y = base_y + wallh
+    # Ridge (puncak atap)
+    ents.append(world._create_entity('cube',
+        (cx, roof_y + HOUSE_H * 0.38, cz),
+        (sx * 0.06, HOUSE_H * 0.78, sx * 0.06), None, frame_col))
+    # Panel atap kiri-kanan
+    from ursina.models.procedural.cone import Cone
+    ents.append(world._create_entity(Cone(resolution=4),
+        (cx, roof_y + HOUSE_H * 0.30, cz),
+        (sx * 1.32, HOUSE_H * 0.65, sz * 1.32), None,
+        color.rgb(125, 178, 140), rotation=(0, 45, 0)))
+    # Frame atap
+    ents.append(world._create_entity('cube',
+        (cx, roof_y + 0.05, cz), (sx * 1.35, 0.08, sz * 1.35), None, frame_col))
+
+    world._obj_ents.extend(ents)
+
+
 # ─── DERMAGA LAPUK ────────────────────────────────────────────────────────────
 
 def build_dock_rotten(world, wx, wz):
@@ -951,6 +1386,10 @@ def default_prop_builder(world, scene):
             elif tid == H:        build_house_block(world, scene, tx, ty, wx, wz)
             elif tid == RUMAH_PG: build_rumah_panggung(world, scene, tx, ty, wx, wz)
             elif tid == UNION_HL: build_union_hall(world, scene, tx, ty, wx, wz)
+            elif tid == SHOP_EXT:       build_shop_exterior(world, scene, tx, ty, wx, wz)
+            elif tid == CLINIC_EXT:     build_clinic_exterior(world, scene, tx, ty, wx, wz)
+            elif tid == SMITH_EXT:      build_smith_exterior(world, scene, tx, ty, wx, wz)
+            elif tid == GREENHOUSE_EXT: build_greenhouse_exterior(world, scene, tx, ty, wx, wz)
             elif tid == WARUNG:   build_warung(world, wx, wz)
             elif tid == SHRINE:   build_shrine_altar(world, wx, wz)
             elif tid == DEBRIS:   build_debris_pile(world, wx, wz)

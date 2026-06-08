@@ -440,17 +440,18 @@ class EntitiesManager:
                     actor.color = color.clear # hide dummy
                 else:
                     model_name = get_npc_model_name(actor_id)
-                    panda_model = load_model_file(model_name)
-                    if panda_model:
-                        actor.model = panda_model
-                        actor.scale = 1.0
+                    if model_name == 'naga':
+                        from .naga_model import build_naga
+                        build_naga(actor)
+                        actor.scale = 0.62
                     else:
-                        # Fallback model if missing
-                        panda_fallback = load_model_file('humanoid')
-                        if panda_fallback:
-                            actor.model = panda_fallback
+                        panda_model = load_model_file(model_name)
+                        if panda_model:
+                            actor.model = panda_model
+                            actor.scale = 1.0
                         else:
-                            actor.model = 'cube'
+                            panda_fallback = load_model_file('humanoid')
+                            actor.model = panda_fallback if panda_fallback else 'cube'
                 # Apply Slum Grunge Tint
                 # (Will be applied below to both new and pooled actors)
 
@@ -629,25 +630,28 @@ class EntitiesManager:
             kind = mob['kind']
             is_boss = mob.get('is_boss', False)
 
-            model_name = 'naga' if is_boss else f"mob_{kind}"
-            panda_model = load_model_file(model_name)
-            if panda_model:
-                actor.model = panda_model
+            if is_boss:
+                from .naga_model import build_naga
+                build_naga(actor)
+                sc = 1.05
+                actor.scale = sc
+                model_name = 'naga'
             else:
-                model_name = 'humanoid'
-                panda_fallback = load_model_file('humanoid')
-                actor.model = panda_fallback if panda_fallback else 'cube'
-
-            # Skala & offset Y per-model (perbaiki bat tenggelam, NPC raksasa, dll.)
-            msc, moff = _MODEL_TRANSFORM.get(model_name, (1.0, 0.0))
-            boss_mult = 1.6 if is_boss else 1.0
-            sc = msc * boss_mult
-            actor.scale = sc
-            if moff:
-                actor.y = moff
-
-            # Semua mob dungeon = artefak relik (batu/terakota/perunggu)
-            _apply_relic_material(actor, model_name)
+                model_name = f"mob_{kind}"
+                panda_model = load_model_file(model_name)
+                if panda_model:
+                    actor.model = panda_model
+                else:
+                    model_name = 'humanoid'
+                    panda_fallback = load_model_file('humanoid')
+                    actor.model = panda_fallback if panda_fallback else 'cube'
+                msc, moff = _MODEL_TRANSFORM.get(model_name, (1.0, 0.0))
+                sc = msc * (1.6 if is_boss else 1.0)
+                actor.scale = sc
+                if moff:
+                    actor.y = moff
+                # Mob biasa = artefak relik
+                _apply_relic_material(actor, model_name)
 
             # HP Bar — warna suram, gaya Disco Elysium
             hp_y = GH + (3.0 if is_boss else 2.2)

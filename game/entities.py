@@ -218,8 +218,7 @@ NPC_APPEARANCES = {
     'ningsih':  ['fabd002_mom01.apr', 'fahd001_sharon.apr', 'fahl001_sharon.apr'],
     'pak_guru': ['mabd000_leathers.apr', 'mahd000_proxy.apr'],   # Pak Hadi
     'kru_kuro': ['mabd000_sl__teepjs2.apr', 'mahd002_asian.apr'],
-    # Petapa Srimana — humanoid Vitaboy (jubah), deity aura ditambah saat spawn
-    'petapa_srimana': ['mabd000_leathers.apr', 'mahd000_proxy.apr'],
+    # petapa_srimana pakai model prosedural khusus (petapa_model.py), bukan Vitaboy
 }
 
 # ─── PALET WARNA NPC (Disco Elysium decay aesthetic) ──────────────────────────
@@ -318,6 +317,7 @@ class EntitiesManager:
         self._wild_pool = []   # Object pooling untuk wild entities
         self._npc_sched_t = 0.0
         self._wild_update_t = 0.0
+        self._wild_anim_t = 0.0
         self.brains = None
 
         self._init_data()
@@ -519,7 +519,12 @@ class EntitiesManager:
                 continue
 
             apr_list = NPC_APPEARANCES.get(actor_id)
-            if apr_list:
+            if actor_id == 'petapa_srimana':
+                from .petapa_model import build_petapa_srimana
+                build_petapa_srimana(actor)              # sets model/color/scale
+                if not getattr(actor, '_halo', None):    # guard pool reuse
+                    _add_deity_aura(actor)
+            elif apr_list:
                 from .vitaboy import VitaboyAvatar
                 sc = 0.19 if actor_id in ('cici', 'bowo') else 0.32
                 if actor_id in _DEITY_IDS:
@@ -577,34 +582,20 @@ class EntitiesManager:
             if w['scene'] != self.scene_name: continue
             if w.get('night_only') and not s.is_night(): continue
             px, py = w['x'] * TS, w['y'] * TS
+            from .animal_models import build_wild_entity
+            k = w['kind']
             if self._wild_pool:
                 e = self._wild_pool.pop()
-                e.enabled = True
+                for p in getattr(e, '_wild_parts', []):
+                    destroy(p)
+                e._wild_parts = []
+                e.enabled  = True
                 e.position = (px, GH + 0.25, py)
             else:
-                e = Entity(model='cube', position=(px, GH + 0.25, py), scale=0.4, billboard=True)
-                from .smooth_shader import apply_smooth
-                apply_smooth(e, has_texture=False)
-
-            k = w['kind']
-            if k == 'running_mushroom':
-                e.color = color.rgb(255, 100, 100)
-                e.scale = (0.5, 0.6, 0.5)
-            elif k == 'firefly':
-                e.color = color.rgb(200, 255, 100, 150)
-                e.scale = (0.15, 0.15, 0.15)
-            elif k == 'mandrake':
-                e.color = color.rgb(150, 100, 50)
-                e.scale = (0.4, 0.7, 0.4)
-            elif k == 'wild_herb':
-                e.color = color.rgb(80, 200, 80)
-                e.scale = (0.5, 0.3, 0.5)
-            elif k == 'wild_berry':
-                e.color = color.rgb(220, 50, 150)
-                e.scale = (0.4, 0.4, 0.4)
-            else:
-                e.color = color.white
-                e.scale = 0.5
+                e = Entity(model='cube', position=(px, GH + 0.25, py))
+                e._wild_parts = []
+            e._base_y = GH + 0.25
+            build_wild_entity(e, k)
             self.wild_ents[i] = e
             
         # Spawn Mobs
@@ -750,16 +741,18 @@ class EntitiesManager:
                     s.npc_positions[actor_id]['y'] = actor.logical_y
                     s.npc_positions[actor_id]['target_x'] = actor.target_x
                     s.npc_positions[actor_id]['target_y'] = actor.target_y
+                actor.update_anim(dt)
 
             # Let the actor smoothly move visually
             actor.sync_visuals(dt, TS, GH)
 
         # Wild update tiap 0.8s
         self._wild_update_t += dt
+        self._wild_anim_t   += dt
         if self._wild_update_t >= 0.8:
             self._wild_update_t = 0
             self._update_wild_ai()
-        self._sync_wild_visuals()
+        self._sync_wild_visuals(self._wild_anim_t)
 
     def _update_wild_ai(self):
         s = self.state
@@ -782,7 +775,8 @@ class EntitiesManager:
                 if _can_walk(nx_, ny_, self.scene_name, s.dungeon_tiles):
                     w['x'], w['y'] = nx_, ny_
 
-    def _sync_wild_visuals(self):
+    def _sync_wild_visuals(self, anim_t: float = 0.0):
+        from .animal_models import update_anim_wild
         s = self.state
         for i, w in enumerate(s.wild_entities):
             if i not in self.wild_ents: continue
@@ -790,6 +784,8 @@ class EntitiesManager:
             e.x = w['x']*TS; e.z = w['y']*TS
             if w.get('night_only'):
                 e.enabled = s.is_night()
+            if e.enabled:
+                update_anim_wild(e, w['kind'], anim_t)
 
     def _clear_all(self):
         for actor_id, actor in self.actors.items():
@@ -843,7 +839,9 @@ class EntitiesManager:
                     s.mobs.remove(mob)
         return killed
 
-    def try_capture_wild(self, tx: int, ty: int, state) -> tuple | None:
+    def try_capture_wild(self, tx: int, ty: int, state, kinds=None) -> tuple | None:
+        """Coba tangkap/panen entitas liar di sekitar (tx, ty).
+        kinds: set jenis yang diizinkan; None = semua jenis."""
         import random as rng_mod
         sc = state.scene_name
         px, pz = tx * TS, ty * TS
@@ -852,6 +850,7 @@ class EntitiesManager:
             wx, wz = w['x'] * TS, w['y'] * TS
             if math.sqrt((px-wx)**2 + (pz-wz)**2) > 3.0: continue
             kind = w['kind']
+            if kinds is not None and kind not in kinds: continue
             rates = {'running_mushroom': 0.60, 'firefly': 0.70,
                      'mandrake': 0.30, 'wild_herb': 0.90, 'wild_berry': 0.90}
             if rng_mod.random() < rates.get(kind, 0.5):

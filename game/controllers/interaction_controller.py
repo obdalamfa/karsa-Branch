@@ -39,7 +39,7 @@ class InteractionController:
                 soil['tilled'] = True
                 self.player._spend_energy(2)
                 self.world.refresh_tile(tx, ty, soil_key)
-                self.player._play_tool_anim('down')
+                self.player._play_tool_anim('hoe')
                 self.player._fx_burst(fx, fy, fz, color.rgb(120, 82, 42))
                 sound_play('hoe', 0.8)
                 panels.flash_msg("Tanah dicangkul!", 0.8)
@@ -191,6 +191,8 @@ class InteractionController:
                 npc_id, options,
                 lambda nid, act: self.execute_pie_action(nid, act, entities_mgr, panels)
             )
+        elif self._try_harvest_wild(tx, ty, entities_mgr, panels):
+            return
         else:
             ftx, fty = self.player._facing_tile()
             my_tx, my_ty = self.player.get_tile_pos()
@@ -231,6 +233,30 @@ class InteractionController:
                 sound_play('menu_select', 0.8)
             elif tid == CHR:
                 panels.flash_msg("Ini kursi yang nyaman. Coba berdiri di atasnya untuk duduk.", 1.5)
+
+    def _try_harvest_wild(self, tx: int, ty: int, entities_mgr, panels) -> bool:
+        """Panen entitas liar di tile player atau tile depan (herba, beri, jamur).
+        Return True jika berhasil memanen sesuatu."""
+        s = self.player.state
+        HARVESTABLE = {'wild_herb', 'wild_berry', 'running_mushroom', 'mandrake'}
+        ftx, fty = self.player._facing_tile()
+        # Cek tile depan dulu, lalu tile player sendiri
+        for chk_x, chk_y in ((ftx, fty), (tx, ty)):
+            result = entities_mgr.try_capture_wild(chk_x, chk_y, s,
+                                                   kinds=HARVESTABLE)
+            if result:
+                kind, sell = result
+                item_info  = WILD_ITEMS.get(kind, {})
+                item_name  = item_info.get('name', kind)
+                s.inventory[kind] = s.inventory.get(kind, 0) + 1
+                self.player._play_tool_anim('bend')
+                self.player._fx_burst(chk_x * TS, GROUND_H + 0.5, chk_y * TS,
+                                      color.rgb(150, 230, 90), n=6)
+                sound_play('harvest', 0.8)
+                panels.flash_msg(f"+1 {item_name}! (jual {sell}G)", 1.4)
+                self.check_quests(panels)
+                return True
+        return False
 
     def attack(self, entities_mgr, panels):
         s = self.player.state
@@ -545,13 +571,24 @@ class InteractionController:
             sound_play('menu_select', 0.6)
             panels.flash_msg(f"Kamu membelai {npc.get('name', npc_id)}.", 1.0)
         elif action == 'ambil_hasil':
-            produce_map = {'sapi_betina': ('susu', 40), 'ayam': ('telur', 30), 'kambing': ('wol', 35)}
+            produce_map = {
+                'sapi_betina': ('susu',        40),
+                'ayam':        ('telur',        30),
+                'kambing':     ('wol',          35),
+                'domba':       ('wol',          35),
+                'bebek':       ('bulu_bebek',   20),
+                'kelinci':     ('bulu_kelinci', 25),
+                'kuda':        ('susu_kuda',    50),
+                'rubah':       ('bulu_rubah',   60),
+            }
             produce, gold = produce_map.get(npc_id, (None, 0))
             if produce:
                 s.inventory[produce] = s.inventory.get(produce, 0) + 1
                 s.gold += gold
+                self.player._play_tool_anim('bend')
                 sound_play('harvest', 0.8)
-                panels.flash_msg(f"+1 {produce.title()} (+{gold}G)", 1.2)
+                produce_name = produce.replace('_', ' ').title()
+                panels.flash_msg(f"+1 {produce_name} (+{gold}G)", 1.2)
             else:
                 panels.flash_msg("Tidak ada hasil saat ini.", 1.0)
         elif action == 'beri_makan':

@@ -692,6 +692,21 @@ class Player3D(Entity):
                 self._pivot_shoulder_r.rotation_x = -85 * st
                 self._pivot_shoulder_l.rotation_x = -85 * st
                 if va_root: va_root.rotation_x = -45 * st
+            elif m == 'give':
+                # Kedua tangan maju + badan sedikit membungkuk (memberi)
+                self._pivot_shoulder_r.rotation_x = -95 * st
+                self._pivot_shoulder_l.rotation_x = -95 * st
+                self.body.rotation_x = st * 14
+                if va_root: va_root.rotation_x = -60 * st
+            elif m == 'hoe':
+                # Dua tangan: ayunan ke bawah tajam (mencangkul) — lebih kuat dari swing
+                self._pivot_shoulder_r.rotation_x = -150 * st
+                self._pivot_shoulder_l.rotation_x = -150 * st
+                if hasattr(self, '_pivot_elbow_l') and self._pivot_elbow_l:
+                    self._pivot_elbow_l.rotation_x = -st * 55
+                    self._pivot_elbow_r.rotation_x = -st * 55
+                self.body.rotation_x = st * 25
+                if va_root: va_root.rotation_x = -95 * st
         else:
             self._pivot_shoulder_r.rotation_z = 0
             if moving_now and not getattr(self, '_is_vitaboy', True):
@@ -1006,6 +1021,7 @@ class Player3D(Entity):
         self.time_controller.try_sleep(panels, self)
 
     def give_gift(self, entities_mgr, panels):
+        self._play_tool_anim('give')
         self.interaction_controller.give_gift(entities_mgr, panels)
 
     def complete_gift_gifting(self, npc_id, panels):

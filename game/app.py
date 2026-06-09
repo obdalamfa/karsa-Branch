@@ -187,7 +187,7 @@ class Game3D:
         camera.orthographic = False
         camera.fov          = 60
         self.camera_yaw     = 0.0
-        self.camera_pitch   = 12.0
+        self.camera_pitch   = 22.0   # sudut pitch default (lebih dekat ke tanah)
         self.camera_dist    = 13.0
 
         # Chargen — muncul jika first run (char_name kosong) atau tekan F2
@@ -330,33 +330,21 @@ class Game3D:
 
             # Kamera mengikuti pemain (smooth lerp) — 3D Person Follow
             from ursina import held_keys, mouse
-            
-            if self.panels.mode == 'hud':
-                if held_keys['right mouse']:
-                    if not getattr(self, '_right_mouse_down', False):
-                        self._right_mouse_down = True
-                        mouse.locked = True
-                    else:
-                        # Menggunakan kontrol normal (non-inverted) untuk kenyamanan standard game 3D
-                        self.camera_yaw -= mouse.velocity[0] * 200
-                        self.camera_pitch += mouse.velocity[1] * 200
-                else:
-                    self._right_mouse_down = False
-                    mouse.locked = False
-            else:
-                self._right_mouse_down = False
-                mouse.locked = False
 
-            # ── Putar kamera dengan Q / E (tahan untuk berputar) ──
+            # Pastikan mouse tidak pernah terkunci (mencegah kamera spinning liar)
+            mouse.locked = False
+            self._right_mouse_down = False
+
+            # ── Putar kamera dengan Q / E saja (pelan, terkontrol) ──
             if self.panels.mode == 'hud':
-                CAM_ROT_SPEED = 95.0   # derajat / detik
+                CAM_ROT_SPEED = 45.0   # derajat / detik (lebih lambat = tidak berputar liar)
                 if held_keys['q']:
                     self.camera_yaw -= CAM_ROT_SPEED * dt
                 if held_keys['e']:
                     self.camera_yaw += CAM_ROT_SPEED * dt
 
-            # Kunci sudut kemiringan (pitch) agar tidak terbalik atau menembus tanah
-            self.camera_pitch = max(5.0, min(80, self.camera_pitch))
+            # Kunci pitch agar kamera tidak menjauh ke atas (22° tetap, tidak bisa diubah)
+            self.camera_pitch = 22.0
             
             ideal_focus = self.player.position + Vec3(0, CAM_TARGET_LIFT, 0)
             if not hasattr(self, 'camera_focus'):

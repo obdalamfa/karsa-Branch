@@ -361,6 +361,153 @@ def build_shrine_altar(world, wx, wz):
     world._obj_ents.extend([base, table, roof, tiang_l, tiang_r, incense, ember, offering])
 
 
+# ─── KUIL SURGAWI (CANDI SWARGA) ─────────────────────────────────────────────
+
+def build_kuil_swarga(world, scene, tx, ty, wx, wz):
+    """Candi surgawi bertingkat — grand temple emas gaya Jawa-Hindu di awan.
+    Dipanggil per tile KUIL; hanya menggambar dari tile pojok kiri atas."""
+    # Hanya spawn dari pojok kiri-atas blok KUIL
+    left_is_k = tx > 0 and scene.tiles[ty][tx - 1] == KUIL
+    up_is_k   = ty > 0 and scene.tiles[ty - 1][tx] == KUIL
+    if left_is_k or up_is_k:
+        return
+
+    # Ukur lebar & tinggi blok KUIL
+    w_t = 1
+    while tx + w_t < scene.w and scene.tiles[ty][tx + w_t] == KUIL:
+        w_t += 1
+    h_t = 1
+    while ty + h_t < scene.h and scene.tiles[ty + h_t][tx] == KUIL:
+        h_t += 1
+
+    cx = wx + (w_t - 1) * TS / 2.0   # pusat world X
+    cz = wz + (h_t - 1) * TS / 2.0   # pusat world Z
+    GH = GROUND_H
+
+    # ── Palet warna suci ────────────────────────────────────────────────────
+    C_GOLD        = color.rgb(218, 185,  95)
+    C_GOLD_LIGHT  = color.rgb(245, 222, 130)
+    C_GOLD_DARK   = color.rgb(162, 135,  55)
+    C_GOLD_BRIGHT = color.rgb(255, 242, 162)
+    C_WHITE       = color.rgb(248, 246, 238)
+    C_CREAM       = color.rgb(235, 222, 198)
+    C_SACRED_FIRE = color.rgb(255, 215,  48)
+    C_RED_ACCENT  = color.rgb(185,  52,  38)
+    C_JADE        = color.rgb( 88, 165, 118)
+    C_LOTUS       = color.rgb(228, 148, 185)
+    C_NAGA        = color.rgb(105, 178, 125)
+
+    e  = world._create_entity
+    oe = world._obj_ents.extend
+
+    # ─── 1. PLATFORM DASAR ─────────────────────────────────────────────────
+    y0 = GH
+    plat = e('cube', (cx, y0 + 0.14, cz), (10.6, 0.28, 10.6), None, C_GOLD_DARK)
+
+    # ─── 2. TIGA ANAK TANGGA (stepped pyramid) ─────────────────────────────
+    y1 = y0 + 0.28
+    tier1 = e('cube', (cx, y1 + 0.27, cz), (8.8, 0.55, 8.8), None, C_GOLD_DARK)
+
+    y2 = y1 + 0.55
+    tier2 = e('cube', (cx, y2 + 0.32, cz), (6.8, 0.65, 6.8), None, C_GOLD)
+
+    y3 = y2 + 0.65
+    tier3 = e('cube', (cx, y3 + 0.35, cz), (5.2, 0.70, 5.2), None, C_GOLD_LIGHT)
+
+    # ─── 3. BADAN UTAMA CANDI ───────────────────────────────────────────────
+    y_wall = y3 + 0.70
+    wall_h = 2.80
+    body_outer = e('cube', (cx, y_wall + wall_h*0.5, cz), (4.4, wall_h, 4.4), None, C_GOLD)
+    body_inner = e('cube', (cx, y_wall + wall_h*0.5, cz), (3.8, wall_h * 0.98, 3.8), None, C_WHITE)
+
+    # Aksen ceruk/panel di 4 sisi (ala candi Prambanan)
+    for sz_off, rx in ((1, 0), (-1, 0), (0, 90), (0, 90)):
+        pass  # skip (costly), cukup warna badan berbeda
+
+    # Pintu depan (selatan) — warna merah sakral
+    door_front = e('cube', (cx, y_wall + 0.80, cz + 2.21),
+                   (1.05, 1.60, 0.10), None, C_RED_ACCENT)
+    door_arch  = e('cube', (cx, y_wall + 1.68, cz + 2.21),
+                   (1.20, 0.32, 0.10), None, C_GOLD)
+
+    # Jendela kecil di sisi timur/barat
+    wins = []
+    for ox, oz in ((2.21, 0), (-2.21, 0)):
+        wins.append(e('cube', (cx + ox, y_wall + 1.40, cz + oz),
+                      (0.10, 0.65, 0.55), None, C_GOLD))
+    # Ornamen panel di sisi utara/selatan
+    for ox, oz in ((0, 2.21), (0, -2.21)):
+        wins.append(e('cube', (cx + ox, y_wall + 1.40, cz + oz),
+                      (0.55, 0.65, 0.10), None, C_GOLD))
+
+    # ─── 4. ATAP BERTINGKAT (multi-tier roof) ───────────────────────────────
+    y_r = y_wall + wall_h
+    roof1 = e('cube', (cx, y_r + 0.25,  cz), (5.4, 0.50, 5.4), None, C_GOLD)
+    roof1_lip = e('cube', (cx, y_r + 0.04, cz), (5.8, 0.09, 5.8), None, C_GOLD_DARK)
+
+    y_r2 = y_r + 0.50
+    roof2 = e('cube', (cx, y_r2 + 0.30, cz), (4.0, 0.60, 4.0), None, C_GOLD_LIGHT)
+    roof2_lip = e('cube', (cx, y_r2 + 0.04, cz), (4.4, 0.08, 4.4), None, C_GOLD)
+
+    y_r3 = y_r2 + 0.60
+    roof3 = e('cube', (cx, y_r3 + 0.30, cz), (2.8, 0.60, 2.8), None, C_GOLD)
+    roof3_lip = e('cube', (cx, y_r3 + 0.04, cz), (3.1, 0.08, 3.1), None, C_GOLD_DARK)
+
+    y_r4 = y_r3 + 0.60
+    roof4 = e('cube', (cx, y_r4 + 0.22, cz), (1.8, 0.44, 1.8), None, C_GOLD_LIGHT)
+
+    # ─── 5. PUNCAK MENARA (spire) ───────────────────────────────────────────
+    y_sp = y_r4 + 0.44
+    spire_body = e('cylinder', (cx, y_sp + 0.95, cz), (0.52, 1.90, 0.52), None, C_GOLD_LIGHT)
+    spire_cap  = e('sphere',   (cx, y_sp + 2.00, cz), (0.72, 0.72, 0.72), None, C_GOLD_BRIGHT)
+    sacred_flame = e('sphere', (cx, y_sp + 2.58, cz), (0.38, 0.38, 0.38), None, C_SACRED_FIRE)
+
+    # Cincin halo di spire
+    halo = e('cube', (cx, y_sp + 2.00, cz), (1.20, 0.06, 1.20), None, C_GOLD_BRIGHT)
+
+    oe([plat, tier1, tier2, tier3,
+        body_outer, body_inner, door_front, door_arch] +
+       wins +
+       [roof1, roof1_lip, roof2, roof2_lip, roof3, roof3_lip, roof4,
+        spire_body, spire_cap, sacred_flame, halo])
+
+    # ─── 6. MENARA SUDUT (4 mini-towers di sudut KUIL area) ─────────────────
+    for sx, sz in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+        mx = cx + sx * 4.3
+        mz = cz + sz * 4.3
+        mt_base  = e('cube',     (mx, y0 + 0.55,   mz), (1.25, 1.10, 1.25), None, C_GOLD_DARK)
+        mt_body  = e('cube',     (mx, y0 + 1.58,   mz), (0.95, 1.05, 0.95), None, C_WHITE)
+        mt_roof  = e('cube',     (mx, y0 + 2.28,   mz), (1.15, 0.48, 1.15), None, C_GOLD)
+        mt_spire = e('cylinder', (mx, y0 + 2.88,   mz), (0.28, 0.90, 0.28), None, C_GOLD_LIGHT)
+        mt_top   = e('sphere',   (mx, y0 + 3.42,   mz), (0.35, 0.35, 0.35), None, C_GOLD_BRIGHT)
+        oe([mt_base, mt_body, mt_roof, mt_spire, mt_top])
+
+    # ─── 7. PILAR GERBANG SELATAN (naga pillars) ────────────────────────────
+    for px_off in (-2.6, 2.6):
+        px = cx + px_off
+        pz = cz + 5.0
+        p_base  = e('cube',     (px, y0 + 0.45, pz), (0.75, 0.90, 0.75), None, C_GOLD_DARK)
+        p_body  = e('cylinder', (px, y0 + 1.85, pz), (0.42, 2.80, 0.42), None, C_GOLD)
+        p_cap   = e('cube',     (px, y0 + 3.35, pz), (0.68, 0.28, 0.68), None, C_GOLD_LIGHT)
+        p_naga  = e('sphere',   (px, y0 + 3.72, pz), (0.52, 0.42, 0.48), None, C_NAGA)
+        p_horn1 = e('cube',     (px - 0.15, y0 + 4.00, pz), (0.10, 0.34, 0.10), None, C_NAGA)
+        p_horn2 = e('cube',     (px + 0.15, y0 + 4.00, pz), (0.10, 0.34, 0.10), None, C_NAGA)
+        oe([p_base, p_body, p_cap, p_naga, p_horn1, p_horn2])
+
+    # ─── 8. LOTUS DEKORASI DI ANAK TANGGA ───────────────────────────────────
+    for lx, lz in (( 3.8,  3.8), (-3.8,  3.8), ( 3.8, -3.8), (-3.8, -3.8),
+                   ( 0.0,  4.2), ( 0.0, -4.2), ( 4.2,  0.0), (-4.2,  0.0)):
+        lp = e('sphere', (cx + lx, y1 + 0.45, cz + lz), (0.30, 0.22, 0.30), None, C_LOTUS)
+        lc = e('sphere', (cx + lx, y1 + 0.60, cz + lz), (0.14, 0.14, 0.14), None, C_GOLD_BRIGHT)
+        oe([lp, lc])
+
+    # ─── 9. LAMPU GANTUNG JADE DI SUDUT BADAN ───────────────────────────────
+    for ox, oz in ((1.8, 1.8), (-1.8, 1.8), (1.8, -1.8), (-1.8, -1.8)):
+        bell = e('sphere', (cx + ox, y_wall + wall_h - 0.30, cz + oz),
+                 (0.22, 0.30, 0.22), None, C_JADE)
+        oe([bell])
+
+
 # ─── DINDING GRAFFITI ─────────────────────────────────────────────────────────
 
 def build_graffiti_wall(world, wx, wz):
@@ -1392,6 +1539,7 @@ def default_prop_builder(world, scene):
             elif tid == GREENHOUSE_EXT: build_greenhouse_exterior(world, scene, tx, ty, wx, wz)
             elif tid == WARUNG:   build_warung(world, wx, wz)
             elif tid == SHRINE:   build_shrine_altar(world, wx, wz)
+            elif tid == KUIL:     build_kuil_swarga(world, scene, tx, ty, wx, wz)
             elif tid == DEBRIS:   build_debris_pile(world, wx, wz)
             elif tid == LAUNDRY:  build_laundry_line(world, wx, wz)
             elif tid == GRAFFITI_W: build_graffiti_wall(world, wx, wz)
@@ -1401,3 +1549,46 @@ def default_prop_builder(world, scene):
             elif tid in (ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS):
                 ore_tex = OBJ_TEX.get(tid, 'crystal')
                 build_ore(world, wx, wz, ore_tex)
+
+# ─── BLENDER-EXPORTED .OBJ PROPS ─────────────────────────────────────────────
+# Assets diekspor dari Blender ke game/assets/models/, siap pakai di Ursina.
+
+from ursina import Entity
+
+def _obj_entity(model_name, pos, scale=1.0, rot=(0,0,0), col=None):
+    kw = dict(model=model_name, position=pos, scale=scale, rotation=rot)
+    if col: kw['color'] = col
+    return Entity(**kw)
+
+def build_sumur_obj(wx, wz, scale=1.0):
+    return _obj_entity('sumur', (wx, 0, wz), scale)
+
+def build_warung_obj(wx, wz, scale=1.0, rot_y=0):
+    return _obj_entity('warung', (wx, 0, wz), scale, (0, rot_y, 0))
+
+def build_pohon_tropis_obj(wx, wz, scale=1.0):
+    return _obj_entity('pohon_tropis', (wx, 0, wz), scale)
+
+def build_pohon_kelapa_obj(wx, wz, scale=1.0):
+    return _obj_entity('pohon_kelapa', (wx, 0, wz), scale)
+
+def build_pohon_bambu_obj(wx, wz, scale=1.0):
+    return _obj_entity('pohon_bambu', (wx, 0, wz), scale)
+
+def build_pohon_mati_obj(wx, wz, scale=1.0):
+    return _obj_entity('pohon_mati', (wx, 0, wz), scale)
+
+def build_rumah_kampung_obj(wx, wz, scale=1.0, rot_y=0):
+    return _obj_entity('rumah_kampung', (wx, 0, wz), scale, (0, rot_y, 0))
+
+def build_rumah_limasan_obj(wx, wz, scale=1.0, rot_y=0):
+    return _obj_entity('rumah_limasan', (wx, 0, wz), scale, (0, rot_y, 0))
+
+def build_rumah_joglo_obj(wx, wz, scale=1.0, rot_y=0):
+    return _obj_entity('rumah_joglo', (wx, 0, wz), scale, (0, rot_y, 0))
+
+def build_lantern_obj(wx, wz, scale=1.0):
+    return _obj_entity('lantern', (wx, 0, wz), scale)
+
+def build_pagar_bambu_obj(wx, wz, scale=1.0, rot_y=0):
+    return _obj_entity('pagar_bambu', (wx, 0, wz), scale, (0, rot_y, 0))

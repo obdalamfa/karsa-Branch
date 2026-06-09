@@ -21,7 +21,7 @@ from ursina import Shader, Vec3
 
 _VERT = """
 #version 140
-// v5 2026-05-17
+// v6 2026-06-08
 uniform mat4 p3d_ModelViewProjectionMatrix;
 uniform mat4 p3d_ModelMatrix;
 uniform mat3 p3d_NormalMatrix;
@@ -44,7 +44,7 @@ void main() {
 
 _FRAG = """
 #version 140
-// v5 2026-05-17
+// v6 2026-06-08 — normalisasi otomatis skala warna 0-255
 uniform sampler2D p3d_Texture0;
 uniform vec4 p3d_ColorScale;
 uniform mat4 p3d_ViewMatrixInverse;
@@ -70,7 +70,16 @@ vec3 lift_saturation(vec3 c, float s) {
 
 void main() {
     // Base color dari p3d_ColorScale — Ursina menyimpan entity.color di sini via setColorScale()
+    // color.rgb(r,g,b) di Ursina menyimpan nilai 0-255 mentah, bukan 0-1.
+    // Normalkan otomatis: bila ada channel RGB > 1.5 → skala 0-255, bagi 255.
+    // color.white=(1,1,1,1) dan color.clear=(0,0,0,0) tidak tersentuh (semua ≤ 1).
     vec4 base = p3d_ColorScale;
+    if (base.r > 1.5 || base.g > 1.5 || base.b > 1.5) {
+        float saved_a = base.a;
+        base.rgb /= 255.0;
+        // Alpha juga bisa 0-255 (color.rgba dengan a besar), atau 0-1 (color.rgb default a=1)
+        base.a = (saved_a > 1.5) ? saved_a / 255.0 : saved_a;
+    }
     if (sm_has_tex == 1) {
         base *= texture(p3d_Texture0, v_uv);
     }

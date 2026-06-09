@@ -8,7 +8,8 @@ def test_all_models():
     print("Initializing headless ShowBase for model validation...")
     base = ShowBase(windowType='none')
     
-    models_dir = Path(__file__).resolve().parent / 'assets' / 'models'
+    # File ada di tests/, aset di root → naik dua tingkat ke root repo.
+    models_dir = Path(__file__).resolve().parent.parent / 'assets' / 'models'
     
     models_to_test = [
         'mob_kucing',

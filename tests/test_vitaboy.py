@@ -14,6 +14,8 @@ Kontrol:
 import sys
 import logging
 import os
+# tests/ ada satu tingkat di bawah root — pastikan root ada di sys.path agar `game` ter-import.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Paksa pipeline GL sebelum import ursina
 from panda3d.core import loadPrcFileData

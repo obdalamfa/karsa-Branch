@@ -19,6 +19,15 @@ tools/_*.png
 tools/assets_dl/
 tools/refs/
 
+# Blender working files & render previews (scratch, root-level — disimpan lokal, tak di-push)
+/*.blend
+/*.blend1
+/lembah_karsa_*.png
+/naga_*.png
+/mob_*.png
+/mobs_*.png
+/preview_*.png
+
 # OS / editor
 .DS_Store
 Thumbs.db

@@ -19,7 +19,7 @@ class QuestController:
                 self._notify_quest_up(panels)
 
         if s.quest_stage == 2:
-            if s.npc_relations.get('arya', 0) >= 15:
+            if s.npc_hearts.get('arya', 0) >= 15:
                 s.quest_stage = 3
                 self._notify_quest_up(panels)
 
@@ -31,7 +31,8 @@ class QuestController:
     def _notify_quest_up(self, panels):
         s = self.state
         sound_play('magic', 0.8)
-        msg = f"Quest Update: Tahap {s.quest_stage} - {QUEST_STAGES.get(s.quest_stage, 'Rahasia baru terungkap')}"
+        stage_title = next((q['t'] for q in QUEST_STAGES if q['s'] == s.quest_stage), 'Rahasia baru terungkap')
+        msg = f"Quest Update: Tahap {s.quest_stage} - {stage_title}"
         if panels:
             panels.flash_msg(msg, 3.5)
         else:
@@ -40,14 +41,18 @@ class QuestController:
     def check_dungeon_lore(self, dungeon_level, player, panels=None):
         s = self.state
         lore_msg = None
-        if dungeon_level == 3 and not s.lore_found.get('dungeon_3'):
-            s.lore_found['dungeon_3'] = True
+        lore_col = getattr(s, 'lore_collected', [])
+        if dungeon_level == 3 and 'dungeon_3' not in lore_col:
+            lore_col.append('dungeon_3')
+            s.lore_collected = lore_col
             lore_msg = "Sebuah prasasti kuno: 'Kutukan Lembah Karsa berawal dari keserakahan manusia...'"
-        elif dungeon_level == 7 and not s.lore_found.get('dungeon_7'):
-            s.lore_found['dungeon_7'] = True
+        elif dungeon_level == 7 and 'dungeon_7' not in lore_col:
+            lore_col.append('dungeon_7')
+            s.lore_collected = lore_col
             lore_msg = "Sisa-sisa kemah penambang. Ada buku harian: 'Kami menggali terlalu dalam. Sesuatu terbangun...'"
-        elif dungeon_level == 12 and not s.lore_found.get('dungeon_12'):
-            s.lore_found['dungeon_12'] = True
+        elif dungeon_level == 12 and 'dungeon_12' not in lore_col:
+            lore_col.append('dungeon_12')
+            s.lore_collected = lore_col
             lore_msg = "Dinding bercahaya: 'Hanya hati yang murni yang bisa menenangkan sang Naga Bumi...'"
         
         if lore_msg:

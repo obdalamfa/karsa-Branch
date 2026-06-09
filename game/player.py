@@ -29,6 +29,8 @@ from .pathfinder import PathGrid, PathMover
 from .controllers.time_controller import TimeController
 from .controllers.quest_controller import QuestController
 from .controllers.interaction_controller import InteractionController
+from .controllers.combat_controller import CombatController
+from .anim_state import AnimStateMachine, AnimState
 
 TS = TILE_SIZE
 _GH = GROUND_H
@@ -156,8 +158,24 @@ class Player3D(Entity):
         self.time_controller = TimeController(state)
         self.quest_controller = QuestController(state)
         self.interaction_controller = InteractionController(self, world)
+        self.combat_controller = CombatController(self)
+        self._anim = None  # dibuat setelah _build_model oleh AnimStateMachine
 
         self._build_model()
+
+        # Inisialisasi AnimStateMachine setelah model selesai dibangun
+        _voxel_pivots = {
+            'shoulder_l': getattr(self, '_pivot_shoulder_l', None),
+            'shoulder_r': getattr(self, '_pivot_shoulder_r', None),
+            'hip_l':      getattr(self, '_pivot_hip_l', None),
+            'hip_r':      getattr(self, '_pivot_hip_r', None),
+            'neck':       getattr(self, '_pivot_neck', None),
+        }
+        self._anim = AnimStateMachine(
+            vitaboy_avatar=getattr(self, '_va', None),
+            voxel_pivots=_voxel_pivots if not getattr(self, '_is_vitaboy', True) else {},
+        )
+
         self.set_tile_pos(state.player_x, state.player_y)
         self.rebuild_pathgrid()
         self._set_initial_rotation()
@@ -703,6 +721,27 @@ class Player3D(Entity):
             if getattr(self, '_is_vitaboy', False) and hasattr(self, '_va') and self._va:
                 self._va.root_entity.rotation_x = 0
 
+        # ── AnimStateMachine update ──
+        if self._anim:
+            # Dorong state WALK/IDLE berdasarkan gerakan (hanya jika tidak blocking)
+            if not self._anim.is_blocking():
+                if moving_now:
+                    self._anim.request(AnimState.RUN if getattr(self, '_is_sprinting', False) else AnimState.WALK)
+                elif not moving_now and self._anim.state in (AnimState.WALK, AnimState.RUN):
+                    self._anim.request(AnimState.IDLE)
+            self._anim.update(dt)
+
+        # ── CombatController tick ──
+        entities_mgr = getattr(self.world, 'entities_mgr', None)
+        panels = getattr(self, '_panels', None)
+        self.combat_controller.tick(dt, entities_mgr, panels)
+
+        # ── Speed modifier dari status efek combat ──
+        if self.combat_controller.is_slowed:
+            _eff_speed = self.speed * self.combat_controller.speed_multiplier
+        else:
+            _eff_speed = self.speed
+
         # ── python-2d-game health_and_mana.py pattern: passive HP regen ──
         if s.hp < s.max_hp:
             regen = s.hp_regen_rate
@@ -933,6 +972,16 @@ class Player3D(Entity):
     def _play_tool_anim(self, mode='swing'):
         self._attack_anim = 350
         self._anim_mode   = mode
+        # Peta mode lama → AnimState baru
+        _MODE_TO_STATE = {
+            'swing': AnimState.ATTACK_SWORD,
+            'mine':  AnimState.ATTACK_HOE,
+            'down':  AnimState.ATTACK_HOE,
+            'water': AnimState.ATTACK_PUNCH,
+            'bend':  AnimState.HARVEST,
+        }
+        if self._anim:
+            self._anim.request(_MODE_TO_STATE.get(mode, AnimState.ATTACK_SWORD))
 
     def _fx_burst(self, wx, wy, wz, col, n=5, spread=0.45, dur=0.38):
         """Partikel ledakan singkat di posisi world — efek visual alat/serangan."""

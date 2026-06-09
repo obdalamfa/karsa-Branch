@@ -255,19 +255,34 @@ _WILD_VISUALS = {
 # ─── TRANSFORM PER-MODEL (skala, offset Y) — perbaiki proporsi/posisi aneh ─────
 # Model .obj punya tinggi/origin berbeda; tanpa ini NPC raksasa & bat tenggelam.
 _MODEL_TRANSFORM = {
-    'humanoid':      (0.62, 0.0),   # 3.0 tall → ~1.86 (seukuran orang, sebanding player)
-    'mob_pocong':    (0.85, 0.0),   # 2.25 → ~1.9
-    'mob_genderuwo': (0.80, 0.0),   # 2.85 → ~2.3 (roh besar)
-    'mob_kelelawar': (1.10, 0.55),  # bat: angkat dari tanah (Y model negatif) → melayang
-    'naga':          (0.60, 0.0),   # naga panjang
+    'humanoid':        (0.62, 0.0),   # 3.0 tall → ~1.86 (seukuran orang, sebanding player)
+    'mob_pocong':      (0.85, 0.0),   # 2.25 → ~1.9
+    'mob_genderuwo':   (0.80, 0.0),   # 2.85 → ~2.3 (roh besar)
+    'mob_kelelawar':   (1.10, 0.55),  # bat: angkat dari tanah → melayang
+    'mob_banaspati':   (0.95, 0.30),  # bola api kecil → melayang
+    'mob_tikus_gua':   (1.40, 0.0),   # tikus kecil → perbesar sedikit
+    'mob_leak':        (0.90, 0.40),  # kepala melayang → angkat dari tanah
+    'mob_kuntilanak':  (0.88, 0.0),   # hantu wanita → proporsional
+    'naga':            (0.60, 0.0),   # naga panjang
+}
+
+# Mob dungeon dengan model khusus (bukan fallback humanoid)
+_MOB_KIND_MODELS = {
+    'kelelawar':  'mob_kelelawar',
+    'genderuwo':  'mob_genderuwo',
+    'pocong':     'mob_pocong',
+    'banaspati':  'mob_banaspati',
+    'tikus_gua':  'mob_tikus_gua',
+    'leak':       'mob_leak',
+    'kuntilanak': 'mob_kuntilanak',
 }
 
 def get_npc_model_name(npc_id):
     if npc_id == 'naga_bijak':
         return 'naga'
-    if npc_id == 'kelelawar':
-        return 'mob_kelelawar'
-    # Roh humanlike (genderuwo, pocong, kuntilanak, dll.) → basis humanoid
+    if npc_id in _MOB_KIND_MODELS:
+        return _MOB_KIND_MODELS[npc_id]
+    # Roh humanlike lain → basis humanoid
     return 'humanoid'
 
 def _can_walk(tx, ty, scene_name, dungeon_tiles=None):
@@ -523,7 +538,10 @@ class EntitiesManager:
             kind = mob['kind']
             is_boss = mob.get('is_boss', False)
 
-            model_name = 'naga' if is_boss else f"mob_{kind}"
+            if is_boss:
+                model_name = 'naga'
+            else:
+                model_name = _MOB_KIND_MODELS.get(kind, f'mob_{kind}')
             panda_model = load_model_file(model_name)
             if panda_model:
                 actor.model = panda_model

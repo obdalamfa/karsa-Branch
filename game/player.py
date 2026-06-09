@@ -29,6 +29,7 @@ from .pathfinder import PathGrid, PathMover
 from .controllers.time_controller import TimeController
 from .controllers.quest_controller import QuestController
 from .controllers.interaction_controller import InteractionController
+from .controllers.combat_controller import CombatController
 
 TS = TILE_SIZE
 _GH = GROUND_H
@@ -156,6 +157,10 @@ class Player3D(Entity):
         self.time_controller = TimeController(state)
         self.quest_controller = QuestController(state)
         self.interaction_controller = InteractionController(self, world)
+        # Sistem combat dungeon (combo/crit/dodge/loot/dmg-number/screen-shake).
+        # Efek pasif (status, loot, dmg-number, shake) di-tick tiap frame; jalur
+        # serangan masih lewat interaction_controller.attack (storage s.mobs).
+        self.combat_controller = CombatController(self)
 
         self._build_model()
         self.set_tile_pos(state.player_x, state.player_y)
@@ -390,6 +395,10 @@ class Player3D(Entity):
         s.invuln_timer_ms = self._invuln
         if self._portal_cd > 0.0:
             self._portal_cd = max(0.0, self._portal_cd - dt)
+
+        # Tick efek combat pasif (timer cooldown, status, loot lantai, angka
+        # damage, screen-shake). Inert sampai jalur serangan combat diaktifkan.
+        self.combat_controller.tick(dt, None, panels)
 
         # Slide/Dash Active Tick
         if hasattr(self, '_slide_active_ms') and self._slide_active_ms > 0:

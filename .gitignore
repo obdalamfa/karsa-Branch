@@ -32,3 +32,6 @@ tools/refs/
 .DS_Store
 Thumbs.db
 *.swp
+
+# Folder export model legacy (di-regenerasi runtime; kanonik = assets/models/)
+/game/assets/

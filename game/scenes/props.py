@@ -114,10 +114,33 @@ def _kenney_colored_mesh(name, dull=0.82):
 
 # ─── VEGETASI ─────────────────────────────────────────────────────────────────
 
+def _obj_vegetasi(name, wx, wz, h, jitter=0.20):
+    """Pohon dari aset Blender baked (skala meter). Return Entity atau None."""
+    try:
+        from game.entities import load_model_file
+        mdl = load_model_file(name)
+    except Exception:
+        mdl = None
+    if not mdl:
+        return None
+    from ursina import Entity
+    e = Entity()
+    e.model = mdl                 # setter (pola actor), bukan constructor
+    e.position = (wx, GROUND_H, wz)
+    e.scale = 1.0 + (h - 0.5) * 2 * jitter
+    e.rotation_y = h * 360
+    return e
+
+
 def build_tree(world, wx, wz):
-    """Pohon — pakai model kit CC0 (kenney_tree*) bila ada, di-tint kumuh;
+    """Pohon — aset Blender baked (pohon_tropis) bila ada; lalu kit Kenney;
     fallback prosedural (cylinder + bola) bila tak ada aset."""
     h = _hash(wx, wz)
+
+    e = _obj_vegetasi('pohon_tropis', wx, wz, h)
+    if e is not None:
+        world._obj_ents.append(e)
+        return
 
     # ── Aset kit Kenney (CC0): mesh vertex-color hasil bake dari OBJ+MTL ──
     variants = ['kenney_tree_default', 'kenney_tree_detailed', 'kenney_tree_fat']
@@ -161,6 +184,11 @@ def build_tree(world, wx, wz):
 def build_palm(world, wx, wz):
     """Kelapa — batang coklat tua, condong dramatis."""
     h = _hash(wx, wz)
+
+    e = _obj_vegetasi('pohon_kelapa', wx, wz, h)
+    if e is not None:
+        world._obj_ents.append(e)
+        return
     trunk = world._create_entity('cylinder', (wx, TREE_H * 0.5, wz),
                (TS * 0.22, TREE_H * 1.1, TS * 0.22), 'tree_trunk',
                color.rgb(128, 88, 52), rotation=(8, 0, 12))
@@ -185,6 +213,11 @@ def build_palm(world, wx, wz):
 def build_dead_tree(world, wx, wz):
     """Pohon mati — tulang belulang kayu, cabang terentang."""
     h = _hash(wx, wz)
+
+    e = _obj_vegetasi('pohon_mati', wx, wz, h)
+    if e is not None:
+        world._obj_ents.append(e)
+        return
     col = color.rgb(58, 42, 28)
     trunk = world._create_entity('cylinder', (wx, TREE_H * 0.45, wz),
                (TS * 0.18, TREE_H * 0.90, TS * 0.18), 'tree_trunk', col)

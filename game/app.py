@@ -413,8 +413,8 @@ class Game3D:
             
             from ursina import scene
             scene.fog_color = window.color
-            # Kabut atmosferik (ala Forest) — cukup tipis agar dunia terlihat, beri kedalaman
-            scene.fog_density = 0.010 if is_indoor else 0.016
+            # Kabut atmosferik Disco/Zomboid — dunia memudar ke kabut, hujan lebih pekat
+            scene.fog_density = 0.012 if is_indoor else (0.026 if is_raining else 0.021)
             
             self._sync_smooth_lighting()
 
@@ -519,6 +519,9 @@ class Game3D:
                 msg = self.panels.panel_action(int(key))
                 if msg:
                     self.panels.flash_msg(msg)
+                    if msg.startswith('Berhasil') or msg.startswith('Beli'):
+                        from ursina import color as _c
+                        self.panels.emote('* + *', _c.rgb(255, 220, 130), 1.3)
             return
 
         if self.panels.mode == 'hud':

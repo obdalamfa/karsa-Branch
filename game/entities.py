@@ -254,12 +254,23 @@ _WILD_VISUALS = {
 # ─── TRANSFORM PER-MODEL (skala, offset Y) — perbaiki proporsi/posisi aneh ─────
 # Model .obj punya tinggi/origin berbeda; tanpa ini NPC raksasa & bat tenggelam.
 _MODEL_TRANSFORM = {
-    'humanoid':      (0.62, 0.0),   # 3.0 tall → ~1.86 (seukuran orang, sebanding player)
-    'mob_pocong':    (0.85, 0.0),   # 2.25 → ~1.9
-    'mob_genderuwo': (0.80, 0.0),   # 2.85 → ~2.3 (roh besar)
-    'mob_kelelawar': (1.10, 0.55),  # bat: angkat dari tanah (Y model negatif) → melayang
-    'naga':          (0.60, 0.0),   # naga panjang
+    # Pasca-restandarisasi Jun 2026 (DESIGN_STANDARD.md): semua mob_*.obj
+    # sudah skala meter (1u=1m) — tidak perlu koreksi skala lagi.
+    'humanoid':      (0.62, 0.0),   # 3.0 tall → ~1.86 (satu-satunya model non-meter)
+    'mob_kelelawar': (1.00, 0.55),  # bat melayang di atas tanah
 }
+
+def _setup_pose_swap(actor, base_name):
+    """Aktifkan animasi mesh-swap 2-frame bila aset pose tersedia
+    (<base>_idle/_walk1/_walk2.obj). Dibaca oleh BaseActor.sync_visuals."""
+    try:
+        if load_model_file(base_name + '_idle') and load_model_file(base_name + '_walk1'):
+            actor._pose_names = (base_name + '_idle',
+                                 base_name + '_walk1',
+                                 base_name + '_walk2')
+            actor._pose_cur = -1
+    except Exception:
+        pass
 
 def get_npc_model_name(npc_id):
     mapping = {
@@ -504,9 +515,14 @@ class EntitiesManager:
                 animal_type = ANIMAL_NPCS[actor_id].get('type', 'kucing')
                 asset = get_animal_model_file(animal_type)
                 pm = load_model_file(asset) if asset else None
+                if pm is None:
+                    # Aset Blender baked (mob_<type>.obj) — standar meter + muted
+                    asset = 'mob_' + animal_type
+                    pm = load_model_file(asset)
                 if pm is not None:
                     actor.model = pm
                     actor.scale = 1.0
+                    _setup_pose_swap(actor, asset)
                 else:
                     build_animal(actor, animal_type)   # prosedural
                 # Label + lanjut (lewati blok model manusia/roh)
@@ -519,11 +535,19 @@ class EntitiesManager:
                 continue
 
             apr_list = NPC_APPEARANCES.get(actor_id)
+            npc_mdl = load_model_file(f'npc_{actor_id}')
             if actor_id == 'petapa_srimana':
                 from .petapa_model import build_petapa_srimana
                 build_petapa_srimana(actor)              # sets model/color/scale
                 if not getattr(actor, '_halo', None):    # guard pool reuse
                     _add_deity_aura(actor)
+            elif npc_mdl is not None:
+                # Model NPC kustom Blender (npc_<id>.obj) — gaya Disco muted,
+                # skala meter, tekstur baked. Menggantikan Vitaboy/humanoid.
+                actor.model = npc_mdl
+                actor.color = color.white
+                actor.scale = 1.0
+                _setup_pose_swap(actor, f'npc_{actor_id}')
             elif apr_list:
                 from .vitaboy import VitaboyAvatar
                 sc = 0.19 if actor_id in ('cici', 'bowo') else 0.32
@@ -541,6 +565,7 @@ class EntitiesManager:
                 panda_model = load_model_file(model_name)
                 if panda_model:
                     actor.model = panda_model
+                    _setup_pose_swap(actor, model_name)
                 else:
                     model_name = 'humanoid'
                     panda_fallback = load_model_file('humanoid')

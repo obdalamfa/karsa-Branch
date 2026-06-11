@@ -56,6 +56,7 @@ class InteractionController:
                 self.player._play_tool_anim('water')
                 self.player._fx_burst(fx, fy + 0.2, fz, color.rgb(60, 150, 255, 200), n=6)
                 sound_play('water', 0.8)
+                panels.emote('~ ~', color.rgb(110, 180, 240))
                 panels.flash_msg("Tanaman disiram!", 0.8)
                 self.check_quests()
             else:
@@ -75,6 +76,7 @@ class InteractionController:
                 sound_play('plant', 0.8)
                 if s.seed_key == 'lobak':
                     s.stats['lobak_planted'] = s.stats.get('lobak_planted', 0) + 1
+                panels.emote('\\v/', color.rgb(140, 215, 110))
                 panels.flash_msg(f"{CROPS[s.seed_key]['name']} ditanam!", 0.8)
             else:
                 sound_play('blocked', 0.6)
@@ -98,6 +100,7 @@ class InteractionController:
                     self.player._play_tool_anim('bend')
                     self.player._fx_burst(fx, fy + 0.3, fz, color.rgb(255, 225, 50), n=7)
                     sound_play('harvest', 0.8)
+                    panels.emote(f'* +{sold}G', color.rgb(255, 220, 100), 1.3)
                     panels.flash_msg(f"{CROPS[crop_name]['name']} dipanen! +{sold}G", 1.2)
                     self.check_quests(panels)
                 else:
@@ -176,6 +179,8 @@ class InteractionController:
 
         if s.scene_name == 'beach' and self.try_repair_lighthouse(panels):
             return
+        if s.scene_name == 'beach' and self.try_sail(panels):
+            return
         if s.scene_name == 'lake' and self.try_fishing(panels):
             return
         if s.scene_name == 'dungeon' and getattr(self.world, 'dungeon_level', 0) == 13 and self.try_fishing(panels):
@@ -186,6 +191,8 @@ class InteractionController:
         npc_info = entities_mgr.get_nearest_npc(tx, ty, max_dist_tiles=3.0)
         if npc_info:
             npc_id  = npc_info['id']
+            if npc_id == 'petapa_srimana':
+                self._petapa_awaken(npc_id, entities_mgr, panels)
             options = self.build_pie_options(npc_id)
             panels.open_pie_menu(
                 npc_id, options,
@@ -204,9 +211,11 @@ class InteractionController:
             if my_tid == CHR:
                 panels.flash_msg("Kamu sedang duduk bersantai di kursi.", 1.5)
                 self.player.state.energy = min(100, self.player.state.energy + 5)
+                panels.emote('+5 EN', color.rgb(130, 210, 130))
                 sound_play('menu_select', 0.5)
                 return
             elif my_tid == BD:
+                panels.emote('Zzz', color.rgb(150, 170, 235), 1.5)
                 self.player._try_sleep(panels)
                 return
 
@@ -215,10 +224,13 @@ class InteractionController:
                 if self.player.state.quest_stage == 0:
                     self.player.state.quest_stage = 1
                 sound_play('menu_select', 0.8)
+                panels.emote('!', color.rgb(255, 220, 120))
                 panels.start_dialog('mailbox', self.player.state)
             elif tid == ST:
                 panels.flash_msg("Kamu memasak makanan yang lezat. (+20 Energi)", 1.5)
                 self.player.state.energy = min(100, self.player.state.energy + 20)
+                self.player._play_tool_anim('down')
+                panels.emote('+20 EN', color.rgb(255, 190, 110), 1.4)
                 sound_play('menu_select', 0.8)
             elif tid == CL:
                 h, m = self.player.state.time_hm()
@@ -230,9 +242,22 @@ class InteractionController:
             elif tid == TV:
                 panels.flash_msg("Kamu menonton acara televisi yang menarik. (+10 Senang)", 1.5)
                 self.player.state.senang = min(100, getattr(self.player.state, 'senang', 100) + 10)
+                panels.emote(':)', color.rgb(255, 200, 150))
                 sound_play('menu_select', 0.8)
             elif tid == CHR:
                 panels.flash_msg("Ini kursi yang nyaman. Coba berdiri di atasnya untuk duduk.", 1.5)
+
+    def _petapa_awaken(self, npc_id, entities_mgr, panels):
+        """Arca emas Srimana yang mematung bangkit ke wujud murka
+        (Iblis-Dewa Bertangan Banyak) saat pertama kali didekati pemain."""
+        actor = entities_mgr.actors.get(npc_id)
+        if actor is None or getattr(actor, '_petapa_form', '') == 'galak':
+            return
+        from ..petapa_model import petapa_transform_galak
+        if petapa_transform_galak(actor):
+            panels.flash_msg("Arca emas itu BERGERAK — kedelapan lengan Srimana terbuka!", 2.5)
+            panels.emote('! ! !', color.rgb(255, 120, 80), 1.8)
+            sound_play('menu_select', 1.0)
 
     def _try_harvest_wild(self, tx: int, ty: int, entities_mgr, panels) -> bool:
         """Panen entitas liar di tile player atau tile depan (herba, beri, jamur).
@@ -253,6 +278,7 @@ class InteractionController:
                 self.player._fx_burst(chk_x * TS, GROUND_H + 0.5, chk_y * TS,
                                       color.rgb(150, 230, 90), n=6)
                 sound_play('harvest', 0.8)
+                panels.emote(f'+1 {item_name}', color.rgb(170, 225, 120), 1.3)
                 panels.flash_msg(f"+1 {item_name}! (jual {sell}G)", 1.4)
                 self.check_quests(panels)
                 return True
@@ -297,6 +323,8 @@ class InteractionController:
             self.player.state.inventory[name] = self.player.state.inventory.get(name, 0) + 1
             self.player.state.senang = min(NEED_MAX, self.player.state.senang + 20)
             sound_play('capture', 0.8)
+            self.player._play_tool_anim('bend')
+            panels.emote('(o)!', color.rgb(190, 230, 150), 1.4)
             panels.flash_msg(f"{name} ditangkap! (+{sell}G jika dijual)", 1.5)
             self.check_quests(panels)
         else:
@@ -327,6 +355,36 @@ class InteractionController:
         sound_play('blocked', 0.5)
         panels.flash_msg("Tidak ada makanan. (V = makan)", 1.0)
 
+    def try_sail(self, panels) -> bool:
+        """Berlayar dari dermaga pantai dengan perahu hasil crafting.
+        Butuh: berdiri di dermaga (DCK), menghadap laut, punya 'perahu'."""
+        import random as _rng
+        from ..config import DCK, W
+        s = self.player.state
+        tx, ty = self.player.get_tile_pos()
+        ftx, fty = self.player._facing_tile()
+        if self.world.get_tile(tx, ty) != DCK or self.world.get_tile(ftx, fty) != W:
+            return False
+        if s.inventory.get('perahu', 0) < 1:
+            return False          # tanpa perahu → jatuh ke aksi lain (mancing)
+        if s.energy < 8:
+            sound_play('blocked', 0.5)
+            panels.flash_msg("Terlalu lelah untuk berlayar.", 1.2)
+            return True
+        s.energy = max(0, s.energy - 8)
+        s.time_minutes += 45      # pelayaran memakan waktu
+        self.player._play_tool_anim('water')
+        panels.emote('~~>', color.rgb(120, 190, 230), 1.4)
+        n_ikan = _rng.randint(2, 4)
+        s.inventory['ikan_laut'] = s.inventory.get('ikan_laut', 0) + n_ikan
+        loot = f"{n_ikan} Ikan Laut"
+        if _rng.random() < 0.18:
+            s.inventory['mutiara'] = s.inventory.get('mutiara', 0) + 1
+            loot += " + MUTIARA!"
+        sound_play('harvest', 0.8)
+        panels.flash_msg(f"Kamu berlayar ke laut lepas... pulang membawa {loot}", 3.0)
+        return True
+
     def try_fishing(self, panels) -> bool:
         import random as _rng
         from ..config import DCK, LLY, W
@@ -345,22 +403,27 @@ class InteractionController:
 
         s.energy = max(0, s.energy - 2)
         is_legendary_lake = (s.scene_name == 'dungeon' and getattr(self.world, 'dungeon_level', 0) == 13)
-        
-        if _rng.random() < 0.55:
+
+        chance = 0.55 + (0.20 if s.inventory.get('jala', 0) > 0 else 0)
+        if _rng.random() < chance:
             if is_legendary_lake and _rng.random() < 0.25:
                 s.inventory['ikan_legendaris'] = s.inventory.get('ikan_legendaris', 0) + 1
                 sound_play('harvest', 0.8)
+                panels.emote('><(((*>  !!', color.rgb(255, 220, 120), 1.8)
                 panels.flash_msg("Luar Biasa! Dapat Ikan Legendaris!", 2.5)
             else:
                 gold = _rng.randint(20, 75)
                 s.gold += gold
                 s.stats['earned'] = s.stats.get('earned', 0) + gold
                 sound_play('harvest', 0.8)
+                panels.emote(f'><(((*> +{gold}G', color.rgb(140, 200, 220), 1.4)
                 panels.flash_msg(f"Dapat ikan! Dijual +{gold}G", 1.5)
             self.check_quests(panels)
         else:
             sound_play('blocked', 0.4)
+            panels.emote('. . .', color.rgb(160, 165, 170))
             panels.flash_msg("Tidak ada yang menggigit... coba lagi.", 1.0)
+        self.player._play_tool_anim('water')
         return True
 
     def try_healing(self, panels) -> bool:
@@ -384,6 +447,7 @@ class InteractionController:
 
         s.gold -= cost
         s.hp = s.max_hp
+        panels.emote('+HP', color.rgb(140, 220, 140), 1.4)
         sound_play('menu_select', 0.8)
         panels.flash_msg(f"Dirawat oleh Pak Raka (-{cost}G)", 1.5)
         return True
@@ -413,6 +477,8 @@ class InteractionController:
         s.inventory['besi'] -= req_besi
         
         s.lighthouse_fixed = True
+        self.player._play_tool_anim('swing')
+        panels.emote('* ! *', color.rgb(255, 215, 110), 1.6)
         self.world.scene_obj.tiles[fty][ftx] = LGH_F
         self.world.load_scene('beach')
         sound_play('magic', 0.8)
@@ -526,10 +592,12 @@ class InteractionController:
         if action == 'sapa':
             s.sosial = min(NEED_MAX, s.sosial + 5)
             sound_play('menu_select', 0.7)
+            panels.emote('. . .', color.rgb(220, 220, 210))
             panels.flash_msg(f"{npc.get('name', npc_id)}: Halo!", 1.2)
         elif action == 'ngobrol':
             s.sosial = min(NEED_MAX, s.sosial + 15)
             s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1)
+            panels.emote('<3', color.rgb(235, 140, 160), 1.4)
             panels.start_dialog(npc_id, s)
         elif action == 'arya_tanya':
             panels.start_dialog(npc_id, s, node_key='arya_history_start')
@@ -544,6 +612,7 @@ class InteractionController:
             else:
                 panels.start_dialog(npc_id, s, node_key='maya_quest_start')
         elif action == 'beri_hadiah':
+            panels.emote('<3 !', color.rgb(245, 150, 170), 1.5)
             self.give_gift(entities_mgr, panels)
             s.sosial = min(NEED_MAX, s.sosial + 20)
         elif action == 'tanya_kabar':

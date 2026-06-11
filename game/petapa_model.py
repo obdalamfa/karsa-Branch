@@ -25,12 +25,55 @@ _RB = color.rgb(192, 45, 75)     # rubi merah aksen
 _E3 = color.rgb(255, 252, 90)    # mata ketiga bersinar
 
 
+def _try_obj_form(actor, model_name, scale=1.0):
+    """Pasang model OBJ (aset Blender) ke actor. Return True jika berhasil.
+    Membersihkan parts prosedural lama bila ada (ganti wujud)."""
+    try:
+        from .entities import load_model_file
+        mdl = load_model_file(model_name)
+    except Exception:
+        mdl = None
+    if not mdl:
+        return False
+    parts = getattr(actor, '_petapa_parts', None)
+    if parts:
+        from ursina import destroy
+        for p in parts:
+            try: destroy(p)
+            except Exception: pass
+        actor._petapa_parts = None
+    actor.model = mdl
+    actor.color = color.white
+    actor.scale = scale
+    return True
+
+
+def petapa_transform_galak(actor):
+    """Wujud murka: arca yang mematung bangkit jadi Iblis-Dewa Bertangan Banyak.
+    Dipanggil saat pemain pertama kali berinteraksi. Return True jika berubah."""
+    if getattr(actor, '_petapa_form', '') == 'galak':
+        return False
+    if _try_obj_form(actor, 'petapa_srimana_galak', scale=1.0):
+        actor._petapa_form = 'galak'
+        return True
+    return False
+
+
 def build_petapa_srimana(actor):
     """
     Rakit Petapa Srimana sebagai child-Entity parts pada ``actor``.
     Setelah dipanggil: actor.model='cube', actor.color=clear, actor.scale=1.4.
     Aman dipanggil berulang (pool reuse): hanya reset warna jika sudah dibangun.
+
+    Wujud awal = arca kalem "mematung" (petapa_srimana.obj, buatan Blender).
+    Saat interaksi pertama, interaction_controller memanggil
+    petapa_transform_galak() → ganti ke petapa_srimana_galak.obj.
+    Bila aset OBJ tak ada, jatuh ke build prosedural lama di bawah.
     """
+    if _try_obj_form(actor, 'petapa_srimana', scale=1.2):
+        actor._petapa_form = 'kalem'
+        return []
+
     if getattr(actor, '_petapa_parts', None):
         # Actor dari pool — cukup pastikan parent cube tetap tersembunyi
         actor.model = 'cube'

@@ -30,16 +30,42 @@ def build_beach():
 def beach_builder(world):
     from .props import default_prop_builder
     default_prop_builder(world, world.scene_obj)
-    
-    if not getattr(world.state, 'lighthouse_fixed', False):
+
+    from game.config import TILE_SIZE as TS, GROUND_H
+    from ursina import color, Entity
+
+    fixed = getattr(world.state, 'lighthouse_fixed', False)
+
+    # ── Mercusuar 3D (model Blender; tile LGH tetap untuk logika interaksi) ──
+    try:
+        from game.entities import load_model_file
+    except Exception:
+        load_model_file = lambda n: None
+    mname = 'prop_mercusuar' if fixed else 'prop_mercusuar_rusak'
+    mdl = load_model_file(mname)
+    if mdl:
+        m = Entity()
+        m.model = mdl            # setter (pola actor) — bukan constructor
+        m.color = color.white
+        m.position = (20 * TS, GROUND_H, 17 * TS)
+        world._obj_ents.append(m)
+
+    if not fixed:
         return
-        
-    from game.config import TS, GROUND_H
-    from ursina import color
-    
+
     base_x = 10 * TS
     base_z = 25 * TS
     y = GROUND_H + 0.2
+
+    # ── Kapal Kurofune (model Blender bila ada; fallback kubus lama) ──
+    ship = load_model_file('prop_kurofune')
+    if ship:
+        e = Entity()
+        e.model = ship
+        e.color = color.white
+        e.position = (base_x + 8, GROUND_H + 0.1, base_z)
+        world._obj_ents.append(e)
+        return
 
     hull = world._create_entity('cube', (base_x + 8, y, base_z), (20, 2.5, 6), 'wood_plank', color.rgb(30, 30, 35))
     world._obj_ents.append(hull)

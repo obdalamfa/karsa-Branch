@@ -45,7 +45,29 @@ WILD_ITEMS = {
     'wild_berry':       {'name':'Beri Liar','sell':20,'description':'Beri manis'},
     'air_keabadian':    {'name':'Air Keabadian','sell':500,'description':'Air ruqyah dari naga'},
     'ikan_legendaris':  {'name':'Ikan Legendaris','sell':1000,'description':'Ikan raksasa penghuni danau terdalam'},
+    # ── Hasil kerajinan & laut ──
+    'perahu':           {'name':'Perahu Kayu','sell':400,'description':'Perahu kecil untuk berlayar dari dermaga pantai'},
+    'obor':             {'name':'Obor','sell':12,'description':'Penerangan kayu sederhana'},
+    'jala':             {'name':'Jala Ikan','sell':90,'description':'Meningkatkan peluang memancing'},
+    'peti_kayu':        {'name':'Peti Kayu','sell':95,'description':'Peti buatan tangan, laku dijual'},
+    'pagar_kayu':       {'name':'Pagar Kayu','sell':35,'description':'Segmen pagar dekorasi kebun'},
+    'ikan_laut':        {'name':'Ikan Laut','sell':60,'description':'Tangkapan segar dari laut lepas'},
+    'mutiara':          {'name':'Mutiara','sell':250,'description':'Mutiara berkilau dari dasar laut'},
 }
+
+# ─── RESEP KERAJINAN UMUM (meja kerja Bengkel Budi, tombol U) ───────────────
+CRAFT_RECIPES = [
+    {'id':'perahu',    'name':'Perahu Kayu', 'cost_gold':150, 'gives':1,
+     'needs':{'kayu':24,'besi':4}, 'desc':'Berlayar dari dermaga pantai'},
+    {'id':'jala',      'name':'Jala Ikan',   'cost_gold':30,  'gives':1,
+     'needs':{'kayu':3,'besi':1},  'desc':'Mancing lebih mujur'},
+    {'id':'obor',      'name':'Obor (x3)',   'cost_gold':0,   'gives':3,
+     'needs':{'kayu':2},           'desc':'Penerangan murah'},
+    {'id':'peti_kayu', 'name':'Peti Kayu',   'cost_gold':0,   'gives':1,
+     'needs':{'kayu':6},           'desc':'Barang dagangan'},
+    {'id':'pagar_kayu','name':'Pagar (x2)',  'cost_gold':0,   'gives':2,
+     'needs':{'kayu':3},           'desc':'Dekorasi kebun'},
+]
 
 HUMAN_NPCS = {
     'arya':       {'name':'Arya','type':'human','gift':'jagung',

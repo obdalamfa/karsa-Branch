@@ -67,6 +67,24 @@ class BaseActor(Entity):
         else:
             self._walk_t += dt * 1.8
 
+        # Animasi mesh-swap 2-frame (aset <model>_idle/_walk1/_walk2.obj).
+        # _pose_names diisi entities._setup_pose_swap saat spawn.
+        names = getattr(self, '_pose_names', None)
+        if names:
+            if self.is_moving:
+                frame = 1 + (int(self._walk_t * 0.5) % 2)   # ±8 fps walk cycle
+            else:
+                frame = 0
+            if frame != getattr(self, '_pose_cur', -1):
+                try:
+                    from .entities import load_model_file
+                    mdl = load_model_file(names[frame])
+                    if mdl is not None:
+                        self.model = mdl
+                        self._pose_cur = frame
+                except Exception:
+                    self._pose_names = None
+
     def on_destroy(self):
         """Cleanup logic when the actor is destroyed or removed from the scene."""
         pass

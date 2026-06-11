@@ -34,13 +34,16 @@ void main() {
     vec2 puv = (floor(uv * PIXEL_RES) + 0.5) / PIXEL_RES;
     vec3 c = texture(tex, puv).rgb;
 
-    // 0b. Butiran pasir SANGAT halus (hampir tak terlihat, hanya tekstur)
+    // 0b. Butiran pasir (grit Zomboid — terlihat tapi tidak mengganggu)
     float g = grain(floor(uv * PIXEL_RES));
-    c += (g - 0.5) * 0.018;
+    c += (g - 0.5) * 0.030;
 
-    // 1. Desaturasi sangat ringan
+    // 1. Desaturasi Disco Elysium — dunia pudar kelelahan
     float luma = dot(c, vec3(0.299, 0.587, 0.114));
-    c = mix(vec3(luma), c, 0.90);
+    c = mix(vec3(luma), c, 0.78);
+
+    // 1b. Split-tone: bayangan ditarik ke teal dingin, merah turun di area gelap
+    c -= vec3(0.022, 0.004, 0.012) * (1.0 - luma);
 
     // 2. Angkat black supaya tile gelap jadi abu (BUKAN hitam → tidak ada magenta)
     c = c * 0.90 + 0.07;
@@ -48,9 +51,9 @@ void main() {
     // 3. Kontras sangat lembut (hampir netral) — tidak memperkuat noise gelap
     c = (c - 0.5) * 1.02 + 0.5;
 
-    // 4. Vignette amat halus
+    // 4. Vignette — bingkai suram menekan sudut layar
     float v = length(uv - 0.5);
-    c *= smoothstep(1.1, 0.4, v) * 0.08 + 0.92;
+    c *= smoothstep(1.15, 0.35, v) * 0.14 + 0.86;
 
     fragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
 }

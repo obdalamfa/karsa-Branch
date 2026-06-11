@@ -39,7 +39,8 @@ def _init_thermo_tex():
     _THERMO_FILL_TEX = _lt('up_thermo_slice_active')
 from .data import CROPS
 from .data import (HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS,
-                   QUEST_STAGES, SWORD_RECIPES, PICKAXE_RECIPES, SHOP_ITEMS)
+                   QUEST_STAGES, SWORD_RECIPES, PICKAXE_RECIPES, SHOP_ITEMS,
+                   CRAFT_RECIPES)
 
 _ALL_NPCS = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
 
@@ -103,6 +104,48 @@ class UIManager:
                 if hasattr(self, '_flash_bg'):
                     self._flash_bg.enabled = False
 
+        # Emote melayang (feedback interaksi ala The Sims)
+        if getattr(self, '_emotes', None):
+            from ursina import destroy as _destroy
+            alive = []
+            for rec in self._emotes:
+                ent, t0, ttl = rec
+                ttl -= dt
+                if ttl <= 0 or not ent:
+                    try: _destroy(ent)
+                    except Exception: pass
+                    continue
+                k = ttl / t0                      # 1 → 0
+                ent.y += dt * 0.16                # melayang naik
+                try:
+                    c = ent.color
+                    ent.color = color.rgba(int(c.r*255), int(c.g*255), int(c.b*255),
+                                           int(255 * min(1.0, k * 1.6)))
+                except Exception:
+                    pass
+                ent.scale = 1.05 + (1.0 - k) * 0.35
+                rec[2] = ttl
+                alive.append(rec)
+            self._emotes = alive
+
+    # ─── PUBLIC: EMOTE (ikon interaksi melayang) ─────────
+    def emote(self, text: str, col=None, dur: float = 1.1, x: float = 0.0, y: float = 0.02):
+        """Feedback visual kecil yang muncul dekat pemain (tengah layar),
+        melayang ke atas lalu memudar — dipanggil dari tiap interaksi."""
+        if not hasattr(self, '_emotes'):
+            self._emotes = []
+        e = _txt(text, pos=(x, y), scale=1.05,
+                 col=col or color.rgb(255, 238, 150), origin=(0, 0))
+        e.z = -0.6
+        self._emotes.append([e, dur, dur])
+        if len(self._emotes) > 6:                 # batasi spam
+            old = self._emotes.pop(0)
+            try:
+                from ursina import destroy as _destroy
+                _destroy(old[0])
+            except Exception:
+                pass
+
     _TOOL_NAMES = ['Cangkul','Siram','Tanam','Panen','Kapak','Hadiah','Pickaxe','Pedang']
     # (simbol, warna_bg, warna_teks) per tool index
     _TOOL_ICON_DATA = [
@@ -124,19 +167,22 @@ class UIManager:
         BAR_TOP = -0.405
         BAR_BOT = -0.455
 
-        # ── Panel bar penuh di bawah ──
+        # ── Panel bar penuh di bawah (kertas tua Disco: gelap + aksen rust) ──
         self._hud_bar    = _ui(scale=(1.95, 0.17), position=(0, -0.435),
-                               color=color.rgb(26, 22, 20, 240), z=1.0)
-        self._hud_border = _ui(scale=(1.95, 0.010), position=(0, -0.352),
-                               color=color.rgb(128, 100, 72), z=0.95)
+                               color=color.rgb(20, 19, 18, 244), z=1.0)
+        self._hud_border = _ui(scale=(1.95, 0.008), position=(0, -0.352),
+                               color=color.rgb(150, 96, 60), z=0.95)
+        self._hud_border2 = _ui(scale=(1.95, 0.0028), position=(0, -0.359),
+                                color=color.rgb(96, 84, 64), z=0.96)
 
-        # ── Item aktif (tengah) — menggantikan wajah ──
+        # ── Item aktif (tengah) — frame berlapis dengan ring pilihan ──
         sym0, bg0, fg0 = self._TOOL_ICON_DATA[0]
-        self._item_frame = _ui(scale=(0.115, 0.150), position=(0.0, -0.422), color=color.rgb(48, 38, 28), z=0.6)
+        self._item_ring  = _ui(scale=(0.125, 0.162), position=(0.0, -0.422), color=color.rgb(150, 96, 60), z=0.65)
+        self._item_frame = _ui(scale=(0.115, 0.150), position=(0.0, -0.422), color=color.rgb(38, 32, 26), z=0.6)
         self._item_bg    = _ui(scale=(0.095, 0.128), position=(0.0, -0.422), color=bg0, z=0.5)
         self._item_sym   = _txt(sym0, pos=(0.0, -0.418), scale=1.25, col=fg0, origin=(0, 0))
         self._item_lbl   = _txt(self._TOOL_NAMES[0], pos=(0.0, -0.454), scale=0.58,
-                                col=color.rgb(210, 195, 165), origin=(0, 0))
+                                col=color.rgb(224, 216, 188), origin=(0, 0))
 
         # ── Kiri jauh: Alat aktif ──
         X_TOOL = -0.82
@@ -154,18 +200,34 @@ class UIManager:
         self._en_bar   = _ui(scale=(self._BAR_W, 0.024), position=(self._BAR_X_LEFT + self._BAR_W/2, BAR_BOT), color=color.rgb(70, 180, 80), z=0.3)
         self._en_val   = _txt('EN', pos=(self._BAR_X_LEFT - 0.045, BAR_BOT + 0.010), scale=0.68, col=WHITE)
 
-        self._buff_txt  = _txt('', pos=(-0.26, BAR_TOP + 0.012), scale=0.65, col=color.rgb(120, 255, 180))
-        self._queue_txt = _txt('', pos=(-0.26, BAR_BOT + 0.005), scale=0.65, col=color.rgb(255, 210, 80))
+        # ── Needs sim-life (Lapar / Sosial / Senang) — mini bar 3 baris ──
+        NX, NW = -0.275, 0.135
+        self._need_fills = {}
+        need_rows = [
+            ('lapar',  'LPR', -0.404, color.rgb(205, 150, 62)),
+            ('sosial', 'SOS', -0.430, color.rgb(82, 156, 150)),
+            ('senang', 'SNG', -0.456, color.rgb(160, 128, 176)),
+        ]
+        for key, lbl, ny, ncol in need_rows:
+            _txt(lbl, pos=(NX - 0.052, ny + 0.009), scale=0.52, col=color.rgb(168, 158, 138))
+            _ui(scale=(NW, 0.017), position=(NX + NW/2, ny), color=color.rgb(40, 35, 31), z=0.4)
+            fill = _ui(scale=(NW, 0.017), position=(NX + NW/2, ny), color=ncol, z=0.3)
+            self._need_fills[key] = (fill, NX, NW, ncol)
 
-        # ── Kanan-tengah: Emas ──
-        self._gold_txt = _txt('§ 0G', pos=(0.16, BAR_TOP + 0.006), scale=1.05, col=GOLD_C)
+        self._buff_txt  = _txt('', pos=(0.075, BAR_TOP + 0.012), scale=0.58, col=color.rgb(120, 220, 165))
+        self._queue_txt = _txt('', pos=(0.075, BAR_BOT + 0.005), scale=0.58, col=color.rgb(220, 190, 95))
 
-        # ── Kanan jauh: Waktu / tanggal / cuaca / scene ──
+        # ── Kanan-tengah: Emas (pill chip) ──
+        self._gold_bg  = _ui(scale=(0.135, 0.052), position=(0.255, -0.428), color=color.rgb(36, 31, 24), z=0.55)
+        self._gold_txt = _txt('§ 0G', pos=(0.20, BAR_TOP - 0.002), scale=1.02, col=GOLD_C)
+
+        # ── Kanan jauh: chip Waktu / tanggal + cuaca / scene ──
         X_R = 0.50
+        self._time_bg     = _ui(scale=(0.215, 0.075), position=(X_R + 0.085, -0.430), color=color.rgb(30, 28, 25), z=0.55)
         self._time_txt    = _txt('06:00',  pos=(X_R, BAR_TOP + 0.010), scale=1.15, col=WHITE)
-        self._date_txt    = _txt('Hari 1',  pos=(X_R, BAR_BOT + 0.005), scale=0.66, col=color.rgb(170, 200, 255))
-        self._weather_txt = _txt('^ Cerah', pos=(X_R + 0.26, BAR_TOP + 0.012), scale=0.66, col=color.rgb(255, 240, 130))
-        self._scene_txt   = _txt('> Kebun', pos=(X_R + 0.26, BAR_BOT + 0.005), scale=0.66, col=color.rgb(140, 255, 160))
+        self._date_txt    = _txt('Hari 1',  pos=(X_R, BAR_BOT + 0.005), scale=0.62, col=color.rgb(178, 188, 205))
+        self._weather_txt = _txt('^ Cerah', pos=(X_R + 0.26, BAR_TOP + 0.012), scale=0.66, col=color.rgb(225, 212, 140))
+        self._scene_txt   = _txt('> Kebun', pos=(X_R + 0.26, BAR_BOT + 0.005), scale=0.66, col=color.rgb(150, 205, 162))
 
         self._need_lbl_ents  = []
         self._need_bg_ents   = []
@@ -211,6 +273,14 @@ class UIManager:
         _shrink_bar(self._en_bar, BAR_X_LEFT, BAR_W, en_r)
         self._en_bar.color = color.rgb(220, 80, 55) if en_r <= 0.3 else color.rgb(55, 205, 75)
         self._en_val.text = f'{int(s.energy)}/{s.max_energy}'
+
+        # Needs sim-life (Lapar/Sosial/Senang) — redup saat kritis
+        if getattr(self, '_need_fills', None):
+            from .config import NEED_MAX
+            for key, (fill, nx, nw, ncol) in self._need_fills.items():
+                val = max(0.0, min(1.0, getattr(s, key, NEED_MAX) / max(NEED_MAX, 1)))
+                _shrink_bar(fill, nx, nw, max(0.001, val))
+                fill.color = color.rgb(200, 70, 55) if val <= 0.25 else ncol
 
         # Gold + buff (§ simbol web-style)
         self._gold_txt.text = f'§ {s.gold}G'
@@ -839,6 +909,17 @@ class UIManager:
                 mark = '[v]' if already else ('[o]' if (got_gold and got_mat) else '[ ]')
                 lines.append(f"  [{num}] {mark} {r['name']:18s}  {r['cost_gold']:>4}G + {need} (DMG {r['damage']})")
             lines.append('')
+            lines.append("── PERKAKAS ──")
+            base_num = len(PICKAXE_RECIPES) + len(SWORD_RECIPES) + 1
+            for i, r in enumerate(CRAFT_RECIPES):
+                num = base_num + i
+                need = ', '.join(f"{k}×{v}" for k, v in r['needs'].items())
+                got_gold = s.gold >= r['cost_gold']
+                got_mat  = all(inv.get(k, 0) >= v for k, v in r['needs'].items())
+                mark = '[o]' if (got_gold and got_mat) else '[ ]'
+                gtxt = f"{r['cost_gold']:>4}G + " if r['cost_gold'] else "       "
+                lines.append(f"  [{num}] {mark} {r['name']:14s} {gtxt}{need}  — {r['desc']}")
+            lines.append('')
             lines.append("[ ]=kurang bahan  [o]=siap  [v]=sudah punya")
             self._panel_body.text = '\n'.join(lines)
 
@@ -948,9 +1029,14 @@ class UIManager:
             if s.sword_id == r['id']:
                 return "Sudah punya pedang ini."
             return self._do_craft(r, set_sword=r['id'])
+        gi = si - len(SWORD_RECIPES)          # lanjut ke perkakas umum
+        if 0 <= gi < len(CRAFT_RECIPES):
+            r = CRAFT_RECIPES[gi]
+            return self._do_craft(r, give_item=(r['id'], r.get('gives', 1)))
         return ''
 
-    def _do_craft(self, r: dict, set_pickaxe: int = None, set_sword: str = None) -> str:
+    def _do_craft(self, r: dict, set_pickaxe: int = None, set_sword: str = None,
+                  give_item: tuple = None) -> str:
         s = self.state
         if s.gold < r['cost_gold']:
             return f"Gold kurang ({r['cost_gold']}G)."
@@ -965,6 +1051,9 @@ class UIManager:
             s.pickaxe_tier = set_pickaxe
         if set_sword is not None:
             s.sword_id = set_sword
+        if give_item is not None:
+            iid, qty = give_item
+            s.inventory[iid] = s.inventory.get(iid, 0) + qty
         self._render_panel('crafting')
         return f"Berhasil membuat {r['name']}!"
 

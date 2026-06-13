@@ -191,8 +191,8 @@ class Game3D:
         camera.orthographic = False
         camera.fov          = 60
         self.camera_yaw     = 0.0
-        self.camera_pitch   = 22.0   # sudut pitch default (lebih dekat ke tanah)
-        self.camera_dist    = 13.0
+        self.camera_pitch   = 28.0   # sudut pitch (lebih tinggi: petak sawah terlihat jelas)
+        self.camera_dist    = 10.0   # lebih dekat: karakter terasa lebih besar
 
         # Chargen handle — dibuka dari layar judul ("Mulai Baru") atau F2
         self._chargen: ChargenScreen = None
@@ -387,15 +387,16 @@ class Game3D:
                 if held_keys['e']:
                     self.camera_yaw += CAM_ROT_SPEED * dt
 
-            # Kunci pitch agar kamera tidak menjauh ke atas (22° tetap, tidak bisa diubah)
-            self.camera_pitch = 22.0
+            # Kunci pitch agar kamera tidak menjauh ke atas (28° tetap)
+            self.camera_pitch = 28.0
             
             ideal_focus = self.player.position + Vec3(0, CAM_TARGET_LIFT, 0)
             if not hasattr(self, 'camera_focus'):
                 self.camera_focus = ideal_focus
             
-            # Smooth trailing focus point
-            self.camera_focus = lerp(self.camera_focus, ideal_focus, CAM_LERP * 1.5 * dt)
+            # Smooth trailing focus point (framerate-independent → tak overshoot saat fps turun)
+            smf = 1.0 - math.exp(-CAM_LERP * 1.5 * dt)
+            self.camera_focus = lerp(self.camera_focus, ideal_focus, min(1.0, smf))
             
             cy = math.radians(self.camera_yaw)
             cp = math.radians(self.camera_pitch)
@@ -404,7 +405,8 @@ class Game3D:
             dz = -math.cos(cy) * math.cos(cp)
             
             target_cam = self.camera_focus + Vec3(dx, dy, dz) * self.camera_dist
-            camera.position += (target_cam - camera.position) * CAM_LERP * dt
+            sm = 1.0 - math.exp(-CAM_LERP * dt)
+            camera.position += (target_cam - camera.position) * min(1.0, sm)
             camera.look_at(self.camera_focus)
             camera.rotation_z = 0
 

@@ -37,12 +37,16 @@ class InteractionController:
             if tid in TILLABLE and s.energy >= 2:
                 soil = s.soil.setdefault(soil_key, {})
                 soil['tilled'] = True
+                s.stats['tilled'] = s.stats.get('tilled', 0) + 1
                 self.player._spend_energy(2)
                 self.world.refresh_tile(tx, ty, soil_key)
                 self.player._play_tool_anim('hoe')
                 self.player._fx_burst(fx, fy, fz, color.rgb(120, 82, 42))
                 sound_play('hoe', 0.8)
                 panels.flash_msg("Tanah dicangkul!", 0.8)
+                panels.say_batin_once('cangkul', 'akar',
+                    "Bagus. Balik yang gelap ke bawah cahaya. Tiap negeri besar dimulai begini: satu mata bajak, satu larik.")
+                self._batin_first_morning(panels)
             else:
                 sound_play('blocked', 0.6)
 
@@ -58,6 +62,8 @@ class InteractionController:
                 sound_play('water', 0.8)
                 panels.emote('~ ~', color.rgb(110, 180, 240))
                 panels.flash_msg("Tanaman disiram!", 0.8)
+                panels.say_batin_once('siram', 'akar',
+                    "Genangi tunas muda, keringkan saat menua. Air itu jadwal, bukan suasana hati.")
                 self.check_quests()
             else:
                 sound_play('blocked', 0.6)
@@ -78,6 +84,8 @@ class InteractionController:
                     s.stats['lobak_planted'] = s.stats.get('lobak_planted', 0) + 1
                 panels.emote('\\v/', color.rgb(140, 215, 110))
                 panels.flash_msg(f"{CROPS[s.seed_key]['name']} ditanam!", 0.8)
+                panels.say_batin_once('tanam', 'sukma',
+                    "Benih adalah jurus tersegel. Sawah adalah kitab ajiannya. Baca pelan-pelan.")
             else:
                 sound_play('blocked', 0.6)
 
@@ -102,6 +110,8 @@ class InteractionController:
                     sound_play('harvest', 0.8)
                     panels.emote(f'* +{sold}G', color.rgb(255, 220, 100), 1.3)
                     panels.flash_msg(f"{CROPS[crop_name]['name']} dipanen! +{sold}G", 1.2)
+                    panels.say_batin_once('panen', 'akar',
+                        "Panen pertama. Mutu mengingat segalanya yang kau lakukan dan tidak. Sawah membukukan dengan jujur.")
                     self.check_quests(panels)
                 else:
                     sound_play('blocked', 0.6)
@@ -259,6 +269,25 @@ class InteractionController:
             panels.emote('! ! !', color.rgb(255, 120, 80), 1.8)
             sound_play('menu_select', 1.0)
 
+    def _batin_first_morning(self, panels):
+        """Skill-moment pertama (gaya Disco): saat cangkul pertama, majelis batin
+        memintamu memutuskan jadi siapa. Tiap pilihan menaikkan satu suara."""
+        if not getattr(panels, 'batin', None):
+            return
+        if not panels.batin.once('pagi_pertama'):
+            return
+        panels.open_batin_check(
+            'PAGI PERTAMA',
+            'Berdiri di lumpur yang dulu kau cibir, kau memutuskan jadi siapa?',
+            [
+                {'voice': 'akar', 'label': 'Petani yang kebetulan berkebatinan.',
+                 'fn': lambda: panels.say_batin('akar', 'Tanah mendengarnya. Ia akan ingat.')},
+                {'voice': 'sukma', 'label': 'Pesilat yang memakai jurus tertua: bertani.',
+                 'fn': lambda: panels.say_batin('sukma', 'Ya. Dewa pertama adalah petani yang menolak berhenti.')},
+                {'voice': 'bara', 'label': 'Senjata yang butuh diberi makan.',
+                 'fn': lambda: panels.say_batin('bara', 'Jujur. Aku bisa kerja sama dengan kejujuran.')},
+            ])
+
     def _try_harvest_wild(self, tx: int, ty: int, entities_mgr, panels) -> bool:
         """Panen entitas liar di tile player atau tile depan (herba, beri, jamur).
         Return True jika berhasil memanen sesuatu."""
@@ -354,6 +383,60 @@ class InteractionController:
             return
         sound_play('blocked', 0.5)
         panels.flash_msg("Tidak ada makanan. (V = makan)", 1.0)
+
+    def context_prompt(self, entities_mgr) -> str:
+        """Prompt kontekstual untuk HUD: apa yang bisa dilakukan SEKARANG.
+        Dipanggil tiap beberapa frame dari app.update — murah & read-only."""
+        s = self.player.state
+        try:
+            from ..config import (TILLABLE, MB, BD, ST, W, DCK, LGH_B, CHR)
+            from ..data import CROPS
+            tx, ty = self.player.get_tile_pos()
+            ftx, fty = self.player._facing_tile()
+            tid_here = self.world.get_tile(tx, ty)
+            tid_face = self.world.get_tile(ftx, fty)
+
+            # 1) NPC terdekat — aksi sosial paling utama
+            npc = entities_mgr.get_nearest_npc(tx, ty, max_dist_tiles=1.8)
+            if npc:
+                nama = npc.get('name') or npc['id'].replace('_', ' ').title()
+                return f"[R] Bicara dengan {nama}"
+
+            # 2) Objek dunia yang dihadap
+            if tid_face == MB:
+                return "[R] Baca surat" if not s.mail_read else ""
+            if tid_face == LGH_B:
+                return "[R] Periksa mercusuar"
+            if tid_here == DCK and tid_face == W and s.inventory.get('perahu', 0) > 0:
+                return "[R] Berlayar ke laut lepas"
+            if tid_face == W or tid_here == DCK:
+                return "[R] Memancing"
+            if tid_here == BD or tid_face == BD:
+                return "[R] Tidur sampai besok"
+            if tid_face == ST:
+                return "[R] Masak (+20 Energi)"
+            if tid_here == CHR:
+                return "[R] Duduk santai"
+
+            # 3) Pertanian — tergantung alat aktif & kondisi petak yang dihadap
+            soil_key = f"{ftx},{fty},{s.scene_name}"
+            soil = s.soil.get(soil_key) or {}
+            crop = soil.get('crop')
+            if crop:
+                grown = soil.get('age', 0) >= CROPS.get(crop, {}).get('days', 4)
+                if grown:
+                    return "[SPACE] Panen!  (alat: Panen [4])"
+                if not soil.get('watered'):
+                    return "[SPACE] Siram tanaman  (alat: Siram [2])"
+                sisa = CROPS.get(crop, {}).get('days', 4) - soil.get('age', 0)
+                return f"Tanaman tumbuh — {sisa} hari lagi"
+            if soil.get('tilled'):
+                return "[SPACE] Tanam benih  (alat: Tanam [3])"
+            if tid_face in TILLABLE:
+                return "[SPACE] Cangkul tanah  (alat: Cangkul [1])"
+        except Exception:
+            pass
+        return ""
 
     def try_sail(self, panels) -> bool:
         """Berlayar dari dermaga pantai dengan perahu hasil crafting.

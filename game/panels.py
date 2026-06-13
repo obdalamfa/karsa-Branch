@@ -41,6 +41,9 @@ from .data import CROPS
 from .data import (HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS,
                    QUEST_STAGES, SWORD_RECIPES, PICKAXE_RECIPES, SHOP_ITEMS,
                    CRAFT_RECIPES)
+from .sound import play as sound_play
+from .batin import VOICES as BVOICES, DIFF_NAME, pct as batin_pct, roll as batin_roll, raise_voice
+import textwrap as _tw
 
 _ALL_NPCS = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
 
@@ -83,6 +86,7 @@ class UIManager:
         self._build_panel_bg()
         self._build_inventory_grid()
         self._build_pie_menu()
+        self._build_batin()
 
         # Previous motives cache for Arrow indicators
         self._prev_hunger = None
@@ -127,6 +131,135 @@ class UIManager:
                 rec[2] = ttl
                 alive.append(rec)
             self._emotes = alive
+
+        # Subtitle suara batin (memudar)
+        if getattr(self, '_voice_sub_t', 0) > 0:
+            self._voice_sub_t -= dt
+            if self._voice_sub_t <= 0 and getattr(self, '_voice_sub', None):
+                self._voice_sub.enabled = False
+
+    # ─── MAJELIS BATIN (4 suara + skill-check) ───────────
+    def _build_batin(self):
+        self.batin = None              # diisi app.py setelah Batin dibuat
+        self._batin_open = False
+        self._voice_sub_t = 0.0
+        bg = _ui(scale=(0.58, 0.96), position=(-0.60, 0.0), color=color.rgb(20, 18, 16, 237), z=1.0)
+        title = _txt('MAJELIS BATIN', pos=(-0.86, 0.43), scale=0.95, col=color.rgb(231, 178, 61))
+        sub = _txt('Empat sukma, satu tengkorak.', pos=(-0.86, 0.395), scale=0.58, col=color.rgb(150, 135, 100))
+        self._batin_chips = []
+        for i, k in enumerate(['bara', 'akar', 'sukma', 'lapar']):
+            vd = BVOICES[k]
+            chip = _txt(f"{vd['name']} 1", pos=(-0.86 + i * 0.185, 0.35), scale=0.6,
+                        col=color.rgb(*vd['col']))
+            self._batin_chips.append((k, chip))
+        self._batin_log = _txt('', pos=(-0.875, 0.30), scale=0.62, col=color.rgb(224, 216, 188))
+        self._batin_ents = [bg, title, sub, self._batin_log] + [c for _, c in self._batin_chips]
+        for e in self._batin_ents:
+            e.enabled = False
+        # subtitle bawah (selalu ada, fade)
+        self._voice_sub = _txt('', pos=(0, -0.30), scale=0.78, col=color.white, origin=(0, 0))
+        self._voice_sub.enabled = False
+
+    def toggle_batin(self):
+        if not self._batin_open and self.mode not in ('hud',):
+            return                      # jangan buka di tengah dialog/pie/panel
+        self._batin_open = not self._batin_open
+        for e in self._batin_ents:
+            e.enabled = self._batin_open
+        if self._batin_open:
+            self._refresh_batin()
+
+    def _refresh_batin(self):
+        if not self.batin:
+            return
+        for k, chip in self._batin_chips:
+            chip.text = f"{BVOICES[k]['name']} {self.state.batin.get(k, 1)}"
+        out = ''
+        for v, t in self.batin.lines[-8:]:
+            nm = BVOICES[v]['name'] if v in BVOICES else v.upper()
+            out += _tw.fill(f"[{nm}] {t}", 42) + "\n\n"
+        self._batin_log.text = out
+
+    def say_batin(self, voice, text):
+        if self.batin:
+            self.batin.say(voice, text)
+        vd = BVOICES.get(voice)
+        if not vd:
+            return
+        self._voice_sub.text = _tw.fill(f"{vd['name']} — {text}", 58)
+        self._voice_sub.color = color.rgb(*vd['col'])
+        self._voice_sub.enabled = True
+        self._voice_sub_t = 4.5
+        if self._batin_open:
+            self._refresh_batin()
+
+    def say_batin_once(self, flag, voice, text):
+        if self.batin and self.batin.once('say_' + flag):
+            self.say_batin(voice, text)
+
+    def open_batin_check(self, title, prompt, opts):
+        """opts: list of dict {voice, label, check:(voice,diff)|None, red, id, ok, fail, fn}."""
+        from ursina import destroy
+        self._batin_opts = opts
+        self.mode = 'batin'
+        for e in getattr(self, '_bc_ents', []):
+            try: destroy(e)
+            except Exception: pass
+        bg = _ui(scale=(1.18, 0.74), position=(0, -0.02), color=color.rgb(18, 15, 12, 247), z=0.9)
+        ents = [bg,
+                _txt(title, pos=(0, 0.26), scale=0.92, col=color.rgb(231, 178, 61), origin=(0, 0)),
+                _txt(_tw.fill(prompt, 64), pos=(0, 0.15), scale=0.7, col=color.rgb(224, 216, 188), origin=(0, 0))]
+        for i, o in enumerate(opts):
+            vd = BVOICES[o['voice']]
+            tag = ''
+            if o.get('check'):
+                v, d = o['check']
+                tag = f"   [{vd['name']} · {DIFF_NAME[d]} {batin_pct(self.state, v, d)}%{' · MERAH' if o.get('red') else ''}]"
+            locked = o.get('red') and (o.get('id') or o['label'][:14]) in getattr(self.state, 'batin_red', [])
+            txt = f"{i+1}. {o['label']}{tag}" + ('  (terkunci)' if locked else '')
+            ents.append(_txt(_tw.fill(txt, 76), pos=(-0.52, 0.01 - i * 0.085), scale=0.64,
+                             col=color.rgb(90, 84, 70) if locked else color.rgb(*vd['col'])))
+        ents.append(_txt(f'Tekan 1-{len(opts)} untuk memilih.', pos=(0, -0.30), scale=0.58,
+                         col=color.rgb(150, 135, 100), origin=(0, 0)))
+        self._bc_ents = ents
+
+    def batin_check_input(self, key):
+        if key == 'escape':
+            self._close_batin_check(); return
+        if key.isdigit():
+            i = int(key) - 1
+            if 0 <= i < len(getattr(self, '_batin_opts', [])):
+                self._pick_batin(i)
+
+    def _pick_batin(self, i):
+        o = self._batin_opts[i]
+        if o.get('red') and (o.get('id') or o['label'][:14]) in getattr(self.state, 'batin_red', []):
+            return                      # opsi merah terkunci
+        raise_voice(self.state, o['voice'], 1)
+        if o.get('check'):
+            v, d = o['check']
+            r = batin_roll(self.state, v, d)
+            if r['ok']:
+                if o.get('ok'): o['ok'](r)
+                self.say_batin(v, 'BERHASIL ' + r['txt'])
+            else:
+                if o.get('red'):
+                    rid = o.get('id') or o['label'][:14]
+                    if rid not in self.state.batin_red:
+                        self.state.batin_red.append(rid)
+                if o.get('fail'): o['fail'](r)
+                self.say_batin(v, 'GAGAL ' + r['txt'])
+        elif o.get('fn'):
+            o['fn']()
+        self._close_batin_check()
+
+    def _close_batin_check(self):
+        from ursina import destroy
+        for e in getattr(self, '_bc_ents', []):
+            try: destroy(e)
+            except Exception: pass
+        self._bc_ents = []
+        self.mode = 'hud'
 
     # ─── PUBLIC: EMOTE (ikon interaksi melayang) ─────────
     def emote(self, text: str, col=None, dur: float = 1.1, x: float = 0.0, y: float = 0.02):
@@ -235,6 +368,19 @@ class UIManager:
         self._NBAR_W = 0
         self._NBAR_X = 0
 
+        # ── Objective tracker (kiri-atas) — tutorial / quest aktif ──
+        self._obj_bg = _ui(scale=(0.385, 0.092), position=(-0.685, 0.398),
+                           color=color.rgb(20, 19, 18, 215), z=0.9)
+        self._obj_rust = _ui(scale=(0.385, 0.006), position=(-0.685, 0.446),
+                             color=color.rgb(150, 96, 60), z=0.85)
+        self._obj_title = _txt('TUTORIAL', pos=(-0.868, 0.434), scale=0.62,
+                               col=color.rgb(214, 168, 110))
+        self._obj_step = _txt('...', pos=(-0.868, 0.408), scale=0.78,
+                              col=color.rgb(228, 222, 198))
+        self._obj_hint = _txt('', pos=(-0.868, 0.380), scale=0.58,
+                              col=color.rgb(150, 158, 168))
+        self._obj_last = None   # cache: deteksi pergantian langkah → emote
+
         # ── Flash message tengah ──
         self._flash_ent = _txt('', pos=(0, 0.15), scale=1.1,
                                col=color.rgb(255, 245, 80), origin=(0, 0))
@@ -273,6 +419,20 @@ class UIManager:
         _shrink_bar(self._en_bar, BAR_X_LEFT, BAR_W, en_r)
         self._en_bar.color = color.rgb(220, 80, 55) if en_r <= 0.3 else color.rgb(55, 205, 75)
         self._en_val.text = f'{int(s.energy)}/{s.max_energy}'
+
+        # Objective tracker — tutorial / quest aktif (modul game.tutorial)
+        if getattr(self, '_obj_title', None):
+            from .tutorial import tracker_lines
+            title, step, hint = tracker_lines(s)
+            self._obj_title.text = title
+            self._obj_step.text = step
+            self._obj_hint.text = hint
+            self._obj_hint.enabled = bool(hint)
+            self._obj_bg.scale_y = 0.092 if hint else 0.066
+            if self._obj_last is not None and self._obj_last != step:
+                self.emote('v Selesai!', color.rgb(140, 220, 140), 1.4)
+                sound_play('menu_select', 0.7)
+            self._obj_last = step
 
         # Needs sim-life (Lapar/Sosial/Senang) — redup saat kritis
         if getattr(self, '_need_fills', None):
@@ -316,11 +476,14 @@ class UIManager:
                      type('o', (object,), {'display': s.scene_name})()).display
         self._scene_txt.text = f'> {sc_display}'
         
-        # Action prompt dynamic
-        if hasattr(s, 'action_prompt'):
-            self._control_hint.text = s.action_prompt
+        # Action prompt dynamic — prompt kontekstual menonjol, fallback hint umum
+        prompt = getattr(s, 'action_prompt', '')
+        if prompt:
+            self._control_hint.text = prompt
+            self._control_hint.color = color.rgb(255, 235, 160)
         else:
-            self._control_hint.text = '[WASD] Jalan  ·  [Q/E] Putar Kamera  ·  [SPACE] Pakai  ·  [R] Aksi  ·  [F1] Panduan  ·  [I] Inv'
+            self._control_hint.text = '[WASD] Jalan  ·  [SPACE] Pakai  ·  [R] Aksi  ·  [TAB] Majelis Batin  ·  [F1] Panduan  ·  [I] Inv'
+            self._control_hint.color = color.rgb(205, 222, 245)
 
     # ─── PUBLIC: FLASH MESSAGE ───────────────────────────
     def flash_msg(self, text: str, duration: float = 1.2):
@@ -990,6 +1153,153 @@ class UIManager:
             return SEASON_NAMES[s.season_index]
         except Exception:
             return '-'
+
+    # ─── LAYAR JUDUL & INTRO (ROADMAP M1) ────────────────
+    def _menu_labels(self):
+        cont = 'Lanjutkan' if self._menu_has_save else 'Lanjutkan  (belum ada simpanan)'
+        return ['Mulai Baru', cont, 'Kontrol']
+
+    def open_main_menu(self, has_save: bool):
+        """Layar judul saat boot: Mulai Baru / Lanjutkan / Kontrol."""
+        if getattr(self, '_menu_ents', None):
+            return
+        self.mode = 'menu'
+        self._menu_has_save = has_save
+        self._menu_sel = 0 if not has_save else 1
+        E = []
+        E.append(_ui(scale=(2.6, 1.4), position=(0, 0), color=color.rgb(13, 13, 16, 252), z=3.0))
+        E.append(_ui(scale=(0.70, 0.005), position=(0, 0.215), color=color.rgb(150, 96, 60), z=2.9))
+        E.append(_ui(scale=(0.70, 0.0022), position=(0, 0.205), color=color.rgb(96, 84, 64), z=2.9))
+        E.append(_txt('L E M B A H   K A R S A', pos=(0, 0.305), scale=2.4,
+                      col=color.rgb(232, 210, 160), origin=(0, 0)))
+        E.append(_txt('kebun warisan · folklor · lembah yang menunggu',
+                      pos=(0, 0.245), scale=0.78, col=color.rgb(150, 158, 168), origin=(0, 0)))
+        self._menu_item_txts = []
+        for i in range(3):
+            t = _txt('', pos=(0, 0.085 - i * 0.082), scale=1.2,
+                     col=color.rgb(200, 200, 200), origin=(0, 0))
+            E.append(t)
+            self._menu_item_txts.append(t)
+        self._menu_ctrl_txt = _txt('', pos=(0, -0.30), scale=0.70,
+                                   col=color.rgb(172, 182, 192), origin=(0, 0))
+        E.append(self._menu_ctrl_txt)
+        E.append(_txt('[W/S] pilih    [ENTER / SPACE] konfirmasi',
+                      pos=(0, -0.345), scale=0.66, col=color.rgb(118, 124, 132), origin=(0, 0)))
+        self._menu_ents = E
+        # Sembunyikan tracker selama di layar judul
+        for w in (getattr(self, '_obj_bg', None), getattr(self, '_obj_rust', None),
+                  getattr(self, '_obj_title', None), getattr(self, '_obj_step', None),
+                  getattr(self, '_obj_hint', None)):
+            if w is not None:
+                w.enabled = False
+        self._render_menu()
+
+    def _render_menu(self):
+        labels = self._menu_labels()
+        for i, t in enumerate(self._menu_item_txts):
+            sel = (i == self._menu_sel)
+            mati = (i == 1 and not self._menu_has_save)
+            t.text = ('>  ' if sel else '   ') + labels[i]
+            if mati:
+                t.color = color.rgb(95, 95, 100)
+            elif sel:
+                t.color = color.rgb(240, 222, 180)
+            else:
+                t.color = color.rgb(168, 168, 168)
+        if getattr(self, '_menu_show_controls', False):
+            self._menu_ctrl_txt.text = (
+                '[WASD] Jalan   [SHIFT] Lari   [Q/E] Kamera   [SPACE] Pakai Alat\n'
+                '[R] Interaksi/Bicara   [1-8] Pilih Alat   [I] Inventory   [U] Bengkel\n'
+                '[TAB] Majelis Batin (4 suara)   [J] Quest   [M] Peta   [F1] Panduan')
+        else:
+            self._menu_ctrl_txt.text = ''
+
+    def menu_input(self, key) -> str:
+        """Navigasi layar judul. Return 'new' / 'continue' / ''."""
+        if key in ('s', 'down arrow'):
+            self._menu_sel = (self._menu_sel + 1) % 3
+            sound_play('menu_select', 0.4)
+            self._render_menu()
+        elif key in ('w', 'up arrow'):
+            self._menu_sel = (self._menu_sel - 1) % 3
+            sound_play('menu_select', 0.4)
+            self._render_menu()
+        elif key in ('1', '2', '3'):
+            self._menu_sel = int(key) - 1
+            self._render_menu()
+            return self._menu_activate()
+        elif key in ('enter', 'space', 'e'):
+            return self._menu_activate()
+        return ''
+
+    def _menu_activate(self) -> str:
+        sel = self._menu_sel
+        if sel == 0:
+            sound_play('menu_select', 0.8)
+            self.close_main_menu()
+            return 'new'
+        if sel == 1:
+            if not self._menu_has_save:
+                sound_play('blocked', 0.5)
+                return ''
+            sound_play('menu_select', 0.8)
+            self.close_main_menu()
+            return 'continue'
+        self._menu_show_controls = not getattr(self, '_menu_show_controls', False)
+        sound_play('menu_select', 0.5)
+        self._render_menu()
+        return ''
+
+    def close_main_menu(self):
+        from ursina import destroy
+        for e in getattr(self, '_menu_ents', []) or []:
+            try:
+                destroy(e)
+            except Exception:
+                pass
+        self._menu_ents = None
+        for w in (getattr(self, '_obj_bg', None), getattr(self, '_obj_rust', None),
+                  getattr(self, '_obj_title', None), getattr(self, '_obj_step', None),
+                  getattr(self, '_obj_hint', None)):
+            if w is not None:
+                w.enabled = True
+        self.mode = 'hud'
+
+    def show_intro(self, char_name: str = ''):
+        """Kartu intro setelah chargen: tujuan game dinyatakan eksplisit."""
+        if getattr(self, '_intro_ents', None):
+            return
+        self.mode = 'intro'
+        nama = char_name or 'Kawan'
+        E = []
+        E.append(_ui(scale=(1.18, 0.68), position=(0, 0.02), color=color.rgb(26, 23, 19, 248), z=2.6))
+        E.append(_ui(scale=(1.18, 0.006), position=(0, 0.345), color=color.rgb(150, 96, 60), z=2.5))
+        E.append(_txt('— Surat dari Paman Arsa —', pos=(0, 0.30), scale=1.05,
+                      col=color.rgb(222, 190, 140), origin=(0, 0)))
+        body = (
+            f'"{nama},\n\n'
+            'Kalau kau membaca ini, berarti kebunku di Lembah Karsa kini milikmu.\n'
+            'Tanahnya masih baik — hidupkan dia lagi: cangkul, tanam, dan panen.\n'
+            'Kenali para warga; mereka akan membantumu lebih dari yang kau duga.\n\n'
+            'Dan satu hal: lembah ini menyimpan hal-hal yang tidak kuceritakan.\n'
+            'Jaga dia, seperti dia akan menjagamu."\n')
+        E.append(_txt(body, pos=(-0.52, 0.235), scale=0.82, col=color.rgb(216, 210, 192)))
+        E.append(_txt('Ikuti panduan TUTORIAL di kiri-atas layar untuk memulai.',
+                      pos=(0, -0.21), scale=0.74, col=color.rgb(150, 200, 160), origin=(0, 0)))
+        E.append(_txt('[SPACE] Mulai hidup baru', pos=(0, -0.28), scale=0.78,
+                      col=color.rgb(120, 126, 134), origin=(0, 0)))
+        self._intro_ents = E
+
+    def close_intro(self):
+        from ursina import destroy
+        for e in getattr(self, '_intro_ents', []) or []:
+            try:
+                destroy(e)
+            except Exception:
+                pass
+        self._intro_ents = None
+        self.mode = 'hud'
+        self.flash_msg('Selamat datang di Lembah Karsa!', 2.0)
 
     # ─── PANEL ACTIONS (shop/craft) ──────────────────────
     def panel_action(self, idx: int) -> str:

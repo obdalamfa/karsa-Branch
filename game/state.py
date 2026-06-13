@@ -64,6 +64,10 @@ class GameState:
     sosial: float = 100.0   # Social  — turun waktu → isi dengan ngobrol
     senang: float = 100.0   # Fun     — turun waktu → isi dengan panen/jelajah
 
+    # ─── Majelis Batin (4 suara + skill-check ala Disco Elysium) ───
+    batin: dict = field(default_factory=lambda: {'bara': 1, 'akar': 1, 'sukma': 1, 'lapar': 1})
+    batin_red: list = field(default_factory=list)   # id red-check yang sudah gagal (terkunci)
+
     # ─── Penampilan karakter (chargen) ───
     char_name:  str = ''         # kosong = belum buat karakter (trigger chargen)
     char_skin:  int = 0

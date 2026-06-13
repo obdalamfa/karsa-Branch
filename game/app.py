@@ -1,5 +1,6 @@
 import logging
 import math
+import os
 import random
 from pathlib import Path as _Path
 from PIL import Image as _PILImg
@@ -140,6 +141,9 @@ class Game3D:
         self._needs_warned: set = set()
 
         self.panels = UIManager(self.state)
+        from .batin import Batin
+        self.batin = Batin(self.state)
+        self.panels.batin = self.batin          # panel Majelis Batin baca dari sini
         self.world = World3D(self.state)
         self.entities = EntitiesManager(self.state)
         
@@ -190,10 +194,14 @@ class Game3D:
         self.camera_pitch   = 22.0   # sudut pitch default (lebih dekat ke tanah)
         self.camera_dist    = 13.0
 
-        # Chargen — muncul jika first run (char_name kosong) atau tekan F2
+        # Chargen handle — dibuka dari layar judul ("Mulai Baru") atau F2
         self._chargen: ChargenScreen = None
-        if not self.state.char_name:
-            self._open_chargen()
+
+        # ── Layar judul (ROADMAP M1) — selalu tampil saat boot ──
+        from .config import SAVE_FILE as _SAVE_FILE
+        self._had_save = os.path.exists(_SAVE_FILE) and bool(self.state.char_name)
+        self._intro_after_chargen = False
+        self.panels.open_main_menu(self._had_save)
 
         # Inisialisasi lingkungan langsung sesuai waktu awal (bukan fade dari gelap)
         self._init_env()
@@ -237,6 +245,24 @@ class Game3D:
         except Exception as e:
             logging.error(f"[SCREENSHOT] error: {e}")
 
+    def _start_new_game(self):
+        """'Mulai Baru' dari layar judul: reset state in-place (semua manager
+        memegang referensi objek state yang sama) lalu bangun ulang dunia."""
+        from .config import TILE_SIZE as _TS
+        fresh = GameState()
+        self.state.__dict__.update(fresh.__dict__)
+        self.world.load_scene(self.state.scene_name)
+        self.entities.load_scene(self.state.scene_name)
+        self.player.position = (self.state.player_x * _TS, 0, self.state.player_y * _TS)
+        try:
+            from .sound import set_ambient_for_scene
+            set_ambient_for_scene(self.state.scene_name)
+        except Exception:
+            pass
+        self._init_env()
+        self._intro_after_chargen = True
+        self._open_chargen()
+
     def update(self, dt):
         s = self.state
 
@@ -247,7 +273,25 @@ class Game3D:
         # Update UI HUD
         self.panels.update(s, dt)
 
+        # Layar judul / intro: dunia beku (M1)
+        if self.panels.mode in ('menu', 'intro'):
+            return
+        # Setelah chargen selesai (Mulai Baru) → tampilkan surat intro sekali
+        if getattr(self, '_intro_after_chargen', False) and self.panels.mode == 'hud':
+            self._intro_after_chargen = False
+            self.panels.show_intro(self.state.char_name)
+            return
+
         if self.panels.mode == 'hud':
+            # ── Prompt kontekstual (M1) — refresh ringan ~6×/detik ──
+            self._prompt_t = getattr(self, '_prompt_t', 0.0) + dt
+            if self._prompt_t >= 0.15:
+                self._prompt_t = 0.0
+                try:
+                    s.action_prompt = self.player.interaction_controller.context_prompt(self.entities)
+                except Exception:
+                    s.action_prompt = ''
+
             # ── Maju waktu in-game & Needs Decay (via TimeManager) ──
             msg = self.player.time_controller.tick(dt, self.player)
             if msg:
@@ -463,6 +507,20 @@ class Game3D:
                 pass
             return
 
+        # Layar judul / kartu intro (ROADMAP M1)
+        if self.panels.mode == 'menu':
+            act = self.panels.menu_input(key)
+            if act == 'new':
+                self._start_new_game()
+            elif act == 'continue':
+                self.panels.flash_msg(
+                    f"Selamat datang kembali, {self.state.char_name}!", 2.2)
+            return
+        if self.panels.mode == 'intro':
+            if key in ('space', 'enter', 'e'):
+                self.panels.close_intro()
+            return
+
         # Chargen mode — semua input ke ChargenScreen
         if self.panels.mode == 'chargen':
             if self._chargen:
@@ -483,6 +541,10 @@ class Game3D:
             else:
                 if key in ('space', 'e', 'enter'):
                     self.panels.advance_dialog()
+            return
+
+        if self.panels.mode == 'batin':
+            self.panels.batin_check_input(key)
             return
 
         if self.panels.mode == 'pie':
@@ -554,6 +616,8 @@ class Game3D:
             # Hotkeys menu
             if key == 'i':
                 self.panels.open_panel('inventory')
+            elif key == 'tab':
+                self.panels.toggle_batin()        # buka/tutup Majelis Batin (4 suara)
             elif key == 'm':
                 self.panels.open_panel('map')
             elif key == 'j':

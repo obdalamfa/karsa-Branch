@@ -74,8 +74,8 @@
 **DoD:** semua sistem bisa dioperasikan tanpa membaca README.
 
 ## M4 — GAMEPLAY CORE LENGKAP
-- [ ] Shipping bin (jual di akhir hari ala Stardew) di samping rumah ← SISA UTAMA
-- [ ] Ternak produktif: beli anak ternak → rawat → susu/telur/wol harian ← SISA UTAMA
+- [x] Shipping bin / Peti Kirim (model A Stardew: panen→kirim→tidur→emas)
+- [ ] Ternak produktif: rawat → susu/telur/wol harian ← SISA UTAMA berikutnya
 - [~] Set crop per musim + benih di toko Bu Sari (CROPS ada, perlu dilengkapi)
 - [x] Upgrade alat (pickaxe/pedang via Bengkel Budi)
 - [ ] Balance ekonomi pass 1 (harga, energi, durasi hari)

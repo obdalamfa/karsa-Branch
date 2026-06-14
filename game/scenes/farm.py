@@ -71,8 +71,41 @@ def build_farm():
     # ── Jemuran di dekat rumah ──
     m[5][2] = LAUNDRY
 
-    return Scene('farm', 'Kebun Paman Arsa', m, portals=[
+    return Scene('farm', 'Kebun Paman Arsa', m, builder=farm_builder, portals=[
         (3,  4, 'house', 7, 9),
         (24, 14, 'town',  1, 14),
         (24, 15, 'town',  1, 15),
     ])
+
+
+def farm_builder(world):
+    """Dress kebun dgn props 3D Blender (M2). Tiles tetap diurus default builder."""
+    from .props import default_prop_builder
+    default_prop_builder(world, world.scene_obj)
+
+    from game.config import TILE_SIZE as TS, GROUND_H
+    from ursina import Entity
+    try:
+        from game.entities import load_model_file
+    except Exception:
+        return
+
+    # (model, tile_x, tile_y, scale, rot_y)
+    DRESSING = [
+        ('prop_scarecrow',   11, 8,  1.0, 0),    # di antara dua petak
+        ('prop_gerobak',      5, 13, 1.0, 90),   # tepi jalan
+        ('prop_kandang_ayam',18, 4,  1.0, 0),    # dalam kandang
+        ('prop_jerami',      20, 6,  1.0, 0),    # dekat kandang
+        ('prop_peti_sayur',   2, 5,  1.0, 0),    # dekat rumah
+        ('prop_karung',       2, 6,  1.0, 30),
+        ('prop_pagar_kayu',  10, 16, 1.0, 0),    # hiasan tepi jalan selatan
+        ('prop_pagar_kayu',  12, 16, 1.0, 0),
+        ('prop_ember',        4, 12, 1.0, 0),    # ember di tepi petak
+    ]
+    for name, tx, ty, sc, ry in DRESSING:
+        mdl = load_model_file(name)
+        if not mdl:
+            continue
+        e = Entity(model=mdl, position=(tx * TS, GROUND_H, ty * TS),
+                   scale=sc, rotation=(0, ry, 0))
+        world._obj_ents.append(e)

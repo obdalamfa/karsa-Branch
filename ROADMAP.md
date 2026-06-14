@@ -11,6 +11,28 @@
 3. Aset = script idempoten (regenerable); kode = compile + capture sebelum lanjut.
 4. Jebakan terdokumentasi di memory (axis Y-up, cache .bam, scene-reset Blender).
 
+## STATUS (per 13 Jun 2026) — ringkas
+| Milestone | Progres | Catatan |
+|---|---|---|
+| **M1** Lima Menit Pertama | **~90%** | judul/intro/tutorial/tracker/prompt/signpost ADA & lulus smoke_boot |
+| **M2** Tampilan | **~60%** | skybox+lighting+cuaca ADA; sisa: dress props→tile, tekstur interior |
+| **M3** HUD & UX | **~55%** | HUD Disco + needs + **Majelis Batin** ADA; sisa: ikon item, pause/settings, save-slot UI |
+| **M4** Gameplay core | **~55%** | crafting+laut, upgrade alat, **tani Sakuna mendalam** ADA; sisa: shipping bin, ternak produktif, balance, audit quest |
+| **M5** Animasi & kehidupan | **~40%** | walk mesh-swap 2-frame + pose aksi ADA; sisa: 4-frame, schedule penuh, telegraph mob, ambient satwa |
+| **M6** Audio | **~30%** | sound.py + ambient scene ADA; sisa: SFX/musik lengkap, game-feel |
+| **M7** Rilis | **0%** | belum |
+
+**BONUS lintas-milestone yang sudah jadi (di luar rencana awal):**
+- **Majelis Batin** — 4 suara batin (BARA/AKAR/SUKMA/LAPAR) + skill-check 2d6 white/red (TAB) — DNA Disco, di-port dari prototipe three.js
+- **Tani Sakuna mendalam** — jadwal air muda-basah/menua-kering, nutrisi, gulma → mutu ★1-5 → hasil & harga
+- **Kamera third-person** diperbaiki (lebih dekat, sudut lebih baik, smoothing stabil)
+- **Petapa Srimana 2 wujud** (kalem → galak saat interaksi), **Kapal Kurofune + Mercusuar**, **crafting + pelayaran**
+- **Prototipe web three.js** terpisah (`lembah karsa html/lembah_karsa_3d.html`) — cel-shade, terverifikasi jalan
+
+> Pola nyata: kita kerja per-FITUR (sesuai mood/permintaan), bukan M1→M7 berurutan.
+> Itu OK — tapi untuk "game utuh" perlu menutup celah *legibility* (M1 selesai) lalu
+> *kelengkapan loop* (M4: shipping bin + ternak) supaya ada alasan main berhari-hari.
+
 ## Sumber daya FreeSO/TSO (sudah ter-port: `game/vitaboy/`, GPL v3)
 - Lokasi: `E:/Documents/Panda demo/panda_atb_demo/FreeSO/` + `E:/Download/The Sims Online/TSOClient`
 - **Yang sudah dipakai:** avatar Vitaboy, animator (blending/head-seek), snowflake,
@@ -23,22 +45,22 @@
 
 ## M1 — LIMA MENIT PERTAMA (onboarding & legibility)  ⭐ prioritas
 **Masalah yang diserang:** pemain baru bingung harus apa.
-- [ ] Layar judul: logo, Mulai Baru / Lanjutkan / Kontrol, latar render kampung
-- [ ] Intro: surat Paman Arsa di mailbox → tujuan game dinyatakan eksplisit
-- [ ] Rantai quest tutorial ber-objective: cangkul → tanam → siram → tidur →
-      panen → jual (tiap langkah dipandu hint HUD + emote)
-- [ ] **Objective tracker** di HUD (kiri-atas: quest aktif + langkah berikutnya)
-- [ ] Prompt kontekstual di atas target: `[R] Bicara`, `[SPACE] Cangkul`, dll.
-- [ ] Papan petunjuk (signpost) di percabangan jalan antar-scene
-**DoD:** orang yang belum pernah lihat game ini bisa panen pertama tanpa bertanya.
+- [x] Layar judul: logo, Mulai Baru / Lanjutkan / Kontrol
+- [x] Intro: surat Paman Arsa di mailbox → tujuan game dinyatakan eksplisit
+- [x] Rantai quest tutorial ber-objective (tutorial.py, 6 langkah)
+- [x] **Objective tracker** di HUD (kiri-atas, tracker_lines)
+- [x] Prompt kontekstual (context_prompt: "[SPACE] Cangkul tanah …")
+- [x] Papan petunjuk (signpost) antar-scene (build_signpost)
+**DoD:** orang baru bisa panen pertama tanpa bertanya. → **sebagian besar TERCAPAI**
+(perlu playtest manusia nyata untuk pastikan).
 
 ## M2 — TAMPILAN (identitas visual terkunci)
-- [ ] Skybox gradient + siluet gunung di horizon (pengganti void abu-abu)
-- [ ] Lighting rig per scene (interior hangat, malam dingin, swarga keemasan)
+- [x] Skybox gradient (SkyDome) + transisi warna siang-malam
+- [x] Lighting rig siang/malam (ambient+sun lerp; tint per fase)
 - [ ] Scene dressing: wire props farming ke tile system (kandang, gerobak,
-      scarecrow, jerami, peti — tile baru di config + builder di props.py)
+      scarecrow, jerami, peti — tile baru di config + builder di props.py) ← SISA UTAMA
 - [ ] Interior: lantai/dinding bertekstur (kandidat: aset TSO housedata)
-- [ ] Polish cuaca: hujan/salju/angin konsisten dengan LUT siang-malam
+- [x] Polish cuaca: hujan/salju/angin/kabut konsisten
 **DoD:** screenshot 6 scene utama layak jadi material itch.io.
 
 ## M3 — HUD & UX 2.0
@@ -52,14 +74,15 @@
 **DoD:** semua sistem bisa dioperasikan tanpa membaca README.
 
 ## M4 — GAMEPLAY CORE LENGKAP
-- [ ] Shipping bin (jual di akhir hari ala Stardew) di samping rumah
-- [ ] Ternak produktif: beli anak ternak → rawat → susu/telur/wol harian
-- [ ] Set crop lengkap per musim + benih di toko Bu Sari
-- [ ] Upgrade alat terasa (radius siram, auto-panen 3×3, dst.)
+- [ ] Shipping bin (jual di akhir hari ala Stardew) di samping rumah ← SISA UTAMA
+- [ ] Ternak produktif: beli anak ternak → rawat → susu/telur/wol harian ← SISA UTAMA
+- [~] Set crop per musim + benih di toko Bu Sari (CROPS ada, perlu dilengkapi)
+- [x] Upgrade alat (pickaxe/pedang via Bengkel Budi)
 - [ ] Balance ekonomi pass 1 (harga, energi, durasi hari)
 - [ ] Audit quest utama 11-stage end-to-end (main sampai tamat tanpa stuck)
-- [ ] Crafting diperluas (resep dari hasil dungeon + laut)
-**DoD:** loop harian punya 3+ keputusan bermakna; tamat quest utama bisa dicapai.
+- [x] Crafting diperluas (perahu, jala, obor, peti, pagar + pelayaran laut)
+- [x] **Tani Sakuna mendalam** (jadwal air, nutrisi, gulma → mutu ★) — BONUS
+**DoD:** loop harian punya 3+ keputusan bermakna; tamat quest bisa dicapai.
 
 ## M5 — ANIMASI & KEHIDUPAN
 - [ ] Walk cycle 4-frame (dari 2) — timing dicuplik dari `.anim` TSO

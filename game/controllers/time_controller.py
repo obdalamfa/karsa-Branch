@@ -47,6 +47,7 @@ class TimeController:
         s.senang = min(NEED_MAX, s.senang + 20)
         s.naga_fountain_used_today = False
         s.buffs.clear()
+        s.animals_collected = []          # ternak siap diperah/diambil lagi
 
         # Rain auto-waters tilled soil
         if s.weather in ('Hujan', 'Badai'):
@@ -113,9 +114,10 @@ class TimeController:
         self._last_ship_sale = (0, 0)
         bin_ = getattr(s, 'ship_bin', None)
         if bin_:
+            from ..data import SHIP_PRICES
             earned, items = 0, 0
             for item, n in list(bin_.items()):
-                earned += CROPS.get(item, {}).get('sell', 0) * n
+                earned += SHIP_PRICES.get(item, 0) * n
                 items += n
             if earned > 0:
                 s.gold += earned

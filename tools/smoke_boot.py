@@ -143,5 +143,22 @@ assert gq > bq, f"mutu petak rawatan ({gq}) harus > telantar ({bq})"
 assert ga > 0, "tanaman rawatan tidak tumbuh"
 print(f"[OK] Sakuna: mutu rawat {gq:.1f}* vs telantar {bq:.1f}* | umur {ga}")
 
+# ── Ternak produktif (M4): hasil harian → peti → jual, reset tiap fajar ──
+_ic = game.player.interaction_controller
+game.state.scene_name = 'farm'
+game.state.animals_collected = []
+game.state.inventory['susu'] = 0
+got = _ic._try_collect_animal('sapi_betsy', game.panels)
+assert got and game.state.inventory.get('susu', 0) == 1 and 'sapi_betsy' in game.state.animals_collected, "ambil susu gagal"
+assert _ic._try_collect_animal('sapi_betsy', game.panels) is False, "harusnya tak bisa ambil 2x/hari"
+game.player.set_tile_pos(_BIN[0], _BIN[1]); step(1)
+_ic._try_shipping_bin(game.panels)
+assert game.state.ship_bin.get('susu', 0) == 1, "susu tak masuk Peti"
+_g1 = game.state.gold
+game.player.time_controller.advance_day(game.player); step(2)
+assert game.state.gold > _g1, "susu tak terjual saat fajar"
+assert game.state.animals_collected == [], "ternak tak reset saat fajar"
+print(f"[OK] Ternak: susu -> peti -> jual fajar (+{game.state.gold - _g1}G), reset harian OK")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

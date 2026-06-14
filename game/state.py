@@ -70,6 +70,7 @@ class GameState:
 
     # ─── Peti Kirim (shipping bin ala Stardew) — jual hasil panen saat tidur ───
     ship_bin: dict = field(default_factory=dict)     # item → jumlah menunggu dijual
+    animals_collected: list = field(default_factory=list)  # id hewan yg hasilnya diambil hari ini
 
     # ─── Penampilan karakter (chargen) ───
     char_name:  str = ''         # kosong = belum buat karakter (trigger chargen)

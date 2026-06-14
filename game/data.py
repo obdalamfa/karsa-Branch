@@ -364,6 +364,17 @@ ANIMAL_NPCS = {
     'kelinci_putih':   {'name':'Pinky','type':'kelinci','talks':[["(Hidung berkedut)"]],'product':None},
 }
 
+# ─── Hasil ternak harian (dikumpulkan [R] dari hewan, dijual via Peti Kirim) ───
+ANIMAL_PRODUCTS = {
+    'susu':  {'name': 'Susu',  'sell': 90,  'description': 'Susu segar dari sapi'},
+    'telur': {'name': 'Telur', 'sell': 55,  'description': 'Telur ayam pagi'},
+    'wol':   {'name': 'Wol',   'sell': 130, 'description': 'Wol hangat dari domba/kambing'},
+}
+
+# Harga jual gabungan untuk Peti Kirim (hasil panen + hasil ternak)
+SHIP_PRICES = {**{k: v.get('sell', 0) for k, v in CROPS.items()},
+               **{k: v['sell'] for k, v in ANIMAL_PRODUCTS.items()}}
+
 def all_npcs():
     return list(HUMAN_NPCS.keys()) + list(SUPERNATURAL_NPCS.keys()) + list(ANIMAL_NPCS.keys())
 

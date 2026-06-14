@@ -212,6 +212,8 @@ class InteractionController:
         npc_info = entities_mgr.get_nearest_npc(tx, ty, max_dist_tiles=3.0)
         if npc_info:
             npc_id  = npc_info['id']
+            if self._try_collect_animal(npc_id, panels):   # ternak: ambil hasil harian dulu
+                return
             if npc_id == 'petapa_srimana':
                 self._petapa_awaken(npc_id, entities_mgr, panels)
             options = self.build_pie_options(npc_id)
@@ -299,6 +301,30 @@ class InteractionController:
                  'fn': lambda: panels.say_batin('bara', 'Jujur. Aku bisa kerja sama dengan kejujuran.')},
             ])
 
+    def _try_collect_animal(self, npc_id, panels) -> bool:
+        """Ternak produktif: ambil hasil harian (susu/telur/wol) dgn [R].
+        Return True jika hasil diambil; False (sudah/ bukan ternak) → lanjut pie menu."""
+        from ..data import ANIMAL_NPCS, ANIMAL_PRODUCTS
+        info = ANIMAL_NPCS.get(npc_id)
+        if not info or not info.get('product'):
+            return False
+        s = self.player.state
+        if getattr(s, 'animals_collected', None) is None:
+            s.animals_collected = []
+        if npc_id in s.animals_collected:
+            return False                       # sudah diambil → biarkan pie menu (belai/ngobrol)
+        product = info['product']
+        s.inventory[product] = s.inventory.get(product, 0) + 1
+        s.animals_collected.append(npc_id)
+        s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1)   # merawat = hati naik
+        pname = ANIMAL_PRODUCTS.get(product, {}).get('name', product)
+        sound_play('harvest', 0.7)
+        panels.emote('+1', color.rgb(255, 240, 180))
+        panels.flash_msg(f"Dapat {pname} dari {info['name']}! Kirim ke Peti untuk dijual.", 2.0)
+        panels.say_batin_once('ternak', 'lapar',
+            "Hewan memberi kalau kau memberi dulu. Susu, telur, wol — bunga dari kesabaran.")
+        return True
+
     def _try_shipping_bin(self, panels) -> bool:
         """Peti Kirim (Stardew): setor hasil panen → dijual saat tidur (emas masuk fajar)."""
         s = self.player.state
@@ -310,12 +336,13 @@ class InteractionController:
             return False
         if getattr(s, 'ship_bin', None) is None:
             s.ship_bin = {}
+        from ..data import SHIP_PRICES
         moved = 0
-        for crop in list(CROPS.keys()):
-            n = s.inventory.get(crop, 0)
+        for item in list(SHIP_PRICES.keys()):     # hasil panen + hasil ternak
+            n = s.inventory.get(item, 0)
             if n > 0:
-                s.ship_bin[crop] = s.ship_bin.get(crop, 0) + n
-                s.inventory[crop] = 0
+                s.ship_bin[item] = s.ship_bin.get(item, 0) + n
+                s.inventory[item] = 0
                 moved += n
         if moved > 0:
             sound_play('menu_select', 0.8)

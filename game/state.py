@@ -68,6 +68,9 @@ class GameState:
     batin: dict = field(default_factory=lambda: {'bara': 1, 'akar': 1, 'sukma': 1, 'lapar': 1})
     batin_red: list = field(default_factory=list)   # id red-check yang sudah gagal (terkunci)
 
+    # ─── Peti Kirim (shipping bin ala Stardew) — jual hasil panen saat tidur ───
+    ship_bin: dict = field(default_factory=dict)     # item → jumlah menunggu dijual
+
     # ─── Penampilan karakter (chargen) ───
     char_name:  str = ''         # kosong = belum buat karakter (trigger chargen)
     char_skin:  int = 0

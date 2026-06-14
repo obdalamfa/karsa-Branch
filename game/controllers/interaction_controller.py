@@ -98,12 +98,9 @@ class InteractionController:
                 if soil.get('age', 0) >= crop_data.get('days', 4):
                     crop_name = soil['crop']
                     quality = max(1, min(5, round(soil.get('quality', 3.0))))   # Sakuna ★1-5
-                    yield_n = 1 + quality // 2                                  # mutu → hasil
+                    yield_n = 1 + quality // 2                                  # mutu → jumlah hasil
                     s.inventory[crop_name] = s.inventory.get(crop_name, 0) + yield_n
-                    base = crop_data.get('sell', 20)
-                    sold = int(base * (0.6 + 0.2 * quality))                    # ★1:0.8x … ★5:1.6x
-                    s.gold += sold
-                    s.stats['earned'] = s.stats.get('earned', 0) + sold
+                    # Model Stardew: panen kasih ITEM saja — emas dari Peti Kirim saat tidur
                     if crop_name == 'lobak':
                         s.stats['lobak_harvested'] = s.stats.get('lobak_harvested', 0) + 1
                     del s.soil[soil_key]
@@ -113,10 +110,12 @@ class InteractionController:
                     self.player._play_tool_anim('bend')
                     self.player._fx_burst(fx, fy + 0.3, fz, color.rgb(255, 225, 50), n=7)
                     sound_play('harvest', 0.8)
-                    panels.emote(f'* +{sold}G', color.rgb(255, 220, 100), 1.3)
-                    panels.flash_msg(f"{CROPS[crop_name]['name']} ×{yield_n}  {'★'*quality}  dipanen! +{sold}G", 1.6)
+                    panels.emote(f'x{yield_n}', color.rgb(255, 220, 100), 1.3)
+                    panels.flash_msg(f"{CROPS[crop_name]['name']} x{yield_n}  {'★'*quality}  dipanen! Kirim ke Peti.", 1.8)
                     panels.say_batin_once('panen', 'akar',
                         "Panen pertama. Mutu mengingat segalanya yang kau lakukan dan tidak. Sawah membukukan dengan jujur.")
+                    panels.say_batin_once('kirim_hint', 'lapar',
+                        "Hasil panen tak jadi emas sendiri. Taruh di Peti Kirim dekat rumah — fajar mengubahnya jadi uang.")
                     if quality >= 4:
                         panels.say_batin('sukma',
                             "Lihat butirnya — berpendar samar. Ada lebih banyak tenaga di segenggam ini daripada di seluruh meridianmu.")
@@ -204,6 +203,8 @@ class InteractionController:
         if s.scene_name == 'dungeon' and getattr(self.world, 'dungeon_level', 0) == 13 and self.try_fishing(panels):
             return
         if s.scene_name == 'clinic' and self.try_healing(panels):
+            return
+        if self._try_shipping_bin(panels):  # Peti Kirim: setor hasil panen
             return
         if self._try_plot_care(panels):     # Sakuna: cabut gulma / pupuk petak di kaki
             return
@@ -297,6 +298,38 @@ class InteractionController:
                 {'voice': 'bara', 'label': 'Senjata yang butuh diberi makan.',
                  'fn': lambda: panels.say_batin('bara', 'Jujur. Aku bisa kerja sama dengan kejujuran.')},
             ])
+
+    def _try_shipping_bin(self, panels) -> bool:
+        """Peti Kirim (Stardew): setor hasil panen → dijual saat tidur (emas masuk fajar)."""
+        s = self.player.state
+        if s.scene_name != 'farm':
+            return False
+        from ..config import SHIP_BIN_TILE
+        tx, ty = self.player.get_tile_pos()
+        if abs(tx - SHIP_BIN_TILE[0]) + abs(ty - SHIP_BIN_TILE[1]) > 1:
+            return False
+        if getattr(s, 'ship_bin', None) is None:
+            s.ship_bin = {}
+        moved = 0
+        for crop in list(CROPS.keys()):
+            n = s.inventory.get(crop, 0)
+            if n > 0:
+                s.ship_bin[crop] = s.ship_bin.get(crop, 0) + n
+                s.inventory[crop] = 0
+                moved += n
+        if moved > 0:
+            sound_play('menu_select', 0.8)
+            panels.emote('^', color.rgb(231, 178, 61))
+            panels.flash_msg(f"{moved} hasil panen masuk Peti Kirim — terjual saat tidur.", 2.2)
+            panels.say_batin_once('kirim', 'lapar',
+                "Beras masuk peti. Saat fajar, peti jadi emas. Logistik, sayang.")
+        else:
+            total = sum(s.ship_bin.values())
+            if total:
+                panels.flash_msg(f"Peti Kirim — {total} barang menunggu fajar.", 1.4)
+            else:
+                panels.flash_msg("Peti Kirim kosong. Panen dulu, lalu setor di sini [R].", 1.8)
+        return True
 
     def _try_plot_care(self, panels) -> bool:
         """Sakuna: perawatan petak di kaki pemain via [R].

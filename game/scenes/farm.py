@@ -109,3 +109,14 @@ def farm_builder(world):
         e = Entity(model=mdl, position=(tx * TS, GROUND_H, ty * TS),
                    scale=sc, rotation=(0, ry, 0))
         world._obj_ents.append(e)
+
+    # ── Peti Kirim (shipping bin) — dekat rumah, ditandai krat + papan kuning ──
+    from game.config import SHIP_BIN_TILE
+    bx, bz = SHIP_BIN_TILE[0] * TS, SHIP_BIN_TILE[1] * TS
+    bin_mdl = load_model_file('prop_peti_sayur')
+    if bin_mdl:
+        world._obj_ents.append(Entity(model=bin_mdl, position=(bx, GROUND_H, bz), scale=1.3))
+    from ursina import color as _c
+    sign = Entity(model='cube', position=(bx, GROUND_H + 1.2, bz),
+                  scale=(0.5, 0.28, 0.06), color=_c.rgb(231, 178, 61))
+    world._obj_ents.append(sign)

@@ -109,8 +109,22 @@ class TimeController:
         _weights  = [38, 22, 14, 12, 8, 4, 2]
         s.weather = _rng.choices(_weathers, weights=_weights)[0]
 
+        # Jual isi Peti Kirim (shipping bin) — emas masuk saat fajar
+        self._last_ship_sale = (0, 0)
+        bin_ = getattr(s, 'ship_bin', None)
+        if bin_:
+            earned, items = 0, 0
+            for item, n in list(bin_.items()):
+                earned += CROPS.get(item, {}).get('sell', 0) * n
+                items += n
+            if earned > 0:
+                s.gold += earned
+                s.stats['earned'] = s.stats.get('earned', 0) + earned
+                self._last_ship_sale = (items, earned)
+            bin_.clear()
+
         sound_play('morning', 0.8)
-        
+
         # In a real setup, wild respawn would be handled by EntityFactory/EntitiesManager
         # Using late import to prevent circular dependencies
         try:
@@ -134,6 +148,11 @@ class TimeController:
             sound_play('sleep', 0.8)
             panels.flash_msg("Tidur... Hari baru dimulai!", 2.0)
             self.advance_day(player)
+            # Ringkasan penjualan Peti Kirim (Stardew)
+            items, earned = getattr(self, '_last_ship_sale', (0, 0))
+            if earned > 0:
+                invoke(panels.flash_msg,
+                       f"Peti Kirim: {items} hasil panen terjual — +{earned}G", 3.0, delay=2.3)
             # Deliver pending story messages after sleep
             if getattr(player, '_pending_seasonal_event', None):
                 invoke(panels.flash_msg,

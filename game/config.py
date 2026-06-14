@@ -27,6 +27,8 @@ CAM_SIDE        = 0
 CAM_TARGET_LIFT = 1.0   # titik fokus kamera lebih terpusat ke badan karakter
 CAM_LERP        = 8.0   # kamera bergerak mengikuti lebih cepat
 
+SHIP_BIN_TILE   = (6, 4)   # posisi Peti Kirim di scene farm (tile)
+
 # ─── TIMING ──────────────────────────────────────────────
 REAL_SECONDS_PER_INGAME_DAY     = 900
 INGAME_MINUTES_PER_REAL_SECOND  = 1440 / REAL_SECONDS_PER_INGAME_DAY

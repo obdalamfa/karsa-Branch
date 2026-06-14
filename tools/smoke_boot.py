@@ -115,6 +115,18 @@ game.input('escape'); step(2)
 assert game.panels.mode == 'hud', "menu Jeda tidak menutup dgn Esc"
 print("[OK] Menu Jeda (Esc buka/tutup)")
 
+# ── Peti Kirim / shipping bin (Stardew, M4) ──
+from game.config import SHIP_BIN_TILE as _BIN
+game.state.scene_name = 'farm'
+game.state.inventory['lobak'] = 5
+game.player.set_tile_pos(_BIN[0], _BIN[1]); step(1)
+ok = game.player.interaction_controller._try_shipping_bin(game.panels)
+assert ok and game.state.ship_bin.get('lobak', 0) == 5 and game.state.inventory.get('lobak', 0) == 0, "setor ke Peti gagal"
+_g0 = game.state.gold
+game.player.time_controller.advance_day(game.player); step(2)
+assert game.state.gold > _g0 and not game.state.ship_bin, "penjualan Peti saat fajar gagal"
+print(f"[OK] Peti Kirim: 5 lobak -> jual saat fajar (+{game.state.gold - _g0}G)")
+
 # ── Tani-mendalam Sakuna (jadwal air, nutrisi, gulma → mutu ★) ──
 sc = game.state.scene_name
 game.state.soil['90,90,' + sc] = {'tilled': True, 'crop': 'lobak', 'age': 0,

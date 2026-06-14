@@ -75,7 +75,7 @@
 
 ## M4 — GAMEPLAY CORE LENGKAP
 - [x] Shipping bin / Peti Kirim (model A Stardew: panen→kirim→tidur→emas)
-- [ ] Ternak produktif: rawat → susu/telur/wol harian ← SISA UTAMA berikutnya
+- [x] Ternak produktif: [R] hewan → susu/telur/wol harian → Peti Kirim
 - [~] Set crop per musim + benih di toko Bu Sari (CROPS ada, perlu dilengkapi)
 - [x] Upgrade alat (pickaxe/pedang via Bengkel Budi)
 - [ ] Balance ekonomi pass 1 (harga, energi, durasi hari)

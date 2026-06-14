@@ -549,6 +549,19 @@ class Game3D:
             self.panels.batin_check_input(key)
             return
 
+        if self.panels.mode == 'pause':
+            act = self.panels.pause_input(key)
+            if act == 'resume':
+                self.panels.close_pause()
+            elif act == 'save':
+                self.state.save()
+                self.panels.close_pause()
+                self.panels.flash_msg("Game tersimpan.", 2.0)
+            elif act == 'controls':
+                self.panels.close_pause()
+                self.panels.open_panel('help')
+            return
+
         if self.panels.mode == 'pie':
             if key in ('left arrow', 'q'):
                 self.panels.navigate_pie(-1)
@@ -643,10 +656,7 @@ class Game3D:
             elif key == 'f2':
                 self._open_chargen()
             elif key == 'escape':
-                # Esc di HUD: save + tampilkan pesan, jangan langsung quit
-                # (klik X window untuk benar-benar tutup)
-                self.state.save()
-                self.panels.flash_msg("Game tersimpan. Tekan X di window untuk keluar.", 3.5)
+                self.panels.open_pause()        # menu Jeda (Lanjut/Simpan/Kontrol)
             elif key == 'f5':
                 if self.state.save():
                     self.panels.flash_msg("[F5] Game Tersimpan!")

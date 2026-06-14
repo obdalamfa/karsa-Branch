@@ -87,6 +87,7 @@ class UIManager:
         self._build_inventory_grid()
         self._build_pie_menu()
         self._build_batin()
+        self._build_pause()
 
         # Previous motives cache for Arrow indicators
         self._prev_hunger = None
@@ -260,6 +261,54 @@ class UIManager:
             except Exception: pass
         self._bc_ents = []
         self.mode = 'hud'
+
+    # ─── MENU JEDA (pause) ───────────────────────────────
+    def _build_pause(self):
+        self._pause_sel = 0
+        self._pause_opts = ['Lanjut', 'Simpan', 'Kontrol']
+        bg = _ui(scale=(0.46, 0.56), position=(0, 0), color=color.rgb(16, 14, 12, 242), z=0.9)
+        title = _txt('JEDA', pos=(0, 0.20), scale=1.4, col=color.rgb(231, 178, 61), origin=(0, 0))
+        self._pause_items = [_txt('', pos=(0, 0.06 - i * 0.085), scale=1.0,
+                                  col=color.white, origin=(0, 0)) for i in range(len(self._pause_opts))]
+        hint = _txt('[W/S] pilih   [Enter] OK   [Esc] lanjut', pos=(0, -0.20), scale=0.58,
+                    col=color.rgb(150, 135, 100), origin=(0, 0))
+        self._pause_ents = [bg, title, hint] + self._pause_items
+        for e in self._pause_ents:
+            e.enabled = False
+
+    def open_pause(self):
+        self._pause_sel = 0
+        self.mode = 'pause'
+        for e in self._pause_ents:
+            e.enabled = True
+        self._render_pause()
+
+    def close_pause(self):
+        for e in self._pause_ents:
+            e.enabled = False
+        self.mode = 'hud'
+
+    def _render_pause(self):
+        for i, t in enumerate(self._pause_items):
+            sel = (i == self._pause_sel)
+            t.text = ('> ' if sel else '   ') + self._pause_opts[i]
+            t.color = color.rgb(231, 178, 61) if sel else color.rgb(200, 196, 186)
+
+    def pause_input(self, key):
+        """Return aksi: '' / 'resume' / 'save' / 'controls'."""
+        if key in ('w', 'up arrow'):
+            self._pause_sel = (self._pause_sel - 1) % len(self._pause_opts); self._render_pause(); return ''
+        if key in ('s', 'down arrow'):
+            self._pause_sel = (self._pause_sel + 1) % len(self._pause_opts); self._render_pause(); return ''
+        if key == 'escape':
+            return 'resume'
+        acts = ['resume', 'save', 'controls']
+        if key in ('enter', 'space', 'e'):
+            return acts[self._pause_sel]
+        if key.isdigit() and 1 <= int(key) <= len(acts):
+            self._pause_sel = int(key) - 1
+            return acts[self._pause_sel]
+        return ''
 
     # ─── PUBLIC: EMOTE (ikon interaksi melayang) ─────────
     def emote(self, text: str, col=None, dur: float = 1.1, x: float = 0.0, y: float = 0.02):

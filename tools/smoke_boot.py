@@ -107,6 +107,14 @@ assert game.panels.mode == 'hud', "check tidak menutup setelah memilih"
 assert game.state.batin['sukma'] == before['sukma'] + 1, "stat suara tidak naik"
 print("[OK] Skill-check modal: pilih -> SUKMA", before['sukma'], '->', game.state.batin['sukma'])
 
+# ── Menu Jeda (pause, M3) ──
+game.input('escape'); step(2)
+assert game.panels.mode == 'pause', "Esc tidak membuka menu Jeda"
+game.input('s'); step(1)
+game.input('escape'); step(2)
+assert game.panels.mode == 'hud', "menu Jeda tidak menutup dgn Esc"
+print("[OK] Menu Jeda (Esc buka/tutup)")
+
 # ── Tani-mendalam Sakuna (jadwal air, nutrisi, gulma → mutu ★) ──
 sc = game.state.scene_name
 game.state.soil['90,90,' + sc] = {'tilled': True, 'crop': 'lobak', 'age': 0,

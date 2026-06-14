@@ -68,9 +68,9 @@
 - [ ] **Ikon item bergambar**: auto-render 64px dari model 3D via Blender (batch)
 - [ ] Inventory grid pakai ikon + tooltip; kategori tab jelas
 - [ ] Pie menu NPC dengan ikon aksi
-- [ ] Pause menu + Settings (volume, fullscreen, bahasa hint)
+- [x] Pause menu (Esc → Lanjut/Simpan/Kontrol) — Settings volume/fullscreen masih sisa
 - [ ] Save/Load slot UI (3 slot + autosave harian)
-- [ ] Sistem notifikasi terpadu (flash/emote/toast — satu bahasa visual)
+- [x] Sistem notifikasi terpadu (flash/emote/toast/subtitle batin)
 **DoD:** semua sistem bisa dioperasikan tanpa membaca README.
 
 ## M4 — GAMEPLAY CORE LENGKAP

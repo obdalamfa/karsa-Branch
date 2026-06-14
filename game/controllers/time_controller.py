@@ -54,14 +54,49 @@ class TimeController:
                 if soil.get('tilled') and not soil.get('watered'):
                     soil['watered'] = True
 
-        # Tumbuh tanaman semalam
+        # Tumbuh tanaman semalam — Sakuna: jadwal air, nutrisi, gulma → mutu (★)
         cur_season = s.get_season()
+        akar = (getattr(s, 'batin', {}) or {}).get('akar', 1)
         for soil in s.soil.values():
-            if soil.get('watered') and soil.get('crop'):
-                crop_seasons = CROPS.get(soil['crop'], {}).get('seasons', [])
-                growth = 2 if cur_season in crop_seasons else 1
-                soil['age'] = soil.get('age', 0) + growth
-                soil['watered'] = False
+            crop = soil.get('crop')
+            if not crop:
+                if soil.get('tilled') and _rng.random() < 0.18:      # gulma di petak kosong
+                    soil['weeds'] = min(3, soil.get('weeds', 0) + 1)
+                continue
+            cdata   = CROPS.get(crop, {})
+            days    = cdata.get('days', 4)
+            age     = soil.get('age', 0)
+            q       = soil.get('quality', 3.0)
+            nut     = soil.get('nutrients', 3)
+            weeds   = soil.get('weeds', 0)
+            watered = soil.get('watered', False) or s.weather in ('Hujan', 'Badai')
+            ripening = age >= max(1, days * 0.6)                     # fase menua → ingin kering
+            in_season = cur_season in cdata.get('seasons', [])
+            grow = 0
+            # Jadwal air: muda ingin BASAH, menua ingin KERING (inti Sakuna)
+            if not ripening:
+                if watered:
+                    grow = 2 if in_season else 1; q += 0.15
+                else:
+                    q -= 0.5                                          # kekeringan saat muda
+            else:
+                grow = 1
+                q += 0.2 if not watered else -0.55                   # tergenang saat menua = buruk
+            # Nutrisi tanah
+            if nut > 0:
+                q += 0.2 + akar * 0.05; nut -= 1
+            else:
+                q -= 0.35
+            # Gulma menekan
+            if weeds >= 2:
+                q -= 0.4; grow = max(0, grow - 1)
+            if _rng.random() < 0.32:
+                weeds = min(3, weeds + 1)
+            soil['age']       = age + grow
+            soil['quality']   = max(1.0, min(5.0, q))
+            soil['nutrients'] = nut
+            soil['weeds']     = weeds
+            soil['watered']   = False
 
         if s.day_in_season > DAYS_PER_SEASON:
             s.day_in_season = 1

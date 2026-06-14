@@ -107,5 +107,21 @@ assert game.panels.mode == 'hud', "check tidak menutup setelah memilih"
 assert game.state.batin['sukma'] == before['sukma'] + 1, "stat suara tidak naik"
 print("[OK] Skill-check modal: pilih -> SUKMA", before['sukma'], '->', game.state.batin['sukma'])
 
+# ── Tani-mendalam Sakuna (jadwal air, nutrisi, gulma → mutu ★) ──
+sc = game.state.scene_name
+game.state.soil['90,90,' + sc] = {'tilled': True, 'crop': 'lobak', 'age': 0,
+                                  'quality': 3.0, 'nutrients': 3, 'weeds': 0, 'watered': True}
+game.state.soil['91,91,' + sc] = {'tilled': True, 'crop': 'lobak', 'age': 0,
+                                  'quality': 3.0, 'nutrients': 0, 'weeds': 3, 'watered': False}
+for _ in range(3):
+    game.state.soil['90,90,' + sc]['watered'] = True     # petani rajin menyiram
+    game.player.time_controller.advance_day(game.player); step(2)
+gq = game.state.soil['90,90,' + sc]['quality']
+bq = game.state.soil['91,91,' + sc]['quality']
+ga = game.state.soil['90,90,' + sc]['age']
+assert gq > bq, f"mutu petak rawatan ({gq}) harus > telantar ({bq})"
+assert ga > 0, "tanaman rawatan tidak tumbuh"
+print(f"[OK] Sakuna: mutu rawat {gq:.1f}* vs telantar {bq:.1f}* | umur {ga}")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

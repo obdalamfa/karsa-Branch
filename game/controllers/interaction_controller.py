@@ -37,6 +37,8 @@ class InteractionController:
             if tid in TILLABLE and s.energy >= 2:
                 soil = s.soil.setdefault(soil_key, {})
                 soil['tilled'] = True
+                soil.setdefault('nutrients', 3)     # Sakuna: kesuburan tanah
+                soil['weeds'] = 0
                 s.stats['tilled'] = s.stats.get('tilled', 0) + 1
                 self.player._spend_energy(2)
                 self.world.refresh_tile(tx, ty, soil_key)
@@ -73,7 +75,7 @@ class InteractionController:
             seed_key = s.seed_key + '_seed'
             if soil.get('tilled') and not soil.get('crop') and s.inventory.get(seed_key, 0) > 0:
                 soil = s.soil.setdefault(soil_key, {})
-                soil.update({'crop': s.seed_key, 'age': 0, 'tilled': True})
+                soil.update({'crop': s.seed_key, 'age': 0, 'tilled': True, 'quality': 3.0})
                 s.inventory[seed_key] -= 1
                 self.player._spend_energy(2)
                 self.world.refresh_tile(tx, ty, soil_key)
@@ -95,8 +97,11 @@ class InteractionController:
                 crop_data = CROPS.get(soil['crop'], {})
                 if soil.get('age', 0) >= crop_data.get('days', 4):
                     crop_name = soil['crop']
-                    s.inventory[crop_name] = s.inventory.get(crop_name, 0) + 1
-                    sold = crop_data.get('sell', 20)
+                    quality = max(1, min(5, round(soil.get('quality', 3.0))))   # Sakuna ★1-5
+                    yield_n = 1 + quality // 2                                  # mutu → hasil
+                    s.inventory[crop_name] = s.inventory.get(crop_name, 0) + yield_n
+                    base = crop_data.get('sell', 20)
+                    sold = int(base * (0.6 + 0.2 * quality))                    # ★1:0.8x … ★5:1.6x
                     s.gold += sold
                     s.stats['earned'] = s.stats.get('earned', 0) + sold
                     if crop_name == 'lobak':
@@ -109,9 +114,12 @@ class InteractionController:
                     self.player._fx_burst(fx, fy + 0.3, fz, color.rgb(255, 225, 50), n=7)
                     sound_play('harvest', 0.8)
                     panels.emote(f'* +{sold}G', color.rgb(255, 220, 100), 1.3)
-                    panels.flash_msg(f"{CROPS[crop_name]['name']} dipanen! +{sold}G", 1.2)
+                    panels.flash_msg(f"{CROPS[crop_name]['name']} ×{yield_n}  {'★'*quality}  dipanen! +{sold}G", 1.6)
                     panels.say_batin_once('panen', 'akar',
                         "Panen pertama. Mutu mengingat segalanya yang kau lakukan dan tidak. Sawah membukukan dengan jujur.")
+                    if quality >= 4:
+                        panels.say_batin('sukma',
+                            "Lihat butirnya — berpendar samar. Ada lebih banyak tenaga di segenggam ini daripada di seluruh meridianmu.")
                     self.check_quests(panels)
                 else:
                     sound_play('blocked', 0.6)
@@ -196,6 +204,8 @@ class InteractionController:
         if s.scene_name == 'dungeon' and getattr(self.world, 'dungeon_level', 0) == 13 and self.try_fishing(panels):
             return
         if s.scene_name == 'clinic' and self.try_healing(panels):
+            return
+        if self._try_plot_care(panels):     # Sakuna: cabut gulma / pupuk petak di kaki
             return
 
         npc_info = entities_mgr.get_nearest_npc(tx, ty, max_dist_tiles=3.0)
@@ -287,6 +297,39 @@ class InteractionController:
                 {'voice': 'bara', 'label': 'Senjata yang butuh diberi makan.',
                  'fn': lambda: panels.say_batin('bara', 'Jujur. Aku bisa kerja sama dengan kejujuran.')},
             ])
+
+    def _try_plot_care(self, panels) -> bool:
+        """Sakuna: perawatan petak di kaki pemain via [R].
+        Prioritas: cabut gulma → pupuk (isi nutrisi). Return True jika menangani."""
+        s = self.player.state
+        tx, ty = self.player.get_tile_pos()
+        key = f"{tx},{ty},{s.scene_name}"
+        soil = s.soil.get(key)
+        if not soil or not soil.get('crop'):
+            return False
+        if soil.get('weeds', 0) > 0:
+            if s.energy < 2:
+                sound_play('blocked', 0.6); panels.flash_msg("Terlalu lelah mencabut gulma.", 1.0); return True
+            soil['weeds'] = 0
+            self.player._spend_energy(2)
+            sound_play('hoe', 0.6)
+            panels.flash_msg("Gulma dicabut.", 0.9)
+            panels.say_batin_once('gulma', 'akar',
+                "Cabut gulma sebelum senja. Gulma itu padi tanpa sopan santun tapi rajinnya luar biasa.")
+            return True
+        if soil.get('nutrients', 3) < 4:
+            if s.energy < 3:
+                sound_play('blocked', 0.6); panels.flash_msg("Terlalu lelah memupuk.", 1.0); return True
+            soil['nutrients'] = 4
+            self.player._spend_energy(3)
+            sound_play('hoe', 0.5)
+            panels.emote('+', color.rgb(180, 160, 90))
+            panels.flash_msg("Tanah dipupuk (+nutrisi).", 0.9)
+            panels.say_batin_once('pupuk', 'lapar',
+                "Yang mati memberi makan yang hidup memberi makan kau. Lembah tak buang apa pun.")
+            return True
+        panels.flash_msg(f"Petak sehat — mutu kini ~{round(soil.get('quality', 3.0))}★", 1.1)
+        return True
 
     def _try_harvest_wild(self, tx: int, ty: int, entities_mgr, panels) -> bool:
         """Panen entitas liar di tile player atau tile depan (herba, beri, jamur).

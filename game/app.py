@@ -128,6 +128,25 @@ class Game3D:
                 drop.setLightOff()
             self.snow_drops.append(drop)
 
+        # Satwa ambient siang (M5) — kupu-kupu beterbangan di scene luar
+        self.critters = []
+        _crit_cols = [color.rgb(232, 178, 90), color.rgb(210, 120, 130),
+                      color.rgb(150, 170, 220), color.rgb(225, 225, 235),
+                      color.rgb(180, 150, 200), color.rgb(120, 175, 140)]
+        for _i in range(8):
+            kw = dict(model='quad', color=_crit_cols[_i % len(_crit_cols)],
+                      transparent=True, double_sided=True, billboard=True,
+                      scale=0.22, enabled=False)
+            if _use_unlit_sh:
+                kw['shader'] = unlit_shader
+            b = Entity(**kw)
+            if not _use_unlit_sh and hasattr(b, 'setLightOff'):
+                b.setLightOff()
+            b._cx = random.uniform(-9, 9)      # offset rumah relatif pemain
+            b._cz = random.uniform(-9, 9)
+            b._ph = random.uniform(0, 6.28)    # fase flutter
+            self.critters.append(b)
+
         # Inisialisasi suara prosedural (pygame.mixer, tidak konflik dengan panda3d audio)
         from .sound import init_sound, build_sounds, _build_ambients, set_ambient_for_scene
         if init_sound():
@@ -498,6 +517,23 @@ class Game3D:
                         drop.x = self.player.x + random.uniform(-15, 15)
                         drop.z = self.player.z + random.uniform(-15, 15)
                         drop.y = random.uniform(10, 20)
+
+            # Satwa ambient (M5) — kupu-kupu beterbangan, hanya siang & di luar
+            crit_active = (not is_indoor) and (not is_raining_) and (not s.is_night())
+            for b in getattr(self, 'critters', []):
+                b.enabled = crit_active
+                if not crit_active:
+                    continue
+                b._ph += dt
+                b._cx += math.sin(b._ph * 0.27 + b._cz) * dt * 0.6   # jelajah lembut
+                b._cz += math.cos(b._ph * 0.31 + b._cx) * dt * 0.6
+                if abs(b._cx) > 12 or abs(b._cz) > 12:               # daur ulang dekat pemain
+                    b._cx = random.uniform(-6, 6); b._cz = random.uniform(-6, 6)
+                b.x = self.player.x + b._cx + math.sin(b._ph * 1.7) * 0.7
+                b.z = self.player.z + b._cz + math.cos(b._ph * 1.5) * 0.7
+                b.y = 1.1 + math.sin(b._ph * 2.1 + b._cx) * 0.45     # naik-turun
+                b.scale_x = 0.07 + abs(math.sin(b._ph * 13)) * 0.20  # kepak sayap
+                b.rotation_y = math.degrees(math.atan2(math.cos(b._ph * 1.5), -math.sin(b._ph * 1.7)))
 
     def input(self, key):
         # Screenshot global — backspace, berfungsi di mode apa pun

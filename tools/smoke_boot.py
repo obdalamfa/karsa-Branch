@@ -160,5 +160,29 @@ assert game.state.gold > _g1, "susu tak terjual saat fajar"
 assert game.state.animals_collected == [], "ternak tak reset saat fajar"
 print(f"[OK] Ternak: susu -> peti -> jual fajar (+{game.state.gold - _g1}G), reset harian OK")
 
+# ── Audit quest 11-stage end-to-end (M4) ──
+_qc = game.player.quest_controller
+_st = game.state
+_st.quest_stage = 0
+_st.mail_read = True
+_st.stats.update({'lobak_planted': 3, 'watered': 3, 'lobak_harvested': 3,
+                  'mobs_killed': 5, 'deepest_level': 10})
+_st.gold = 200
+_st.pickaxe_tier = 2
+_st.sword_id = 'sword_besi'
+_st.inventory.update({'tembaga': 5, 'besi': 3})
+_st.captured_supernatural = 1
+_st.naga_defeated = True
+_qc.check_quest_progress()
+assert _st.quest_stage == 11, f"quest MACET di tahap {_st.quest_stage}"
+assert _st.post_game, "post_game tak diset saat tamat"
+print("[OK] Quest 0->11 tamat tanpa macet (audit)")
+# Gating: tanpa syarat tahap 0, tak boleh lompat walau sinyal akhir ada
+_st.quest_stage = 0
+_st.mail_read = False
+_qc.check_quest_progress()
+assert _st.quest_stage == 0, "tahap 0 lolos tanpa baca surat (gating bocor)"
+print("[OK] Quest gating: tahap 0 menahan tanpa syarat")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

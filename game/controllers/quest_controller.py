@@ -10,25 +10,31 @@ class QuestController:
 
     def check_quest_progress(self, panels=None):
         s = self.state
-        if s.quest_stage == 0 and s.mail_read:
-            s.quest_stage = 1
+        # Rantai: satu aksi bisa melompati beberapa tahap sekaligus (cegah macet).
+        while s.quest_stage < 11 and self._stage_done(s.quest_stage):
+            s.quest_stage += 1
+            if s.quest_stage >= 11:
+                s.post_game = True
+            self._notify_quest_up(panels)
 
-        if s.quest_stage == 1:
-            if s.stats.get('lobak_harvested', 0) >= 3 and s.stats.get('earned', 0) >= 500:
-                s.quest_stage = 2
-                self._notify_quest_up(panels)
-
-        if s.quest_stage == 2:
-            # npc_hearts dibatasi maks 10 (lihat interaction_controller), jadi
-            # ambang 6 hati = relasi erat, konsisten dgn lore-gift (sari:6, maya:7).
-            if s.npc_hearts.get('arya', 0) >= 6:
-                s.quest_stage = 3
-                self._notify_quest_up(panels)
-
-        if s.quest_stage == 3:
-            if getattr(s, 'lighthouse_fixed', False):
-                s.quest_stage = 4
-                self._notify_quest_up(panels)
+    def _stage_done(self, st):
+        """Syarat tiap tahap — DICOCOKKAN dgn deskripsi QUEST_STAGES, pakai sinyal
+        yang benar-benar terjadi di gameplay (audit M4)."""
+        s = self.state
+        inv = s.inventory
+        stt = s.stats
+        if st == 0:  return bool(s.mail_read)                                       # cek kotak pos
+        if st == 1:  return stt.get('lobak_planted', 0) >= 3 and stt.get('watered', 0) >= 3
+        if st == 2:  return stt.get('lobak_harvested', 0) >= 3                       # panen 3 lobak
+        if st == 3:  return s.gold >= 150                                           # kumpulkan 150G
+        if st == 4:  return s.pickaxe_tier >= 1 or bool(s.sword_id)                 # alat lebih baik
+        if st == 5:  return s.pickaxe_tier >= 1 and stt.get('deepest_level', 0) >= 1 # crafting + masuk gua
+        if st == 6:  return inv.get('tembaga', 0) >= 5 and inv.get('besi', 0) >= 3   # 5 tembaga + 3 besi
+        if st == 7:  return s.sword_id == 'sword_besi' and stt.get('mobs_killed', 0) >= 5
+        if st == 8:  return s.captured_supernatural >= 1                            # tangkap makhluk halus
+        if st == 9:  return stt.get('deepest_level', 0) >= 10                       # gua level 10
+        if st == 10: return bool(s.naga_defeated)                                   # kalahkan Naga
+        return False
 
     def _notify_quest_up(self, panels):
         s = self.state

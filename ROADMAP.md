@@ -16,7 +16,7 @@
 |---|---|---|
 | **M1** Lima Menit Pertama | **~90%** | judul/intro/tutorial/tracker/prompt/signpost ADA & lulus smoke_boot |
 | **M2** Tampilan | **~60%** | skybox+lighting+cuaca ADA; sisa: dress props→tile, tekstur interior |
-| **M3** HUD & UX | **~80%** | HUD Disco + needs + Majelis Batin + **menu Jeda berlapis (Simpan/Muat 3 slot + Pengaturan volume/fullscreen)** ADA; sisa: ikon item (butuh Blender), skin HUD chrome/pixel (keputusan visual) |
+| **M3** HUD & UX | **~90%** | HUD Disco + needs + Majelis Batin + menu Jeda berlapis (Simpan/Muat 3 slot + Pengaturan) + **ikon item bergambar (18 PNG prosedural PIL)** ADA; sisa: skin HUD chrome/pixel (keputusan visual) |
 | **M4** Gameplay core | **~55%** | crafting+laut, upgrade alat, **tani Sakuna mendalam** ADA; sisa: shipping bin, ternak produktif, balance, audit quest |
 | **M5** Animasi & kehidupan | **~90%** | walk mesh-swap + pose aksi + **jadwal NPC per-jam** + ambient kupu/kunang + **telegraph & death anim mob** ADA; sisa: 4-frame walk (Blender batch) |
 | **M6** Audio & game-feel | **~95%** | 27 SFX prosedural + 6 BGM ambient per-scene (progresi akor) + musik tempur dinamis (duck HP kritis) + SFX tempur (telegraph/mati/kena) + screen-shake + **fade transisi scene** ADA |
@@ -65,8 +65,9 @@
 
 ## M3 — HUD & UX 2.0
 - [ ] Skin HUD: panel chrome TSO (9-slice) ATAU pixel-art custom — pilih satu
-- [ ] **Ikon item bergambar**: auto-render 64px dari model 3D via Blender (batch)
-- [ ] Inventory grid pakai ikon + tooltip; kategori tab jelas
+- [x] **Ikon item bergambar**: 18 ikon 64px prosedural PIL (`tools/make_item_icons.py`) —
+      tanpa Blender (crop/material/produk belum punya model 3D); grid auto-muat via _item_icon_tex
+- [x] Inventory grid pakai ikon + tooltip; kategori tab jelas (grid sudah ada, kini berikon)
 - [ ] Pie menu NPC dengan ikon aksi
 - [x] Pause menu berlapis (Esc → Lanjut/Simpan/Muat/Pengaturan/Kontrol) + Settings volume master & fullscreen
 - [x] Save/Load slot UI (3 slot, ringkasan nama/hari/emas; slot 0 = save lama kompatibel)

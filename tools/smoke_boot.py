@@ -259,5 +259,13 @@ for _s in (1, 2):
     try: os.remove(_GS.slot_path(_s))
     except Exception: pass
 
+# ── Ikon item inventory (M3) — PNG prosedural termuat sbg tekstur ──
+_icon_hits = 0
+for _it in ('lobak', 'wortel', 'jamur', 'susu', 'telur', 'wol', 'kayu', 'besi', 'kristal'):
+    if game.panels._item_icon_tex(_it) is not None:
+        _icon_hits += 1
+assert _icon_hits >= 8, f"ikon item tak termuat ({_icon_hits}/9)"
+print(f"[OK] Ikon item: {_icon_hits}/9 PNG termuat sebagai tekstur inventory")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

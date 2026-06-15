@@ -20,7 +20,7 @@
 | **M4** Gameplay core | **~55%** | crafting+laut, upgrade alat, **tani Sakuna mendalam** ADA; sisa: shipping bin, ternak produktif, balance, audit quest |
 | **M5** Animasi & kehidupan | **~90%** | walk mesh-swap + pose aksi + **jadwal NPC per-jam** + ambient kupu/kunang + **telegraph & death anim mob** ADA; sisa: 4-frame walk (Blender batch) |
 | **M6** Audio & game-feel | **~95%** | 27 SFX prosedural + 6 BGM ambient per-scene (progresi akor) + musik tempur dinamis (duck HP kritis) + SFX tempur (telegraph/mati/kena) + screen-shake + **fade transisi scene** ADA |
-| **M7** Rilis | **0%** | belum |
+| **M7** Rilis | **~40%** | **scaffold packaging siap** (lembah_karsa.spec + build_release.ps1 + README_PEMAIN + main.py frozen-path); sisa: jalankan build & uji exe (sisi user), perf pass, bug sweep playtest |
 
 **BONUS lintas-milestone yang sudah jadi (di luar rencana awal):**
 - **Majelis Batin** — 4 suara batin (BARA/AKAR/SUKMA/LAPAR) + skill-check 2d6 white/red (TAB) — DNA Disco, di-port dari prototipe three.js
@@ -101,12 +101,17 @@
 **DoD:** main dengan mata tertutup tetap tahu apa yang terjadi.
 
 ## M7 — RILIS
-- [ ] Performance pass (profiling; target 60fps di scene terpadat)
-- [ ] Packaging PyInstaller → folder distribusi + ikon
-- [ ] README pemain + 6 screenshot + GIF
-- [ ] Playtest checklist penuh + bugfix sweep
+- [ ] Performance pass (profiling; target 60fps di scene terpadat) — butuh run nyata
+- [x] Packaging PyInstaller → spec onedir (`lembah_karsa.spec`) + `build_release.ps1`
+      (auto-install PI, smoke-test gate, bundel assets+ursina+panda3d, salin README)
+- [x] main.py: set `application.asset_folder` saat frozen (font/aset internal terbaca)
+- [x] README pemain (`README_PEMAIN.md`) — kontrol + loop harian; sisa: 6 screenshot + GIF
+- [ ] **Jalankan build & uji exe** (sisi user: `pwsh ./build_release.ps1`) — perlu GUI nyata
+- [ ] Playtest checklist penuh + bugfix sweep — perlu pemain manusia
 - [ ] Tag v1.0
 **DoD:** satu zip yang bisa dikirim ke teman dan langsung jalan.
+> Catatan: scaffold build tak bisa diverifikasi di lingkungan headless (butuh
+> PyInstaller + boot GUI). Langkah build sengaja diserahkan ke user via skrip.
 
 ---
 

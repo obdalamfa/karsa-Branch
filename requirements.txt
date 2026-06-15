@@ -1,1 +1,4 @@
 ursina>=5.0.0
+pygame>=2.5.0
+# Hanya untuk build rilis (M7):
+# pyinstaller>=6.0

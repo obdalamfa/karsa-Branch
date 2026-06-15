@@ -57,6 +57,26 @@ def _ui(model='quad', **kw):
 
 _FONT_NAME = 'Montserrat-Bold.ttf'  # Ursina cari via glob(**) di asset_folder
 
+# ── Skin panel 'chrome' ala TSO (ROADMAP M3-A) ──
+_CHROME_PATH = _Path(__file__).resolve().parent.parent / 'assets' / 'ui' / 'panel_chrome.png'
+_chrome_tex = None
+def _chrome():
+    global _chrome_tex
+    if _chrome_tex is None:
+        try:
+            _chrome_tex = Texture(_PILImg.open(_CHROME_PATH)) if _CHROME_PATH.exists() else False
+        except Exception:
+            _chrome_tex = False
+    return _chrome_tex or None
+
+def _skin_chrome(ent):
+    """Pasang bingkai chrome TSO sbg tekstur latar panel (tahan-stretch)."""
+    t = _chrome()
+    if t is not None:
+        ent.texture = t
+        ent.color = color.white
+    return ent
+
 def _txt(text='', pos=(0, 0), scale=1.0, col=color.white, **kw):
     kw.setdefault('font', _FONT_NAME)
     return Text(text, parent=camera.ui, position=pos,
@@ -144,7 +164,7 @@ class UIManager:
         self.batin = None              # diisi app.py setelah Batin dibuat
         self._batin_open = False
         self._voice_sub_t = 0.0
-        bg = _ui(scale=(0.58, 0.96), position=(-0.60, 0.0), color=color.rgb(20, 18, 16, 237), z=1.0)
+        bg = _skin_chrome(_ui(scale=(0.58, 0.96), position=(-0.60, 0.0), color=color.rgb(20, 18, 16, 237), z=1.0))
         title = _txt('MAJELIS BATIN', pos=(-0.86, 0.43), scale=0.95, col=color.rgb(231, 178, 61))
         sub = _txt('Empat sukma, satu tengkorak.', pos=(-0.86, 0.395), scale=0.58, col=color.rgb(150, 135, 100))
         self._batin_chips = []
@@ -206,7 +226,7 @@ class UIManager:
         for e in getattr(self, '_bc_ents', []):
             try: destroy(e)
             except Exception: pass
-        bg = _ui(scale=(1.18, 0.74), position=(0, -0.02), color=color.rgb(18, 15, 12, 247), z=0.9)
+        bg = _skin_chrome(_ui(scale=(1.18, 0.74), position=(0, -0.02), color=color.rgb(18, 15, 12, 247), z=0.9))
         ents = [bg,
                 _txt(title, pos=(0, 0.26), scale=0.92, col=color.rgb(231, 178, 61), origin=(0, 0)),
                 _txt(_tw.fill(prompt, 64), pos=(0, 0.15), scale=0.7, col=color.rgb(224, 216, 188), origin=(0, 0))]
@@ -266,7 +286,7 @@ class UIManager:
     def _build_pause(self):
         self._pause_sel = 0
         self._pause_view = 'root'   # root | save | load | settings
-        bg = _ui(scale=(0.52, 0.64), position=(0, 0), color=color.rgb(16, 14, 12, 242), z=0.9)
+        bg = _skin_chrome(_ui(scale=(0.52, 0.64), position=(0, 0), color=color.rgb(16, 14, 12, 242), z=0.9))
         title = _txt('JEDA', pos=(0, 0.24), scale=1.4, col=color.rgb(231, 178, 61), origin=(0, 0))
         # pool baris (cukup untuk menu terpanjang)
         self._pause_items = [_txt('', pos=(0, 0.12 - i * 0.074), scale=0.9,

@@ -923,8 +923,12 @@ class UIManager:
 
     # ─── PUBLIC: PANEL ───────────────────────────────────
     def _build_panel_bg(self):
+        # Lapisan peredup layar penuh (paling belakang)
         self._panel_bg = _ui(scale=(1.5, 1.2), position=(0, 0),
-                              color=color.rgb(10, 5, 20, 210))
+                              color=color.rgb(10, 5, 20, 210), z=0.2)
+        # Bingkai chrome TSO di depan peredup, di belakang konten/teks (M3-A)
+        self._panel_frame = _skin_chrome(_ui(scale=(1.18, 1.02), position=(0, 0),
+                                             color=color.rgb(20, 16, 14, 240), z=0.1))
         self._panel_title = _txt('', pos=(-0.45, 0.44), scale=1.2,
                                   col=color.rgb(220, 190, 255))
         self._panel_body  = _txt('', pos=(-0.45, 0.36), scale=0.80,
@@ -934,7 +938,7 @@ class UIManager:
         self._set_panel_visible(False)
 
     def _set_panel_visible(self, v: bool):
-        for e in (self._panel_bg, self._panel_title,
+        for e in (self._panel_bg, self._panel_frame, self._panel_title,
                   self._panel_body, self._panel_hint):
             e.enabled = v
         if not v:

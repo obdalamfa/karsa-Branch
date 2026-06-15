@@ -698,11 +698,23 @@ class EntitiesManager:
         for actor_id, actor in list(self.actors.items()):
             if isinstance(actor, Monster):
                 if actor.hp <= 0:
-                    if actor.is_boss: s.naga_defeated = True
-                    if actor.mob_spec in s.mobs:
-                        s.mobs.remove(actor.mob_spec)
-                    destroy(actor)
-                    del self.actors[actor_id]
+                    base_sc = 1.4 if actor.is_boss else 1.0
+                    if not actor.dying:
+                        actor.dying = True
+                        actor.death_ms = 450.0
+                        if actor.is_boss: s.naga_defeated = True
+                    # Animasi kematian: tumbang ke samping sambil menyusut
+                    actor.death_ms = max(0.0, actor.death_ms - dt * 1000)
+                    t = actor.death_ms / 450.0
+                    actor.scale = base_sc * max(0.05, t)
+                    actor.rotation_z = (1.0 - t) * 80.0
+                    try: actor.color = color.rgb(120, 45, 45)
+                    except Exception: pass
+                    if actor.death_ms <= 0:
+                        if actor.mob_spec in s.mobs:
+                            s.mobs.remove(actor.mob_spec)
+                        destroy(actor)
+                        del self.actors[actor_id]
                     continue
                 actor.update_ai(dt, s.player_x, s.player_y, can_walk_fn)
                 
@@ -716,10 +728,18 @@ class EntitiesManager:
                 sc = 1.4 if actor.is_boss else 1.0
                 actor._hp_bar.scale_x = 0.9 * sc * ratio
 
-                if actor.dmg_flash_ms > 0:
+                base_sc = 1.4 if actor.is_boss else 1.0
+                if actor.telegraph_ms > 0:
+                    # Telegraph: membesar + memerah sbg peringatan serangan
+                    pulse = 1.0 + 0.20 * (actor.telegraph_ms / max(actor.windup_total, 1))
+                    actor.scale = base_sc * pulse
+                    actor.color = color.rgb(220, 70, 55)
+                elif actor.dmg_flash_ms > 0:
+                    actor.scale = base_sc
                     actor.color = color.white
                 else:
-                    actor.color = color.white # Revert to normal
+                    actor.scale = base_sc
+                    actor.color = color.white
                 
             elif isinstance(actor, NPC):
                 actor.update_ai(dt, self.brains, can_walk_fn)

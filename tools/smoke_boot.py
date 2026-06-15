@@ -196,5 +196,32 @@ assert (_sari_pagi.get('scene'), _sari_pagi.get('sched_x')) != \
        (_sari_malam.get('scene'), _sari_malam.get('sched_x')), "jadwal sari tak berubah by jam"
 print(f"[OK] Jadwal NPC by-jam: sari pagi={_sari_pagi.get('scene')} -> malam={_sari_malam.get('scene')}")
 
+# ── Telegraph serangan mob (M5) — wind-up dulu, baru pukulan mendarat ──
+from game.mob import Monster
+_spec = {'kind': 'tikus_gua', 'hp': 20, 'damage': 5, 'x': 5.0, 'y': 5.0, 'max_hp': 20}
+_mob = Monster(game.state, 'uji_mob', _spec)
+game.state.invuln_timer_ms = 0
+game.state.hp = 100
+_hp0 = game.state.hp
+_cw = lambda a, b: True
+_mob.update_ai(0.016, 5.0, 5.0, _cw)               # pemain dalam jangkauan
+assert _mob.windup_ms > 0 and game.state.hp == _hp0, "telegraph tak mulai / kena instan"
+for _ in range(80):                                # habiskan wind-up
+    _mob.update_ai(0.016, 5.0, 5.0, _cw)
+    if game.state.hp < _hp0:
+        break
+assert game.state.hp < _hp0, "pukulan tak mendarat setelah wind-up"
+print(f"[OK] Telegraph mob: wind-up dulu lalu kena (-{_hp0 - game.state.hp} HP)")
+# Mengelak saat telegraph: keluar jangkauan sebelum pukulan -> tak kena
+game.state.hp = 100; game.state.invuln_timer_ms = 0
+_mob2 = Monster(game.state, 'uji_mob2', dict(_spec))
+_mob2.update_ai(0.016, 5.0, 5.0, _cw)              # mulai wind-up
+for _ in range(80):
+    _mob2.update_ai(0.016, 99.0, 99.0, _cw)        # pemain lari jauh
+assert game.state.hp == 100, "mengelak saat telegraph tetap kena (telegraph tak adil)"
+print("[OK] Telegraph mob: mengelak saat wind-up menghindari pukulan")
+try: _mob.disable(); _mob2.disable()
+except Exception: pass
+
 print("SMOKE BOOT PASS")
 os._exit(0)

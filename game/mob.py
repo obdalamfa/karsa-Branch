@@ -40,6 +40,13 @@ class Monster(BaseActor):
         
         self.attack_cooldown_ms = 0
         self.dmg_flash_ms = 0
+        # Telegraph serangan: jeda wind-up sebelum pukulan mendarat
+        self.windup_ms = 0
+        self.windup_total = 1
+        self.telegraph_ms = 0
+        # Animasi kematian: tumbang + menyusut sebelum dihapus
+        self.dying = False
+        self.death_ms = 0
 
     def update_ai(self, dt: float, player_x: float, player_y: float, can_walk_fn):
         if self.hp <= 0:
@@ -79,7 +86,8 @@ class Monster(BaseActor):
                 if can_walk_fn(self.logical_x, ny): self.logical_y = ny
                 
         elif self.ai_state in (MobState.ALERT, MobState.CHASE):
-            if dist > 0.3:
+            # Diam saat sedang wind-up (telegraph) supaya peringatan terbaca
+            if dist > 0.3 and self.windup_ms <= 0:
                 spd_mult = 1.6 if self.ai_state == MobState.ALERT else 1.0
                 spd = self.speed * spd_mult / TILE_SIZE * dt
                 dx = (player_x - self.logical_x) / dist
@@ -89,10 +97,21 @@ class Monster(BaseActor):
                 if can_walk_fn(nx, self.logical_y): self.logical_x = nx
                 if can_walk_fn(self.logical_x, ny): self.logical_y = ny
                 
-        # Attack logic
-        if dist <= self.atk_r and self.attack_cooldown_ms <= 0:
-            if self.state.invuln_timer_ms <= 0:
-                self.state.hp = max(0, self.state.hp - self.damage)
-                self.state.invuln_timer_ms = INVULN_AFTER_HIT_MS
-                self.ai_state = MobState.ATTACK
-            self.attack_cooldown_ms = 1000
+        # Telegraph + serangan: ada jeda wind-up sebelum pukulan mendarat,
+        # memberi pemain jendela untuk mengelak (rasa combat lebih adil).
+        if self.windup_ms > 0:
+            self.ai_state = MobState.ATTACK
+            self.windup_ms = max(0, self.windup_ms - dt * 1000)
+            self.telegraph_ms = self.windup_ms
+            if self.windup_ms <= 0:
+                # pukulan mendarat — hanya kena bila pemain masih di jangkauan
+                if dist <= self.atk_r * 1.35 and self.state.invuln_timer_ms <= 0:
+                    self.state.hp = max(0, self.state.hp - self.damage)
+                    self.state.invuln_timer_ms = INVULN_AFTER_HIT_MS
+                self.attack_cooldown_ms = 1000
+        elif dist <= self.atk_r and self.attack_cooldown_ms <= 0:
+            # mulai wind-up (telegraph) — boss menahan lebih lama agar terbaca
+            self.windup_total = 600 if self.is_boss else 380
+            self.windup_ms = self.windup_total
+            self.telegraph_ms = self.windup_total
+            self.ai_state = MobState.ATTACK

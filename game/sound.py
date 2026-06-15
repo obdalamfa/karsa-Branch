@@ -101,6 +101,9 @@ def build_sounds():
             'morning':    _chord([261, 329, 392, 523], 580, 0.30),
             'capture':    _sweep(275, 740, 330, 0.36),
             'heal':       _sweep(330, 560, 210, 0.20),
+            'mob_windup': _sweep(150, 430, 340, 0.24),    # geraman naik — telegraph serangan
+            'mob_death':  _sweep(360, 70, 420, 0.34),     # tumbang — nada turun
+            'hurt':       _wave(150, 130, 0.30, 'square'),# pemain kena pukul
         })
     except Exception:
         _enabled = False

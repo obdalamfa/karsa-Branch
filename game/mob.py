@@ -108,6 +108,10 @@ class Monster(BaseActor):
                 if dist <= self.atk_r * 1.35 and self.state.invuln_timer_ms <= 0:
                     self.state.hp = max(0, self.state.hp - self.damage)
                     self.state.invuln_timer_ms = INVULN_AFTER_HIT_MS
+                    try:
+                        from .sound import play as _play
+                        _play('hurt')
+                    except Exception: pass
                 self.attack_cooldown_ms = 1000
         elif dist <= self.atk_r and self.attack_cooldown_ms <= 0:
             # mulai wind-up (telegraph) — boss menahan lebih lama agar terbaca
@@ -115,3 +119,7 @@ class Monster(BaseActor):
             self.windup_ms = self.windup_total
             self.telegraph_ms = self.windup_total
             self.ai_state = MobState.ATTACK
+            try:
+                from .sound import play as _play
+                _play('mob_windup')
+            except Exception: pass

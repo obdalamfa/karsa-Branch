@@ -19,7 +19,7 @@
 | **M3** HUD & UX | **~55%** | HUD Disco + needs + **Majelis Batin** ADA; sisa: ikon item, pause/settings, save-slot UI |
 | **M4** Gameplay core | **~55%** | crafting+laut, upgrade alat, **tani Sakuna mendalam** ADA; sisa: shipping bin, ternak produktif, balance, audit quest |
 | **M5** Animasi & kehidupan | **~90%** | walk mesh-swap + pose aksi + **jadwal NPC per-jam** + ambient kupu/kunang + **telegraph & death anim mob** ADA; sisa: 4-frame walk (Blender batch) |
-| **M6** Audio | **~30%** | sound.py + ambient scene ADA; sisa: SFX/musik lengkap, game-feel |
+| **M6** Audio & game-feel | **~85%** | 27 SFX prosedural + 6 BGM ambient per-scene (progresi akor) + musik tempur dinamis (duck HP kritis) + **SFX tempur (telegraph/mati/kena) + screen-shake** ADA; sisa: SFX pintu/kasir lengkap, transisi fade scene |
 | **M7** Rilis | **0%** | belum |
 
 **BONUS lintas-milestone yang sudah jadi (di luar rencana awal):**
@@ -94,10 +94,10 @@
 **DoD:** dunia terasa hidup saat diam ditonton 60 detik. → kupu-kupu/kunang ✓, jadwal NPC ✓, telegraph+death mob ✓; sisa: 4-frame walk (Blender).
 
 ## M6 — AUDIO & GAME FEEL
-- [ ] SFX per aksi (cangkul, siram, panen, pintu, kasir, ombak, api)
-- [ ] Ambience per scene (jangkrik malam, ombak pantai, gamelan pasar samar)
-- [ ] Musik: 2-3 loop (pagi/malam/dungeon) — komposisi prosedural atau CC0
-- [ ] Transisi scene fade; screen-shake halus; hit-feedback combat
+- [x] SFX per aksi (cangkul, siram, panen, dialog, beli/jual, quest, tidur, dll — 27 SFX prosedural)
+- [x] Ambience per scene (outdoor/forest/cave/indoor/water + tempur — sintesis prosedural)
+- [x] Musik: 6 loop ambient (per kategori scene) + tempur dinamis (duck saat HP kritis, boost saat terbang)
+- [~] Transisi scene fade (sisa); **screen-shake halus + hit-feedback combat ADA** (SFX telegraph/mati/kena + shake kamera)
 **DoD:** main dengan mata tertutup tetap tahu apa yang terjadi.
 
 ## M7 — RILIS

@@ -429,6 +429,21 @@ class Game3D:
             camera.look_at(self.camera_focus)
             camera.rotation_z = 0
 
+            # ── Screen-shake saat pemain kena pukul (hit-feedback, M6) ──
+            inv = getattr(s, 'invuln_timer_ms', 0)
+            if inv > getattr(self, '_prev_invuln', 0) + 1:   # invuln baru di-set = baru kena
+                self._cam_shake = 0.32
+            self._prev_invuln = inv
+            shake = getattr(self, '_cam_shake', 0.0)
+            if shake > 0.002:
+                import random as _rnd
+                camera.position += Vec3(_rnd.uniform(-shake, shake),
+                                        _rnd.uniform(-shake, shake),
+                                        _rnd.uniform(-shake, shake))
+                self._cam_shake = shake * (1.0 - min(1.0, 12.0 * dt))   # decay cepat
+            else:
+                self._cam_shake = 0.0
+
             # ── Sky Dome + Grass Shader update ──────────────
             is_indoor = self.world.scene_obj.indoor if self.world.scene_obj else False
             hour = (s.time_minutes / 60.0) % 24.0

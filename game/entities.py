@@ -703,6 +703,10 @@ class EntitiesManager:
                         actor.dying = True
                         actor.death_ms = 450.0
                         if actor.is_boss: s.naga_defeated = True
+                        try:
+                            from .sound import play as _play
+                            _play('mob_death')
+                        except Exception: pass
                     # Animasi kematian: tumbang ke samping sambil menyusut
                     actor.death_ms = max(0.0, actor.death_ms - dt * 1000)
                     t = actor.death_ms / 450.0

@@ -101,6 +101,8 @@ def farm_builder(world):
         ('prop_pagar_kayu',  10, 16, 1.0, 0),    # hiasan tepi jalan selatan
         ('prop_pagar_kayu',  12, 16, 1.0, 0),
         ('prop_ember',        4, 12, 1.0, 0),    # ember di tepi petak
+        ('prop_cangkul',      5, 11, 1.0, 40),   # cangkul tersandar di tepi petak
+        ('mob_jago',         16, 8,  1.0, -20),  # ayam jantan berkokok dekat kandang
     ]
     for name, tx, ty, sc, ry in DRESSING:
         mdl = load_model_file(name)

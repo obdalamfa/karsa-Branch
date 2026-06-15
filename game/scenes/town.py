@@ -149,7 +149,7 @@ def build_town():
     m[22][25]= PALM
     m[1][27] = PALM
 
-    return Scene('town', 'Desa Karsa', m, portals=[
+    return Scene('town', 'Desa Karsa', m, builder=town_builder, portals=[
         (0,  14, 'farm',       23, 14),
         (0,  15, 'farm',       23, 15),
         (14,  0, 'mountain',   14, 23),
@@ -164,3 +164,40 @@ def build_town():
         (14, 24, 'beach',      14,  1),
         (15, 24, 'beach',      15,  1),
     ])
+
+
+def town_builder(world):
+    """Dress Desa Karsa dgn struktur kampung 3D Blender yg sebelumnya tak terpakai
+    (sumur, rumah kampung/limasan/joglo, warung, lentera, pagar & pohon bambu)."""
+    from .props import default_prop_builder
+    default_prop_builder(world, world.scene_obj)
+
+    from game.config import TILE_SIZE as TS, GROUND_H
+    from ursina import Entity
+    try:
+        from game.entities import load_model_file
+    except Exception:
+        return
+
+    # (model, tile_x, tile_y, scale, rot_y) — taruh di tepi/ruang kosong rumput
+    VILLAGE = [
+        ('sumur',           16, 18, 1.4, 0),    # sumur umum di ruang terbuka
+        ('rumah_kampung',   10, 17, 1.0, 25),   # rumah dekorasi kampung
+        ('rumah_limasan',   24, 17, 1.0, -25),
+        ('rumah_joglo',     24, 11, 1.0, 0),    # joglo besar (pojok timur-tengah)
+        ('warung',           3, 16, 1.0, 20),   # warung obj (selain WARUNG prosedural)
+        ('lantern',         12, 16, 2.4, 0),    # lentera persimpangan
+        ('lantern',         17, 16, 2.4, 0),
+        ('lantern',         11, 22, 2.4, 0),
+        ('pagar_bambu',     15, 18, 1.0, 0),    # segmen pagar bambu
+        ('pagar_bambu',     17, 18, 1.0, 0),
+        ('pohon_bambu',      2, 11, 1.2, 0),    # rumpun bambu tepi
+        ('pohon_bambu',     28, 18, 1.2, 0),
+    ]
+    for name, tx, ty, sc, ry in VILLAGE:
+        mdl = load_model_file(name)
+        if not mdl:
+            continue
+        world._obj_ents.append(
+            Entity(model=mdl, position=(tx * TS, GROUND_H, ty * TS),
+                   scale=sc, rotation=(0, ry, 0)))

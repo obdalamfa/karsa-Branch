@@ -380,6 +380,7 @@ class Game3D:
 
                 # Reset portal cooldown supaya tidak ada lock dari portal sebelumnya
                 self.player._portal_cd = 0.5  # cukup buat hindari portal-ping-pong tapi tidak block movement
+                self._fade = 1.0              # mulai fade-in dari hitam (M6)
                 self._init_env()
                 _grass.apply_to_entities(self.world._grass_ents,
                                          self._grass_time, 0.06)
@@ -443,6 +444,18 @@ class Game3D:
                 self._cam_shake = shake * (1.0 - min(1.0, 12.0 * dt))   # decay cepat
             else:
                 self._cam_shake = 0.0
+
+            # ── Fade transisi scene (M6) — layar hitam memudar saat pindah ──
+            if getattr(self, '_fade', 0.0) > 0.003:
+                if not hasattr(self, '_fade_overlay'):
+                    self._fade_overlay = Entity(parent=camera.ui, model='quad',
+                                                scale=(2.4, 1.3), z=-90,
+                                                color=color.black, eternal=True)
+                self._fade = max(0.0, self._fade - dt / 0.45)   # fade-in 0.45s
+                self._fade_overlay.enabled = True
+                self._fade_overlay.color = color.rgb(0, 0, 0, int(255 * self._fade))
+            elif hasattr(self, '_fade_overlay') and self._fade_overlay.enabled:
+                self._fade_overlay.enabled = False
 
             # ── Sky Dome + Grass Shader update ──────────────
             is_indoor = self.world.scene_obj.indoor if self.world.scene_obj else False

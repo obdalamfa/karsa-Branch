@@ -19,7 +19,7 @@
 | **M3** HUD & UX | **~55%** | HUD Disco + needs + **Majelis Batin** ADA; sisa: ikon item, pause/settings, save-slot UI |
 | **M4** Gameplay core | **~55%** | crafting+laut, upgrade alat, **tani Sakuna mendalam** ADA; sisa: shipping bin, ternak produktif, balance, audit quest |
 | **M5** Animasi & kehidupan | **~90%** | walk mesh-swap + pose aksi + **jadwal NPC per-jam** + ambient kupu/kunang + **telegraph & death anim mob** ADA; sisa: 4-frame walk (Blender batch) |
-| **M6** Audio & game-feel | **~85%** | 27 SFX prosedural + 6 BGM ambient per-scene (progresi akor) + musik tempur dinamis (duck HP kritis) + **SFX tempur (telegraph/mati/kena) + screen-shake** ADA; sisa: SFX pintu/kasir lengkap, transisi fade scene |
+| **M6** Audio & game-feel | **~95%** | 27 SFX prosedural + 6 BGM ambient per-scene (progresi akor) + musik tempur dinamis (duck HP kritis) + SFX tempur (telegraph/mati/kena) + screen-shake + **fade transisi scene** ADA |
 | **M7** Rilis | **0%** | belum |
 
 **BONUS lintas-milestone yang sudah jadi (di luar rencana awal):**
@@ -97,7 +97,7 @@
 - [x] SFX per aksi (cangkul, siram, panen, dialog, beli/jual, quest, tidur, dll — 27 SFX prosedural)
 - [x] Ambience per scene (outdoor/forest/cave/indoor/water + tempur — sintesis prosedural)
 - [x] Musik: 6 loop ambient (per kategori scene) + tempur dinamis (duck saat HP kritis, boost saat terbang)
-- [~] Transisi scene fade (sisa); **screen-shake halus + hit-feedback combat ADA** (SFX telegraph/mati/kena + shake kamera)
+- [x] Transisi scene fade (layar hitam memudar 0.45s saat pindah scene); screen-shake halus + hit-feedback combat (SFX telegraph/mati/kena + shake kamera)
 **DoD:** main dengan mata tertutup tetap tahu apa yang terjadi.
 
 ## M7 — RILIS

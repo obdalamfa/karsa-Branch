@@ -184,5 +184,17 @@ _qc.check_quest_progress()
 assert _st.quest_stage == 0, "tahap 0 lolos tanpa baca surat (gating bocor)"
 print("[OK] Quest gating: tahap 0 menahan tanpa syarat")
 
+# ── Jadwal NPC per-jam (M5) — NPC pindah lokasi sesuai waktu ──
+_em = game.entities
+game.state.time_minutes = 6 * 60          # 06:00
+_em._update_npc_schedules()
+_sari_pagi = dict(game.state.npc_positions.get('sari', {}))
+game.state.time_minutes = 19 * 60         # 19:00
+_em._update_npc_schedules()
+_sari_malam = game.state.npc_positions.get('sari', {})
+assert (_sari_pagi.get('scene'), _sari_pagi.get('sched_x')) != \
+       (_sari_malam.get('scene'), _sari_malam.get('sched_x')), "jadwal sari tak berubah by jam"
+print(f"[OK] Jadwal NPC by-jam: sari pagi={_sari_pagi.get('scene')} -> malam={_sari_malam.get('scene')}")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

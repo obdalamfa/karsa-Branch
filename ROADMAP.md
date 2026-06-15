@@ -18,7 +18,7 @@
 | **M2** Tampilan | **~60%** | skybox+lighting+cuaca ADA; sisa: dress props→tile, tekstur interior |
 | **M3** HUD & UX | **~55%** | HUD Disco + needs + **Majelis Batin** ADA; sisa: ikon item, pause/settings, save-slot UI |
 | **M4** Gameplay core | **~55%** | crafting+laut, upgrade alat, **tani Sakuna mendalam** ADA; sisa: shipping bin, ternak produktif, balance, audit quest |
-| **M5** Animasi & kehidupan | **~40%** | walk mesh-swap 2-frame + pose aksi ADA; sisa: 4-frame, schedule penuh, telegraph mob, ambient satwa |
+| **M5** Animasi & kehidupan | **~75%** | walk mesh-swap + pose aksi + **jadwal NPC per-jam (terverifikasi)** + ambient kupu/kunang ADA; sisa: 4-frame walk, telegraph mob |
 | **M6** Audio | **~30%** | sound.py + ambient scene ADA; sisa: SFX/musik lengkap, game-feel |
 | **M7** Rilis | **0%** | belum |
 
@@ -87,10 +87,11 @@
 ## M5 — ANIMASI & KEHIDUPAN
 - [ ] Walk cycle 4-frame (dari 2) — timing dicuplik dari `.anim` TSO
 - [ ] Pose aksi per konteks: mencangkul, menyiram, duduk, tidur, memancing
-- [ ] NPC schedule terlihat: warung buka/tutup, Jaka ronda malam, anak sekolah
+- [x] NPC schedule terlihat: jadwal per-jam ADA & terverifikasi (SCHEDULES 25+ NPC —
+      Jaka ronda malam, warung sari buka pagi→pulang malam, hantu muncul malam di kuburan/gunung)
 - [ ] Mob dungeon: telegraph serangan + death anim (mesh-swap)
 - [x] Kupu-kupu ambient siang (pool 8, flutter) + kunang-kunang malam (sudah ada)
-**DoD:** dunia terasa hidup saat diam ditonton 60 detik. → kupu-kupu/kunang ✓; sisa: jadwal NPC, telegraph mob.
+**DoD:** dunia terasa hidup saat diam ditonton 60 detik. → kupu-kupu/kunang ✓, jadwal NPC ✓; sisa: 4-frame walk, telegraph mob.
 
 ## M6 — AUDIO & GAME FEEL
 - [ ] SFX per aksi (cangkul, siram, panen, pintu, kasir, ombak, api)

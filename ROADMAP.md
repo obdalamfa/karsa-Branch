@@ -89,8 +89,8 @@
 - [ ] Pose aksi per konteks: mencangkul, menyiram, duduk, tidur, memancing
 - [ ] NPC schedule terlihat: warung buka/tutup, Jaka ronda malam, anak sekolah
 - [ ] Mob dungeon: telegraph serangan + death anim (mesh-swap)
-- [ ] Burung/kupu-kupu ambient di farm (partikel bermodel)
-**DoD:** dunia terasa hidup saat diam ditonton 60 detik.
+- [x] Kupu-kupu ambient siang (pool 8, flutter) + kunang-kunang malam (sudah ada)
+**DoD:** dunia terasa hidup saat diam ditonton 60 detik. → kupu-kupu/kunang ✓; sisa: jadwal NPC, telegraph mob.
 
 ## M6 — AUDIO & GAME FEEL
 - [ ] SFX per aksi (cangkul, siram, panen, pintu, kasir, ombak, api)

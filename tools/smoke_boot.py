@@ -223,5 +223,41 @@ print("[OK] Telegraph mob: mengelak saat wind-up menghindari pukulan")
 try: _mob.disable(); _mob2.disable()
 except Exception: pass
 
+# ── Save/Load slot + Pengaturan (M3) ──
+from game.state import GameState as _GS
+game.state.gold = 777
+game.state.char_name = 'UjiSlot'
+assert game.state.save(2), "simpan ke slot gagal"
+_info = _GS.slot_info(2)
+assert _info and _info['gold'] == 777 and _info['name'] == 'UjiSlot', f"slot_info salah: {_info}"
+print(f"[OK] Save slot: Slot 2 = {_info['name']} / {_info['gold']}G")
+# Navigasi menu Jeda → Simpan → pilih slot lewat input
+game.input('escape'); step(1)                  # buka Jeda (root)
+assert game.panels.mode == 'pause' and game.panels._pause_view == 'root'
+game.input('2'); step(1)                        # masuk view Simpan
+assert game.panels._pause_view == 'save', "tak masuk view Simpan"
+game.input('1'); step(1)                        # simpan ke Slot 1
+assert _GS.slot_info(1) and _GS.slot_info(1)['gold'] == 777, "Slot 1 tak tersimpan via UI"
+print("[OK] UI Jeda->Simpan->Slot 1 menulis save")
+# Pengaturan: ubah volume master
+game.input('escape'); step(1)                   # kembali ke root
+game.input('4'); step(1)                        # masuk Pengaturan
+assert game.panels._pause_view == 'settings', "tak masuk Pengaturan"
+from game.sound import get_master as _gm
+_v0 = _gm()
+game.input('a'); step(1)                         # volume turun
+assert _gm() < _v0 + 1e-6 and _gm() <= _v0, "volume tak turun"
+print(f"[OK] Pengaturan: volume {_v0:.1f} -> {_gm():.1f}")
+game.input('escape'); step(1); game.input('escape'); step(1)  # tutup
+# Muat slot 1 (gold 777) setelah mengubah state
+game.state.gold = 5
+game._load_slot(1); step(2)
+assert game.state.gold == 777, "muat slot tak mengembalikan state"
+print(f"[OK] Muat Slot 1 -> gold kembali {game.state.gold}")
+# Bersihkan file slot uji
+for _s in (1, 2):
+    try: os.remove(_GS.slot_path(_s))
+    except Exception: pass
+
 print("SMOKE BOOT PASS")
 os._exit(0)

@@ -61,6 +61,14 @@ def _chord(freqs: list, dur_ms: int, vol: float = 0.3) -> pygame.mixer.Sound:
 
 SOUNDS: dict = {}
 _enabled: bool = False
+_master: float = 0.8   # volume master (0..1), diatur dari menu Pengaturan
+
+def set_master(v: float):
+    global _master
+    _master = max(0.0, min(1.0, v))
+
+def get_master() -> float:
+    return _master
 
 def init_sound() -> bool:
     global _enabled
@@ -119,7 +127,7 @@ def play(name: str, volume: float = 1.0):
     if cd: _cooldowns[name] = now + cd
     try:
         s = SOUNDS[name]
-        s.set_volume(max(0.0, min(1.0, volume)))
+        s.set_volume(max(0.0, min(1.0, volume)) * _master)
         s.play()
     except Exception: pass
 

@@ -282,6 +282,29 @@ class Game3D:
         self._intro_after_chargen = True
         self._open_chargen()
 
+    def _load_slot(self, slot: int):
+        """Muat save dari slot lalu bangun ulang dunia di tempat (menu Jeda → Muat)."""
+        gs = GameState.load(slot)
+        if not gs:
+            self.panels.flash_msg(f"Slot {slot} kosong.", 2.0)
+            return
+        from .config import TILE_SIZE as _TS
+        self.state.__dict__.update(gs.__dict__)
+        self.world.load_scene(self.state.scene_name)
+        self.entities.load_scene(self.state.scene_name)
+        self.player.position = (self.state.player_x * _TS, 0, self.state.player_y * _TS)
+        if self.state.char_name:
+            self.player.apply_appearance(self.state)
+        try:
+            from .sound import set_ambient_for_scene
+            set_ambient_for_scene(self.state.scene_name)
+        except Exception:
+            pass
+        self._fade = 1.0
+        self._init_env()
+        self.panels.close_pause()
+        self.panels.flash_msg(f"Slot {slot} dimuat.", 2.0)
+
     def update(self, dt):
         s = self.state
 
@@ -617,10 +640,14 @@ class Game3D:
             act = self.panels.pause_input(key)
             if act == 'resume':
                 self.panels.close_pause()
-            elif act == 'save':
-                self.state.save()
-                self.panels.close_pause()
-                self.panels.flash_msg("Game tersimpan.", 2.0)
+            elif act.startswith('save:'):
+                slot = int(act.split(':')[1])
+                ok = self.state.save(slot)
+                self.panels._render_pause()    # perbarui ringkasan slot
+                self.panels.flash_msg(f"Tersimpan ke Slot {slot}." if ok else "Gagal menyimpan.", 2.0)
+            elif act.startswith('load:'):
+                slot = int(act.split(':')[1])
+                self._load_slot(slot)
             elif act == 'controls':
                 self.panels.close_pause()
                 self.panels.open_panel('help')

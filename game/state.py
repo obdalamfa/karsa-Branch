@@ -117,9 +117,17 @@ class GameState:
         else:
             return 1.4
 
-    def save(self):
+    @staticmethod
+    def slot_path(slot: int = 0) -> str:
+        """Slot 0 = file lama (kompatibel mundur); slot 1-3 = file bersufiks."""
+        if not slot:
+            return SAVE_FILE
+        base, ext = os.path.splitext(SAVE_FILE)
+        return f"{base}_slot{slot}{ext}"
+
+    def save(self, slot: int = 0):
         try:
-            with open(SAVE_FILE, 'w') as f:
+            with open(GameState.slot_path(slot), 'w') as f:
                 json.dump({k: v for k, v in self.__dict__.items()}, f, indent=2)
             return True
         except Exception as e:
@@ -127,11 +135,12 @@ class GameState:
             return False
 
     @classmethod
-    def load(cls):
-        if not os.path.exists(SAVE_FILE):
+    def load(cls, slot: int = 0):
+        path = cls.slot_path(slot)
+        if not os.path.exists(path):
             return None
         try:
-            with open(SAVE_FILE) as f:
+            with open(path) as f:
                 data = json.load(f)
             gs = cls()
             for k, v in data.items():
@@ -140,4 +149,21 @@ class GameState:
             return gs
         except Exception as e:
             print(f"Load error: {e}")
+            return None
+
+    @classmethod
+    def slot_info(cls, slot: int = 0):
+        """Ringkasan ringkas slot untuk UI simpan/muat; None bila kosong/rusak."""
+        path = cls.slot_path(slot)
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path) as f:
+                d = json.load(f)
+            return {
+                'name': d.get('char_name') or 'Tanpa Nama',
+                'day':  int(d.get('day', 1)),
+                'gold': int(d.get('gold', 0)),
+            }
+        except Exception:
             return None

@@ -16,7 +16,7 @@
 |---|---|---|
 | **M1** Lima Menit Pertama | **~90%** | judul/intro/tutorial/tracker/prompt/signpost ADA & lulus smoke_boot |
 | **M2** Tampilan | **~60%** | skybox+lighting+cuaca ADA; sisa: dress props→tile, tekstur interior |
-| **M3** HUD & UX | **~55%** | HUD Disco + needs + **Majelis Batin** ADA; sisa: ikon item, pause/settings, save-slot UI |
+| **M3** HUD & UX | **~80%** | HUD Disco + needs + Majelis Batin + **menu Jeda berlapis (Simpan/Muat 3 slot + Pengaturan volume/fullscreen)** ADA; sisa: ikon item (butuh Blender), skin HUD chrome/pixel (keputusan visual) |
 | **M4** Gameplay core | **~55%** | crafting+laut, upgrade alat, **tani Sakuna mendalam** ADA; sisa: shipping bin, ternak produktif, balance, audit quest |
 | **M5** Animasi & kehidupan | **~90%** | walk mesh-swap + pose aksi + **jadwal NPC per-jam** + ambient kupu/kunang + **telegraph & death anim mob** ADA; sisa: 4-frame walk (Blender batch) |
 | **M6** Audio & game-feel | **~95%** | 27 SFX prosedural + 6 BGM ambient per-scene (progresi akor) + musik tempur dinamis (duck HP kritis) + SFX tempur (telegraph/mati/kena) + screen-shake + **fade transisi scene** ADA |
@@ -68,8 +68,8 @@
 - [ ] **Ikon item bergambar**: auto-render 64px dari model 3D via Blender (batch)
 - [ ] Inventory grid pakai ikon + tooltip; kategori tab jelas
 - [ ] Pie menu NPC dengan ikon aksi
-- [x] Pause menu (Esc → Lanjut/Simpan/Kontrol) — Settings volume/fullscreen masih sisa
-- [ ] Save/Load slot UI (3 slot + autosave harian)
+- [x] Pause menu berlapis (Esc → Lanjut/Simpan/Muat/Pengaturan/Kontrol) + Settings volume master & fullscreen
+- [x] Save/Load slot UI (3 slot, ringkasan nama/hari/emas; slot 0 = save lama kompatibel)
 - [x] Sistem notifikasi terpadu (flash/emote/toast/subtitle batin)
 **DoD:** semua sistem bisa dioperasikan tanpa membaca README.
 

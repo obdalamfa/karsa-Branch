@@ -262,22 +262,66 @@ class UIManager:
         self._bc_ents = []
         self.mode = 'hud'
 
-    # ─── MENU JEDA (pause) ───────────────────────────────
+    # ─── MENU JEDA (pause) + sub-menu Simpan/Muat/Pengaturan ──────────
     def _build_pause(self):
         self._pause_sel = 0
-        self._pause_opts = ['Lanjut', 'Simpan', 'Kontrol']
-        bg = _ui(scale=(0.46, 0.56), position=(0, 0), color=color.rgb(16, 14, 12, 242), z=0.9)
-        title = _txt('JEDA', pos=(0, 0.20), scale=1.4, col=color.rgb(231, 178, 61), origin=(0, 0))
-        self._pause_items = [_txt('', pos=(0, 0.06 - i * 0.085), scale=1.0,
-                                  col=color.white, origin=(0, 0)) for i in range(len(self._pause_opts))]
-        hint = _txt('[W/S] pilih   [Enter] OK   [Esc] lanjut', pos=(0, -0.20), scale=0.58,
-                    col=color.rgb(150, 135, 100), origin=(0, 0))
+        self._pause_view = 'root'   # root | save | load | settings
+        bg = _ui(scale=(0.52, 0.64), position=(0, 0), color=color.rgb(16, 14, 12, 242), z=0.9)
+        title = _txt('JEDA', pos=(0, 0.24), scale=1.4, col=color.rgb(231, 178, 61), origin=(0, 0))
+        # pool baris (cukup untuk menu terpanjang)
+        self._pause_items = [_txt('', pos=(0, 0.12 - i * 0.074), scale=0.9,
+                                  col=color.white, origin=(0, 0)) for i in range(6)]
+        hint = _txt('[W/S] pilih   [A/D] ubah   [Enter] OK   [Esc] kembali', pos=(0, -0.25),
+                    scale=0.5, col=color.rgb(150, 135, 100), origin=(0, 0))
+        self._pause_title = title
         self._pause_ents = [bg, title, hint] + self._pause_items
         for e in self._pause_ents:
             e.enabled = False
 
+    def _pause_rows(self):
+        """Daftar label baris untuk view aktif."""
+        from .state import GameState
+        v = self._pause_view
+        if v == 'root':
+            return ['Lanjut', 'Simpan', 'Muat', 'Pengaturan', 'Kontrol']
+        if v in ('save', 'load'):
+            rows = []
+            for s in (1, 2, 3):
+                info = GameState.slot_info(s)
+                if info:
+                    rows.append(f"Slot {s}   [{info['name']} · Hari {info['day']} · {info['gold']}G]")
+                else:
+                    rows.append(f"Slot {s}   [kosong]")
+            rows.append('‹ Kembali')
+            return rows
+        if v == 'settings':
+            from .sound import get_master
+            vol = int(round(get_master() * 100))
+            bars = max(0, min(8, int(round(get_master() * 8))))
+            bar_str = '█' * bars + '░' * (8 - bars)
+            full = '[x]' if self._is_fullscreen() else '[ ]'
+            return [f"Volume   {bar_str}  {vol}%",
+                    f"Layar Penuh   {full}",
+                    '‹ Kembali']
+        return []
+
+    def _is_fullscreen(self):
+        try:
+            from ursina import window
+            return bool(window.fullscreen)
+        except Exception:
+            return False
+
+    def _toggle_fullscreen(self):
+        try:
+            from ursina import window
+            window.fullscreen = not window.fullscreen
+        except Exception:
+            pass
+
     def open_pause(self):
         self._pause_sel = 0
+        self._pause_view = 'root'
         self.mode = 'pause'
         for e in self._pause_ents:
             e.enabled = True
@@ -289,25 +333,68 @@ class UIManager:
         self.mode = 'hud'
 
     def _render_pause(self):
+        rows = self._pause_rows()
+        titles = {'root': 'JEDA', 'save': 'SIMPAN', 'load': 'MUAT', 'settings': 'PENGATURAN'}
+        self._pause_title.text = titles.get(self._pause_view, 'JEDA')
+        if rows:
+            self._pause_sel = max(0, min(self._pause_sel, len(rows) - 1))
         for i, t in enumerate(self._pause_items):
-            sel = (i == self._pause_sel)
-            t.text = ('> ' if sel else '   ') + self._pause_opts[i]
-            t.color = color.rgb(231, 178, 61) if sel else color.rgb(200, 196, 186)
+            if i < len(rows):
+                sel = (i == self._pause_sel)
+                t.enabled = True
+                t.text = ('> ' if sel else '    ') + rows[i]
+                t.color = color.rgb(231, 178, 61) if sel else color.rgb(200, 196, 186)
+            else:
+                t.enabled = False
+                t.text = ''
 
     def pause_input(self, key):
-        """Return aksi: '' / 'resume' / 'save' / 'controls'."""
+        """Return aksi terminal: '' / 'resume' / 'save:N' / 'load:N' / 'controls'."""
+        rows = self._pause_rows()
+        n = max(1, len(rows))
         if key in ('w', 'up arrow'):
-            self._pause_sel = (self._pause_sel - 1) % len(self._pause_opts); self._render_pause(); return ''
+            self._pause_sel = (self._pause_sel - 1) % n; self._render_pause(); return ''
         if key in ('s', 'down arrow'):
-            self._pause_sel = (self._pause_sel + 1) % len(self._pause_opts); self._render_pause(); return ''
+            self._pause_sel = (self._pause_sel + 1) % n; self._render_pause(); return ''
+
+        # Penyesuaian nilai di view Pengaturan
+        if self._pause_view == 'settings' and key in ('a', 'left arrow', 'd', 'right arrow'):
+            delta = -0.1 if key in ('a', 'left arrow') else 0.1
+            if self._pause_sel == 0:
+                from .sound import get_master, set_master
+                set_master(get_master() + delta); sound_play('menu_move'); self._render_pause()
+            elif self._pause_sel == 1:
+                self._toggle_fullscreen(); self._render_pause()
+            return ''
+
         if key == 'escape':
-            return 'resume'
-        acts = ['resume', 'save', 'controls']
-        if key in ('enter', 'space', 'e'):
-            return acts[self._pause_sel]
-        if key.isdigit() and 1 <= int(key) <= len(acts):
+            if self._pause_view == 'root':
+                return 'resume'
+            self._pause_view = 'root'; self._pause_sel = 0; self._render_pause(); return ''
+
+        if key.isdigit() and 1 <= int(key) <= n:
             self._pause_sel = int(key) - 1
-            return acts[self._pause_sel]
+            return self._pause_confirm()
+        if key in ('enter', 'space', 'e'):
+            return self._pause_confirm()
+        return ''
+
+    def _pause_confirm(self):
+        v, sel = self._pause_view, self._pause_sel
+        if v == 'root':
+            if sel == 0: return 'resume'
+            if sel == 1: self._pause_view = 'save'; self._pause_sel = 0; self._render_pause(); return ''
+            if sel == 2: self._pause_view = 'load'; self._pause_sel = 0; self._render_pause(); return ''
+            if sel == 3: self._pause_view = 'settings'; self._pause_sel = 0; self._render_pause(); return ''
+            if sel == 4: return 'controls'
+        elif v in ('save', 'load'):
+            if sel == 3:
+                self._pause_view = 'root'; self._pause_sel = 0; self._render_pause(); return ''
+            return f"{v}:{sel + 1}"
+        elif v == 'settings':
+            if sel == 1: self._toggle_fullscreen(); self._render_pause(); return ''
+            if sel == 2:
+                self._pause_view = 'root'; self._pause_sel = 0; self._render_pause(); return ''
         return ''
 
     # ─── PUBLIC: EMOTE (ikon interaksi melayang) ─────────

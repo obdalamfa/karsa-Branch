@@ -78,8 +78,8 @@
 - [x] Ternak produktif: [R] hewan → susu/telur/wol harian → Peti Kirim
 - [~] Set crop per musim + benih di toko Bu Sari (CROPS ada, perlu dilengkapi)
 - [x] Upgrade alat (pickaxe/pedang via Bengkel Budi)
-- [ ] Balance ekonomi pass 1 (harga, energi, durasi hari)
-- [ ] Audit quest utama 11-stage end-to-end (main sampai tamat tanpa stuck)
+- [~] Balance ekonomi pass 1 (harga/energi/durasi) — paling baik sambil playtest manusia
+- [x] Audit quest 11-stage end-to-end — dulu MACET di tahap 4, kini tamat (smoke-tested)
 - [x] Crafting diperluas (perahu, jala, obor, peti, pagar + pelayaran laut)
 - [x] **Tani Sakuna mendalam** (jadwal air, nutrisi, gulma → mutu ★) — BONUS
 **DoD:** loop harian punya 3+ keputusan bermakna; tamat quest bisa dicapai.

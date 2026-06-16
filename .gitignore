@@ -41,3 +41,8 @@ tools/cap_*.png
 tools/vm_*.png
 tools/icon_contact.png
 tools/cam_shot.png
+
+tools/icon3d/
+tools/*_sheet.png
+boot_out.log
+boot_err.log

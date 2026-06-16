@@ -17,18 +17,14 @@ window.color = color.rgb(90, 95, 100)
 from direct.showbase.ShowBaseGlobal import base
 sun = DirectionalLight(); sun.look_at(Vec3(-0.4, -0.7, -0.5)); sun.color = color.rgb(200, 196, 186)
 amb = AmbientLight(color=color.rgb(120, 122, 126, 255))
-from game.entities import load_model_file
+from game.entities import load_model_file, make_obj_entity
 
 def view(name):
     # lantai grid sebagai acuan "tegak"
     floor = Entity(model='plane', scale=10, color=color.rgb(70, 110, 70), y=0)
-    mdl = load_model_file(name)
-    if not mdl:
+    e = make_obj_entity(name, (0, 0, 0), scale=1.0, rot_y=0)
+    if e is None:
         print('NO MODEL', name); return
-    e = Entity(); e.model = mdl; e.position = (0, 0, 0); e.scale = 1.0
-    rx = float(os.environ.get('RX', '0'))
-    if rx:
-        e.rotation_x = rx
     # bingkai tinggi acuan (tiang merah 2m) untuk banding tegak
     pole = Entity(model='cube', scale=(0.06, 2, 0.06), position=(2.2, 1, 0), color=color.rgb(200, 60, 60))
     camera.fov = 50

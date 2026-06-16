@@ -209,16 +209,54 @@ def load_model_file(name: str):
         return None
 
 
+# Warna material muted (Disco/Zomboid) untuk model tanpa tekstur/Kd → cegah putih.
+MODEL_COLORS = {
+    'sumur':         (150, 140, 125),   # batu + kayu
+    'lantern':       (120, 110, 90),    # besi + kaca redup
+    'pagar_bambu':   (158, 162, 100),   # bambu
+    'pohon_bambu':   (150, 165, 95),    # bambu hijau pudar
+    'rumah_kampung': (168, 150, 122),   # plester hangat
+    'rumah_limasan': (170, 152, 120),
+    'rumah_joglo':   (165, 145, 112),
+    'warung':        (152, 114, 74),    # kayu
+}
+
+_PROP_TEX_CACHE = {}
+def _baked_texture(name):
+    if name in _PROP_TEX_CACHE:
+        return _PROP_TEX_CACHE[name]
+    tex = None
+    p = _MODELS_DIR / f'{name}_baked.png'
+    if p.exists():
+        try:
+            from ursina import Texture
+            from PIL import Image as _Img
+            tex = Texture(_Img.open(p))
+        except Exception:
+            tex = None
+    _PROP_TEX_CACHE[name] = tex
+    return tex
+
+
 def make_obj_entity(name, position, scale=1.0, rot_y=0.0):
-    """Buat Entity prop dari model .obj dgn koreksi orientasi otomatis.
-    Model Z-up (lihat Z_UP_MODELS) diputar -90° pitch agar berdiri tegak di
-    engine Y-up. Return Entity atau None bila model tak ada."""
-    from ursina import Entity
+    """Buat Entity prop dari model .obj dgn koreksi orientasi & warna.
+    - Model Z-up (Z_UP_MODELS) diputar -90° pitch agar berdiri tegak (Y-up).
+    - Tekstur baked dipasang bila ada; selain itu warna material muted
+      (MODEL_COLORS) supaya tak render putih polos.
+    Return Entity atau None bila model tak ada."""
+    from ursina import Entity, color as _color
     mdl = load_model_file(name)
     if not mdl:
         return None
     rx = -90 if name in Z_UP_MODELS else 0
-    return Entity(model=mdl, position=position, scale=scale, rotation=(rx, rot_y, 0))
+    e = Entity(model=mdl, position=position, scale=scale, rotation=(rx, rot_y, 0))
+    tex = _baked_texture(name)
+    if tex is not None:
+        e.texture = tex
+    elif name in MODEL_COLORS:
+        r, g, b = MODEL_COLORS[name]
+        e.color = _color.rgb(r, g, b)
+    return e
 
 
 NPC_APPEARANCES = {

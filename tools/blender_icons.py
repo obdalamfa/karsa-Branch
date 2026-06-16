@@ -68,33 +68,56 @@ obj.data.materials.append(m)
 '''
 
 
+def emat(name, rgb, strength=2.5, rough=0.5):
+    r, g, b = [c / 255.0 for c in rgb]
+    return f'''
+m = bpy.data.materials.new("{name}"); m.use_nodes = True
+bsdf = m.node_tree.nodes.get('Principled BSDF')
+bsdf.inputs['Base Color'].default_value = ({r:.3f}, {g:.3f}, {b:.3f}, 1)
+bsdf.inputs['Roughness'].default_value = {rough}
+try:
+    bsdf.inputs['Emission Color'].default_value = ({r:.3f}, {g:.3f}, {b:.3f}, 1)
+    bsdf.inputs['Emission Strength'].default_value = {strength}
+except Exception:
+    pass
+obj.data.materials.append(m)
+'''
+
+
 def _sword(blade_rgb, metallic, grip_rgb=(96, 64, 40)):
-    # Pedang diagonal (ujung kanan-atas), bilah + guard + grip + pommel.
+    # Pedang tegak (broad-face menghadap kamera), parts DI-JOIN jadi satu mesh
+    # lalu dimiringkan sbg rigid body → tetap menyatu, blade kebaca jelas.
+    bro = (0.25 if metallic else 0.55)
     return f'''
 import math
-# bilah
-bpy.ops.mesh.primitive_cube_add(size=1, location=(0,0,0.35))
-obj=bpy.context.active_object; obj.scale=(0.05,0.012,0.5)
-''' + mat('blade', blade_rgb, rough=(0.25 if metallic else 0.6), metallic=metallic) + '''
-# ujung bilah (lancip)
-bpy.ops.mesh.primitive_cone_add(radius1=0.05, radius2=0.0, depth=0.18, location=(0,0,0.94))
-obj=bpy.context.active_object
-''' + mat('tip', blade_rgb, rough=(0.25 if metallic else 0.6), metallic=metallic) + f'''
-# guard (melintang)
-bpy.ops.mesh.primitive_cube_add(size=1, location=(0,0,-0.18))
-obj=bpy.context.active_object; obj.scale=(0.22,0.05,0.04)
-''' + mat('guard', (90, 78, 60), rough=0.4, metallic=metallic) + f'''
+parts=[]
+# bilah (broad face di bidang X-Z menghadap kamera)
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0,0,0.44)); obj=bpy.context.active_object; obj.scale=(0.085,0.024,0.46)
+''' + mat('blade', blade_rgb, rough=bro, metallic=metallic) + '''
+parts.append(obj)
+# ujung lancip (apex ke atas)
+bpy.ops.mesh.primitive_cone_add(radius1=0.085, radius2=0.0, depth=0.18, location=(0,0,0.98)); obj=bpy.context.active_object; obj.scale=(1,0.28,1)
+''' + mat('tip', blade_rgb, rough=bro, metallic=metallic) + '''
+parts.append(obj)
+# guard melintang
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0,0,-0.02)); obj=bpy.context.active_object; obj.scale=(0.30,0.07,0.055)
+''' + mat('guard', (88, 76, 58), rough=0.4, metallic=metallic) + '''
+parts.append(obj)
 # grip
-bpy.ops.mesh.primitive_cylinder_add(radius=0.045, depth=0.3, location=(0,0,-0.36))
-obj=bpy.context.active_object
-''' + mat('grip', grip_rgb, rough=0.7) + '''
+bpy.ops.mesh.primitive_cylinder_add(radius=0.05, depth=0.32, location=(0,0,-0.24)); obj=bpy.context.active_object
+''' + mat('grip', grip_rgb, rough=0.75) + '''
+parts.append(obj)
 # pommel
-bpy.ops.mesh.primitive_uv_sphere_add(radius=0.07, location=(0,0,-0.52))
-obj=bpy.context.active_object
-''' + mat('pommel', (90, 78, 60), rough=0.4, metallic=metallic) + '''
-# miringkan seluruh pedang biar diagonal dinamis
-for o in bpy.data.objects:
-    if o.type=='MESH': o.rotation_euler=(0,math.radians(28),0)
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.08, location=(0,0,-0.44)); obj=bpy.context.active_object; bpy.ops.object.shade_smooth()
+''' + mat('pommel', (88, 76, 58), rough=0.4, metallic=metallic) + '''
+parts.append(obj)
+# JOIN semua jadi 1 mesh, lalu miringkan diagonal sbg rigid body
+for o in bpy.data.objects: o.select_set(False)
+for p in parts: p.select_set(True)
+bpy.context.view_layer.objects.active = parts[0]
+bpy.ops.object.join()
+sw = bpy.context.active_object
+sw.rotation_euler = (0, math.radians(26), 0)
 '''
 
 # Builder per crop: kode bpy yang membuat objek "obj" lalu set material.
@@ -181,24 +204,32 @@ WEAPONS = {
 }
 
 def _fish(body_rgb, accent_rgb):
+    # Body + ekor + sirip + mata, semua DI-JOIN jadi satu mesh (sirip nempel).
     return f'''
 import math
-# badan ikan (lonjong sepanjang X)
-bpy.ops.mesh.primitive_uv_sphere_add(radius=0.5, location=(0,0,0.45))
-obj=bpy.context.active_object; obj.scale=(0.62,0.30,0.34)
-''' + mat('fish_body', body_rgb, rough=0.45) + '''
-# ekor (kipas di -X)
-bpy.ops.mesh.primitive_cone_add(radius1=0.26, radius2=0.0, depth=0.34, location=(-0.62,0,0.45))
-obj=bpy.context.active_object; obj.rotation_euler=(0,math.radians(-90),0); obj.scale=(1,0.18,1)
+parts=[]
+# badan ikan (lonjong sepanjang X, profil menghadap kamera -Y)
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.5, location=(0,0,0.46)); obj=bpy.context.active_object; obj.scale=(0.6,0.30,0.36); bpy.ops.object.shade_smooth()
+''' + mat('fish_body', body_rgb, rough=0.42) + '''
+parts.append(obj)
+# ekor: kipas, base lebar di -X, apex ke badan
+bpy.ops.mesh.primitive_cone_add(radius1=0.3, radius2=0.0, depth=0.32, location=(-0.46,0,0.46)); obj=bpy.context.active_object; obj.rotation_euler=(0,math.radians(90),0); obj.scale=(1,0.16,1)
 ''' + mat('fish_tail', accent_rgb, rough=0.5) + '''
-# sirip punggung
-bpy.ops.mesh.primitive_cone_add(radius1=0.16, radius2=0.0, depth=0.3, location=(0.0,0,0.78))
-obj=bpy.context.active_object; obj.scale=(1,0.12,1)
+parts.append(obj)
+# sirip punggung (di atas badan, base nempel)
+bpy.ops.mesh.primitive_cone_add(radius1=0.18, radius2=0.0, depth=0.26, location=(0.02,0,0.66)); obj=bpy.context.active_object; obj.scale=(1,0.1,1)
 ''' + mat('fish_fin', accent_rgb, rough=0.5) + '''
-# mata
-bpy.ops.mesh.primitive_uv_sphere_add(radius=0.06, location=(0.34,0.16,0.55))
-obj=bpy.context.active_object
-''' + mat('fish_eye', (30, 28, 30), rough=0.3)
+parts.append(obj)
+# mata (sisi -Y menghadap kamera)
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.062, location=(0.28,-0.2,0.54)); obj=bpy.context.active_object; bpy.ops.object.shade_smooth()
+''' + mat('fish_eye', (28, 26, 28), rough=0.3) + '''
+parts.append(obj)
+# JOIN jadi satu
+for o in bpy.data.objects: o.select_set(False)
+for p in parts: p.select_set(True)
+bpy.context.view_layer.objects.active = parts[0]
+bpy.ops.object.join()
+'''
 
 
 FISH = {
@@ -249,7 +280,59 @@ for sx in (-0.12,0.12):
 ''' + mat('rm_leg',(210,200,180),rough=0.6),
 }
 
-MODELS = {**CROPS, **WEAPONS, **FISH, **ORGANIC}
+B_ITEMS = {
+ 'wild_herb': '''
+import math
+ml = bpy.data.materials.new('herb'); ml.use_nodes=True
+_h=ml.node_tree.nodes.get('Principled BSDF'); _h.inputs['Base Color'].default_value=(0.35,0.59,0.32,1); _h.inputs['Roughness'].default_value=0.55
+ml2 = bpy.data.materials.new('herb2'); ml2.use_nodes=True
+_h2=ml2.node_tree.nodes.get('Principled BSDF'); _h2.inputs['Base Color'].default_value=(0.30,0.50,0.28,1); _h2.inputs['Roughness'].default_value=0.55
+# daun memanjang menyebar dari pangkal (kipas)
+for i,a in enumerate((-0.6,-0.3,0.0,0.3,0.6)):
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.5, location=(math.sin(a)*0.22,0,0.42+math.cos(a)*0.16))
+    lf=bpy.context.active_object; lf.scale=(0.07,0.03,0.42); lf.rotation_euler=(0,a,0); bpy.ops.object.shade_smooth()
+    lf.data.materials.append(ml if i%2 else ml2)
+# batang
+bpy.ops.mesh.primitive_cylinder_add(radius=0.04, depth=0.3, location=(0,0,0.12)); obj=bpy.context.active_object
+''' + mat('herb_stem',(120,98,60),rough=0.7),
+
+ 'obor': '''
+# gagang kayu
+bpy.ops.mesh.primitive_cylinder_add(radius=0.075, depth=0.8, location=(0,0,0.35))
+obj=bpy.context.active_object
+''' + mat('obor_kayu',(140,100,60),rough=0.75) + '''
+# kain di ujung
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.14, location=(0,0,0.78)); obj=bpy.context.active_object; obj.scale=(1,1,0.8)
+''' + mat('obor_kain',(86,70,54),rough=0.8) + '''
+# api luar (oranye menyala) — base color fiery + emission tinggi
+bpy.ops.mesh.primitive_cone_add(radius1=0.26, radius2=0.0, depth=0.62, location=(0,0,1.18))
+obj=bpy.context.active_object; bpy.ops.object.shade_smooth()
+''' + emat('api_luar',(235,104,34),strength=1.15,rough=0.4) + '''
+# api dalam (kuning lebih terang)
+bpy.ops.mesh.primitive_cone_add(radius1=0.13, radius2=0.0, depth=0.42, location=(0,0,1.06))
+obj=bpy.context.active_object; bpy.ops.object.shade_smooth()
+''' + emat('api_dalam',(255,214,96),strength=1.7,rough=0.4),
+
+ 'mandrake': '''
+import math
+# umbi utama lonjong
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.42, location=(0,0,0.5)); obj=bpy.context.active_object; obj.scale=(0.82,0.72,0.95); bpy.ops.object.shade_smooth()
+''' + mat('mand_body',(168,128,86),rough=0.7) + '''
+# dua akar kaki bawah
+for sx in (-0.13,0.14):
+    bpy.ops.mesh.primitive_cone_add(radius1=0.12, radius2=0.0, depth=0.34, location=(sx,0,0.12))
+    rt=bpy.context.active_object; rt.rotation_euler=(0,(0.5 if sx>0 else -0.5),math.pi); obj=rt
+''' + mat('mand_root',(150,112,72),rough=0.75) + '''
+# daun hijau di atas (kipas kecil)
+mg = bpy.data.materials.new('mleaf'); mg.use_nodes=True
+_mg=mg.node_tree.nodes.get('Principled BSDF'); _mg.inputs['Base Color'].default_value=(0.36,0.55,0.30,1); _mg.inputs['Roughness'].default_value=0.6
+for a in (-0.5,-0.2,0.2,0.5):
+    bpy.ops.mesh.primitive_cone_add(radius1=0.07, radius2=0.0, depth=0.4, location=(math.sin(a)*0.12,0,0.92+math.cos(a)*0.1))
+    lf=bpy.context.active_object; lf.rotation_euler=(0,a,0); lf.data.materials.append(mg)
+''',
+}
+
+MODELS = {**CROPS, **WEAPONS, **FISH, **ORGANIC, **B_ITEMS}
 
 
 def render_item(item):

@@ -54,7 +54,7 @@ bpy.ops.mesh.primitive_cube_add(size=1, location=(0,0,0.06))
 inset = bpy.context.active_object; inset.scale=(0.80,0.80,0.06)
 bpy.ops.object.modifier_add(type='BEVEL')
 bv2 = inset.modifiers['Bevel']; bv2.width=0.035; bv2.segments=4
-matn(inset, (0.075,0.062,0.052), 0.95, 0.0)  # parchment gelap pekat
+matn(inset, (0.042,0.036,0.030), 0.97, 0.0)  # parchment near-black (kontras teks)
 
 # Kamera TOP-DOWN ortho
 cam_d = bpy.data.cameras.new('Cam'); cam_d.type='ORTHO'; cam_d.ortho_scale=2.05

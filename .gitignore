@@ -36,3 +36,6 @@ Thumbs.db
 
 # Folder export model legacy (di-regenerasi runtime; kanonik = assets/models/)
 /game/assets/
+
+tools/cap_*.png
+tools/vm_*.png

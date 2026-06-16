@@ -245,9 +245,8 @@ def scatter_obj_props(world, scene, specs, count, seed=0, avoid=2, floor=None):
             Scene berlantai lain (mis. kuburan = D) cukup oper floor=D.
     """
     from game.config import TILE_SIZE as _TS, GROUND_H as _GH, G as _G
-    from ursina import Entity
     try:
-        from game.entities import load_model_file
+        from game.entities import make_obj_entity
     except Exception:
         return
     allowed = (floor,) if (floor is not None and not isinstance(floor, (tuple, list, set))) \
@@ -275,12 +274,10 @@ def scatter_obj_props(world, scene, specs, count, seed=0, avoid=2, floor=None):
             continue
         used.add((tx, ty))
         name, sc = specs[placed % len(specs)]
-        mdl = load_model_file(name)
         placed += 1
-        if not mdl:
-            continue
-        world._obj_ents.append(Entity(model=mdl, position=(tx * _TS, _GH, ty * _TS),
-                                      scale=sc, rotation=(0, i % 360, 0)))
+        e = make_obj_entity(name, (tx * _TS, _GH, ty * _TS), scale=sc, rot_y=i % 360)
+        if e is not None:
+            world._obj_ents.append(e)
 
 
 # ─── OBJEK KECIL ─────────────────────────────────────────────────────────────

@@ -173,9 +173,8 @@ def town_builder(world):
     default_prop_builder(world, world.scene_obj)
 
     from game.config import TILE_SIZE as TS, GROUND_H
-    from ursina import Entity
     try:
-        from game.entities import load_model_file
+        from game.entities import make_obj_entity
     except Exception:
         return
 
@@ -195,9 +194,6 @@ def town_builder(world):
         ('pohon_bambu',     28, 18, 1.2, 0),
     ]
     for name, tx, ty, sc, ry in VILLAGE:
-        mdl = load_model_file(name)
-        if not mdl:
-            continue
-        world._obj_ents.append(
-            Entity(model=mdl, position=(tx * TS, GROUND_H, ty * TS),
-                   scale=sc, rotation=(0, ry, 0)))
+        e = make_obj_entity(name, (tx * TS, GROUND_H, ty * TS), scale=sc, rot_y=ry)
+        if e is not None:
+            world._obj_ents.append(e)

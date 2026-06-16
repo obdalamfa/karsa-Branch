@@ -86,7 +86,7 @@ def farm_builder(world):
     from game.config import TILE_SIZE as TS, GROUND_H
     from ursina import Entity
     try:
-        from game.entities import load_model_file
+        from game.entities import load_model_file, make_obj_entity
     except Exception:
         return
 
@@ -105,12 +105,9 @@ def farm_builder(world):
         ('mob_jago',         16, 8,  1.0, -20),  # ayam jantan berkokok dekat kandang
     ]
     for name, tx, ty, sc, ry in DRESSING:
-        mdl = load_model_file(name)
-        if not mdl:
-            continue
-        e = Entity(model=mdl, position=(tx * TS, GROUND_H, ty * TS),
-                   scale=sc, rotation=(0, ry, 0))
-        world._obj_ents.append(e)
+        e = make_obj_entity(name, (tx * TS, GROUND_H, ty * TS), scale=sc, rot_y=ry)
+        if e is not None:
+            world._obj_ents.append(e)
 
     # ── Peti Kirim (shipping bin) — dekat rumah, ditandai krat + papan kuning ──
     from game.config import SHIP_BIN_TILE

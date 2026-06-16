@@ -19,6 +19,12 @@ GH = GROUND_H
 _MODELS_DIR = Path(__file__).resolve().parent.parent / 'assets' / 'models'
 _ASSET_DIR = Path(__file__).resolve().parent.parent / 'assets' / 'textures'
 
+# Model yang diekspor Z-up (ketinggian di sumbu Z) → tergeletak di engine Y-up.
+# Diputar -90° pitch saat dimuat agar berdiri tegak. (Diukur dari bbox .obj.)
+Z_UP_MODELS = {
+    'sumur', 'rumah_joglo', 'lantern', 'pagar_bambu', 'pohon_bambu', 'prop_gerobak',
+}
+
 _MODEL_CACHE: dict = {}
 _TEX_CACHE: dict = {}
 
@@ -201,6 +207,19 @@ def load_model_file(name: str):
         logging.warning(f"Failed to load model '{name}': {e}")
         _MODEL_CACHE[name] = None
         return None
+
+
+def make_obj_entity(name, position, scale=1.0, rot_y=0.0):
+    """Buat Entity prop dari model .obj dgn koreksi orientasi otomatis.
+    Model Z-up (lihat Z_UP_MODELS) diputar -90° pitch agar berdiri tegak di
+    engine Y-up. Return Entity atau None bila model tak ada."""
+    from ursina import Entity
+    mdl = load_model_file(name)
+    if not mdl:
+        return None
+    rx = -90 if name in Z_UP_MODELS else 0
+    return Entity(model=mdl, position=position, scale=scale, rotation=(rx, rot_y, 0))
+
 
 NPC_APPEARANCES = {
     'arya': ['mabd000_sw__default.apr', 'mahd001_romeo.apr'],

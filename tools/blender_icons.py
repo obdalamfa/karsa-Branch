@@ -420,7 +420,45 @@ bpy.ops.mesh.primitive_cylinder_add(radius=0.025, depth=0.7, location=(0.2,0.18,
  'fragmen_prasasti_3': _prasasti(2),
 }
 
-MODELS = {**CROPS, **WEAPONS, **FISH, **ORGANIC, **B_ITEMS, **EXTRA}
+EXTRA2 = {
+ 'air_keabadian': '''
+import math
+# badan botol = cairan bercahaya cyan (botol 'penuh')
+bpy.ops.mesh.primitive_cylinder_add(radius=0.22, depth=0.46, location=(0,0,0.34)); obj=bpy.context.active_object; bpy.ops.object.shade_smooth()
+bpy.ops.object.modifier_add(type='BEVEL'); obj.modifiers['Bevel'].width=0.04; obj.modifiers['Bevel'].segments=3
+''' + emat('air_cairan',(58,196,224),strength=1.9,rough=0.2) + '''
+# bahu botol (taper) - kerucut pendek pucat glossy
+bpy.ops.mesh.primitive_cone_add(radius1=0.22, radius2=0.09, depth=0.14, location=(0,0,0.64)); obj=bpy.context.active_object; bpy.ops.object.shade_smooth()
+''' + emat('air_bahu',(80,200,224),strength=1.4,rough=0.15) + '''
+# leher kaca pucat
+bpy.ops.mesh.primitive_cylinder_add(radius=0.085, depth=0.16, location=(0,0,0.78)); obj=bpy.context.active_object
+''' + mat('air_leher',(188,216,222),rough=0.12) + '''
+# sumbat gabus
+bpy.ops.mesh.primitive_cylinder_add(radius=0.1, depth=0.1, location=(0,0,0.9)); obj=bpy.context.active_object
+''' + mat('air_gabus',(150,112,72),rough=0.7),
+
+ 'peta_mimpi_maya': '''
+import math
+# lembar peta (kertas krem) - cube pipih sedikit miring
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0,0,0.42)); obj=bpy.context.active_object; obj.scale=(0.52,0.40,0.03); obj.rotation_euler=(math.radians(-14),0,math.radians(6))
+''' + mat('peta_kertas',(222,206,168),rough=0.85) + '''
+# garis peta (jejak ungu mistis) + rute
+mp = bpy.data.materials.new('peta_garis'); mp.use_nodes=True
+_p=mp.node_tree.nodes.get('Principled BSDF'); _p.inputs['Base Color'].default_value=(0.42,0.30,0.52,1); _p.inputs['Roughness'].default_value=0.7
+import math as _m
+for (gx,gy,sx,sy) in [(-0.1,0.08,0.34,0.014),(0.06,-0.05,0.26,0.014),(0.0,0.0,0.014,0.3)]:
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(gx,gy,0.45)); g=bpy.context.active_object; g.scale=(sx,sy,0.012); g.rotation_euler=(math.radians(-14),0,math.radians(6)); g.data.materials.append(mp)
+# titik tujuan (bercahaya)
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.05, location=(0.16,-0.12,0.48)); obj=bpy.context.active_object
+''' + emat('peta_titik',(150,110,210),strength=1.0,rough=0.4) + '''
+# dua gulungan di sisi (silinder krem sepanjang Y)
+for gx in (-0.56,0.56):
+    bpy.ops.mesh.primitive_cylinder_add(radius=0.1, depth=0.92, location=(gx,0,0.42)); r=bpy.context.active_object; r.rotation_euler=(math.radians(90+(-14)),0,math.radians(6)); bpy.ops.object.shade_smooth()
+    r.data.materials.append(bpy.data.materials.get('peta_kertas'))
+''',
+}
+
+MODELS = {**CROPS, **WEAPONS, **FISH, **ORGANIC, **B_ITEMS, **EXTRA, **EXTRA2}
 
 
 def render_item(item):

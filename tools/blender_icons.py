@@ -206,7 +206,50 @@ FISH = {
     'ikan_legendaris': _fish((222, 186, 92), (200, 150, 70)),
 }
 
-MODELS = {**CROPS, **WEAPONS, **FISH}
+ORGANIC = {
+ 'mutiara': '''
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.46, location=(0,0,0.5))
+obj=bpy.context.active_object
+bpy.ops.object.shade_smooth()
+''' + mat('mutiara', (236, 232, 226), rough=0.12) + '''
+# alas cangkang abu di bawah
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.5, location=(0,0,0.18))
+obj=bpy.context.active_object; obj.scale=(1.1,1.1,0.32)
+''' + mat('cangkang', (150, 150, 156), rough=0.5),
+
+ 'mithril': '''
+bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=0.5, location=(0,0,0.55))
+obj=bpy.context.active_object; obj.scale=(0.7,0.7,1.0); bpy.ops.object.shade_flat()
+''' + mat('mithril', (158, 200, 214), rough=0.18, metallic=0.4) + '''
+# batu dasar gelap
+bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=0.36, location=(0.05,0,0.18))
+obj=bpy.context.active_object; obj.scale=(1.1,1.1,0.5); bpy.ops.object.shade_flat()
+''' + mat('mithril_rock', (96, 100, 104), rough=0.7),
+
+ 'wild_berry': '''
+import math as _m
+mb = bpy.data.materials.new('berry'); mb.use_nodes=True
+_bb=mb.node_tree.nodes.get('Principled BSDF'); _bb.inputs['Base Color'].default_value=(0.55,0.24,0.36,1); _bb.inputs['Roughness'].default_value=0.35
+for dx,dy,dz in [(-0.18,0,0.4),(0.18,0,0.4),(0,0.16,0.4),(0,-0.05,0.62),(-0.02,0,0.2)]:
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.2, location=(dx,dy,dz)); bpy.ops.object.shade_smooth()
+    bpy.context.active_object.data.materials.append(mb)
+bpy.ops.mesh.primitive_cone_add(radius1=0.14,radius2=0.0,depth=0.3,location=(0.1,0,0.8)); obj=bpy.context.active_object; obj.rotation_euler=(0.3,0.4,0)
+''' + mat('berry_leaf',(95,160,82)),
+
+ 'running_mushroom': '''
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.5, location=(0,0,0.62))
+obj=bpy.context.active_object; obj.scale=(0.62,0.62,0.45); bpy.ops.object.shade_smooth()
+''' + mat('rm_cap',(196,92,84),rough=0.45) + '''
+bpy.ops.mesh.primitive_cylinder_add(radius=0.17, depth=0.42, location=(0,0,0.32))
+obj=bpy.context.active_object
+''' + mat('rm_stem',(228,216,196),rough=0.6) + '''
+for sx in (-0.12,0.12):
+    bpy.ops.mesh.primitive_cylinder_add(radius=0.05, depth=0.22, location=(sx,0.0,0.06))
+    lg=bpy.context.active_object; lg.rotation_euler=(0,0.4 if sx>0 else -0.4,0); obj=lg
+''' + mat('rm_leg',(210,200,180),rough=0.6),
+}
+
+MODELS = {**CROPS, **WEAPONS, **FISH, **ORGANIC}
 
 
 def render_item(item):

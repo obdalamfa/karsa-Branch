@@ -56,14 +56,45 @@ print('SETUP ok engine=' + sc.render.engine)
 '''
 
 
-def mat(name, rgb, rough=0.6):
+def mat(name, rgb, rough=0.6, metallic=0.0):
     r, g, b = [c / 255.0 for c in rgb]
     return f'''
 m = bpy.data.materials.new("{name}"); m.use_nodes = True
 bsdf = m.node_tree.nodes.get('Principled BSDF')
 bsdf.inputs['Base Color'].default_value = ({r:.3f}, {g:.3f}, {b:.3f}, 1)
 bsdf.inputs['Roughness'].default_value = {rough}
+bsdf.inputs['Metallic'].default_value = {metallic}
 obj.data.materials.append(m)
+'''
+
+
+def _sword(blade_rgb, metallic, grip_rgb=(96, 64, 40)):
+    # Pedang diagonal (ujung kanan-atas), bilah + guard + grip + pommel.
+    return f'''
+import math
+# bilah
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0,0,0.35))
+obj=bpy.context.active_object; obj.scale=(0.05,0.012,0.5)
+''' + mat('blade', blade_rgb, rough=(0.25 if metallic else 0.6), metallic=metallic) + '''
+# ujung bilah (lancip)
+bpy.ops.mesh.primitive_cone_add(radius1=0.05, radius2=0.0, depth=0.18, location=(0,0,0.94))
+obj=bpy.context.active_object
+''' + mat('tip', blade_rgb, rough=(0.25 if metallic else 0.6), metallic=metallic) + f'''
+# guard (melintang)
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0,0,-0.18))
+obj=bpy.context.active_object; obj.scale=(0.22,0.05,0.04)
+''' + mat('guard', (90, 78, 60), rough=0.4, metallic=metallic) + f'''
+# grip
+bpy.ops.mesh.primitive_cylinder_add(radius=0.045, depth=0.3, location=(0,0,-0.36))
+obj=bpy.context.active_object
+''' + mat('grip', grip_rgb, rough=0.7) + '''
+# pommel
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.07, location=(0,0,-0.52))
+obj=bpy.context.active_object
+''' + mat('pommel', (90, 78, 60), rough=0.4, metallic=metallic) + '''
+# miringkan seluruh pedang biar diagonal dinamis
+for o in bpy.data.objects:
+    if o.type=='MESH': o.rotation_euler=(0,math.radians(28),0)
 '''
 
 # Builder per crop: kode bpy yang membuat objek "obj" lalu set material.
@@ -142,8 +173,44 @@ st=bpy.context.active_object; obj=st
 }
 
 
+WEAPONS = {
+    'sword_kayu':    _sword((170, 135, 90), 0.0, grip_rgb=(120, 88, 52)),
+    'sword_besi':    _sword((178, 186, 198), 1.0),
+    'sword_emas':    _sword((214, 182, 92), 1.0, grip_rgb=(120, 60, 48)),
+    'sword_mithril': _sword((158, 200, 214), 1.0),
+}
+
+def _fish(body_rgb, accent_rgb):
+    return f'''
+import math
+# badan ikan (lonjong sepanjang X)
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.5, location=(0,0,0.45))
+obj=bpy.context.active_object; obj.scale=(0.62,0.30,0.34)
+''' + mat('fish_body', body_rgb, rough=0.45) + '''
+# ekor (kipas di -X)
+bpy.ops.mesh.primitive_cone_add(radius1=0.26, radius2=0.0, depth=0.34, location=(-0.62,0,0.45))
+obj=bpy.context.active_object; obj.rotation_euler=(0,math.radians(-90),0); obj.scale=(1,0.18,1)
+''' + mat('fish_tail', accent_rgb, rough=0.5) + '''
+# sirip punggung
+bpy.ops.mesh.primitive_cone_add(radius1=0.16, radius2=0.0, depth=0.3, location=(0.0,0,0.78))
+obj=bpy.context.active_object; obj.scale=(1,0.12,1)
+''' + mat('fish_fin', accent_rgb, rough=0.5) + '''
+# mata
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.06, location=(0.34,0.16,0.55))
+obj=bpy.context.active_object
+''' + mat('fish_eye', (30, 28, 30), rough=0.3)
+
+
+FISH = {
+    'ikan_laut':       _fish((120, 150, 170), (96, 124, 145)),
+    'ikan_legendaris': _fish((222, 186, 92), (200, 150, 70)),
+}
+
+MODELS = {**CROPS, **WEAPONS, **FISH}
+
+
 def render_item(item):
-    body = CROPS.get(item)
+    body = MODELS.get(item)
     if not body:
         print('skip (no builder):', item); return
     path = f'{OUTDIR}/{item}.png'
@@ -163,7 +230,7 @@ print("RENDERED {item}")
 
 if __name__ == '__main__':
     print(run(SETUP))
-    items = sys.argv[1:] or list(CROPS.keys())
+    items = sys.argv[1:] or list(MODELS.keys())
     for it in items:
         render_item(it)
     print('DONE ->', OUTDIR)

@@ -62,7 +62,17 @@ def build_lake():
     m[7][4]  = LN
     m[8][6]  = LN
 
-    return Scene('lake', 'Danau Karsa', m, portals=[
+    return Scene('lake', 'Danau Karsa', m, builder=lake_builder, portals=[
         (0, 7, 'town', 28, 14),
         (0, 8, 'town', 28, 15),
     ])
+
+
+def lake_builder(world):
+    """Tepian danau: rumpun bambu, lentera dermaga, peti & jerami nelayan (M2)."""
+    from .props import default_prop_builder, scatter_obj_props
+    default_prop_builder(world, world.scene_obj)
+    scatter_obj_props(world, world.scene_obj, [
+        ('pohon_bambu', 1.3), ('lantern', 2.2),
+        ('prop_peti_sayur', 1.0), ('prop_jerami', 1.0),
+    ], count=10, seed=33)

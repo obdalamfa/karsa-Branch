@@ -233,6 +233,56 @@ def build_dead_tree(world, wx, wz):
     world._obj_ents.extend([trunk, branch_l, branch_r])
 
 
+# ─── SEBAR PROPS OBJ (dressing aman lintas-scene, M2) ─────────────────────────
+
+def scatter_obj_props(world, scene, specs, count, seed=0, avoid=2, floor=None):
+    """Sebar model .obj di tile lantai kosong yang walkable & jauh dari portal.
+
+    specs : list (model_name, scale). Penempatan deterministik (LCG) supaya
+            konsisten tiap boot & tak menimpa portal/jalur. Aman: kalau model
+            tak ada atau tak ada tile kosong, fungsi diam saja.
+    floor : tile (atau tuple tile) yang dianggap lantai kosong; default G (rumput).
+            Scene berlantai lain (mis. kuburan = D) cukup oper floor=D.
+    """
+    from game.config import TILE_SIZE as _TS, GROUND_H as _GH, G as _G
+    from ursina import Entity
+    try:
+        from game.entities import load_model_file
+    except Exception:
+        return
+    allowed = (floor,) if (floor is not None and not isinstance(floor, (tuple, list, set))) \
+        else (tuple(floor) if floor is not None else (_G,))
+    portals = {(p[0], p[1]) for p in getattr(scene, 'portals', [])}
+    cands = []
+    for ty in range(1, scene.h - 1):
+        for tx in range(1, scene.w - 1):
+            if scene.tiles[ty][tx] not in allowed:
+                continue
+            if any(abs(tx - px) <= avoid and abs(ty - py) <= avoid for (px, py) in portals):
+                continue
+            cands.append((tx, ty))
+    if not cands:
+        return
+    placed = 0
+    i = seed * 7 + 3
+    used = set()
+    guard = 0
+    while placed < count and guard < count * 40:
+        guard += 1
+        i = (i * 1103515245 + 12345) & 0x7fffffff
+        tx, ty = cands[i % len(cands)]
+        if (tx, ty) in used:
+            continue
+        used.add((tx, ty))
+        name, sc = specs[placed % len(specs)]
+        mdl = load_model_file(name)
+        placed += 1
+        if not mdl:
+            continue
+        world._obj_ents.append(Entity(model=mdl, position=(tx * _TS, _GH, ty * _TS),
+                                      scale=sc, rotation=(0, i % 360, 0)))
+
+
 # ─── OBJEK KECIL ─────────────────────────────────────────────────────────────
 
 def build_lantern(world, wx, wz):
@@ -1582,6 +1632,57 @@ def default_prop_builder(world, scene):
             elif tid in (ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS):
                 ore_tex = OBJ_TEX.get(tid, 'crystal')
                 build_ore(world, wx, wz, ore_tex)
+
+    _build_portal_signs(world, scene)
+
+
+# ─── PAPAN PETUNJUK PORTAL (ROADMAP M1) ──────────────────────────────────────
+
+def build_signpost(world, wx, wz, text):
+    """Papan petunjuk kayu dengan label arah — dibaca dari kejauhan.
+    PENTING: Text wajib di-parent ke entity dunia (anchor) — tanpa parent,
+    Ursina menaruh Text di camera.ui (membanjiri layar)."""
+    from ursina import Entity as _E, Text
+    pole = world._create_entity('cylinder',
+              (wx, OBJ_H * 0.5 + GROUND_H, wz),
+              (0.09, OBJ_H, 0.09), 'wood_plank', C_WOOD_OLD)
+    board = world._create_entity('cube',
+              (wx, OBJ_H * 0.95 + GROUND_H, wz),
+              (TS * 0.72, TS * 0.26, 0.07), 'wood_plank', color.rgb(98, 78, 52))
+    anchor = _E(position=(wx, OBJ_H * 1.40 + GROUND_H, wz))
+    lbl = Text(text, parent=anchor, billboard=True, scale=6, origin=(0, 0),
+               color=color.rgb(235, 220, 180), background=True)
+    world._obj_ents.extend([pole, board, anchor, lbl])
+
+
+_SIGN_OUTDOOR = {'farm', 'town', 'beach', 'lake', 'mountain'}
+
+def _build_portal_signs(world, scene):
+    """Auto-pasang papan '→ Tujuan' di samping tiap portal scene outdoor."""
+    if getattr(scene, 'name', '') not in _SIGN_OUTDOOR:
+        return
+    try:
+        from . import SCENES
+    except Exception:
+        SCENES = {}
+    seen = set()
+    for portal in (getattr(scene, 'portals', None) or []):
+        try:
+            px, py, dest = portal[0], portal[1], portal[2]
+        except Exception:
+            continue
+        if dest in seen:
+            continue
+        seen.add(dest)
+        disp = dest.title()
+        sc_dest = SCENES.get(dest) if isinstance(SCENES, dict) else None
+        if sc_dest is not None and getattr(sc_dest, 'display', None):
+            disp = sc_dest.display
+        # geser 1 tile ke dalam peta dari tepi + 1 tile menyamping dari jalur
+        ox = 1 if px <= 1 else (-1 if px >= scene.w - 2 else 1)
+        oy = 1 if py <= 1 else (-1 if py >= scene.h - 2 else 0)
+        build_signpost(world, (px + ox) * TS, (py + oy) * TS, f"> {disp}")
+
 
 # ─── BLENDER-EXPORTED .OBJ PROPS ─────────────────────────────────────────────
 # Assets diekspor dari Blender ke game/assets/models/, siap pakai di Ursina.

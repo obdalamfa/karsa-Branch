@@ -66,7 +66,16 @@ def build_cemetery():
     m[6][2]  = DEBRIS
     m[14][15]= DEBRIS
 
-    return Scene('cemetery', 'Kuburan Tua', m, portals=[
+    return Scene('cemetery', 'Kuburan Tua', m, builder=cemetery_builder, portals=[
         (8, 0, 'mountain', 2, 23),
         (9, 0, 'mountain', 2, 23),
     ])
+
+
+def cemetery_builder(world):
+    """Kuburan tua: pohon mati, lentera redup, & pagar bambu reot (M2)."""
+    from .props import default_prop_builder, scatter_obj_props
+    default_prop_builder(world, world.scene_obj)
+    scatter_obj_props(world, world.scene_obj, [
+        ('pohon_mati', 1.1), ('lantern', 2.0), ('pagar_bambu', 1.0),
+    ], count=11, seed=47, floor=D)

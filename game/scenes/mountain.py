@@ -62,10 +62,20 @@ def build_mountain():
     m[12][16] = LN
     m[18][13] = LN
 
-    return Scene('mountain', 'Lereng Gunung', m, portals=[
+    return Scene('mountain', 'Lereng Gunung', m, builder=mountain_builder, portals=[
         (14, 24, 'town',      14,  1),
         (15, 24, 'town',      15,  1),
         (14,  3, 'naga_cave',  7,  9),
         (15,  3, 'naga_cave',  7,  9),
         (2,  24, 'cemetery',   8,  1),
     ])
+
+
+def mountain_builder(world):
+    """Lereng gunung: rumpun bambu, pohon mati, & batu/karung tersebar (M2)."""
+    from .props import default_prop_builder, scatter_obj_props
+    default_prop_builder(world, world.scene_obj)
+    scatter_obj_props(world, world.scene_obj, [
+        ('pohon_bambu', 1.4), ('pohon_mati', 1.0),
+        ('prop_karung', 0.9), ('pagar_bambu', 1.0),
+    ], count=12, seed=21)

@@ -267,5 +267,29 @@ for _it in ('lobak', 'wortel', 'jamur', 'susu', 'telur', 'wol', 'kayu', 'besi', 
 assert _icon_hits >= 8, f"ikon item tak termuat ({_icon_hits}/9)"
 print(f"[OK] Ikon item: {_icon_hits}/9 PNG termuat sebagai tekstur inventory")
 
+# ── Dressing props obj scene baru (M2): mountain/lake/cemetery ──
+# scatter_obj_props menempatkan model di tile lantai kosong jauh dari portal.
+from game.scenes import props as _props
+import game.entities as _ent
+_orig_lmf = _ent.load_model_file
+_ent.load_model_file = lambda n: ('MDL_' + n)          # stub: model selalu "ada"
+_props_default = _props.default_prop_builder
+_props.default_prop_builder = lambda world, scene: None  # isolasi scatter
+class _StubW:
+    def __init__(self, scn): self._obj_ents = []; self.scene_obj = scn
+    def _create_entity(self, *a, **k): return object()
+from game.scenes.mountain import mountain_builder, build_mountain
+from game.scenes.lake import lake_builder, build_lake
+from game.scenes.cemetery import cemetery_builder, build_cemetery
+for _nm, _bld, _build in (('mountain', mountain_builder, build_mountain),
+                          ('lake', lake_builder, build_lake),
+                          ('cemetery', cemetery_builder, build_cemetery)):
+    _w = _StubW(_build())
+    _bld(_w)
+    assert len(_w._obj_ents) >= 8, f"dressing {_nm} terlalu sedikit ({len(_w._obj_ents)})"
+    print(f"[OK] Dressing {_nm}: scatter menempatkan {len(_w._obj_ents)} props")
+_ent.load_model_file = _orig_lmf
+_props.default_prop_builder = _props_default
+
 print("SMOKE BOOT PASS")
 os._exit(0)

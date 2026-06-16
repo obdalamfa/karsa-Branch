@@ -15,7 +15,7 @@
 | Milestone | Progres | Catatan |
 |---|---|---|
 | **M1** Lima Menit Pertama | **~90%** | judul/intro/tutorial/tracker/prompt/signpost ADA & lulus smoke_boot |
-| **M2** Tampilan | **~60%** | skybox+lighting+cuaca ADA; sisa: dress props→tile, tekstur interior |
+| **M2** Tampilan | **~80%** | skybox+lighting+cuaca + dressing obj (farm/town/beach/greenhouse + **mountain/lake/cemetery via scatter aman**) ADA; sisa: tekstur interior |
 | **M3** HUD & UX | **~95%** | HUD Disco + needs + Majelis Batin + menu Jeda berlapis (Simpan/Muat 3 slot + Pengaturan) + ikon item (18 PNG) + **skin panel chrome TSO** ADA; tinggal polish opsional |
 | **M4** Gameplay core | **~55%** | crafting+laut, upgrade alat, **tani Sakuna mendalam** ADA; sisa: shipping bin, ternak produktif, balance, audit quest |
 | **M5** Animasi & kehidupan | **~90%** | walk mesh-swap + pose aksi + **jadwal NPC per-jam** + ambient kupu/kunang + **telegraph & death anim mob** ADA; sisa: 4-frame walk (Blender batch) |
@@ -57,8 +57,9 @@
 ## M2 — TAMPILAN (identitas visual terkunci)
 - [x] Skybox gradient (SkyDome) + transisi warna siang-malam
 - [x] Lighting rig siang/malam (ambient+sun lerp; tint per fase)
-- [ ] Scene dressing: wire props farming ke tile system (kandang, gerobak,
-      scarecrow, jerami, peti — tile baru di config + builder di props.py) ← SISA UTAMA
+- [x] Scene dressing: props farming ke tile (kandang/gerobak/scarecrow/jerami/peti via
+      farm_builder) + **scatter_obj_props aman** (mountain/lake/cemetery: bambu, pohon mati,
+      lentera, pagar — hanya di tile lantai kosong jauh dari portal, deterministik)
 - [ ] Interior: lantai/dinding bertekstur (kandidat: aset TSO housedata)
 - [x] Polish cuaca: hujan/salju/angin/kabut konsisten
 **DoD:** screenshot 6 scene utama layak jadi material itch.io.

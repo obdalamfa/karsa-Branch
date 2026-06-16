@@ -83,6 +83,14 @@ def capture(scene_name):
         except Exception as e:
             print('dungeon gen skip:', e)
     state.scene_name = scene_name
+    # CAP_HOUR: set jam + perbarui jadwal NPC supaya mob malam (genderuwo dll) muncul
+    _hr = os.environ.get('CAP_HOUR')
+    if _hr:
+        state.time_minutes = float(_hr) * 60
+        try:
+            ents._update_npc_schedules()
+        except Exception as e:
+            print('sched update skip:', e)
     world.load_scene(scene_name)
     ents.load_scene(scene_name)
     _sync_light()

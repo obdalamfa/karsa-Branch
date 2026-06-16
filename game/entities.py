@@ -410,7 +410,11 @@ class EntitiesManager:
         s = self.state
         hour = s.get_hour()
         for npc_id in all_npcs():
-            sched = SCHEDULES.get(npc_id, [])
+            # Urutkan menaik per jam: logika 'pilih entri terakhir <= jam' di bawah
+            # mengasumsikan urutan menaik. Jadwal kreatur malam sering tak urut
+            # (mis. genderuwo [(0,hidden),(19,mountain),(5,hidden)]) → tanpa sort,
+            # entri (5,hidden) salah terpilih saat malam → mob tak pernah muncul.
+            sched = sorted(SCHEDULES.get(npc_id, []), key=lambda e: e[0])
             if not sched: continue
             current = sched[0]
             for entry in sched:

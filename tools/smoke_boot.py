@@ -260,12 +260,12 @@ for _s in (1, 2):
     except Exception: pass
 
 # ── Ikon item inventory (M3) — PNG prosedural termuat sbg tekstur ──
-_icon_hits = 0
-for _it in ('lobak', 'wortel', 'jamur', 'susu', 'telur', 'wol', 'kayu', 'besi', 'kristal'):
-    if game.panels._item_icon_tex(_it) is not None:
-        _icon_hits += 1
-assert _icon_hits >= 8, f"ikon item tak termuat ({_icon_hits}/9)"
-print(f"[OK] Ikon item: {_icon_hits}/9 PNG termuat sebagai tekstur inventory")
+_icon_set = ('lobak', 'wortel', 'jamur', 'susu', 'telur', 'wol', 'kayu', 'besi', 'kristal',
+             'sword_besi', 'jala', 'obor', 'mithril', 'ikan_legendaris', 'mandrake',
+             'firefly', 'buku_paman_arsa', 'surat_paman_arsa_2')
+_icon_hits = sum(1 for _it in _icon_set if game.panels._item_icon_tex(_it) is not None)
+assert _icon_hits >= len(_icon_set) - 1, f"ikon item tak termuat ({_icon_hits}/{len(_icon_set)})"
+print(f"[OK] Ikon item: {_icon_hits}/{len(_icon_set)} PNG termuat sebagai tekstur inventory")
 
 # ── Dressing props obj scene baru (M2): mountain/lake/cemetery ──
 # scatter_obj_props menempatkan model di tile lantai kosong jauh dari portal.

@@ -332,7 +332,95 @@ for a in (-0.5,-0.2,0.2,0.5):
 ''',
 }
 
-MODELS = {**CROPS, **WEAPONS, **FISH, **ORGANIC, **B_ITEMS}
+def _prasasti(seed):
+    # Pecahan batu prasasti — slab pipih + guratan aksara; bentuk beda per seed.
+    import math as _m
+    tilt = [(-8, 0.06), (10, -0.05), (-4, 0.1)][seed % 3]
+    return f'''
+import math
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0,0,0.46)); obj=bpy.context.active_object
+obj.scale=(0.52,0.10,0.6); obj.rotation_euler=(0,math.radians({tilt[0]}),{tilt[1]})
+bpy.ops.object.modifier_add(type='BEVEL'); obj.modifiers['Bevel'].width=0.03; obj.modifiers['Bevel'].segments=2
+''' + mat('prasasti', (150, 146, 138), rough=0.85) + f'''
+# guratan aksara (garis horizontal gelap di muka -Y)
+mg = bpy.data.materials.new('ukir'); mg.use_nodes=True
+_g=mg.node_tree.nodes.get('Principled BSDF'); _g.inputs['Base Color'].default_value=(0.30,0.28,0.25,1); _g.inputs['Roughness'].default_value=0.9
+for i,zz in enumerate(({0.62 if seed%2 else 0.66}, 0.5, 0.38, 0.26)):
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(0,-0.11,zz)); g=bpy.context.active_object
+    g.scale=(0.3 - i*0.03, 0.012, 0.018); g.rotation_euler=(0,math.radians({tilt[0]}),{tilt[1]})
+    g.data.materials.append(mg)
+'''
+
+EXTRA = {
+ 'peti_kayu': '''
+import math
+# badan peti kayu (kubus ber-bevel, tanpa tiang menonjol)
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0,0,0.44)); obj=bpy.context.active_object; obj.scale=(0.46,0.46,0.42)
+bpy.ops.object.modifier_add(type='BEVEL'); obj.modifiers['Bevel'].width=0.035; obj.modifiers['Bevel'].segments=2
+''' + mat('peti_kayu',(150,112,70),rough=0.7) + '''
+# seam papan (alur gelap) di muka -Y dan +X, dalam batas kubus
+md = bpy.data.materials.new('peti_dark'); md.use_nodes=True
+_d=md.node_tree.nodes.get('Principled BSDF'); _d.inputs['Base Color'].default_value=(0.40,0.28,0.16,1); _d.inputs['Roughness'].default_value=0.78
+for zz in (0.58,0.30):                      # 2 alur horizontal
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(0,-0.465,zz)); s=bpy.context.active_object; s.scale=(0.47,0.012,0.025); s.data.materials.append(md)
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(0.465,0,zz)); s=bpy.context.active_object; s.scale=(0.012,0.47,0.025); s.data.materials.append(md)
+# diagonal X-brace di muka -Y
+for ang in (32,-32):
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(0,-0.47,0.44)); b=bpy.context.active_object; b.scale=(0.012,0.012,0.5); b.rotation_euler=(0,math.radians(ang),0); b.data.materials.append(md)
+# lid rim atas (tipis, sebatas kubus)
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0,0,0.86)); r=bpy.context.active_object; r.scale=(0.47,0.47,0.04); r.data.materials.append(md)
+''',
+
+ 'pagar_kayu': '''
+import math
+mw = bpy.data.materials.new('pagar'); mw.use_nodes=True
+_w=mw.node_tree.nodes.get('Principled BSDF'); _w.inputs['Base Color'].default_value=(0.58,0.44,0.28,1); _w.inputs['Roughness'].default_value=0.8
+# 3 tiang vertikal
+for px in (-0.42,0.0,0.42):
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(px,0,0.5)); t=bpy.context.active_object; t.scale=(0.08,0.08,0.62)
+    bpy.ops.object.modifier_add(type='BEVEL'); t.modifiers['Bevel'].width=0.02; t.data.materials.append(mw)
+# 2 palang horizontal
+for pz in (0.34,0.74):
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(0,0,pz)); r=bpy.context.active_object; r.scale=(0.56,0.06,0.06); r.data.materials.append(mw)
+''',
+
+ 'buku_paman_arsa': '''
+import math
+# sampul (coklat-merah)
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0,0,0.4)); obj=bpy.context.active_object; obj.scale=(0.42,0.56,0.09)
+bpy.ops.object.modifier_add(type='BEVEL'); obj.modifiers['Bevel'].width=0.02; obj.modifiers['Bevel'].segments=2
+''' + mat('buku_sampul',(140,78,58),rough=0.6) + '''
+# halaman (krem, sedikit lebih kecil, di antara sampul)
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0.02,0,0.4)); obj=bpy.context.active_object; obj.scale=(0.40,0.52,0.07)
+''' + mat('buku_hal',(226,214,184),rough=0.85) + '''
+# punggung buku (spine, gelap)
+bpy.ops.mesh.primitive_cube_add(size=1, location=(-0.40,0,0.4)); obj=bpy.context.active_object; obj.scale=(0.05,0.57,0.10)
+''' + mat('buku_spine',(98,52,40),rough=0.6) + '''
+# miringkan sedikit utk perspektif dinamis
+for o in bpy.data.objects:
+    if o.type=='MESH': o.rotation_euler=(math.radians(-18),0,math.radians(12))
+''',
+
+ 'perahu': '''
+import math
+# lambung (setengah ellipsoid memanjang)
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.5, location=(0,0,0.42)); obj=bpy.context.active_object
+obj.scale=(0.66,0.30,0.34); bpy.ops.object.shade_smooth()
+''' + mat('perahu_luar',(146,104,64),rough=0.7) + '''
+# rongga dalam (gelap) - sphere lebih kecil di atas garis air
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.5, location=(0,0,0.6)); obj=bpy.context.active_object
+obj.scale=(0.58,0.22,0.3); bpy.ops.object.shade_smooth()
+''' + mat('perahu_dalam',(70,52,36),rough=0.85) + '''
+# dayung
+bpy.ops.mesh.primitive_cylinder_add(radius=0.025, depth=0.7, location=(0.2,0.18,0.62)); obj=bpy.context.active_object; obj.rotation_euler=(math.radians(60),0,math.radians(20))
+''' + mat('dayung',(120,92,58),rough=0.7),
+
+ 'fragmen_prasasti_1': _prasasti(0),
+ 'fragmen_prasasti_2': _prasasti(1),
+ 'fragmen_prasasti_3': _prasasti(2),
+}
+
+MODELS = {**CROPS, **WEAPONS, **FISH, **ORGANIC, **B_ITEMS, **EXTRA}
 
 
 def render_item(item):

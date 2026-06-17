@@ -108,36 +108,46 @@ sph(0.06,1.54, x=0.5, y=-0.05)            # kepala tongkat
 # ─── Build rumah panggung Indonesia: tiang, lantai, dinding, atap limasan ──
 'rumah': '''
 import math
-def box(sx,sy,sz,z,x=0,y=0,rx=0,rz=0):
+def _mat(name,rgb):
+    m=bpy.data.materials.get(name) or bpy.data.materials.new(name); m.use_nodes=True
+    b=m.node_tree.nodes.get('Principled BSDF'); b.inputs['Base Color'].default_value=(rgb[0],rgb[1],rgb[2],1); b.inputs['Roughness'].default_value=0.75
+    return m
+M_WALL=_mat('r_wall',(0.62,0.47,0.30)); M_ROOF=_mat('r_roof',(0.28,0.26,0.25))
+M_WOOD=_mat('r_wood',(0.42,0.30,0.18)); M_GLASS=_mat('r_glass',(0.30,0.40,0.42))
+def box(sx,sy,sz,z,x=0,y=0,rx=0,rz=0,mat=None):
     bpy.ops.mesh.primitive_cube_add(size=1, location=(x,y,z)); o=bpy.context.active_object
-    o.scale=(sx,sy,sz); o.rotation_euler=(rx,0,rz); return o
-def cyl(r,d,z,x=0,y=0):
+    o.scale=(sx,sy,sz); o.rotation_euler=(rx,0,rz)
+    if mat: o.data.materials.append(mat)
+    return o
+def cyl(r,d,z,x=0,y=0,mat=None):
     bpy.ops.mesh.primitive_cylinder_add(radius=r,depth=d,location=(x,y,z)); o=bpy.context.active_object
-    bpy.ops.object.shade_smooth(); return o
-# tiang panggung (6)
-for ix in (-0.62,0,0.62):
-    for iy in (-0.5,0.5):
-        cyl(0.075,1.0,0.5, x=ix, y=iy)
+    bpy.ops.object.shade_smooth()
+    if mat: o.data.materials.append(mat)
+    return o
+# tiang panggung (6) — pendek, kolong rapat
+for ix in (-0.6,0,0.6):
+    for iy in (-0.48,0.48):
+        cyl(0.1,0.55,0.275, x=ix, y=iy, mat=M_WOOD)
 # lantai panggung
-box(0.78,0.66,0.07,1.04)
-# dinding badan rumah
-box(0.7,0.58,0.5,1.55)
+box(0.82,0.7,0.08,0.59, mat=M_WOOD)
+# dinding badan rumah (DUDUK di atas lantai, tanpa celah)
+box(0.74,0.62,0.54,0.9, mat=M_WALL)
 # pintu (muka -Y)
-box(0.16,0.04,0.32,1.42, y=-0.6)
+box(0.17,0.05,0.34,0.83, y=-0.63, mat=M_WOOD)
 # tangga (3 anak) ke pintu
 for i in range(3):
-    box(0.18,0.07,0.05, 0.2+i*0.18, y=-0.74-i*0.12)
+    box(0.2,0.09,0.05, 0.1+i*0.12, y=-0.78-i*0.1, mat=M_WOOD)
 # jendela kiri-kanan (muka -Y)
-for sx in (-0.4,0.4):
-    box(0.12,0.04,0.16,1.6, x=sx, y=-0.59)
+for sx in (-0.44,0.44):
+    box(0.13,0.05,0.16,1.0, x=sx, y=-0.62, mat=M_GLASS)
 # atap limasan (hip) = piramida 4-sisi melebar + tritisan
-bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=0.96, radius2=0.18, depth=0.6, location=(0,0,2.16))
-r=bpy.context.active_object; r.rotation_euler=(0,0,math.radians(45)); r.scale=(1.0,0.86,1.0)
-# tritisan (lapisan tepi atap)
-bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=1.02, radius2=0.9, depth=0.08, location=(0,0,1.9))
-r2=bpy.context.active_object; r2.rotation_euler=(0,0,math.radians(45)); r2.scale=(1.0,0.86,1.0)
+bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=1.0, radius2=0.16, depth=0.62, location=(0,0,1.5))
+r=bpy.context.active_object; r.rotation_euler=(0,0,math.radians(45)); r.scale=(1.0,0.86,1.0); r.data.materials.append(M_ROOF)
+# tritisan (lapisan tepi atap) duduk di puncak dinding
+bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=1.06, radius2=0.96, depth=0.1, location=(0,0,1.22))
+r2=bpy.context.active_object; r2.rotation_euler=(0,0,math.radians(45)); r2.scale=(1.0,0.86,1.0); r2.data.materials.append(M_ROOF)
 # bubungan kecil di puncak
-box(0.5,0.06,0.05,2.5)
+box(0.5,0.07,0.06,1.84, mat=M_ROOF)
 ''',
 
 # ─── Build genderuwo: raksasa berotot berbulu, lengan besar, kepala besar ──
@@ -215,7 +225,7 @@ bpy.context.view_layer.objects.active=objs[0]
 bpy.ops.object.join()
 m=bpy.context.active_object
 bpy.ops.object.shade_smooth()
-bpy.ops.wm.obj_export(filepath=r"__OUT__", export_selected_objects=True, up_axis='Y', forward_axis='NEGATIVE_Z', export_materials=False)
+bpy.ops.wm.obj_export(filepath=r"__OUT__", export_selected_objects=True, up_axis='Y', forward_axis='NEGATIVE_Z', export_materials=True, path_mode='STRIP')
 print('EXPORT_OK __NAME__ -> __OUT__')
 '''
 
@@ -226,8 +236,11 @@ def preview(name):
     print(run(code).strip().splitlines()[-1])
 
 
+NAME_MAP = {'rumah': 'rumah_panggung'}
+
 def export(name):
-    out = (MDIR + f'/{name if name.startswith("mob_") else "mob_"+name}.obj').replace('/', os.sep)
+    fname = NAME_MAP.get(name, name if name.startswith("mob_") else "mob_" + name)
+    out = (MDIR + f'/{fname}.obj').replace('/', os.sep)
     code = SCENE_SETUP + BUILD[name] + EXPORT_TAIL.replace('__OUT__', out).replace('__NAME__', name)
     print(run(code).strip().splitlines()[-1])
 

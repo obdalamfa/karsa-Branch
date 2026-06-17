@@ -259,6 +259,66 @@ def make_obj_entity(name, position, scale=1.0, rot_y=0.0):
     return e
 
 
+_COLORED_MESH_CACHE = {}
+def load_colored_mesh(name, dull=1.0):
+    """Muat .obj+.mtl jadi Mesh vertex-color (warna Kd per material, di-bake ke
+    vertex). Untuk model multi-warna yang shader-nya tak membaca .mtl (mis.
+    rumah). Dirender unlit oleh pemanggil. Return Mesh atau None."""
+    if name in _COLORED_MESH_CACHE:
+        return _COLORED_MESH_CACHE[name]
+    obj_p = _MODELS_DIR / f'{name}.obj'
+    mtl_p = _MODELS_DIR / f'{name}.mtl'
+    if not obj_p.exists():
+        _COLORED_MESH_CACHE[name] = None
+        return None
+    mats = {}
+    if mtl_p.exists():
+        cur = None
+        for line in open(mtl_p):
+            t = line.split()
+            if not t:
+                continue
+            if t[0] == 'newmtl':
+                cur = t[1]
+            elif t[0] == 'Kd' and cur:
+                mats[cur] = (float(t[1]) * dull, float(t[2]) * dull, float(t[3]) * dull)
+    from ursina import Vec3 as _V3, Vec4 as _V4, Mesh as _Mesh
+    V, out_v, out_c = [], [], []
+    cur_col = (0.6, 0.6, 0.6)
+    for line in open(obj_p):
+        t = line.split()
+        if not t:
+            continue
+        if t[0] == 'v':
+            V.append((float(t[1]), float(t[2]), float(t[3])))
+        elif t[0] == 'usemtl':
+            cur_col = mats.get(t[1], (0.6, 0.6, 0.6))
+        elif t[0] == 'f':
+            idx = [int(p.split('/')[0]) - 1 for p in t[1:]]
+            for k in range(1, len(idx) - 1):
+                for j in (0, k, k + 1):
+                    vx = V[idx[j]]
+                    out_v.append(_V3(vx[0], vx[1], vx[2]))
+                    out_c.append(_V4(cur_col[0], cur_col[1], cur_col[2], 1))
+    m = _Mesh(vertices=out_v, colors=out_c, mode='triangle')
+    _COLORED_MESH_CACHE[name] = m
+    return m
+
+
+def make_colored_entity(name, position, scale=1.0, rot_y=0.0):
+    """Entity dari mesh vertex-color (multi-warna, unlit). Untuk rumah dll."""
+    from ursina import Entity
+    mesh = load_colored_mesh(name)
+    if mesh is None:
+        return None
+    e = Entity(model=mesh, position=position, scale=scale, rotation=(0, rot_y, 0))
+    try:
+        e.setLightOff()
+    except Exception:
+        pass
+    return e
+
+
 NPC_APPEARANCES = {
     'arya': ['mabd000_sw__default.apr', 'mahd001_romeo.apr'],
     'sari': ['fabd002_mom01.apr', 'fahd001_sharon.apr', 'fahl001_sharon.apr'],

@@ -174,16 +174,25 @@ def town_builder(world):
 
     from game.config import TILE_SIZE as TS, GROUND_H
     try:
-        from game.entities import make_obj_entity
+        from game.entities import make_obj_entity, make_colored_entity
     except Exception:
         return
 
-    # (model, tile_x, tile_y, scale, rot_y) — taruh di tepi/ruang kosong rumput
+    # Rumah (kampung/limasan/joglo) lama = gumpalan putih kasar → gantikan dgn
+    # rumah panggung 3D Blender (vertex-color). (model, tile_x, tile_y, scale, rot_y)
+    HOUSES = [
+        ('rumah_panggung', 10, 17, 2.4, 25),
+        ('rumah_panggung', 24, 17, 2.4, -25),
+        ('rumah_panggung', 24, 11, 2.8, 0),
+    ]
+    for name, tx, ty, sc, ry in HOUSES:
+        e = make_colored_entity(name, (tx * TS, GROUND_H, ty * TS), scale=sc, rot_y=ry)
+        if e is not None:
+            world._obj_ents.append(e)
+
+    # Prop lain (obj baked / warna) — taruh di tepi/ruang kosong rumput
     VILLAGE = [
         ('sumur',           16, 18, 1.4, 0),    # sumur umum di ruang terbuka
-        ('rumah_kampung',   10, 17, 1.0, 25),   # rumah dekorasi kampung
-        ('rumah_limasan',   24, 17, 1.0, -25),
-        ('rumah_joglo',     24, 11, 1.0, 0),    # joglo besar (pojok timur-tengah)
         ('warung',           3, 16, 1.0, 20),   # warung obj (selain WARUNG prosedural)
         ('lantern',         12, 16, 2.4, 0),    # lentera persimpangan
         ('lantern',         17, 16, 2.4, 0),

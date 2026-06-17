@@ -874,6 +874,18 @@ def build_house_block(world, scene, tx, ty, wx, wz):
     sz = TS * h_tiles * 0.93
     h  = _hash(wx, wz)
 
+    # Rumah panggung 3D Blender (vertex-color) — gantikan geometri prosedural
+    # lama yang tampak "gumpalan abu raksasa". Fallback ke prosedural bila gagal.
+    try:
+        from game.entities import make_colored_entity
+        scl = max(0.7, min(sx, sz) / 1.7)
+        e = make_colored_entity('rumah_panggung', (cx, GROUND_H, cz), scale=scl, rot_y=0)
+        if e is not None:
+            world._obj_ents.append(e)
+            return
+    except Exception:
+        pass
+
     ri = int(h * len(ROOF_TEXTURES)) % len(ROOF_TEXTURES)
     r_tex, r_col = ROOF_TEXTURES[ri]
 

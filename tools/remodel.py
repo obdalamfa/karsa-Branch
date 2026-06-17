@@ -105,6 +105,41 @@ cyl(0.028,1.5,0.78, x=0.5, y=-0.05)
 sph(0.06,1.54, x=0.5, y=-0.05)            # kepala tongkat
 ''',
 
+# ─── Build rumah panggung Indonesia: tiang, lantai, dinding, atap limasan ──
+'rumah': '''
+import math
+def box(sx,sy,sz,z,x=0,y=0,rx=0,rz=0):
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(x,y,z)); o=bpy.context.active_object
+    o.scale=(sx,sy,sz); o.rotation_euler=(rx,0,rz); return o
+def cyl(r,d,z,x=0,y=0):
+    bpy.ops.mesh.primitive_cylinder_add(radius=r,depth=d,location=(x,y,z)); o=bpy.context.active_object
+    bpy.ops.object.shade_smooth(); return o
+# tiang panggung (6)
+for ix in (-0.62,0,0.62):
+    for iy in (-0.5,0.5):
+        cyl(0.075,1.0,0.5, x=ix, y=iy)
+# lantai panggung
+box(0.78,0.66,0.07,1.04)
+# dinding badan rumah
+box(0.7,0.58,0.5,1.55)
+# pintu (muka -Y)
+box(0.16,0.04,0.32,1.42, y=-0.6)
+# tangga (3 anak) ke pintu
+for i in range(3):
+    box(0.18,0.07,0.05, 0.2+i*0.18, y=-0.74-i*0.12)
+# jendela kiri-kanan (muka -Y)
+for sx in (-0.4,0.4):
+    box(0.12,0.04,0.16,1.6, x=sx, y=-0.59)
+# atap limasan (hip) = piramida 4-sisi melebar + tritisan
+bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=0.96, radius2=0.18, depth=0.6, location=(0,0,2.16))
+r=bpy.context.active_object; r.rotation_euler=(0,0,math.radians(45)); r.scale=(1.0,0.86,1.0)
+# tritisan (lapisan tepi atap)
+bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=1.02, radius2=0.9, depth=0.08, location=(0,0,1.9))
+r2=bpy.context.active_object; r2.rotation_euler=(0,0,math.radians(45)); r2.scale=(1.0,0.86,1.0)
+# bubungan kecil di puncak
+box(0.5,0.06,0.05,2.5)
+''',
+
 # ─── Build genderuwo: raksasa berotot berbulu, lengan besar, kepala besar ──
 'genderuwo': '''
 def cyl(r,d,z,x=0,y=0,rx=0,ry=0):

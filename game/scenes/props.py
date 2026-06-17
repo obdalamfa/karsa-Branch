@@ -984,8 +984,8 @@ def build_house_block(world, scene, tx, ty, wx, wz):
     from ursina.models.procedural.cone import Cone
     roof_y = base_y + wallh
     ents.append(world._create_entity(Cone(resolution=4),
-        (cx, roof_y + HOUSE_H * 0.42, cz),
-        (sx * 1.42, HOUSE_H * 0.90, sz * 1.42), r_tex, r_col, rotation=(0, 45, 0)))
+        (cx, roof_y + HOUSE_H * 0.26, cz),
+        (sx * 1.14, HOUSE_H * 0.58, sz * 1.14), r_tex, r_col, rotation=(0, 45, 0)))
     # Lisplang atap
     ents.append(world._create_entity('cube',
         (cx, roof_y + 0.07, cz), (sx * 1.44, 0.12, sz * 1.44), None, r_col))

@@ -256,11 +256,12 @@ class InteractionController:
                 panels.emote('+20 EN', color.rgb(255, 190, 110), 1.4)
                 sound_play('menu_select', 0.8)
             elif tid == CL:
-                h, m = self.player.state.time_hm()
+                h = self.player.state.get_hour()
+                m = int(self.player.state.time_minutes % 60)
                 panels.flash_msg(f"Jam menunjukkan pukul {h:02d}:{m:02d}.", 1.5)
                 sound_play('menu_select', 0.8)
             elif tid == CAL:
-                panels.flash_msg(f"Hari ini adalah Hari ke-{self.player.state.day} Musim {self.player.state.season_name()}.", 1.5)
+                panels.flash_msg(f"Hari ini adalah Hari ke-{self.player.state.day} Musim {self.player.state.get_season()}.", 1.5)
                 sound_play('menu_select', 0.8)
             elif tid == TV:
                 panels.flash_msg("Kamu menonton acara televisi yang menarik. (+10 Senang)", 1.5)
@@ -743,7 +744,7 @@ class InteractionController:
                 opts.append(('sari_gossip', 'Minta Gosip', True, '+Gosip Paman'))
             elif npc_id == 'budi':
                 opts.append(('budi_riddle', 'Tantangan Logam', True, '+Ujian Logam'))
-            elif npc_id == 'maya' and s.get_season_name() == 'Semi':
+            elif npc_id == 'maya' and s.get_season() == 'Semi':
                 q_status = s.side_quests.get('maya_strawberry')
                 if q_status == 'active':
                     opts.append(('maya_quest', 'Serahkan Stroberi', bool(s.inventory.get('stroberi')), 'Quest Sampingan'))
@@ -826,26 +827,14 @@ class InteractionController:
             sound_play('menu_select', 0.6)
             panels.flash_msg(f"Kamu membelai {npc.get('name', npc_id)}.", 1.0)
         elif action == 'ambil_hasil':
-            produce_map = {
-                'sapi_betina': ('susu',        40),
-                'ayam':        ('telur',        30),
-                'kambing':     ('wol',          35),
-                'domba':       ('wol',          35),
-                'bebek':       ('bulu_bebek',   20),
-                'kelinci':     ('bulu_kelinci', 25),
-                'kuda':        ('susu_kuda',    50),
-                'rubah':       ('bulu_rubah',   60),
-            }
-            produce, gold = produce_map.get(npc_id, (None, 0))
-            if produce:
-                s.inventory[produce] = s.inventory.get(produce, 0) + 1
-                s.gold += gold
+            # Satukan dgn jalur harian _try_collect_animal (susu/telur/wol, sekali/hari,
+            # produk yg valid di ANIMAL_PRODUCTS & bisa dijual via Peti Kirim).
+            # (produce_map lama keyed by 'type' tapi di-lookup pakai npc_id → selalu miss,
+            #  dan beberapa produknya tak ada di ANIMAL_PRODUCTS.)
+            if self._try_collect_animal(npc_id, panels):
                 self.player._play_tool_anim('bend')
-                sound_play('harvest', 0.8)
-                produce_name = produce.replace('_', ' ').title()
-                panels.flash_msg(f"+1 {produce_name} (+{gold}G)", 1.2)
             else:
-                panels.flash_msg("Tidak ada hasil saat ini.", 1.0)
+                panels.flash_msg("Belum ada hasil (mungkin sudah diambil hari ini).", 1.0)
         elif action == 'beri_makan':
             feed = 'jerami' if s.inventory.get('jerami', 0) > 0 else 'jagung'
             if s.inventory.get(feed, 0) > 0:

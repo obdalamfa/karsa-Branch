@@ -126,12 +126,22 @@ class GameState:
         return f"{base}_slot{slot}{ext}"
 
     def save(self, slot: int = 0):
+        # Tulis atomik: temp dulu lalu os.replace → save lama TAK pernah rusak
+        # walau penulisan gagal/crash di tengah (cegah kehilangan progres).
+        path = GameState.slot_path(slot)
+        tmp = path + '.tmp'
         try:
-            with open(GameState.slot_path(slot), 'w') as f:
+            with open(tmp, 'w') as f:
                 json.dump({k: v for k, v in self.__dict__.items()}, f, indent=2)
+            os.replace(tmp, path)
             return True
         except Exception as e:
             print(f"Save error: {e}")
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except Exception:
+                pass
             return False
 
     @classmethod

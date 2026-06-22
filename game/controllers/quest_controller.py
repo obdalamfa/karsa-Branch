@@ -30,7 +30,9 @@ class QuestController:
         if st == 4:  return s.pickaxe_tier >= 1 or bool(s.sword_id)                 # alat lebih baik
         if st == 5:  return s.pickaxe_tier >= 1 and stt.get('deepest_level', 0) >= 1 # crafting + masuk gua
         if st == 6:  return inv.get('tembaga', 0) >= 5 and inv.get('besi', 0) >= 3   # 5 tembaga + 3 besi
-        if st == 7:  return s.sword_id == 'sword_besi' and stt.get('mobs_killed', 0) >= 5
+        # Pedang besi ATAU lebih tinggi (kalau pemain sudah upgrade ke emas/mithril,
+        # '== sword_besi' bikin quest MACET PERMANEN — pemblokir tamat game).
+        if st == 7:  return s.sword_id in ('sword_besi', 'sword_emas', 'sword_mithril') and stt.get('mobs_killed', 0) >= 5
         if st == 8:  return s.captured_supernatural >= 1                            # tangkap makhluk halus
         if st == 9:  return stt.get('deepest_level', 0) >= 10                       # gua level 10
         if st == 10: return bool(s.naga_defeated)                                   # kalahkan Naga

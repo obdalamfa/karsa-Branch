@@ -15,12 +15,12 @@
 | Milestone | Progres | Catatan |
 |---|---|---|
 | **M1** Lima Menit Pertama | **~90%** | judul/intro/tutorial/tracker/prompt/signpost ADA & lulus smoke_boot |
-| **M2** Tampilan | **~80%** | skybox+lighting+cuaca + dressing obj (farm/town/beach/greenhouse + **mountain/lake/cemetery via scatter aman**) ADA; sisa: tekstur interior |
-| **M3** HUD & UX | **~95%** | HUD Disco + needs + Majelis Batin + menu Jeda berlapis (Simpan/Muat 3 slot + Pengaturan) + ikon item (18 PNG) + **skin panel chrome TSO** ADA; tinggal polish opsional |
-| **M4** Gameplay core | **~55%** | crafting+laut, upgrade alat, **tani Sakuna mendalam** ADA; sisa: shipping bin, ternak produktif, balance, audit quest |
-| **M5** Animasi & kehidupan | **~90%** | walk mesh-swap + pose aksi + **jadwal NPC per-jam** + ambient kupu/kunang + **telegraph & death anim mob** ADA; sisa: 4-frame walk (Blender batch) |
-| **M6** Audio & game-feel | **~95%** | 27 SFX prosedural + 6 BGM ambient per-scene (progresi akor) + musik tempur dinamis (duck HP kritis) + SFX tempur (telegraph/mati/kena) + screen-shake + **fade transisi scene** ADA |
-| **M7** Rilis | **~40%** | **scaffold packaging siap** (lembah_karsa.spec + build_release.ps1 + README_PEMAIN + main.py frozen-path); sisa: jalankan build & uji exe (sisi user), perf pass, bug sweep playtest |
+| **M2** Tampilan | **~90%** | skybox+lighting+cuaca + dressing obj (farm/town/beach/greenhouse + mountain/lake/cemetery scatter) + **rumah panggung 3D (gantikan "gumpalan")** + ikon 3D Blender ADA; sisa: tekstur interior |
+| **M3** HUD & UX | **~95%** | HUD Disco + Majelis Batin + menu Jeda berlapis + **27 ikon 3D + panel chrome TSO** ADA; polish opsional |
+| **M4** Gameplay core | **~90%** | crafting+laut, upgrade alat, tani Sakuna, **Peti Kirim, ternak produktif, quest 0→11 audit** ADA; sisa: balance via playtest manusia |
+| **M5** Animasi & kehidupan | **~90%** | walk mesh-swap + pose + jadwal NPC per-jam (+**fix kreatur-malam**) + ambient + telegraph/death mob + **3 mob remodel Blender** ADA; sisa: 4-frame walk |
+| **M6** Audio & game-feel | **~95%** | 27 SFX + 6 BGM ambient + musik tempur dinamis + SFX tempur + screen-shake + fade scene ADA |
+| **M7** Rilis | **~55%** | scaffold packaging + **audit bug multi-agen (6 bug nyata diperbaiki: 2 crash interaksi, quest tahap-7 macet, save atomik, dll)** ADA; sisa: jalankan build & uji exe (sisi user), perf pass, playtest |
 
 **BONUS lintas-milestone yang sudah jadi (di luar rencana awal):**
 - **Majelis Batin** — 4 suara batin (BARA/AKAR/SUKMA/LAPAR) + skill-check 2d6 white/red (TAB) — DNA Disco, di-port dari prototipe three.js

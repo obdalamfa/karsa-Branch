@@ -376,5 +376,44 @@ assert 10.0 < _partial < 95.0, f"pembatalan tak memberi sebagian manfaat: {_part
 assert not _ctl.busy, "cancel tak menghentikan aksi"
 print(f"[OK] S2 batal di tengah: bersih 10 -> {_partial:.0f} (sebagian, adil)")
 
+# ── S3 Autonomi / free-will: Sim urus motif terendah sendiri ──
+# Sim harus BENAR-BENAR senggang: hentikan sisa jalan dari uji S2 di atas
+# (autonomi memang sengaja tak membajak Sim yang sedang berjalan).
+if getattr(game.player, 'mover', None):
+    game.player.mover.stop()
+_ctl.cancel(None); _ctl._auto_cd = 0.0
+_s.free_will = True
+_s.lapar = _s.sosial = _s.senang = _s.bersih = 90.0
+_s.energy = _s.max_energy
+_s.kandung = 12.0                      # di bawah ambang → harus ditangani
+game.player.set_tile_pos(8, 3)
+_ctl.tick(0.1, game.panels)
+assert _ctl.busy, "autonomi tak memulai aksi walau motif kritis"
+assert _ctl.current['auto'] is True, "aksi tak ditandai autonom"
+assert _ctl.current['tid'] == WC, f"autonomi pilih objek salah: {_ctl.current['tid']}"
+print(f"[OK] S3 autonomi: kandung 12 -> otomatis menuju {_ctl.current['obj']['label']}")
+# Motif cukup → Sim TIDAK sibuk sendiri
+_ctl.cancel(None); _ctl._auto_cd = 0.0
+_s.kandung = 95.0
+_ctl.tick(0.1, game.panels)
+assert not _ctl.busy, "autonomi jalan padahal semua motif cukup"
+print("[OK] S3 autonomi diam saat semua motif cukup")
+# Free will OFF → Sim tak berinisiatif
+_ctl.cancel(None); _ctl._auto_cd = 0.0
+_s.free_will = False; _s.kandung = 8.0
+_ctl.tick(0.1, game.panels)
+assert not _ctl.busy, "free_will OFF tapi Sim tetap berinisiatif"
+print("[OK] S3 free_will OFF menghentikan autonomi")
+# Toggle di menu Pengaturan mengubah & tersimpan di state
+game.panels._toggle_free_will()
+assert _s.free_will is True, "toggle free will tak bekerja"
+game.panels._pause_view = 'settings'
+assert any('Free Will' in r for r in game.panels._pause_rows()), "baris Free Will tak ada di Pengaturan"
+game.panels._pause_view = 'root'
+print("[OK] S3 toggle Free Will ada di menu Pengaturan & mengubah state")
+# Aksi autonom terbawa ke save (free_will) — kompatibel save lama
+assert 'free_will' in game.state.__dict__, "free_will tak ikut ter-serialize"
+print("[OK] S3 free_will tersimpan di state (ikut save)")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

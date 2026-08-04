@@ -65,6 +65,7 @@ class GameState:
     senang:  float = 100.0  # Fun     — turun waktu → isi dengan panen/jelajah
     kandung: float = 100.0  # Bladder — terisi waktu → kosongkan di toilet (S1 Sims)
     bersih:  float = 100.0  # Hygiene — turun waktu → isi dengan mandi (S1 Sims)
+    free_will: bool = True  # Autonomi ala Sims (S3): Sim urus kebutuhan sendiri
 
     # ─── Majelis Batin (4 suara + skill-check ala Disco Elysium) ───
     batin: dict = field(default_factory=lambda: {'bara': 1, 'akar': 1, 'sukma': 1, 'lapar': 1})

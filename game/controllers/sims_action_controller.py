@@ -13,8 +13,8 @@ Memakai ulang yang sudah ada:
 Motif diisi BERTAHAP (per detik) supaya aksi bisa dibatalkan di tengah dan
 pemain tetap dapat sebagian manfaat — seperti Sims sungguhan.
 """
-from ..config import NEED_MAX
-from ..sims_objects import SIMS_OBJECTS
+from ..config import NEED_MAX, NEED_LOW
+from ..sims_objects import SIMS_OBJECTS, best_motive, find_best_object, motive_value
 from ..sound import play as sound_play
 
 
@@ -23,12 +23,16 @@ class SimsActionController:
 
     # Jarak (tile) dianggap sudah sampai di objek
     REACH = 1.6
+    # Autonomi (S3): Sim mengurus dirinya bila motif turun di bawah ambang ini
+    AUTO_THRESHOLD = NEED_LOW      # 40
+    AUTO_RETRY_SEC = 3.0           # jeda sebelum mencoba lagi bila gagal
 
     def __init__(self, player):
         self.player = player
         self.state = player.state
         self.current = None      # dict aksi berjalan
         self._last_msg = None
+        self._auto_cd = 0.0      # cooldown percobaan autonomi
 
     # ── API publik ────────────────────────────────────────────────
     @property
@@ -45,8 +49,10 @@ class SimsActionController:
         pct = int((1.0 - c['left'] / c['dur']) * 100)
         return f"{c['obj']['action']}… {pct}%"
 
-    def start(self, tile_id: int, tx: int, ty: int, panels=None) -> bool:
-        """Antre & mulai aksi pada objek di tile (tx,ty). False bila tak valid."""
+    def start(self, tile_id: int, tx: int, ty: int, panels=None, auto=False) -> bool:
+        """Antre & mulai aksi pada objek di tile (tx,ty). False bila tak valid.
+        auto=True menandai aksi hasil autonomi (bisa dibatalkan oleh gerakan
+        pemain — override, seperti free-will Sims)."""
         obj = SIMS_OBJECTS.get(tile_id)
         if not obj:
             return False
@@ -54,7 +60,7 @@ class SimsActionController:
         self.current = {
             'tid': tile_id, 'tx': int(tx), 'ty': int(ty), 'obj': obj,
             'dur': float(obj['dur']), 'left': float(obj['dur']),
-            'phase': 'walk',
+            'phase': 'walk', 'auto': bool(auto),
         }
         # Jalan ke objek memakai PathMover yang sudah ada (klik-untuk-jalan).
         self._walk_to(tx, ty)
@@ -71,7 +77,18 @@ class SimsActionController:
     def tick(self, dt: float, panels=None):
         """Dipanggil tiap frame dari Player3D.tick()."""
         c = self.current
+
+        # Override pemain: menggerakkan Sim membatalkan aksi AUTONOM (bukan
+        # aksi yang diperintahkan pemain sendiri) — persis free-will Sims.
+        if c and c.get('auto') and self._player_moving_input():
+            self.current = None
+            self._auto_cd = self.AUTO_RETRY_SEC
+            if panels:
+                panels.flash_msg("Kamu mengambil alih.", 1.0)
+            return
+
         if not c:
+            self._autonomy(dt, panels)
             return
 
         if c['phase'] == 'walk':
@@ -112,6 +129,48 @@ class SimsActionController:
                 sound_play('harvest', 0.6)
             except Exception:
                 pass
+
+    # ── Autonomi / free-will (S3) ─────────────────────────────────
+    def _autonomy(self, dt: float, panels=None):
+        """Sim senggang mengurus kebutuhannya sendiri: pilih motif terendah,
+        cari objek dgn iklan tertinggi, lalu jalankan aksinya."""
+        if self._auto_cd > 0.0:
+            self._auto_cd -= dt
+            return
+        if not getattr(self.state, 'free_will', True):
+            return
+        if self._player_moving_input() or self._walking():
+            return                                  # pemain sedang menyetir
+
+        motive = best_motive(self.state)
+        if motive_value(self.state, motive) >= self.AUTO_THRESHOLD:
+            self._auto_cd = 1.0                     # semua cukup → santai
+            return
+
+        world = getattr(self.player, 'world', None)
+        if world is None:
+            return
+        px, py = self._tile_pos()
+        best = find_best_object(world, self.state, motive=motive,
+                                from_tile=(int(round(px)), int(round(py))))
+        if not best:
+            self._auto_cd = self.AUTO_RETRY_SEC     # tak ada objek → jangan spam
+            return
+        tid, tx, ty, _score = best
+        if self.start(tid, tx, ty, panels=None, auto=True) and panels:
+            obj = SIMS_OBJECTS[tid]
+            panels.flash_msg(
+                f"[auto] {self._motive_label(motive)} rendah → {obj['action']}", 1.6)
+
+    def _player_moving_input(self) -> bool:
+        """Pemain sedang menekan tombol gerak?"""
+        try:
+            from ursina import held_keys
+            return any(held_keys[k] for k in
+                       ('w', 'a', 's', 'd',
+                        'up arrow', 'down arrow', 'left arrow', 'right arrow'))
+        except Exception:
+            return False
 
     # ── Internal ──────────────────────────────────────────────────
     _LABELS = {'lapar': 'Lapar', 'sosial': 'Sosial', 'senang': 'Senang',

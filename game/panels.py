@@ -320,8 +320,10 @@ class UIManager:
             bars = max(0, min(8, int(round(get_master() * 8))))
             bar_str = '█' * bars + '░' * (8 - bars)
             full = '[x]' if self._is_fullscreen() else '[ ]'
+            fw = '[x]' if getattr(self.state, 'free_will', True) else '[ ]'
             return [f"Volume   {bar_str}  {vol}%",
                     f"Layar Penuh   {full}",
+                    f"Free Will (Sim urus diri)   {fw}",
                     '‹ Kembali']
         return []
 
@@ -385,6 +387,8 @@ class UIManager:
                 set_master(get_master() + delta); sound_play('menu_move'); self._render_pause()
             elif self._pause_sel == 1:
                 self._toggle_fullscreen(); self._render_pause()
+            elif self._pause_sel == 2:
+                self._toggle_free_will(); self._render_pause()
             return ''
 
         if key == 'escape':
@@ -413,9 +417,16 @@ class UIManager:
             return f"{v}:{sel + 1}"
         elif v == 'settings':
             if sel == 1: self._toggle_fullscreen(); self._render_pause(); return ''
-            if sel == 2:
+            if sel == 2: self._toggle_free_will(); self._render_pause(); return ''
+            if sel == 3:
                 self._pause_view = 'root'; self._pause_sel = 0; self._render_pause(); return ''
         return ''
+
+    def _toggle_free_will(self):
+        """Nyalakan/matikan autonomi Sim (S3). Tersimpan di save."""
+        cur = getattr(self.state, 'free_will', True)
+        self.state.free_will = not cur
+        sound_play('menu_select', 0.7)
 
     # ─── PUBLIC: EMOTE (ikon interaksi melayang) ─────────
     def emote(self, text: str, col=None, dur: float = 1.1, x: float = 0.0, y: float = 0.02):

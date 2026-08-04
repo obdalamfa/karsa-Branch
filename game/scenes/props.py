@@ -323,6 +323,42 @@ def build_grave(world, wx, wz):
     world._obj_ents.extend([vert, horiz, stain])
 
 
+def build_toilet(world, wx, wz):
+    """Toilet — tangki + dudukan + penutup (motif kandung kemih, S2)."""
+    col = color.rgb(232, 230, 224)
+    tank = world._create_entity('cube', (wx, OBJ_H*0.55 + GROUND_H, wz - TS*0.22),
+              (TS*0.42, OBJ_H*0.62, TS*0.16), None, col)
+    bowl = world._create_entity('cylinder', (wx, OBJ_H*0.28 + GROUND_H, wz + TS*0.02),
+              (TS*0.38, OBJ_H*0.52, TS*0.38), None, col)
+    seat = world._create_entity('cylinder', (wx, OBJ_H*0.56 + GROUND_H, wz + TS*0.02),
+              (TS*0.42, 0.07, TS*0.42), None, color.rgb(210, 208, 200))
+    world._obj_ents.extend([tank, bowl, seat])
+
+
+def build_shower(world, wx, wz):
+    """Pancuran — bak + tiang + kepala shower + tirai (motif kebersihan, S2)."""
+    pan   = world._create_entity('cube', (wx, GROUND_H + 0.08, wz),
+               (TS*0.82, 0.16, TS*0.82), None, color.rgb(206, 210, 212))
+    pole  = world._create_entity('cylinder', (wx + TS*0.28, OBJ_H*0.95 + GROUND_H, wz - TS*0.28),
+               (0.06, OBJ_H*1.85, 0.06), None, color.rgb(168, 172, 176))
+    head  = world._create_entity('cylinder', (wx + TS*0.12, OBJ_H*1.78 + GROUND_H, wz - TS*0.18),
+               (TS*0.20, 0.08, TS*0.20), None, color.rgb(184, 188, 192))
+    panel = world._create_entity('cube', (wx - TS*0.38, OBJ_H*0.9 + GROUND_H, wz),
+               (0.06, OBJ_H*1.75, TS*0.78), None, color.rgb(150, 178, 186, 205))
+    world._obj_ents.extend([pan, pole, head, panel])
+
+
+def build_fridge(world, wx, wz):
+    """Kulkas — badan tinggi + garis pintu + gagang (motif lapar, S2)."""
+    body = world._create_entity('cube', (wx, OBJ_H*0.85 + GROUND_H, wz),
+              (TS*0.68, OBJ_H*1.70, TS*0.60), None, color.rgb(214, 216, 218))
+    seam = world._create_entity('cube', (wx, OBJ_H*1.12 + GROUND_H, wz + TS*0.31),
+              (TS*0.66, 0.04, 0.03), None, color.rgb(150, 152, 154))
+    grip = world._create_entity('cube', (wx + TS*0.22, OBJ_H*0.85 + GROUND_H, wz + TS*0.32),
+              (0.05, OBJ_H*0.5, 0.05), None, color.rgb(120, 124, 128))
+    world._obj_ents.extend([body, seam, grip])
+
+
 def build_tv(world, wx, wz):
     base   = world._create_entity('cube', (wx, OBJ_H*0.2 + GROUND_H, wz),
                 (TS*0.7, OBJ_H*0.4, TS*0.3), 'wood_plank', color.rgb(42, 40, 38))
@@ -1622,6 +1658,9 @@ def default_prop_builder(world, scene):
             elif tid == TV:       build_tv(world, wx, wz)
             elif tid == CHR:      build_chair(world, wx, wz)
             elif tid == CAL:      build_calendar(world, wx, wz)
+            elif tid == WC:       build_toilet(world, wx, wz)
+            elif tid == SWR:      build_shower(world, wx, wz)
+            elif tid == KLK:      build_fridge(world, wx, wz)
             elif tid == H:        build_house_block(world, scene, tx, ty, wx, wz)
             elif tid == RUMAH_PG: build_rumah_panggung(world, scene, tx, ty, wx, wz)
             elif tid == UNION_HL: build_union_hall(world, scene, tx, ty, wx, wz)

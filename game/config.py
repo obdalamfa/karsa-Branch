@@ -65,6 +65,9 @@ WARUNG, RUMAH_PG, UNION_HL, SHRINE, DEBRIS, LAUNDRY, GRAFFITI_W = range(58)
 
 SHOP_EXT, CLINIC_EXT, SMITH_EXT, GREENHOUSE_EXT = range(58, 62)
 KUIL = 62   # kuil surgawi — hanya di scene swarga
+# Objek rumah tangga ala Sims (S2) — ditambah di ID baru agar tak menggeser
+# penomoran tile lama (scene & save lama tetap valid).
+KLK, WC, SWR = 63, 64, 65   # kulkas, toilet, pancuran/shower
 
 TILE_NAMES = {
     G:'grass', D:'dirt', P:'path', W:'water', FL:'floor', WL:'wall',
@@ -86,6 +89,7 @@ TILE_NAMES = {
     SHOP_EXT:'shop_ext', CLINIC_EXT:'clinic_ext', SMITH_EXT:'smith_ext',
     GREENHOUSE_EXT:'greenhouse_ext',
     KUIL:'kuil',
+    KLK:'kulkas', WC:'toilet', SWR:'pancuran',
 }
 
 WALKABLE  = [G, D, P, FL, DR, GT, CV_F, STR_T, DCK, LLY, MINED, STAIRS_DOWN, STAIRS_UP, SD, CLOUD]
@@ -93,7 +97,8 @@ TILLABLE  = [G, D]
 BLOCKING  = [WL, TR, H, FN, BD, ST, TB, BS, MR, FP, CL, PP, CH, CT, SH, GR, LN, DT,
              CV_W, PEN, BOT, CRYS, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, MB, LGH_B, LGH_F, GOLD_W, PALM, TV, CAL,
              WARUNG, RUMAH_PG, UNION_HL, SHRINE, DEBRIS, LAUNDRY, GRAFFITI_W,
-             SHOP_EXT, CLINIC_EXT, SMITH_EXT, GREENHOUSE_EXT, KUIL]
+             SHOP_EXT, CLINIC_EXT, SMITH_EXT, GREENHOUSE_EXT, KUIL,
+             KLK, WC, SWR]
 MINEABLE  = [CV_W, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS]
 
 SEASONS      = ['Semi', 'Panas', 'Gugur', 'Dingin']

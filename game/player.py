@@ -161,6 +161,9 @@ class Player3D(Entity):
         # Efek pasif (status, loot, dmg-number, shake) di-tick tiap frame; jalur
         # serangan masih lewat interaction_controller.attack (storage s.mobs).
         self.combat_controller = CombatController(self)
+        # Aksi-objek ala Sims (S2): antre → jalan ke objek → isi motif.
+        from .controllers.sims_action_controller import SimsActionController
+        self.sims_action = SimsActionController(self)
 
         self._build_model()
         self.set_tile_pos(state.player_x, state.player_y)
@@ -399,6 +402,9 @@ class Player3D(Entity):
         # Tick efek combat pasif (timer cooldown, status, loot lantai, angka
         # damage, screen-shake). Inert sampai jalur serangan combat diaktifkan.
         self.combat_controller.tick(dt, None, panels)
+
+        # Aksi-objek Sims (S2): jalan ke objek lalu isi motif bertahap
+        self.sims_action.tick(dt, panels)
 
         # Slide/Dash Active Tick
         if hasattr(self, '_slide_active_ms') and self._slide_active_ms > 0:
@@ -743,9 +749,9 @@ class Player3D(Entity):
         # Invuln: kedip merah
         if self._invuln > 0:
             blink = int(self._invuln / 80) % 2 == 0
-            self.body.color = color.rgb(255, 80, 80, 102) if blink else Vec4(self._shirt_col[0], self._shirt_col[1], self._shirt_col[2], 0.4)
+            self.body.color = color.rgb(255, 80, 80, 102) if blink else self._shirt_col
         else:
-            self.body.color = Vec4(self._shirt_col[0], self._shirt_col[1], self._shirt_col[2], 0.4)
+            self.body.color = self._shirt_col
 
         # Sync state
         s.player_x = self.x / TS

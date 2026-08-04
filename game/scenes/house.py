@@ -41,6 +41,11 @@ def build_house():
 
         # Perapian kecil di sisi kiri (suasana)
         (1, 5, FP),
+
+        # ── Kebutuhan rumah tangga ala Sims (S2) ──
+        (4, 6, WC),      # toilet — motif kandung kemih
+        (5, 6, SWR),     # pancuran — motif kebersihan
+        (10, 5, KLK),    # kulkas di dapur — motif lapar (cepat)
     ]
     return _build_indoor_room('house', 'Kamar Pemain', objects,
                                ('farm', 3, 5), w=15, h=8)

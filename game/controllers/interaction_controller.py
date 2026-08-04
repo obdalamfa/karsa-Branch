@@ -242,6 +242,19 @@ class InteractionController:
                 self.player._try_sleep(panels)
                 return
 
+            # ── Objek-beraksi ala Sims (S2) ──────────────────────────────
+            # Menghadap objek berkatalog → antre aksi (jalan ke objek → isi
+            # motif bertahap). BD dikecualikan: tidur = maju-hari (Stardew),
+            # bukan aksi motif biasa. CL/CAL info-saja, tak ada di katalog.
+            from ..sims_objects import SIMS_OBJECTS as _SIMS_OBJ
+            sims_act = getattr(self.player, 'sims_action', None)
+            if sims_act is not None and tid in _SIMS_OBJ and tid != BD:
+                if sims_act.busy:
+                    sims_act.cancel(panels)
+                else:
+                    sims_act.start(tid, ftx, fty, panels)
+                return
+
             if tid == MB and not self.player.state.mail_read:
                 self.player.state.mail_read = True
                 if self.player.state.quest_stage == 0:
@@ -249,12 +262,6 @@ class InteractionController:
                 sound_play('menu_select', 0.8)
                 panels.emote('!', color.rgb(255, 220, 120))
                 panels.start_dialog('mailbox', self.player.state)
-            elif tid == ST:
-                panels.flash_msg("Kamu memasak makanan yang lezat. (+20 Energi)", 1.5)
-                self.player.state.energy = min(100, self.player.state.energy + 20)
-                self.player._play_tool_anim('down')
-                panels.emote('+20 EN', color.rgb(255, 190, 110), 1.4)
-                sound_play('menu_select', 0.8)
             elif tid == CL:
                 h = self.player.state.get_hour()
                 m = int(self.player.state.time_minutes % 60)
@@ -263,13 +270,7 @@ class InteractionController:
             elif tid == CAL:
                 panels.flash_msg(f"Hari ini adalah Hari ke-{self.player.state.day} Musim {self.player.state.get_season()}.", 1.5)
                 sound_play('menu_select', 0.8)
-            elif tid == TV:
-                panels.flash_msg("Kamu menonton acara televisi yang menarik. (+10 Senang)", 1.5)
-                self.player.state.senang = min(100, getattr(self.player.state, 'senang', 100) + 10)
-                panels.emote(':)', color.rgb(255, 200, 150))
-                sound_play('menu_select', 0.8)
-            elif tid == CHR:
-                panels.flash_msg("Ini kursi yang nyaman. Coba berdiri di atasnya untuk duduk.", 1.5)
+            # ST/TV/CHR kini ditangani jalur objek-beraksi Sims di atas.
 
     def _petapa_awaken(self, npc_id, entities_mgr, panels):
         """Arca emas Srimana yang mematung bangkit ke wujud murka

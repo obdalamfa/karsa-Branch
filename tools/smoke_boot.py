@@ -323,5 +323,58 @@ _bfill = game.panels._need_fills['bersih'][0]
 assert round(_bfill.color[0]*255) > 150 and round(_bfill.color[1]*255) < 100, "bar kritis tak memerah"
 print("[OK] S1 HUD: 5 bar motif sinkron + merah saat kritis")
 
+# ── S2 Objek-beraksi: katalog + iklan + jalan-ke-objek + isi motif bertahap ──
+from game.sims_objects import (SIMS_OBJECTS, advertise_score, best_motive,
+                               objects_in_scene, find_best_object)
+from game.config import WC, SWR, KLK, BD
+assert WC in SIMS_OBJECTS and SWR in SIMS_OBJECTS and KLK in SIMS_OBJECTS, "objek Sims baru tak ada di katalog"
+# Iklan: objek makin menarik saat motif makin kurang (inti Sims)
+_s.kandung = 95.0; _hi = advertise_score(WC, _s)
+_s.kandung = 5.0;  _lo = advertise_score(WC, _s)
+assert _lo > _hi * 3, f"skor iklan tak naik saat motif kurang ({_hi:.1f} -> {_lo:.1f})"
+print(f"[OK] S2 iklan objek: toilet {_hi:.1f} (kandung 95) -> {_lo:.1f} (kandung 5)")
+# Motif terendah dipilih benar
+_s.lapar = _s.sosial = _s.senang = _s.bersih = 90.0; _s.kandung = 8.0; _s.energy = _s.max_energy
+assert best_motive(_s) == 'kandung', f"motif terendah salah: {best_motive(_s)}"
+print("[OK] S2 best_motive -> kandung (paling mendesak)")
+# Objek terpasang di scene rumah & bisa ditemukan
+game.state.scene_name = 'house'
+game.world.load_scene('house'); game.entities.load_scene('house'); step(1)
+_objs = objects_in_scene(game.world)
+_ids = {t for t, _, _ in _objs}
+assert WC in _ids and SWR in _ids and KLK in _ids, f"objek baru tak ada di rumah: {_ids}"
+print(f"[OK] S2 scan rumah: {len(_objs)} objek Sims (termasuk toilet/pancuran/kulkas)")
+_best = find_best_object(game.world, _s, motive='kandung', from_tile=(3, 3))
+assert _best and _best[0] == WC, f"find_best_object utk kandung salah: {_best}"
+print(f"[OK] S2 find_best_object(kandung) -> toilet di tile ({_best[1]},{_best[2]})")
+# Jalankan aksi: isi motif BERTAHAP, selesai tepat di akhir durasi
+_ctl = game.player.sims_action
+_s.kandung = 10.0
+game.player.set_tile_pos(4, 5)          # tepat di samping toilet (4,6)
+assert _ctl.start(WC, 4, 6, game.panels), "gagal memulai aksi toilet"
+_ctl.tick(0.1, game.panels)             # dekat → langsung fase 'do'
+assert _ctl.current and _ctl.current['phase'] == 'do', "tak masuk fase melakukan"
+_mid = None
+for _ in range(40):
+    _ctl.tick(0.1, game.panels)
+    if _mid is None and _s.kandung > 30.0:
+        _mid = _s.kandung               # bukti pengisian bertahap
+    if not _ctl.busy:
+        break
+assert _mid is not None and _mid < 100.0, "motif tak terisi bertahap (langsung penuh?)"
+assert _s.kandung > 90.0, f"kandung tak terisi penuh: {_s.kandung}"
+assert not _ctl.busy, "aksi tak selesai setelah durasi"
+print(f"[OK] S2 aksi toilet: kandung 10 -> {_s.kandung:.0f} (bertahap, selesai)")
+# Batal di tengah tetap memberi sebagian manfaat
+_s.bersih = 10.0
+game.player.set_tile_pos(5, 5)
+_ctl.start(SWR, 5, 6, game.panels); _ctl.tick(0.1, game.panels)
+for _ in range(8): _ctl.tick(0.1, game.panels)
+_partial = _s.bersih
+_ctl.cancel(game.panels)
+assert 10.0 < _partial < 95.0, f"pembatalan tak memberi sebagian manfaat: {_partial}"
+assert not _ctl.busy, "cancel tak menghentikan aksi"
+print(f"[OK] S2 batal di tengah: bersih 10 -> {_partial:.0f} (sebagian, adil)")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

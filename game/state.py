@@ -60,9 +60,11 @@ class GameState:
     })
 
     # ─── Needs / Motives (ala The Sims / FreeSO) ───
-    lapar:  float = 100.0   # Hunger  — turun waktu → isi dengan makan
-    sosial: float = 100.0   # Social  — turun waktu → isi dengan ngobrol
-    senang: float = 100.0   # Fun     — turun waktu → isi dengan panen/jelajah
+    lapar:   float = 100.0  # Hunger  — turun waktu → isi dengan makan
+    sosial:  float = 100.0  # Social  — turun waktu → isi dengan ngobrol
+    senang:  float = 100.0  # Fun     — turun waktu → isi dengan panen/jelajah
+    kandung: float = 100.0  # Bladder — terisi waktu → kosongkan di toilet (S1 Sims)
+    bersih:  float = 100.0  # Hygiene — turun waktu → isi dengan mandi (S1 Sims)
 
     # ─── Majelis Batin (4 suara + skill-check ala Disco Elysium) ───
     batin: dict = field(default_factory=lambda: {'bara': 1, 'akar': 1, 'sukma': 1, 'lapar': 1})
@@ -106,7 +108,9 @@ class GameState:
     def get_player_tile(self): return (int(round(self.player_x)), int(round(self.player_y)))
 
     def get_mood(self) -> float:
-        return (self.lapar + self.sosial + self.senang) / 3.0
+        # Rata-rata 5 motif Sims (kandung/bersih ikut menekan mood saat rendah)
+        return (self.lapar + self.sosial + self.senang
+                + self.kandung + self.bersih) / 5.0
 
     def mood_energy_multiplier(self) -> float:
         mood = self.get_mood()

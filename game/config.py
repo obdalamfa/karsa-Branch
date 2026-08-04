@@ -109,6 +109,9 @@ NEED_HIGH     = 70    # di atas ini  → bonus mood
 NEED_DECAY_LAPAR  = 0.020   # ~5000 menit ≈ 3.5 hari in-game
 NEED_DECAY_SOSIAL = 0.015   # ~6700 menit ≈ 4.6 hari
 NEED_DECAY_SENANG = 0.012   # ~8300 menit ≈ 5.8 hari
+# Motif Sims tambahan (S1): kandung kemih terisi paling cepat, kebersihan pelan
+NEED_DECAY_KANDUNG = 0.055  # ~1800 menit ≈ 1.3 hari — paling mendesak
+NEED_DECAY_BERSIH  = 0.018  # ~5500 menit ≈ 3.8 hari
 
 # ─── ACTION QUEUE (ala FreeSO VMQueuedAction) ─────────────
 QUEUE_USER_DRIVEN = 50

@@ -272,7 +272,7 @@ print(f"[OK] Ikon item: {_icon_hits}/{len(_icon_set)} PNG termuat sebagai tekstu
 from game.scenes import props as _props
 import game.entities as _ent
 _orig_lmf = _ent.load_model_file
-_ent.load_model_file = lambda n: ('MDL_' + n)          # stub: model selalu "ada"
+_ent.load_model_file = lambda n: 'cube'          # stub: model selalu "ada"
 _props_default = _props.default_prop_builder
 _props.default_prop_builder = lambda world, scene: None  # isolasi scatter
 class _StubW:
@@ -290,6 +290,38 @@ for _nm, _bld, _build in (('mountain', mountain_builder, build_mountain),
     print(f"[OK] Dressing {_nm}: scatter menempatkan {len(_w._obj_ents)} props")
 _ent.load_model_file = _orig_lmf
 _props.default_prop_builder = _props_default
+
+# ── S1 Motif Sims: 5 motif + peluruhan + kecelakaan kandung + HUD 5 bar ──
+_s = game.state
+assert hasattr(_s, 'kandung') and hasattr(_s, 'bersih'), "motif kandung/bersih tak ada"
+assert len(game.panels._need_fills) == 5, f"HUD motif = {len(game.panels._need_fills)} bar, harusnya 5"
+_s.lapar = _s.sosial = _s.senang = _s.kandung = _s.bersih = 80.0
+_s.time_minutes = 8 * 60                            # jauh dari FORCE_SLEEP
+game.player.time_controller.tick(10.0, game.player) # 10 dtk real = banyak menit game
+assert _s.kandung < 80.0 and _s.bersih < 80.0, "motif baru tak meluruh"
+assert _s.kandung < _s.bersih, "kandung harusnya meluruh tercepat"
+print(f"[OK] S1 peluruhan: kandung {_s.kandung:.1f} < bersih {_s.bersih:.1f} < 80")
+# Kecelakaan: kandung 0 → lega tapi kotor & malu
+_s.kandung = 0.001; _s.bersih = 70.0; _s.senang = 50.0
+_msg = game.player.time_controller.tick(1.0, game.player)
+assert _s.kandung > 30.0 and _s.bersih <= 15.0 and _s.senang < 50.0, "kecelakaan tak berefek benar"
+assert _msg and 'mandi' in _msg, f"pesan kecelakaan aneh: {_msg!r}"
+print(f"[OK] S1 kecelakaan: kandung->%.0f bersih->%.0f, pesan tampil" % (_s.kandung, _s.bersih))
+# Mood kini rata-rata 5 motif
+_s.lapar = _s.sosial = _s.senang = 100.0; _s.kandung = 0.0; _s.bersih = 0.0
+assert abs(_s.get_mood() - 60.0) < 0.01, f"mood 5-motif salah: {_s.get_mood()}"
+print("[OK] S1 mood = rata-rata 5 motif")
+# HUD: tiap bar motif mengikuti nilainya + merah saat kritis
+game.panels.mode = 'hud'
+_s.lapar, _s.sosial, _s.senang, _s.kandung, _s.bersih = 90, 70, 50, 30, 10
+game.panels.update(_s, 0.016); step(1)
+for _k, _want in (('lapar',90),('sosial',70),('senang',50),('kandung',30),('bersih',10)):
+    _fill, _nx, _nw, _ncol = game.panels._need_fills[_k]
+    _pct = _fill.scale_x / _nw * 100
+    assert abs(_pct - _want) < 1.5, f"bar {_k}: {_pct:.1f}% != {_want}%"
+_bfill = game.panels._need_fills['bersih'][0]
+assert round(_bfill.color[0]*255) > 150 and round(_bfill.color[1]*255) < 100, "bar kritis tak memerah"
+print("[OK] S1 HUD: 5 bar motif sinkron + merah saat kritis")
 
 print("SMOKE BOOT PASS")
 os._exit(0)

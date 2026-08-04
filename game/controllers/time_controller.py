@@ -1,6 +1,7 @@
 from ..config import (
-    FORCE_SLEEP_HOUR, INGAME_MINUTES_PER_REAL_SECOND, 
-    NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG, NEED_MAX
+    FORCE_SLEEP_HOUR, INGAME_MINUTES_PER_REAL_SECOND,
+    NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG,
+    NEED_DECAY_KANDUNG, NEED_DECAY_BERSIH, NEED_MAX
 )
 from ..data import CROPS
 
@@ -16,11 +17,26 @@ class TimeController:
         if s.time_minutes >= 1440:
             s.time_minutes -= 1440
 
-        # Needs / Motives decay
+        # Needs / Motives decay (5 motif Sims)
         ingame_dt = dt * INGAME_MINUTES_PER_REAL_SECOND
-        s.lapar  = max(0.0, s.lapar  - NEED_DECAY_LAPAR  * ingame_dt)
-        s.sosial = max(0.0, s.sosial - NEED_DECAY_SOSIAL * ingame_dt)
-        s.senang = max(0.0, s.senang - NEED_DECAY_SENANG * ingame_dt)
+        s.lapar   = max(0.0, s.lapar   - NEED_DECAY_LAPAR   * ingame_dt)
+        s.sosial  = max(0.0, s.sosial  - NEED_DECAY_SOSIAL  * ingame_dt)
+        s.senang  = max(0.0, s.senang  - NEED_DECAY_SENANG  * ingame_dt)
+        s.kandung = max(0.0, s.kandung - NEED_DECAY_KANDUNG * ingame_dt)
+        s.bersih  = max(0.0, s.bersih  - NEED_DECAY_BERSIH  * ingame_dt)
+
+        # Starvation: HP berkurang jika kelaparan mencapai 0.0
+        if s.lapar <= 0.0:
+            STARVE_HP_DRAIN = 0.15  # 0.15 HP per menit in-game
+            s.hp = max(0.0, s.hp - STARVE_HP_DRAIN * ingame_dt)
+
+        # "Kecelakaan" klasik Sims: kandung kemih penuh (0) → mengompol —
+        # kandung lega tapi kebersihan anjlok, malu (senang turun).
+        if s.kandung <= 0.0:
+            s.kandung = 60.0
+            s.bersih  = min(s.bersih, 15.0)
+            s.senang  = max(0.0, s.senang - 15.0)
+            return "Ups... kecelakaan! Kamu perlu mandi."
 
         if s.get_hour() >= FORCE_SLEEP_HOUR:
             self.advance_day(player)
@@ -43,8 +59,10 @@ class TimeController:
         s.time_minutes   = 360.0
         s.energy         = s.max_energy
         s.hp             = s.max_hp
-        s.lapar  = min(NEED_MAX, s.lapar  + 25)
-        s.senang = min(NEED_MAX, s.senang + 20)
+        s.lapar   = min(NEED_MAX, s.lapar  + 25)
+        s.senang  = min(NEED_MAX, s.senang + 20)
+        s.kandung = min(NEED_MAX, s.kandung + 60)   # sempat ke belakang semalam
+        s.bersih  = max(0.0, s.bersih - 8)          # bangun agak lusuh → mandi pagi
         s.naga_fountain_used_today = False
         s.buffs.clear()
         s.animals_collected = []          # ternak siap diperah/diambil lagi

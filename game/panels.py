@@ -489,18 +489,20 @@ class UIManager:
         self._en_bar   = _ui(scale=(self._BAR_W, 0.024), position=(self._BAR_X_LEFT + self._BAR_W/2, BAR_BOT), color=color.rgb(70, 180, 80), z=0.3)
         self._en_val   = _txt('EN', pos=(self._BAR_X_LEFT - 0.045, BAR_BOT + 0.010), scale=0.68, col=WHITE)
 
-        # ── Needs sim-life (Lapar / Sosial / Senang) — mini bar 3 baris ──
+        # ── Motif Sims (Lapar/Sosial/Senang/Kandung/Bersih) — mini bar 5 baris ──
         NX, NW = -0.275, 0.135
         self._need_fills = {}
         need_rows = [
-            ('lapar',  'LPR', -0.404, color.rgb(205, 150, 62)),
-            ('sosial', 'SOS', -0.430, color.rgb(82, 156, 150)),
-            ('senang', 'SNG', -0.456, color.rgb(160, 128, 176)),
+            ('lapar',   'LPR', -0.398, color.rgb(205, 150, 62)),
+            ('sosial',  'SOS', -0.419, color.rgb(82, 156, 150)),
+            ('senang',  'SNG', -0.440, color.rgb(160, 128, 176)),
+            ('kandung', 'KDG', -0.461, color.rgb(196, 176, 88)),
+            ('bersih',  'BRS', -0.482, color.rgb(96, 160, 200)),
         ]
         for key, lbl, ny, ncol in need_rows:
-            _txt(lbl, pos=(NX - 0.052, ny + 0.009), scale=0.52, col=color.rgb(168, 158, 138))
-            _ui(scale=(NW, 0.017), position=(NX + NW/2, ny), color=color.rgb(40, 35, 31), z=0.4)
-            fill = _ui(scale=(NW, 0.017), position=(NX + NW/2, ny), color=ncol, z=0.3)
+            _txt(lbl, pos=(NX - 0.052, ny + 0.008), scale=0.48, col=color.rgb(168, 158, 138))
+            _ui(scale=(NW, 0.015), position=(NX + NW/2, ny), color=color.rgb(40, 35, 31), z=0.4)
+            fill = _ui(scale=(NW, 0.015), position=(NX + NW/2, ny), color=ncol, z=0.3)
             self._need_fills[key] = (fill, NX, NW, ncol)
 
         self._buff_txt  = _txt('', pos=(0.075, BAR_TOP + 0.012), scale=0.58, col=color.rgb(120, 220, 165))

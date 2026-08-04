@@ -347,11 +347,11 @@ class Game3D:
                 update_ambient_dynamic(s, self.player, dt)
             except Exception as e:
                 logging.error(f"Gagal update ambient dynamic: {e}")
-            # Jika HP habis → pingsan, balik ke rumah, mulai hari baru
-            if s.hp <= 0:
+            # Jika HP habis → pingsan, balik ke rumah, mulai hari baru (hanya di luar dungeon untuk cegah konflik respawn)
+            if s.hp <= 0 and s.scene_name != 'dungeon':
                 s.scene_name = 'house'
                 s.player_x, s.player_y = 7.0, 8.0
-                self.player._advance_day()
+                self.player.time_controller.advance_day(self.player)
                 self.panels.flash_msg("Kamu pingsan! Terbangun di rumah...", 3.5)
             self.entities.update(dt)
             self.world.update(dt)
@@ -806,9 +806,11 @@ class Game3D:
     # ─── NEEDS WARNING ──────────────────────────────────────
     def _check_needs_warning(self):
         s = self.state
-        for name, val in [('lapar', s.lapar), ('sosial', s.sosial), ('senang', s.senang)]:
+        for name, val in [('lapar', s.lapar), ('sosial', s.sosial), ('senang', s.senang),
+                          ('kandung', s.kandung), ('bersih', s.bersih)]:
             if val <= NEED_CRITICAL and name not in self._needs_warned:
-                label = {'lapar': 'Lapar', 'sosial': 'Kesepian', 'senang': 'Bosan'}[name]
+                label = {'lapar': 'Lapar', 'sosial': 'Kesepian', 'senang': 'Bosan',
+                         'kandung': 'Kebelet', 'bersih': 'Bau badan'}[name]
                 self.panels.flash_msg(f"[!] {label}! Needs kamu kritis.", 2.5)
                 self._needs_warned.add(name)
             elif val > NEED_CRITICAL * 1.5 and name in self._needs_warned:

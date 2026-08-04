@@ -516,6 +516,10 @@ class UIManager:
             fill = _ui(scale=(NW, 0.015), position=(NX + NW/2, ny), color=ncol, z=0.3)
             self._need_fills[key] = (fill, NX, NW, ncol)
 
+        # ── Chip MOOD (S4) — di bawah bar motif ──
+        self._mood_txt = _txt('', pos=(NX - 0.052, -0.505), scale=0.55,
+                              col=color.rgb(180, 190, 175))
+
         self._buff_txt  = _txt('', pos=(0.075, BAR_TOP + 0.012), scale=0.58, col=color.rgb(120, 220, 165))
         self._queue_txt = _txt('', pos=(0.075, BAR_BOT + 0.005), scale=0.58, col=color.rgb(220, 190, 95))
 
@@ -610,6 +614,13 @@ class UIManager:
                 val = max(0.0, min(1.0, getattr(s, key, NEED_MAX) / max(NEED_MAX, 1)))
                 _shrink_bar(fill, nx, nw, max(0.001, val))
                 fill.color = color.rgb(200, 70, 55) if val <= 0.25 else ncol
+
+        # Chip mood (S4) — nama emosi + warnanya
+        if getattr(self, '_mood_txt', None):
+            from .sims_mood import mood_label, mood_color
+            _mc = mood_color(s)
+            self._mood_txt.text = f"MOOD  {mood_label(s)}"
+            self._mood_txt.color = color.rgb(*_mc)
 
         # Gold + buff (§ simbol web-style)
         self._gold_txt.text = f'§ {s.gold}G'

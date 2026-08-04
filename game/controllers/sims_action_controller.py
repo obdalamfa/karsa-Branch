@@ -57,9 +57,12 @@ class SimsActionController:
         if not obj:
             return False
         self.cancel(panels=None)             # satu aksi pada satu waktu
+        # Mood memengaruhi kecepatan (S4): gembira → cepat, loyo → lambat.
+        from ..sims_mood import mood_speed_multiplier
+        dur = float(obj['dur']) * mood_speed_multiplier(self.state)
         self.current = {
             'tid': tile_id, 'tx': int(tx), 'ty': int(ty), 'obj': obj,
-            'dur': float(obj['dur']), 'left': float(obj['dur']),
+            'dur': dur, 'left': dur,
             'phase': 'walk', 'auto': bool(auto),
         }
         # Jalan ke objek memakai PathMover yang sudah ada (klik-untuk-jalan).

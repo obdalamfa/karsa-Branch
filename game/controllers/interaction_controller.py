@@ -19,6 +19,15 @@ class InteractionController:
         self.player = player
         self.world = world
 
+    def _social(self, s, base: int) -> float:
+        """Naikkan motif sosial dgn pengaruh MOOD (S4): mood bagus membuat
+        interaksi lebih berbuah, mood buruk membuatnya hambar. Selalu >0
+        supaya berinteraksi tak pernah sia-sia. Return delta yang diberikan."""
+        from ..sims_mood import mood_social_bonus
+        delta = max(1.0, base * (1.0 + mood_social_bonus(s) / 100.0))
+        s.sosial = min(NEED_MAX, s.sosial + delta)
+        return delta
+
     def use_tool(self, entities_mgr, panels):
         tx, ty = self.player._facing_tile()
         self.use_tool_at(self.player.state.tool_index, tx, ty, entities_mgr, panels)
@@ -778,12 +787,12 @@ class InteractionController:
         from ..config import NEED_MAX
 
         if action == 'sapa':
-            s.sosial = min(NEED_MAX, s.sosial + 5)
+            self._social(s, 5)
             sound_play('menu_select', 0.7)
             panels.emote('. . .', color.rgb(220, 220, 210))
             panels.flash_msg(f"{npc.get('name', npc_id)}: Halo!", 1.2)
         elif action == 'ngobrol':
-            s.sosial = min(NEED_MAX, s.sosial + 15)
+            self._social(s, 15)
             s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1)
             panels.emote('<3', color.rgb(235, 140, 160), 1.4)
             panels.start_dialog(npc_id, s)
@@ -802,9 +811,9 @@ class InteractionController:
         elif action == 'beri_hadiah':
             panels.emote('<3 !', color.rgb(245, 150, 170), 1.5)
             self.give_gift(entities_mgr, panels)
-            s.sosial = min(NEED_MAX, s.sosial + 20)
+            self._social(s, 20)
         elif action == 'tanya_kabar':
-            s.sosial = min(NEED_MAX, s.sosial + 8)
+            self._social(s, 8)
             s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1)
             pos = s.npc_positions.get(npc_id, {})
             act = pos.get('activity', 'tidak ada info')
@@ -815,7 +824,7 @@ class InteractionController:
             sound_play('menu_select', 0.6)
             panels.flash_msg(f"{npc.get('name', npc_id)} tampak misterius...", 1.5)
         elif action == 'sapa_halus':
-            s.sosial = min(NEED_MAX, s.sosial + 10)
+            self._social(s, 10)
             s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1)
             panels.start_dialog(npc_id, s)
         elif action == 'naga_riddle':

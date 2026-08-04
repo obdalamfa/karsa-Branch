@@ -415,5 +415,48 @@ print("[OK] S3 toggle Free Will ada di menu Pengaturan & mengubah state")
 assert 'free_will' in game.state.__dict__, "free_will tak ikut ter-serialize"
 print("[OK] S3 free_will tersimpan di state (ikut save)")
 
+# ── S4 Mood: motif → emosi → pengaruh kecepatan aksi & sosial ──
+from game.sims_mood import (current_mood, mood_label, mood_speed_multiplier,
+                            mood_social_bonus)
+_ctl.cancel(None)
+def _set_motifs(lapar=90, sosial=90, senang=90, kandung=90, bersih=90, en=None):
+    _s.lapar, _s.sosial, _s.senang = lapar, sosial, senang
+    _s.kandung, _s.bersih = kandung, bersih
+    _s.energy = _s.max_energy if en is None else en
+# Semua motif tinggi → Gembira
+_set_motifs()
+assert current_mood(_s) == 'gembira', f"mood salah: {current_mood(_s)}"
+assert mood_speed_multiplier(_s) < 1.0 and mood_social_bonus(_s) > 0
+print(f"[OK] S4 mood semua tinggi -> {mood_label(_s)} (cepat, sosial +{mood_social_bonus(_s)})")
+# Satu motif kritis MENDOMINASI walau rata-rata tinggi
+_set_motifs(kandung=5)
+assert current_mood(_s) == 'kebelet', f"motif kritis tak mendominasi: {current_mood(_s)}"
+print(f"[OK] S4 kandung kritis mendominasi -> {mood_label(_s)}")
+_set_motifs(lapar=8)
+assert current_mood(_s) == 'lapar', f"lapar kritis tak mendominasi: {current_mood(_s)}"
+# Semua sedang-rendah → muram
+_set_motifs(20+1, 21, 21, 21, 21)
+assert current_mood(_s) in ('muram', 'lesu'), f"mood rendah salah: {current_mood(_s)}"
+print(f"[OK] S4 semua motif rendah -> {mood_label(_s)}")
+# Mood mengubah DURASI aksi objek (gembira lebih cepat dari loyo)
+_set_motifs()                                   # gembira
+_ctl.start(WC, 4, 6, None); _dur_baik = _ctl.current['dur']; _ctl.cancel(None)
+_set_motifs(21, 21, 21, 21, 21)                 # muram
+_ctl.start(WC, 4, 6, None); _dur_muram = _ctl.current['dur']; _ctl.cancel(None)
+assert _dur_muram > _dur_baik, f"mood tak memengaruhi durasi ({_dur_baik} vs {_dur_muram})"
+print(f"[OK] S4 durasi aksi ikut mood: gembira {_dur_baik:.1f}s < muram {_dur_muram:.1f}s")
+# Mood mengubah HASIL interaksi sosial
+_ic = game.player.interaction_controller
+_set_motifs(); _s.sosial = 50.0
+_gain_baik = _ic._social(_s, 10)
+_set_motifs(lapar=8); _s.sosial = 50.0
+_gain_buruk = _ic._social(_s, 10)
+assert _gain_baik > _gain_buruk, f"mood tak memengaruhi sosial ({_gain_baik} vs {_gain_buruk})"
+print(f"[OK] S4 hasil sosial ikut mood: gembira +{_gain_baik:.1f} > kelaparan +{_gain_buruk:.1f}")
+# Chip mood tampil di HUD
+game.panels.mode = 'hud'; _set_motifs(); game.panels.update(_s, 0.016); step(1)
+assert 'Gembira' in game.panels._mood_txt.text, f"chip mood HUD: {game.panels._mood_txt.text!r}"
+print(f"[OK] S4 chip mood di HUD: {game.panels._mood_txt.text!r}")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

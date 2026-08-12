@@ -64,6 +64,12 @@ class TimeController:
         s.kandung = min(NEED_MAX, s.kandung + 60)   # sempat ke belakang semalam
         s.bersih  = max(0.0, s.bersih - 8)          # bangun agak lusuh → mandi pagi
         s.naga_fountain_used_today = False
+        # Relasi meluntur bila diabaikan (S5) — pertemanan perlu dirawat
+        try:
+            from ..sims_relationship import decay_relationships
+            decay_relationships(s)
+        except Exception:
+            pass
         s.buffs.clear()
         s.animals_collected = []          # ternak siap diperah/diambil lagi
 

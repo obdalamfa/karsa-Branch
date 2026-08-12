@@ -458,5 +458,61 @@ game.panels.mode = 'hud'; _set_motifs(); game.panels.update(_s, 0.016); step(1)
 assert 'Gembira' in game.panels._mood_txt.text, f"chip mood HUD: {game.panels._mood_txt.text!r}"
 print(f"[OK] S4 chip mood di HUD: {game.panels._mood_txt.text!r}")
 
+# ── S5 Relasi dua-meter: persahabatan + asmara, gate & peluruhan ──
+from game.sims_relationship import (friendship, romance, friend_label,
+                                    romance_label, add_friendship, add_romance,
+                                    can_romance, decay_relationships, summary,
+                                    ROMANCE_MIN_FRIENDSHIP)
+_npc = 'sari'
+_set_motifs()                                   # mood gembira (bonus sosial)
+_s.npc_hearts[_npc] = 0.0; _s.npc_romance = {}; _s.npc_last_social = {}
+# Persahabatan naik & berlabel
+add_friendship(_s, _npc, 1.5)
+assert friendship(_s, _npc) > 1.0, "persahabatan tak naik"
+print(f"[OK] S5 persahabatan: {friendship(_s,_npc):.1f} ({friend_label(_s,_npc)})")
+# Asmara DITOLAK saat belum akrab, dan bikin canggung (persahabatan turun)
+_before = friendship(_s, _npc)
+_ok, _d, _msg = add_romance(_s, _npc, 1.0)
+assert _ok is False and romance(_s, _npc) == 0.0, "rayuan lolos padahal belum akrab"
+assert friendship(_s, _npc) < _before, "rayuan prematur tak ada konsekuensi"
+print(f"[OK] S5 rayuan prematur ditolak & canggung: {_before:.1f} -> {friendship(_s,_npc):.1f} hati")
+# Cukup akrab → rayuan berhasil
+_s.npc_hearts[_npc] = 5.0
+assert can_romance(_s, _npc), "harusnya boleh merayu di 5 hati"
+_ok, _d, _ = add_romance(_s, _npc, 1.0)
+assert _ok and romance(_s, _npc) > 0, "rayuan gagal padahal sudah akrab"
+print(f"[OK] S5 rayuan berhasil: {romance(_s,_npc):.1f} asmara ({romance_label(_s,_npc)})")
+# Mood memengaruhi pertumbuhan relasi
+_s.npc_hearts['budi'] = 0.0
+_set_motifs(); _g_baik = add_friendship(_s, 'budi', 1.0)
+_s.npc_hearts['budi'] = 0.0
+_set_motifs(lapar=8); _g_buruk = add_friendship(_s, 'budi', 1.0)
+assert _g_baik > _g_buruk, f"mood tak memengaruhi relasi ({_g_baik} vs {_g_buruk})"
+print(f"[OK] S5 relasi ikut mood: gembira +{_g_baik:.2f} > kelaparan +{_g_buruk:.2f}")
+# Peluruhan: diabaikan berhari-hari → luntur; baru berinteraksi → aman
+_s.npc_hearts[_npc] = 6.0; _s.npc_romance[_npc] = 4.0
+_s.npc_last_social[_npc] = 1; _s.day = 10          # lama tak bertemu
+_f0, _r0 = friendship(_s, _npc), romance(_s, _npc)
+decay_relationships(_s)
+assert friendship(_s, _npc) < _f0 and romance(_s, _npc) < _r0, "relasi tak luntur"
+assert romance(_s,_npc) - (_r0 - 0.25) < 0.01, "laju luntur asmara salah"
+print(f"[OK] S5 luntur diabaikan: hati {_f0:.1f}->{friendship(_s,_npc):.2f}, asmara {_r0:.1f}->{romance(_s,_npc):.2f}")
+_s.npc_last_social[_npc] = 10                      # baru saja berinteraksi
+_f1 = friendship(_s, _npc); decay_relationships(_s)
+assert friendship(_s, _npc) == _f1, "relasi luntur padahal baru berinteraksi"
+print("[OK] S5 masa tenggang: baru berinteraksi -> tak luntur")
+# Aksi pie 'gombal' & 'puji' tersedia dgn gate yang benar
+_s.npc_hearts[_npc] = 1.0
+_pie = {a[0]: a[2] for a in _ic.build_pie_options(_npc)}
+assert 'gombal' in _pie and 'puji' in _pie, f"aksi asmara tak ada di pie: {list(_pie)}"
+assert _pie['gombal'] is False, "gombal aktif padahal baru 1 hati"
+_s.npc_hearts[_npc] = 5.0
+_pie = {a[0]: a[2] for a in _ic.build_pie_options(_npc)}
+assert _pie['gombal'] is True, "gombal tak aktif padahal 5 hati"
+print("[OK] S5 pie menu: gombal terkunci di 1 hati, terbuka di 5 hati")
+# Relasi ikut save
+assert 'npc_romance' in game.state.__dict__ and 'npc_last_social' in game.state.__dict__
+print("[OK] S5 npc_romance & npc_last_social ikut ter-serialize")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

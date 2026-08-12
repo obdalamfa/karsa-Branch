@@ -748,6 +748,14 @@ class InteractionController:
                 ('beri_hadiah', 'Beri Hadiah',   bool(s.inventory.get(gift_item)), '+20 Sosial +2❤'),
                 ('tanya_kabar', 'Tanya Kabar',   hearts >= 3,                      '+8 Sosial +1❤'),
             ]
+            # ── Aksi asmara (S5) — butuh modal persahabatan dulu ──
+            from ..sims_relationship import (ROMANCE_MIN_FRIENDSHIP, romance as _rom,
+                                             romance_label as _rlabel)
+            _can_rom = hearts >= ROMANCE_MIN_FRIENDSHIP
+            opts.append(('puji', 'Puji', hearts >= 2, '+Sosial +❤ +sedikit ♥'))
+            opts.append(('gombal', 'Gombal', _can_rom,
+                         f"+♥ {_rlabel(s, npc_id)}" if _can_rom
+                         else f"perlu {ROMANCE_MIN_FRIENDSHIP:.0f}❤ dulu"))
             if npc_id == 'arya':
                 opts.append(('arya_tanya', 'Tanya Kebun', True, '+Misteri Kebun'))
             elif npc_id == 'sari' and hearts >= 2.0:
@@ -819,6 +827,28 @@ class InteractionController:
             act = pos.get('activity', 'tidak ada info')
             sound_play('menu_select', 0.7)
             panels.flash_msg(f"{npc.get('name', npc_id)}: Sekarang lagi {act}.", 2.0)
+        elif action == 'puji':
+            # Memuji: menaikkan persahabatan + sedikit asmara (bila sudah akrab)
+            from ..sims_relationship import add_friendship, add_romance, summary
+            self._social(s, 8)
+            _df = add_friendship(s, npc_id, 0.6)
+            add_romance(s, npc_id, 0.2)          # gagal diam-diam bila belum akrab
+            sound_play('menu_select', 0.8)
+            panels.emote('!', color.rgb(255, 225, 150))
+            panels.flash_msg(f"Kamu memuji {npc.get('name', npc_id)}. ({summary(s, npc_id)})", 2.0)
+        elif action == 'gombal':
+            # Merayu: hanya berhasil bila cukup akrab; gagal = canggung
+            from ..sims_relationship import add_romance, summary
+            ok, delta, msg = add_romance(s, npc_id, 1.0)
+            if ok:
+                self._social(s, 10)
+                sound_play('gift', 0.8)
+                panels.emote('<3', color.rgb(245, 150, 170), 1.5)
+                panels.flash_msg(f"Rayuanmu mengena! ({summary(s, npc_id)})", 2.2)
+            else:
+                sound_play('blocked', 0.6)
+                panels.emote('...', color.rgb(180, 180, 180), 1.4)
+                panels.flash_msg(f"{npc.get('name', npc_id)}: {msg}", 2.2)
         elif action == 'amati':
             s.senang = min(NEED_MAX, s.senang + 5)
             sound_play('menu_select', 0.6)

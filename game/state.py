@@ -66,6 +66,10 @@ class GameState:
     kandung: float = 100.0  # Bladder — terisi waktu → kosongkan di toilet (S1 Sims)
     bersih:  float = 100.0  # Hygiene — turun waktu → isi dengan mandi (S1 Sims)
     free_will: bool = True  # Autonomi ala Sims (S3): Sim urus kebutuhan sendiri
+    # Relasi dua-meter ala Sims (S5). Persahabatan pakai npc_hearts yang sudah
+    # ada; asmara & catatan hari interaksi terakhir (utk peluruhan) di sini.
+    npc_romance:     dict = field(default_factory=dict)
+    npc_last_social: dict = field(default_factory=dict)
 
     # ─── Majelis Batin (4 suara + skill-check ala Disco Elysium) ───
     batin: dict = field(default_factory=lambda: {'bara': 1, 'akar': 1, 'sukma': 1, 'lapar': 1})

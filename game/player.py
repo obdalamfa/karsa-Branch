@@ -1033,6 +1033,14 @@ class Player3D(Entity):
             self.body.rotation_x = 3
             self._pose_y_off = 0.0
             self.rotation_x = 0
+        elif pose == 'death':
+            # Tumbang: badan rebah + lengan lemas (dipakai combat saat HP habis)
+            self.rotation_x = -88
+            self._pose_y_off = -0.20
+            self._pivot_shoulder_l.rotation_x = self._pivot_shoulder_r.rotation_x = 25
+            self._pivot_hip_l.rotation_x = self._pivot_hip_r.rotation_x = -10
+            self._pivot_knee_l.rotation_x = self._pivot_knee_r.rotation_x = 18
+            self.body.rotation_x = 0
         elif pose == 'cook':
             # Memasak: satu tangan mengaduk (memutar), badan sedikit membungkuk
             stir = _m.sin(self._pose_t * 6.0) * 22.0

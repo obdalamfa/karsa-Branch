@@ -433,6 +433,57 @@ def _can_walk(tx, ty, scene_name, dungeon_tiles=None):
     return sc.tiles[ty][tx] in WALKABLE
 
 
+# Pose per-AKTIVITAS untuk NPC bermodel OBJ (tak punya rig seperti pemain).
+# Karena satu mesh utuh, "pose" = transform seluruh badan: condong + goyang.
+#   activity → (tilt_x derajat, offset_y, amplitudo goyang)
+# Condong positif = membungkuk ke depan (bekerja), negatif = menengadah.
+NPC_ACTIVITY_POSE = {
+    # Kerja fisik — membungkuk & bergerak jelas
+    'forging':       (20.0, 0.0, 0.055),
+    'cooking':       (15.0, 0.0, 0.035),
+    'angkat_barang': (18.0, 0.0, 0.050),
+    'bersih_bersih': (16.0, 0.0, 0.045),
+    'working':       (13.0, 0.0, 0.035),
+    'helping':       (13.0, 0.0, 0.035),
+    'serving':       (11.0, 0.0, 0.030),
+    'preparing':     (12.0, 0.0, 0.030),
+    'fishing':       (9.0,  0.0, 0.018),   # menunggu, sesekali menyentak
+    'painting':      (8.0,  0.0, 0.022),
+    'sketching':     (8.0,  0.0, 0.022),
+    'stealing':      (22.0, 0.0, 0.040),   # mengendap
+    'pecking':       (25.0, 0.0, 0.050),   # mematuk (hewan)
+    'grazing':       (24.0, 0.0, 0.030),   # merumput
+    # Duduk / bersantai — sedikit turun
+    'reading':       (6.0, -0.10, 0.014),
+    'resting':       (4.0, -0.16, 0.012),
+    'istirahat':     (4.0, -0.16, 0.012),
+    'lounging':      (6.0, -0.20, 0.012),
+    'makan':         (10.0, -0.12, 0.022),
+    'drinking':      (8.0, -0.12, 0.020),
+    'home':          (0.0, -0.06, 0.012),
+    # Sosial / berdiri — goyang halus
+    'teaching':      (0.0, 0.0, 0.030),
+    'gossiping':     (0.0, 0.0, 0.026),
+    'shopping':      (5.0, 0.0, 0.022),
+    'school':        (0.0, 0.0, 0.024),
+    'playing':       (0.0, 0.0, 0.060),    # anak-anak, lincah
+    'hopping':       (0.0, 0.0, 0.075),
+    'meditating':    (0.0, 0.0, 0.006),    # nyaris diam
+    'jaga_kapal':    (0.0, 0.0, 0.014),
+    'inspeksi':      (7.0, 0.0, 0.026),
+    'patroling':     (0.0, 0.0, 0.020),
+    # Makhluk halus — melayang / menakutkan
+    'hovering':      (0.0, 0.55, 0.090),
+    'haunting':      (-6.0, 0.35, 0.075),
+    'jumping':       (0.0, 0.15, 0.110),
+    'prowling':      (14.0, 0.0, 0.045),
+    'roaming':       (0.0, 0.0, 0.030),
+    'swimming':      (10.0, -0.25, 0.045),
+    'wandering':     (0.0, 0.0, 0.020),
+    'strolling':     (0.0, 0.0, 0.020),
+}
+
+
 class EntitiesManager:
     """Mengelola semua NPC, wild entity, dan mob 3D dengan pendekatan OOP."""
 
@@ -561,9 +612,19 @@ class EntitiesManager:
                 else:
                     actor = NPC(s, actor_id)
                 
-                # Setup Model
+                # Setup Model — URUTAN SAMA dgn jalur spawn utama di bawah:
+                # model npc_<id>.obj kustom LEBIH DULU, Vitaboy hanya cadangan.
+                # (Dulu blok ini langsung bikin VitaboyAvatar tanpa cek OBJ, jadi
+                #  actor punya OBJ *dan* _va sekaligus → kode animasi mengambil
+                #  cabang Vitaboy dan mesh OBJ tak pernah dapat pose apa pun.)
                 apr_list = NPC_APPEARANCES.get(actor_id)
-                if apr_list:
+                _obj_mdl = load_model_file(f'npc_{actor_id}')
+                if _obj_mdl is not None:
+                    actor.model = _obj_mdl
+                    actor.color = color.white
+                    actor.scale = 1.0
+                    _setup_pose_swap(actor, f'npc_{actor_id}')
+                elif apr_list:
                     from .vitaboy import VitaboyAvatar
                     sc = 0.19 if actor_id in ('cici', 'bowo') else 0.32
                     actor._va = VitaboyAvatar(actor, apr_list, scale=sc)
@@ -875,7 +936,8 @@ class EntitiesManager:
                     s.npc_positions[actor_id]['target_y'] = actor.target_y
                     s.npc_positions[actor_id]['path'] = list(actor.path)
                 
-                is_sleeping = getattr(actor, 'activity', '') == 'sleeping'
+                activity = getattr(actor, 'activity', '')
+                is_sleeping = activity == 'sleeping'
                 if is_sleeping:
                     if ' (Tidur)' not in actor._lbl.text:
                         actor._lbl.text = f"{actor._lbl.text.split(' (Tidur)')[0]} (Tidur)"
@@ -900,9 +962,21 @@ class EntitiesManager:
                         actor._va.set_animation("a2a-talk-idle-loop")
                     actor._va.update(dt)
                 else:
-                    if not is_moving_now:
+                    # Pose per-AKTIVITAS untuk NPC model-OBJ (tanpa rig): condong
+                    # + goyang halus sesuai apa yang sedang dikerjakan.
+                    # (Dulu blok ini mereset rotation_x tanpa cek tidur, jadi NPC
+                    #  tidur langsung ditegakkan lagi — tak pernah benar rebah.)
+                    if is_moving_now:
                         actor.rotation_x = 0
-                    actor.y = 0
+                        actor.y = 0
+                    elif is_sleeping:
+                        actor.rotation_x = -90          # pertahankan rebah
+                        actor.y = GH + 0.15
+                    else:
+                        tilt, y_off, bob = NPC_ACTIVITY_POSE.get(activity, (0.0, 0.0, 0.012))
+                        actor._act_t = getattr(actor, '_act_t', 0.0) + dt
+                        actor.rotation_x = tilt
+                        actor.y = y_off + math.sin(actor._act_t * 2.4) * bob
                     
             elif isinstance(actor, FarmAnimal):
                 actor.update_ai(dt, can_walk_fn)

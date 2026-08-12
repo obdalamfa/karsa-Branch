@@ -558,5 +558,44 @@ for _ in range(60):
 assert getattr(_p, '_pose', None) is None, "pose tak dilepas setelah aksi selesai"
 print("[OK] Pose dilepas otomatis saat aksi selesai")
 
+# ── Animasi mati pemain (dulu TAK PERNAH jalan: AnimStateMachine dead code) ──
+_p.set_pose(None)
+game.player.combat_controller._on_player_death(None)
+assert getattr(_p, '_pose', None) == 'death', "animasi tumbang tak terpasang saat mati"
+_p._update_pose(0.1)
+assert _p.rotation_x < -80, f"pose tumbang tak rebah: {_p.rotation_x}"
+print(f"[OK] Anim mati: pose 'death' terpasang, badan rebah {_p.rotation_x:.0f} derajat")
+game.player.combat_controller._respawn(None)
+assert getattr(_p, '_pose', None) is None and _p.rotation_x == 0, "pose tumbang tak dilepas saat respawn"
+print("[OK] Anim mati: pose dilepas saat respawn (tak rebah selamanya)")
+
+# ── Pose NPC per-aktivitas (dulu cuma berdiri; tidur pun langsung ditegakkan) ──
+from game.entities import NPC_ACTIVITY_POSE
+_acts_sched = {e[4] for v in __import__('game.data', fromlist=['SCHEDULES']).SCHEDULES.values() for e in v}
+_covered = _acts_sched & set(NPC_ACTIVITY_POSE)
+assert len(_covered) >= 25, f"pose aktivitas terlalu sedikit: {len(_covered)}"
+print(f"[OK] Pose NPC: {len(_covered)}/{len(_acts_sched)} aktivitas jadwal punya pose khas")
+assert NPC_ACTIVITY_POSE['forging'][0] > 15, "menempa harusnya membungkuk jelas"
+assert NPC_ACTIVITY_POSE['hovering'][1] > 0.3, "makhluk melayang harusnya terangkat"
+assert NPC_ACTIVITY_POSE['meditating'][2] < 0.01, "meditasi harusnya nyaris diam"
+print("[OK] Pose NPC khas: menempa membungkuk, hantu melayang, meditasi diam")
+# NPC tidur benar-benar rebah & tetap rebah (bug lama: langsung ditegakkan)
+game.state.scene_name = 'town'
+game.world.load_scene('town'); game.entities.load_scene('town'); step(1)
+_slp = None
+for _aid, _a in game.entities.actors.items():
+    if hasattr(_a, 'activity') and not getattr(_a, '_va', None):
+        _a.activity = 'sleeping'
+        _a.target_x, _a.target_y = _a.logical_x, _a.logical_y   # diam
+        _slp = _a; break
+if _slp is not None:
+    game.entities.update(0.1); game.entities.update(0.1)
+    assert _slp.rotation_x == -90, f"NPC tidur tak rebah: {_slp.rotation_x}"
+    print(f"[OK] NPC tidur rebah & bertahan ({_slp.rotation_x} derajat)")
+    _slp.activity = 'forging'
+    game.entities.update(0.1)
+    assert _slp.rotation_x != -90, "NPC bangun tapi masih rebah"
+    print(f"[OK] NPC bangun -> pose kerja ({_slp.rotation_x:.0f} derajat, tak rebah lagi)")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

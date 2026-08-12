@@ -112,9 +112,6 @@ class CombatController:
         self._tick_floor_loot(dt)
         self._tick_dmg_numbers(dt)
 
-        if self._shake_t > 0:
-            self._apply_screen_shake()
-
     # ── ATTACK ──────────────────────────────────────────────────────────────
 
     def attack(self, entities_mgr: 'EntitiesManager',
@@ -376,14 +373,7 @@ class CombatController:
                 alive.append(dn)
         self._dmg_numbers = alive
 
-    def _apply_screen_shake(self):
-        intensity = self._shake_t * 0.04
-        try:
-            from ursina import camera
-            camera.position.x = random.uniform(-intensity, intensity)
-            camera.position.z = random.uniform(-intensity, intensity)
-        except Exception:
-            pass
+
 
     def _calc_sword_damage(self, s) -> int:
         if not s.sword_id:
@@ -496,6 +486,10 @@ class CombatController:
         p = self.player
         if hasattr(p, '_anim') and p._anim:
             p._anim.force(AnimState.DEATH)
+        elif hasattr(p, 'set_pose'):
+            # AnimStateMachine tak pernah diinstansiasi (dead code), jadi dulu
+            # animasi tumbang TAK PERNAH jalan. Pakai sistem pose bertahan.
+            p.set_pose('death')
 
         sound_play('player_die', 1.0)
 
@@ -515,6 +509,9 @@ class CombatController:
 
     def _respawn(self, panels: 'UIManager'):
         s = self.state
+        # Lepas pose tumbang — kalau tidak, pemain hidup lagi tapi tetap rebah.
+        if hasattr(self.player, 'set_pose'):
+            self.player.set_pose(None)
         s.hp = max(1, s.max_hp // 4)     # HP 25%
         s.energy = max(1, s.max_energy // 3)
         s.dungeon_level = 1              # kembali ke lantai 1

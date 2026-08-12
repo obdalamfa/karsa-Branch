@@ -597,5 +597,42 @@ if _slp is not None:
     assert _slp.rotation_x != -90, "NPC bangun tapi masih rebah"
     print(f"[OK] NPC bangun -> pose kerja ({_slp.rotation_x:.0f} derajat, tak rebah lagi)")
 
+# ── Walk cycle 4-frame (M5): kontak → passing → kontak → passing ──
+from game.entities import _setup_pose_swap as _sps, load_model_file as _lmf
+class _Dummy:  # aktor minimal utk menguji pemilihan pose
+    pass
+_d = _Dummy(); _sps(_d, 'npc_arya')
+_names = getattr(_d, '_pose_names', ())
+assert len(_names) == 5, f"pose swap bukan 4-frame: {_names}"
+assert _names[1].endswith('_walk1') and _names[2].endswith('_walk3') \
+   and _names[3].endswith('_walk2') and _names[4].endswith('_walk4'), f"urutan siklus salah: {_names}"
+print(f"[OK] Walk 4-frame: urutan {[n.split('_')[-1] for n in _names]}")
+# Aset passing benar-benar ada & beda dari kontak
+assert _lmf('npc_arya_walk3') and _lmf('npc_arya_walk4'), "aset passing tak termuat"
+def _vs(p):
+    return [tuple(map(float, l.split()[1:4])) for l in open(p, errors='ignore') if l.startswith('v ')]
+_bv = _vs('assets/models/npc_arya.obj')
+_w1 = _vs('assets/models/npc_arya_walk1.obj'); _w3 = _vs('assets/models/npc_arya_walk3.obj')
+_ys = [v[1] for v in _bv]; _H = max(_ys) - min(_ys); _top = min(_ys) + 0.42 * _H
+_leg1 = max(abs(_w1[i][2] - _bv[i][2]) for i, v in enumerate(_bv) if v[1] < _top)
+_leg3 = max(abs(_w3[i][2] - _bv[i][2]) for i, v in enumerate(_bv) if v[1] < _top)
+_body3 = max(_w3[i][1] - _bv[i][1] for i, v in enumerate(_bv) if v[1] >= _top)
+assert _leg3 < _leg1, "passing harusnya kaki lebih rapat dari kontak"
+assert _body3 > 0.02 * _H, "passing harusnya badan terangkat"
+print(f"[OK] Walk 4-frame pose: kontak kaki {_leg1:.2f} > passing {_leg3:.2f}, badan naik {_body3:.3f}")
+# Siklus benar-benar berputar melewati SEMUA frame saat berjalan
+_d.is_moving = True; _d._walk_t = 0.0; _d._pose_cur = -1
+_seen = set()
+for _k in range(40):
+    _d._walk_t = _k * 0.55
+    _seen.add(1 + (int(_d._walk_t * 0.5) % (len(_names) - 1)))
+assert _seen == {1, 2, 3, 4}, f"siklus tak melewati semua frame: {sorted(_seen)}"
+print("[OK] Walk 4-frame: siklus melewati keempat frame (tak tersendat)")
+# Model tanpa aset passing tetap jalan (turun ke 2-frame)
+_d2 = _Dummy(); _sps(_d2, 'npc_kru_kuro')
+_n2 = getattr(_d2, '_pose_names', ())
+assert len(_n2) in (3, 5), f"fallback pose swap rusak: {_n2}"
+print(f"[OK] Walk: model lain dapat {len(_n2)-1} frame jalan (fallback aman)")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

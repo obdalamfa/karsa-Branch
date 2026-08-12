@@ -378,14 +378,23 @@ _MODEL_TRANSFORM = {
 }
 
 def _setup_pose_swap(actor, base_name):
-    """Aktifkan animasi mesh-swap 2-frame bila aset pose tersedia
-    (<base>_idle/_walk1/_walk2.obj). Dibaca oleh BaseActor.sync_visuals."""
+    """Aktifkan animasi mesh-swap bila aset pose tersedia.
+
+    4-frame (M5): idle + KONTAK kiri → PASSING → KONTAK kanan → PASSING
+    (<base>_walk1/_walk3/_walk2/_walk4). Bila _walk3/_walk4 tak ada, otomatis
+    turun ke siklus 2-frame lama — jadi model tanpa aset baru tetap jalan.
+    Dibaca oleh BaseActor.sync_visuals."""
     try:
-        if load_model_file(base_name + '_idle') and load_model_file(base_name + '_walk1'):
-            actor._pose_names = (base_name + '_idle',
-                                 base_name + '_walk1',
-                                 base_name + '_walk2')
-            actor._pose_cur = -1
+        if not (load_model_file(base_name + '_idle') and load_model_file(base_name + '_walk1')):
+            return
+        names = [base_name + '_idle', base_name + '_walk1']
+        if load_model_file(base_name + '_walk3') and load_model_file(base_name + '_walk4'):
+            # urutan siklus: kontak-kiri, passing, kontak-kanan, passing
+            names += [base_name + '_walk3', base_name + '_walk2', base_name + '_walk4']
+        else:
+            names += [base_name + '_walk2']
+        actor._pose_names = tuple(names)
+        actor._pose_cur = -1
     except Exception:
         pass
 

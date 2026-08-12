@@ -781,7 +781,14 @@ class Player3D(Entity):
                 self.is_jumping = False
         else:
             self.y = lerp(self.y, target_y, min(1.0, dt * 14))
-            
+
+        # ── Pose bertahan aksi Sims (S2) ──────────────────────────────────
+        # Diterapkan SETELAH terrain-following supaya offset y (duduk/tidur)
+        # tidak dilawan gravitasi, dan rotasi rig menimpa animasi jalan/idle.
+        if getattr(self, '_pose', None):
+            self._update_pose(dt)
+            self.y += getattr(self, '_pose_y_off', 0.0)
+
         # Broom Flying neon trailing particle sparks when moving
         if getattr(self, '_is_flying', False) and v_mag > 0.5:
             import random as _rng_mod
@@ -963,6 +970,77 @@ class Player3D(Entity):
     def _play_tool_anim(self, mode='swing'):
         self._attack_anim = 350
         self._anim_mode   = mode
+
+    # ─── POSE BERTAHAN (Sims S2/S4) ──────────────────────
+    # Beda dari _play_tool_anim yang one-shot 350ms: pose ini DITAHAN selama
+    # aksi objek berlangsung (duduk 3s, tidur 6s, mandi 4s) lalu dilepas.
+    def set_pose(self, pose):
+        """pose: None | 'sit' | 'sleep' | 'shower' | 'read' | 'cook'."""
+        self._pose = pose
+        self._pose_t = 0.0
+        if pose is None:
+            self._clear_pose()
+
+    def _clear_pose(self):
+        """Kembalikan rig & badan ke netral setelah pose dilepas."""
+        for piv in (self._pivot_hip_l, self._pivot_hip_r,
+                    self._pivot_knee_l, self._pivot_knee_r,
+                    self._pivot_shoulder_l, self._pivot_shoulder_r):
+            piv.rotation_x = 0
+            piv.rotation_z = 0
+        self.body.rotation_x = 0
+        self.rotation_x = 0
+        self._pose_y_off = 0.0
+
+    def _update_pose(self, dt):
+        """Terapkan pose bertahan tiap frame. Dipanggil dari tick()."""
+        pose = getattr(self, '_pose', None)
+        if not pose:
+            return
+        self._pose_t = getattr(self, '_pose_t', 0.0) + dt
+        import math as _m
+        breathe = _m.sin(self._pose_t * 2.2) * 3.0      # napas halus
+
+        if pose == 'sit':
+            # Duduk: paha ke depan, lutut menekuk, badan sedikit condong, turun
+            self._pivot_hip_l.rotation_x = self._pivot_hip_r.rotation_x = -75
+            self._pivot_knee_l.rotation_x = self._pivot_knee_r.rotation_x = 80
+            self._pivot_shoulder_l.rotation_x = self._pivot_shoulder_r.rotation_x = -12 + breathe * 0.3
+            self.body.rotation_x = 6
+            self._pose_y_off = -0.42
+            self.rotation_x = 0
+        elif pose == 'sleep':
+            # Tidur: seluruh badan rebah + sedikit turun ke ranjang
+            self.rotation_x = -90
+            self._pose_y_off = -0.28
+            self._pivot_shoulder_l.rotation_x = self._pivot_shoulder_r.rotation_x = -8 + breathe * 0.5
+            self._pivot_hip_l.rotation_x = self._pivot_hip_r.rotation_x = -4
+            self._pivot_knee_l.rotation_x = self._pivot_knee_r.rotation_x = 8
+            self.body.rotation_x = 0
+        elif pose == 'shower':
+            # Mandi: kedua tangan terangkat menggosok kepala, badan bergoyang
+            sway = _m.sin(self._pose_t * 3.4) * 8.0
+            self._pivot_shoulder_l.rotation_x = -125 + sway
+            self._pivot_shoulder_r.rotation_x = -125 - sway
+            self._pivot_hip_l.rotation_x = self._pivot_hip_r.rotation_x = 0
+            self._pivot_knee_l.rotation_x = self._pivot_knee_r.rotation_x = 0
+            self.body.rotation_x = 0
+            self._pose_y_off = 0.0
+            self.rotation_x = 0
+        elif pose == 'read':
+            # Membaca / nonton: kedua tangan ke depan setinggi dada
+            self._pivot_shoulder_l.rotation_x = self._pivot_shoulder_r.rotation_x = -72 + breathe * 0.4
+            self.body.rotation_x = 3
+            self._pose_y_off = 0.0
+            self.rotation_x = 0
+        elif pose == 'cook':
+            # Memasak: satu tangan mengaduk (memutar), badan sedikit membungkuk
+            stir = _m.sin(self._pose_t * 6.0) * 22.0
+            self._pivot_shoulder_r.rotation_x = -80 + stir
+            self._pivot_shoulder_l.rotation_x = -20
+            self.body.rotation_x = 10
+            self._pose_y_off = 0.0
+            self.rotation_x = 0
 
     def _fx_burst(self, wx, wy, wz, col, n=5, spread=0.45, dur=0.38):
         """Partikel ledakan singkat di posisi world — efek visual alat/serangan."""

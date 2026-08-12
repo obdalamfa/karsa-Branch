@@ -514,5 +514,49 @@ print("[OK] S5 pie menu: gombal terkunci di 1 hati, terbuka di 5 hati")
 assert 'npc_romance' in game.state.__dict__ and 'npc_last_social' in game.state.__dict__
 print("[OK] S5 npc_romance & npc_last_social ikut ter-serialize")
 
+# ── Pose bertahan aksi Sims (animasi): duduk/tidur/mandi/masak/baca ──
+_p = game.player
+_ctl.cancel(None); _p.set_pose(None)
+_neutral_hip = _p._pivot_hip_l.rotation_x
+# Duduk: paha & lutut menekuk, badan turun
+_p.set_pose('sit'); _p._update_pose(0.1)
+assert _p._pivot_hip_l.rotation_x < -40 and _p._pivot_knee_l.rotation_x > 40, "pose duduk tak menekuk"
+assert _p._pose_y_off < -0.2, "pose duduk tak menurunkan badan"
+print(f"[OK] Pose duduk: paha {_p._pivot_hip_l.rotation_x:.0f}, lutut {_p._pivot_knee_l.rotation_x:.0f}, turun {_p._pose_y_off:.2f}")
+# Tidur: badan rebah 90 derajat
+_p.set_pose('sleep'); _p._update_pose(0.1)
+assert _p.rotation_x == -90, f"pose tidur tak rebah: {_p.rotation_x}"
+print(f"[OK] Pose tidur: badan rebah {_p.rotation_x} derajat")
+# Mandi: kedua tangan terangkat tinggi & bergoyang (beda antar frame)
+_p.set_pose('shower'); _p._update_pose(0.1)
+_sh1 = _p._pivot_shoulder_l.rotation_x
+assert _sh1 < -100, f"pose mandi tak mengangkat tangan: {_sh1}"
+_p._update_pose(0.35)
+assert abs(_p._pivot_shoulder_l.rotation_x - _sh1) > 0.5, "pose mandi tak bergerak (statis)"
+print(f"[OK] Pose mandi: tangan {_sh1:.0f} & bergoyang antar-frame")
+# Masak: tangan mengaduk (berubah tiap frame)
+_p.set_pose('cook'); _p._update_pose(0.1); _ck1 = _p._pivot_shoulder_r.rotation_x
+_p._update_pose(0.25)
+assert abs(_p._pivot_shoulder_r.rotation_x - _ck1) > 1.0, "pose masak tak mengaduk"
+print("[OK] Pose masak: tangan mengaduk (bergerak)")
+# Lepas pose -> rig kembali netral
+_p.set_pose(None)
+assert _p._pivot_hip_l.rotation_x == _neutral_hip and _p.rotation_x == 0 and _p._pose_y_off == 0.0, "pose tak dilepas bersih"
+print("[OK] Pose dilepas -> rig netral kembali")
+# Aksi objek benar-benar MEMASANG pose yang sesuai, lalu melepasnya saat selesai
+game.state.scene_name = 'house'
+game.world.load_scene('house'); game.entities.load_scene('house'); step(1)
+if getattr(_p, 'mover', None): _p.mover.stop()
+_s.kandung = 10.0
+_p.set_tile_pos(4, 5)
+_ctl.start(WC, 4, 6, None); _ctl.tick(0.1, None)
+assert getattr(_p, '_pose', None) == 'sit', f"aksi toilet tak memasang pose duduk: {getattr(_p,'_pose',None)}"
+print("[OK] Aksi Toilet memasang pose 'sit'")
+for _ in range(60):
+    _ctl.tick(0.1, None)
+    if not _ctl.busy: break
+assert getattr(_p, '_pose', None) is None, "pose tak dilepas setelah aksi selesai"
+print("[OK] Pose dilepas otomatis saat aksi selesai")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

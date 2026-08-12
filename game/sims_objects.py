@@ -23,30 +23,31 @@ from .config import (BD, ST, TV, CHR, BS, FP, MR, TB, KLK, WC, SWR,
 #   action  : nama interaksi (kata kerja, untuk UI)
 #   motives : {field_state: delta_total} — diberikan BERTAHAP selama durasi
 #   dur     : durasi aksi dalam DETIK REAL
-#   anim    : pose/animasi yang dimainkan (opsional; dipakai bila ada)
+#   anim    : POSE bertahan di player selama aksi
+#             (sleep|sit|shower|cook|read — lihat Player3D.set_pose)
 SIMS_OBJECTS = {
     BD:  {'label': 'Ranjang',   'action': 'Tidur',        'dur': 6.0,
           'motives': {'energy': 60.0},                     'anim': 'sleep'},
     WC:  {'label': 'Toilet',    'action': 'Pakai Toilet', 'dur': 2.5,
           'motives': {'kandung': 95.0},                    'anim': 'sit'},
     SWR: {'label': 'Pancuran',  'action': 'Mandi',        'dur': 4.0,
-          'motives': {'bersih': 85.0, 'senang': 5.0},      'anim': 'stand'},
+          'motives': {'bersih': 85.0, 'senang': 5.0},      'anim': 'shower'},
     KLK: {'label': 'Kulkas',    'action': 'Ambil Makanan','dur': 2.0,
-          'motives': {'lapar': 35.0},                      'anim': 'bend'},
+          'motives': {'lapar': 35.0},                      'anim': 'cook'},
     ST:  {'label': 'Kompor',    'action': 'Masak',        'dur': 4.5,
-          'motives': {'lapar': 55.0},                      'anim': 'bend'},
+          'motives': {'lapar': 55.0},                      'anim': 'cook'},
     TB:  {'label': 'Meja Makan','action': 'Makan',        'dur': 3.0,
           'motives': {'lapar': 30.0, 'sosial': 8.0},       'anim': 'sit'},
     TV:  {'label': 'Televisi',  'action': 'Nonton TV',    'dur': 5.0,
           'motives': {'senang': 40.0},                     'anim': 'sit'},
     BS:  {'label': 'Rak Buku',  'action': 'Baca Buku',    'dur': 5.0,
-          'motives': {'senang': 25.0},                     'anim': 'stand'},
+          'motives': {'senang': 25.0},                     'anim': 'read'},
     FP:  {'label': 'Perapian',  'action': 'Menghangatkan','dur': 4.0,
-          'motives': {'senang': 18.0, 'energy': 8.0},      'anim': 'stand'},
+          'motives': {'senang': 18.0, 'energy': 8.0},      'anim': 'read'},
     CHR: {'label': 'Kursi',     'action': 'Duduk',        'dur': 3.0,
           'motives': {'energy': 15.0, 'senang': 6.0},      'anim': 'sit'},
     MR:  {'label': 'Cermin',    'action': 'Berdandan',    'dur': 3.0,
-          'motives': {'bersih': 20.0, 'senang': 6.0},      'anim': 'stand'},
+          'motives': {'bersih': 20.0, 'senang': 6.0},      'anim': 'read'},
 }
 
 # Semua motif yang bisa diiklankan objek (untuk validasi & autonomi S3)

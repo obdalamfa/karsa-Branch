@@ -74,6 +74,7 @@ class SimsActionController:
     def cancel(self, panels=None):
         c = self.current
         self.current = None
+        self._clear_anim()
         if c and panels:
             panels.flash_msg(f"{c['obj']['action']} dibatalkan.", 1.0)
 
@@ -85,6 +86,7 @@ class SimsActionController:
         # aksi yang diperintahkan pemain sendiri) — persis free-will Sims.
         if c and c.get('auto') and self._player_moving_input():
             self.current = None
+            self._clear_anim()
             self._auto_cd = self.AUTO_RETRY_SEC
             if panels:
                 panels.flash_msg("Kamu mengambil alih.", 1.0)
@@ -106,6 +108,7 @@ class SimsActionController:
             elif not self._walking():
                 # Tak bisa mencapai objek (terhalang) — batalkan dgn jujur.
                 self.current = None
+                self._clear_anim()
                 if panels:
                     panels.flash_msg(f"Tak bisa mencapai {c['obj']['label']}.", 1.6)
             return
@@ -120,6 +123,7 @@ class SimsActionController:
         if c['left'] <= 0.0:
             obj = c['obj']
             self.current = None
+            self._clear_anim()
             if panels:
                 gains = ', '.join(
                     f"{self._motive_label(f)} +{int(v)}" for f, v in obj['motives'].items())
@@ -240,10 +244,18 @@ class SimsActionController:
         except Exception:
             pass
 
+    VALID_POSES = ('sleep', 'sit', 'shower', 'cook', 'read')
+
     def _play_anim(self, anim):
-        if not anim:
-            return
+        """Tahan POSE selama aksi berlangsung (bukan ayunan alat one-shot)."""
+        pose = anim if anim in self.VALID_POSES else None
         try:
-            self.player._play_tool_anim(anim if anim in ('bend', 'down') else 'down')
+            self.player.set_pose(pose)
+        except Exception:
+            pass
+
+    def _clear_anim(self):
+        try:
+            self.player.set_pose(None)
         except Exception:
             pass

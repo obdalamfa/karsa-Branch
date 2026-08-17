@@ -47,6 +47,22 @@ menua=kering), nutrisi tanah, dan gulma. Mutu tinggi -> hasil lebih banyak.
 - **Relasi 2 meter**: Persahabatan & Asmara. Merayu butuh >=3 hati dulu;
   kalau belum, ditolak dan jadi canggung. Relasi luntur bila diabaikan.
 
+## Skill, Karier, Rumah Tangga
+- **Skill (6)** naik dgn MELAKUKAN: Bertani (cangkul/tanam/panen),
+  Kebugaran (menambang/bertarung), Memasak (kompor/kulkas), Logika (rak
+  buku), Karisma, Kerajinan. Makin tinggi level, makin berat XP-nya.
+- **Karier (3)**: lamar ke Arya (Buruh Tani), Budi (Pandai Besi), atau Sari
+  (Pelayan Warung) lewat menu interaksi NPC. Kamu harus berada di LOKASI
+  kerja pada JAM kerja, sekali sehari. Gaji ikut MOOD (mood bagus dibayar
+  lebih). **Naik pangkat butuh skill DAN jumlah hari kerja.**
+- **Bangun/Beli [L]**: katalog 11 objek (Kursi 60G .. Televisi 350G). Pilih
+  lalu Enter untuk memasang di petak DEPANMU; [X] menjual (balik separuh).
+  Objek yang kamu beli langsung berfungsi memenuhi motif.
+- **Rumah tangga**: NPC dgn >=6 hati bisa diajak tinggal bersama (maks 4
+  orang). Anggota menyetor 18G/hari. **Tagihan datang tiap 5 hari** dan
+  makin mahal bila anggota & barangmu banyak — kalau tak mampu bayar, jadi
+  utang.
+
 ## Kontrol
 | Tombol | Aksi | Tombol | Aksi |
 |---|---|---|---|
@@ -59,6 +75,7 @@ menua=kering), nutrisi tanah, dan gulma. Mutu tinggi -> hasil lebih banyak.
 | Z | Serang | V | Makan |
 | F | Tangkap makhluk halus | G | Beri hadiah |
 | O/P | Ganti benih | B | Sapu terbang |
+| L | Bangun/Beli | | |
 
 Alat: 1 Cangkul, 2 Siram, 3 Tanam, 4 Panen, 5 Kapak, 7 Pickaxe, 8 Pedang.
 

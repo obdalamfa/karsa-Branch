@@ -70,6 +70,13 @@ class TimeController:
             reset_daily(s)
         except Exception:
             pass
+        # Rumah tangga: setoran anggota + tagihan berkala (S8)
+        self._last_household = None
+        try:
+            from ..sims_household import tick_day as _hh_tick
+            self._last_household = _hh_tick(s)
+        except Exception:
+            pass
         # Relasi meluntur bila diabaikan (S5) — pertemanan perlu dirawat
         try:
             from ..sims_relationship import decay_relationships
@@ -181,6 +188,17 @@ class TimeController:
             panels.flash_msg("Tidur... Hari baru dimulai!", 2.0)
             self.advance_day(player)
             # Ringkasan penjualan Peti Kirim (Stardew)
+            hh = getattr(self, '_last_household', None)
+            if hh:
+                from ursina import invoke as _inv
+                if hh.get('bill'):
+                    _txt = (f"Tagihan {hh['bill']}G dibayar."
+                            if not hh.get('unpaid') else
+                            f"Tagihan {hh['bill']}G TAK TERBAYAR — jadi utang!")
+                    _inv(panels.flash_msg, _txt, 3.0, delay=1.2)
+                if hh.get('contrib'):
+                    _inv(panels.flash_msg,
+                         f"Anggota rumah menyetor +{hh['contrib']}G.", 2.4, delay=2.6)
             items, earned = getattr(self, '_last_ship_sale', (0, 0))
             if earned > 0:
                 invoke(panels.flash_msg,

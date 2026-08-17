@@ -757,5 +757,62 @@ print("[OK] S7 mode UI: [L] buka, [Esc] tutup")
 assert 'placed_objects' in game.state.__dict__, "placed_objects tak ter-serialize"
 print("[OK] S7 placed_objects ikut save")
 
+# -- S8 Rumah tangga & Simoleon --
+from game.sims_household import (members, household_size, can_move_in, move_in,
+                                 move_out, bill_amount, daily_contribution,
+                                 tick_day, object_count, summary as _hhsum,
+                                 MOVE_IN_MIN_FRIENDSHIP, MAX_HOUSEHOLD,
+                                 BILL_INTERVAL_DAYS)
+_s.household = []; _s.bill_days = 0; _s.unpaid_bills = 0
+_s.npc_hearts = {}; _s.placed_objects = {}
+assert household_size(_s) == 1, "rumah tangga awal harusnya sendiri"
+# Gate: belum cukup dekat
+_s.npc_hearts['sari'] = 2.0
+_ok, _why = can_move_in(_s, 'sari')
+assert not _ok and 'dekat' in _why.lower(), f"gate kedekatan bocor: {_why}"
+print(f"[OK] S8 gate: 2.0 hati ditolak (butuh {MOVE_IN_MIN_FRIENDSHIP:.0f})")
+# Cukup dekat -> pindah
+_s.npc_hearts['sari'] = 7.0
+_ok, _msg = move_in(_s, 'sari')
+assert _ok and household_size(_s) == 2, f"gagal pindah: {_msg}"
+print(f"[OK] S8 pindah: rumah tangga {household_size(_s)} orang")
+# Tagihan naik seiring anggota & objek
+_b1 = bill_amount(_s)
+_s.placed_objects = {'house': {'1,1': 63, '2,2': 64, '3,3': 65}}
+_b2 = bill_amount(_s)
+assert _b2 > _b1 and object_count(_s) == 3, f"tagihan tak ikut objek ({_b1}->{_b2})"
+print(f"[OK] S8 tagihan: {_b1}G -> {_b2}G setelah beli 3 objek (rumah mewah = mahal)")
+# Setoran harian anggota
+_s.gold = 0; _s.bill_days = 0
+_res = tick_day(_s)
+assert _res and _res['contrib'] == daily_contribution(_s) and _s.gold == _res['contrib']
+print(f"[OK] S8 setoran harian anggota: +{_res['contrib']}G")
+# Tagihan jatuh tempo tiap N hari & benar-benar memotong
+_s.gold = 5000; _s.bill_days = BILL_INTERVAL_DAYS - 1
+_g0 = _s.gold
+_res = tick_day(_s)
+assert _res['bill'] > 0 and _s.gold == _g0 + _res['contrib'] - _res['bill'], "tagihan tak terpotong"
+assert _s.bill_days == 0, "hitungan tagihan tak reset"
+print(f"[OK] S8 tagihan jatuh tempo tiap {BILL_INTERVAL_DAYS} hari: -{_res['bill']}G")
+# Tak mampu bayar -> jadi utang, gold tak minus
+_s.gold = 10; _s.bill_days = BILL_INTERVAL_DAYS - 1; _s.unpaid_bills = 0
+_res = tick_day(_s)
+assert _res['unpaid'] and _s.gold == 0 and _s.unpaid_bills > 0, f"utang tak tercatat: {_res}"
+print(f"[OK] S8 tak mampu bayar -> utang {_s.unpaid_bills}G, gold tak minus")
+# Batas jumlah anggota
+for _i, _n in enumerate(('budi', 'maya', 'raka')):
+    _s.npc_hearts[_n] = 9.0; move_in(_s, _n)
+assert household_size(_s) <= MAX_HOUSEHOLD, "melebihi batas anggota"
+_ok, _why = can_move_in(_s, 'joko')
+assert not _ok and 'penuh' in _why.lower(), f"batas rumah tak berlaku: {_why}"
+print(f"[OK] S8 batas rumah tangga {MAX_HOUSEHOLD} orang ditegakkan")
+# Pindah keluar
+_ok, _msg = move_out(_s, 'sari')
+assert _ok and 'sari' not in members(_s), "gagal pindah keluar"
+print(f"[OK] S8 pindah keluar: {household_size(_s)} orang tersisa")
+for _f in ('household', 'bill_days', 'unpaid_bills'):
+    assert _f in game.state.__dict__, f"{_f} tak ter-serialize"
+print("[OK] S8 rumah tangga ikut save")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

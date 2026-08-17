@@ -788,6 +788,15 @@ class InteractionController:
                     opts.append(('kerja', 'Bekerja', _ok_work, _why or 'Dapat gaji harian'))
                     _can_pro, _nn, _txt = _pstat(s)
                     opts.append(('naik_pangkat', 'Minta Naik Pangkat', _can_pro, _txt))
+            # Rumah tangga (S8): ajak pindah bila sudah sangat dekat
+            from ..sims_household import (can_move_in as _cmi, members as _hhm,
+                                          MOVE_IN_MIN_FRIENDSHIP as _MMF)
+            if npc_id in _hhm(s):
+                opts.append(('usir', 'Minta Pindah Keluar', True, 'keluar dari rumah tangga'))
+            else:
+                _ok_mv, _why_mv = _cmi(s, npc_id)
+                opts.append(('ajak_pindah', 'Ajak Tinggal Bersama', _ok_mv,
+                             _why_mv or f'gabung rumah tangga (min {_MMF:.0f} hati)'))
             opts.append(('gombal', 'Gombal', _can_rom,
                          f"+♥ {_rlabel(s, npc_id)}" if _can_rom
                          else f"perlu {ROMANCE_MIN_FRIENDSHIP:.0f}❤ dulu"))
@@ -900,6 +909,18 @@ class InteractionController:
                 _c, _n, _t = promotion_status(s)
                 sound_play('blocked', 0.6)
                 panels.flash_msg(_t, 3.0)
+        elif action == 'ajak_pindah':
+            from ..sims_household import move_in, summary as _hhsum
+            ok, msg = move_in(s, npc_id)
+            sound_play('quest' if ok else 'blocked', 0.9)
+            panels.flash_msg(msg, 2.8)
+            if ok:
+                panels.flash_msg(_hhsum(s), 3.0)
+        elif action == 'usir':
+            from ..sims_household import move_out
+            ok, msg = move_out(s, npc_id)
+            sound_play('menu_select' if ok else 'blocked', 0.7)
+            panels.flash_msg(msg, 2.4)
         elif action == 'puji':
             # Memuji: menaikkan persahabatan + sedikit asmara (bila sudah akrab)
             from ..sims_relationship import add_friendship, add_romance, summary

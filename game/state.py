@@ -78,6 +78,10 @@ class GameState:
     worked_today: bool = False
     # Mode Bangun/Beli (S7): objek yang dibeli pemain per scene
     placed_objects: dict = field(default_factory=dict)  # scene -> {'x,y': tile_id}
+    # Rumah tangga & tagihan (S8)
+    household:    list = field(default_factory=list)   # npc_id yang tinggal bersama
+    bill_days:    int  = 0
+    unpaid_bills: int  = 0
 
     # ─── Majelis Batin (4 suara + skill-check ala Disco Elysium) ───
     batin: dict = field(default_factory=lambda: {'bara': 1, 'akar': 1, 'sukma': 1, 'lapar': 1})

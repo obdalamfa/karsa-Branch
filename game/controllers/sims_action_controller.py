@@ -122,8 +122,20 @@ class SimsActionController:
 
         if c['left'] <= 0.0:
             obj = c['obj']
+            tid_done = c['tid']
             self.current = None
             self._clear_anim()
+            # Skill naik dgn MELAKUKAN (S6)
+            try:
+                from ..sims_objects import OBJECT_SKILL
+                from ..sims_career import add_skill_xp, SKILLS
+                sk = OBJECT_SKILL.get(tid_done)
+                if sk:
+                    _lv, _up = add_skill_xp(self.state, sk[0], sk[1])
+                    if _up and panels:
+                        panels.flash_msg(f"Skill {SKILLS[sk[0]][0]} naik ke level {_lv}!", 2.4)
+            except Exception:
+                pass
             if panels:
                 gains = ', '.join(
                     f"{self._motive_label(f)} +{int(v)}" for f, v in obj['motives'].items())

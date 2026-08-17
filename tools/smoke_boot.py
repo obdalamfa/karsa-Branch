@@ -634,5 +634,64 @@ _n2 = getattr(_d2, '_pose_names', ())
 assert len(_n2) in (3, 5), f"fallback pose swap rusak: {_n2}"
 print(f"[OK] Walk: model lain dapat {len(_n2)-1} frame jalan (fallback aman)")
 
+# -- S6 Skill & Karier --
+from game.sims_career import (SKILLS, CAREERS, add_skill_xp, skill_level, xp_to_next,
+                              join_career, work_shift, can_work_now, promotion_status,
+                              try_promote, reset_daily, skill_summary, career_info)
+_s.skills = {}; _s.career = ''; _s.career_level = 0; _s.work_days = 0; _s.worked_today = False
+# Skill naik dgn MELAKUKAN, kurva makin berat
+_lv, _up = add_skill_xp(_s, 'bertani', xp_to_next(0))
+assert _lv == 1 and _up, f"skill tak naik: lv={_lv}"
+assert xp_to_next(1) > xp_to_next(0), "kurva XP tak menanjak"
+print(f"[OK] S6 skill: Bertani -> lv{_lv}; XP lv0->1={xp_to_next(0):.0f} < lv3->4={xp_to_next(3):.0f}")
+# Pakai alat melatih skill
+_before = skill_level(_s, 'kebugaran')
+for _ in range(30):
+    _ic._tool_skill_xp('Pickaxe', None)
+assert skill_level(_s, 'kebugaran') > _before, "alat tak melatih skill"
+print(f"[OK] S6 alat melatih skill: Kebugaran lv{skill_level(_s,'kebugaran')} dari menambang")
+# Lamar kerja
+assert join_career(_s, 'tani'), "gagal melamar kerja"
+_c, _r = career_info(_s)
+assert _c and _r[0] == 'Buruh Panen', f"pangkat awal salah: {_r}"
+print(f"[OK] S6 karier: diterima sbg {_r[0]} ({_c['label']}), gaji {_r[1]}G")
+# Gate: salah tempat / salah jam / sudah kerja
+_s.scene_name = 'town'; _s.time_minutes = 10*60
+_ok, _why = can_work_now(_s); assert not _ok and 'farm' in _why, f"gate lokasi bocor: {_why}"
+_s.scene_name = 'farm'; _s.time_minutes = 3*60
+_ok, _why = can_work_now(_s); assert not _ok and 'Jam kerja' in _why, f"gate jam bocor: {_why}"
+print("[OK] S6 gate kerja: salah lokasi & di luar jam ditolak dgn alasan jelas")
+# Shift kerja: dapat gaji, lelah, skill naik, sekali sehari
+_s.time_minutes = 10*60; _s.gold = 0; _s.energy = _s.max_energy
+_set_motifs()   # mood gembira -> kinerja tinggi
+_res = work_shift(_s)
+assert _res and _s.gold == _res['pay'] and _res['pay'] > 45, f"gaji aneh: {_res}"
+assert _s.energy < _s.max_energy, "kerja tak melelahkan"
+print(f"[OK] S6 shift: +{_res['pay']}G sbg {_res['rank']} (kinerja {int(_res['perf']*100)}%), energi terkuras")
+assert work_shift(_s) is None, "bisa kerja dua kali sehari"
+print("[OK] S6 shift: hanya sekali per hari")
+# Mood buruk -> gaji lebih kecil
+_s.worked_today = False; _s.gold = 0; _set_motifs(lapar=8)
+_res2 = work_shift(_s)
+assert _res2['pay'] < _res['pay'], f"mood tak memengaruhi gaji ({_res2['pay']} vs {_res['pay']})"
+print(f"[OK] S6 gaji ikut mood: gembira {_res['pay']}G > kelaparan {_res2['pay']}G")
+# Promosi butuh skill DAN hari kerja
+_s.skills['bertani'] = {'lv': 0, 'xp': 0.0}; _s.work_days = 99
+assert try_promote(_s) is None, "naik pangkat tanpa skill cukup"
+_s.skills['bertani'] = {'lv': 5, 'xp': 0.0}; _s.work_days = 0
+assert try_promote(_s) is None, "naik pangkat tanpa hari kerja cukup"
+_s.work_days = 5
+_new = try_promote(_s)
+assert _new == 'Petani Terampil', f"promosi salah: {_new}"
+print(f"[OK] S6 promosi: butuh skill DAN hari kerja -> naik jadi {_new}")
+# Shift harian reset saat hari baru
+_s.worked_today = True; reset_daily(_s)
+assert _s.worked_today is False, "shift tak reset"
+print("[OK] S6 shift reset tiap hari baru")
+# Ikut save
+for _f in ('skills', 'career', 'career_level', 'work_days', 'worked_today'):
+    assert _f in game.state.__dict__, f"{_f} tak ter-serialize"
+print("[OK] S6 skill & karier ikut save")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

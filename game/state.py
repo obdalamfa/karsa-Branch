@@ -70,6 +70,12 @@ class GameState:
     # ada; asmara & catatan hari interaksi terakhir (utk peluruhan) di sini.
     npc_romance:     dict = field(default_factory=dict)
     npc_last_social: dict = field(default_factory=dict)
+    # Skill & karier ala Sims (S6)
+    skills:       dict = field(default_factory=dict)   # id -> {'lv':int,'xp':float}
+    career:       str  = ''
+    career_level: int  = 0
+    work_days:    int  = 0
+    worked_today: bool = False
 
     # ─── Majelis Batin (4 suara + skill-check ala Disco Elysium) ───
     batin: dict = field(default_factory=lambda: {'bara': 1, 'akar': 1, 'sukma': 1, 'lapar': 1})

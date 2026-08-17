@@ -28,6 +28,24 @@ class InteractionController:
         s.sosial = min(NEED_MAX, s.sosial + delta)
         return delta
 
+    _TOOL_SKILL = {'Cangkul': ('bertani', 6.0), 'Siram': ('bertani', 4.0),
+                   'Tanam': ('bertani', 6.0), 'Panen': ('bertani', 10.0),
+                   'Kapak': ('kebugaran', 6.0), 'Pickaxe': ('kebugaran', 9.0),
+                   'Pedang': ('kebugaran', 7.0)}
+
+    def _tool_skill_xp(self, tool_name, panels=None):
+        """Latih skill dari pemakaian alat (S6): skill naik dgn MELAKUKAN."""
+        try:
+            from ..sims_career import add_skill_xp, SKILLS
+            ent = self._TOOL_SKILL.get(tool_name)
+            if not ent:
+                return
+            lv, up = add_skill_xp(self.player.state, ent[0], ent[1])
+            if up and panels:
+                panels.flash_msg(f"Skill {SKILLS[ent[0]][0]} naik ke level {lv}!", 2.4)
+        except Exception:
+            pass
+
     def use_tool(self, entities_mgr, panels):
         tx, ty = self.player._facing_tile()
         self.use_tool_at(self.player.state.tool_index, tx, ty, entities_mgr, panels)
@@ -198,6 +216,9 @@ class InteractionController:
 
         elif tool == 'Pancing':
             self.try_fishing(panels)
+
+        # Skill naik dgn MELAKUKAN (S6) — di AKHIR, setelah seluruh rantai alat.
+        self._tool_skill_xp(tool, panels)
 
     def interact(self, entities_mgr, panels):
         s = self.player.state
@@ -753,6 +774,20 @@ class InteractionController:
                                              romance_label as _rlabel)
             _can_rom = hearts >= ROMANCE_MIN_FRIENDSHIP
             opts.append(('puji', 'Puji', hearts >= 2, '+Sosial +❤ +sedikit ♥'))
+            # ── Karier (S6): tiap NPC pemberi kerja menawarkan pekerjaan ──
+            from ..sims_career import (CAREERS as _CAR, career_id as _cid,
+                                       can_work_now as _cwn, promotion_status as _pstat)
+            _JOB_NPC = {'arya': 'tani', 'budi': 'pandai_besi', 'sari': 'warung'}
+            _job = _JOB_NPC.get(npc_id)
+            if _job:
+                if _cid(s) != _job:
+                    opts.append(('lamar_kerja', f"Lamar: {_CAR[_job]['label']}", True,
+                                 f"jam {_CAR[_job]['start']}-{_CAR[_job]['end']}"))
+                else:
+                    _ok_work, _why = _cwn(s)
+                    opts.append(('kerja', 'Bekerja', _ok_work, _why or 'Dapat gaji harian'))
+                    _can_pro, _nn, _txt = _pstat(s)
+                    opts.append(('naik_pangkat', 'Minta Naik Pangkat', _can_pro, _txt))
             opts.append(('gombal', 'Gombal', _can_rom,
                          f"+♥ {_rlabel(s, npc_id)}" if _can_rom
                          else f"perlu {ROMANCE_MIN_FRIENDSHIP:.0f}❤ dulu"))
@@ -827,6 +862,44 @@ class InteractionController:
             act = pos.get('activity', 'tidak ada info')
             sound_play('menu_select', 0.7)
             panels.flash_msg(f"{npc.get('name', npc_id)}: Sekarang lagi {act}.", 2.0)
+        elif action == 'lamar_kerja':
+            from ..sims_career import CAREERS as _CAR, join_career
+            _JOB_NPC = {'arya': 'tani', 'budi': 'pandai_besi', 'sari': 'warung'}
+            _job = _JOB_NPC.get(npc_id)
+            if _job and join_career(s, _job):
+                c = _CAR[_job]
+                sound_play('quest', 0.9)
+                panels.flash_msg(
+                    f"Diterima sebagai {c['ranks'][0][0]} ({c['label']})! "
+                    f"Kerja jam {c['start']}:00-{c['end']}:00 di {c['scene']}.", 3.2)
+        elif action == 'kerja':
+            from ..sims_career import work_shift, SKILLS
+            res = work_shift(s)
+            if res:
+                sound_play('sell', 0.9)
+                panels.emote(f"+{res['pay']}G", color.rgb(255, 220, 120), 1.6)
+                panels.flash_msg(
+                    f"Kerja selesai sbg {res['rank']}: +{res['pay']}G "
+                    f"(mood {res['mood']}, kinerja {int(res['perf']*100)}%)", 2.8)
+                if res['leveled']:
+                    panels.flash_msg(
+                        f"Skill {SKILLS[res['skill']][0]} naik ke level {res['skill_level']}!", 2.4)
+            else:
+                from ..sims_career import can_work_now
+                _ok, _why = can_work_now(s)
+                sound_play('blocked', 0.6)
+                panels.flash_msg(_why or "Tak bisa bekerja sekarang.", 2.0)
+        elif action == 'naik_pangkat':
+            from ..sims_career import try_promote, promotion_status
+            newr = try_promote(s)
+            if newr:
+                sound_play('quest', 1.0)
+                panels.emote('!', color.rgb(255, 230, 140), 1.8)
+                panels.flash_msg(f"Selamat! Kamu naik pangkat jadi {newr}.", 3.0)
+            else:
+                _c, _n, _t = promotion_status(s)
+                sound_play('blocked', 0.6)
+                panels.flash_msg(_t, 3.0)
         elif action == 'puji':
             # Memuji: menaikkan persahabatan + sedikit asmara (bila sudah akrab)
             from ..sims_relationship import add_friendship, add_romance, summary

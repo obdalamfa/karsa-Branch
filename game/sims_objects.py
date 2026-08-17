@@ -50,6 +50,14 @@ SIMS_OBJECTS = {
           'motives': {'bersih': 20.0, 'senang': 6.0},      'anim': 'read'},
 }
 
+# Objek yang MELATIH skill saat dipakai (S6): tile_id -> (skill_id, xp)
+OBJECT_SKILL = {
+    ST:  ('memasak', 12.0),
+    KLK: ('memasak', 4.0),
+    BS:  ('logika', 14.0),
+    MR:  ('karisma', 6.0),
+}
+
 # Semua motif yang bisa diiklankan objek (untuk validasi & autonomi S3)
 MOTIVE_FIELDS = ('lapar', 'sosial', 'senang', 'kandung', 'bersih', 'energy')
 

@@ -64,6 +64,12 @@ class TimeController:
         s.kandung = min(NEED_MAX, s.kandung + 60)   # sempat ke belakang semalam
         s.bersih  = max(0.0, s.bersih - 8)          # bangun agak lusuh → mandi pagi
         s.naga_fountain_used_today = False
+        # Shift kerja baru tersedia tiap hari (S6)
+        try:
+            from ..sims_career import reset_daily
+            reset_daily(s)
+        except Exception:
+            pass
         # Relasi meluntur bila diabaikan (S5) — pertemanan perlu dirawat
         try:
             from ..sims_relationship import decay_relationships

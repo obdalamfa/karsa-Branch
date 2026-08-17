@@ -693,5 +693,69 @@ for _f in ('skills', 'career', 'career_level', 'work_days', 'worked_today'):
     assert _f in game.state.__dict__, f"{_f} tak ter-serialize"
 print("[OK] S6 skill & karier ikut save")
 
+# -- S7 Bangun/Beli --
+from game.sims_build import (catalog, place, sell, can_place, apply_placed,
+                             BUY_PRICES, sell_value)
+from game.config import WC as _WC, FL as _FL
+_s.placed_objects = {}
+game.state.scene_name = 'house'
+game.world.load_scene('house'); game.entities.load_scene('house'); step(1)
+_cat = catalog()
+assert len(_cat) >= 8 and _cat[0][3] <= _cat[-1][3], "katalog kosong/tak urut harga"
+print(f"[OK] S7 katalog: {len(_cat)} objek, {_cat[0][1]} {_cat[0][3]}G .. {_cat[-1][1]} {_cat[-1][3]}G")
+# Cari petak kosong yang bisa dipijak
+_sc = game.world.scene_obj
+_spot = None
+for _ty in range(1, _sc.h-1):
+    for _tx in range(1, _sc.w-1):
+        ok, _ = can_place(_s, game.world, _tx, _ty)
+        if ok: _spot = (_tx, _ty); break
+    if _spot: break
+assert _spot, "tak ada petak kosong di rumah"
+# Uang kurang -> ditolak
+_s.gold = 0
+_ok, _msg = place(_s, game.world, _WC, *_spot)
+assert not _ok and 'kurang' in _msg.lower(), f"beli tanpa uang lolos: {_msg}"
+print("[OK] S7 gate: uang kurang ditolak")
+# Beli & pasang
+_s.gold = 1000; _g0 = _s.gold
+_ok, _msg = place(_s, game.world, _WC, *_spot)
+assert _ok, f"gagal memasang: {_msg}"
+assert _s.gold == _g0 - BUY_PRICES[_WC], "uang tak terpotong"
+assert _sc.tiles[_spot[1]][_spot[0]] == _WC, "tile tak berubah"
+print(f"[OK] S7 beli & pasang Toilet di {_spot} (-{BUY_PRICES[_WC]}G)")
+# Petak terisi -> tak bisa ditimpa
+_ok2, _msg2 = place(_s, game.world, _WC, *_spot)
+assert not _ok2 and 'terisi' in _msg2.lower(), f"petak terisi bisa ditimpa: {_msg2}"
+print("[OK] S7 gate: petak terisi tak bisa ditimpa")
+# Objek yang dibeli BERFUNGSI (masuk katalog motif S2)
+from game.sims_objects import objects_in_scene as _ois
+assert any(t == _WC and (x, y) == _spot for t, x, y in _ois(game.world)), "objek beli tak terdeteksi sistem motif"
+print("[OK] S7 objek beli langsung berfungsi utk motif")
+# BERTAHAN saat scene dimuat ulang (inti: SCENES global)
+_sc.tiles[_spot[1]][_spot[0]] = _FL          # simulasi template ter-reset
+game.world.load_scene('house')
+assert game.world.scene_obj.tiles[_spot[1]][_spot[0]] == _WC, "objek beli HILANG saat scene dimuat ulang"
+print("[OK] S7 objek bertahan saat scene dimuat ulang (overlay placed_objects)")
+# Jual: dapat separuh, petak kembali kosong
+_g1 = _s.gold
+_ok3, _msg3 = sell(_s, game.world, *_spot)
+assert _ok3 and _s.gold == _g1 + sell_value(_WC), f"refund salah: {_msg3}"
+assert game.world.scene_obj.tiles[_spot[1]][_spot[0]] != _WC, "petak tak kembali kosong"
+print(f"[OK] S7 jual: +{sell_value(_WC)}G (separuh harga), petak kosong lagi")
+# Tak bisa menjual barang bawaan scene
+_ok4, _msg4 = sell(_s, game.world, 1, 1)
+assert not _ok4, "barang bawaan scene bisa dijual"
+print("[OK] S7 gate: barang bawaan scene tak bisa dijual")
+# Mode UI: tombol L membuka, Esc menutup
+game.panels.mode = 'hud'
+game.input('l'); step(1)
+assert game.panels.mode == 'buy', "tombol L tak membuka mode Bangun/Beli"
+game.input('escape'); step(1)
+assert game.panels.mode == 'hud', "Esc tak menutup mode Bangun/Beli"
+print("[OK] S7 mode UI: [L] buka, [Esc] tutup")
+assert 'placed_objects' in game.state.__dict__, "placed_objects tak ter-serialize"
+print("[OK] S7 placed_objects ikut save")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

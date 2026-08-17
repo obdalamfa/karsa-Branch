@@ -108,6 +108,7 @@ class UIManager:
         self._build_pie_menu()
         self._build_batin()
         self._build_pause()
+        self._build_buy()
 
         # Previous motives cache for Arrow indicators
         self._prev_hunger = None
@@ -297,6 +298,88 @@ class UIManager:
         self._pause_ents = [bg, title, hint] + self._pause_items
         for e in self._pause_ents:
             e.enabled = False
+
+    # ─── MODE BANGUN/BELI (S7) ───────────────────────────
+    def _build_buy(self):
+        self._buy_sel = 0
+        bg = _skin_chrome(_ui(scale=(0.62, 0.66), position=(0, 0),
+                              color=color.rgb(16, 14, 12, 244), z=0.9))
+        title = _txt('BANGUN / BELI', pos=(0, 0.25), scale=1.25,
+                     col=color.rgb(231, 178, 61), origin=(0, 0))
+        self._buy_items = [_txt('', pos=(0, 0.15 - i * 0.052), scale=0.78,
+                                col=color.white, origin=(0, 0)) for i in range(12)]
+        hint = _txt('[W/S] pilih  [Enter] beli & pasang di depanmu  '
+                    '[X] jual  [Esc] tutup', pos=(0, -0.26), scale=0.5,
+                    col=color.rgb(150, 135, 100), origin=(0, 0))
+        self._buy_gold = _txt('', pos=(0, 0.205), scale=0.7,
+                              col=color.rgb(231, 200, 120), origin=(0, 0))
+        self._buy_ents = [bg, title, hint, self._buy_gold] + self._buy_items
+        for e in self._buy_ents:
+            e.enabled = False
+
+    def open_buy(self):
+        self._buy_sel = 0
+        self.mode = 'buy'
+        for e in self._buy_ents:
+            e.enabled = True
+        self._render_buy()
+
+    def close_buy(self):
+        for e in self._buy_ents:
+            e.enabled = False
+        self.mode = 'hud'
+
+    def _render_buy(self):
+        from .sims_build import catalog, BUY_PRICES
+        rows = catalog()
+        self._buy_gold.text = f"Simoleon: {self.state.gold}G"
+        for i, t in enumerate(self._buy_items):
+            if i < len(rows):
+                tid, label, act, price = rows[i]
+                sel = (i == self._buy_sel)
+                afford = self.state.gold >= price
+                t.enabled = True
+                t.text = ('> ' if sel else '    ') + f"{label:<12} {price:>4}G   ({act})"
+                if not afford:
+                    t.color = color.rgb(120, 100, 95)
+                else:
+                    t.color = color.rgb(231, 178, 61) if sel else color.rgb(205, 200, 190)
+            else:
+                t.enabled = False
+                t.text = ''
+
+    def buy_input(self, key, player, world):
+        """Return True bila input dikonsumsi."""
+        from .sims_build import catalog, place, sell
+        rows = catalog()
+        n = max(1, len(rows))
+        if key in ('w', 'up arrow'):
+            self._buy_sel = (self._buy_sel - 1) % n; self._render_buy(); return True
+        if key in ('s', 'down arrow'):
+            self._buy_sel = (self._buy_sel + 1) % n; self._render_buy(); return True
+        if key == 'escape':
+            self.close_buy(); return True
+        tx, ty = player._facing_tile()
+        if key in ('enter', 'space'):
+            tid = rows[self._buy_sel][0]
+            ok, msg = place(self.state, world, tid, tx, ty)
+            sound_play('buy' if ok else 'blocked', 0.8)
+            self.flash_msg(msg, 2.0)
+            if ok:
+                world.load_scene(world.scene_name)      # render objek baru
+                if getattr(player, 'rebuild_pathgrid', None):
+                    player.rebuild_pathgrid()           # objek baru = penghalang
+            self._render_buy(); return True
+        if key == 'x':
+            ok, msg = sell(self.state, world, tx, ty)
+            sound_play('sell' if ok else 'blocked', 0.8)
+            self.flash_msg(msg, 2.0)
+            if ok:
+                world.load_scene(world.scene_name)
+                if getattr(player, 'rebuild_pathgrid', None):
+                    player.rebuild_pathgrid()
+            self._render_buy(); return True
+        return True
 
     def _pause_rows(self):
         """Daftar label baris untuk view aktif."""

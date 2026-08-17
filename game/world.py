@@ -274,6 +274,13 @@ class World3D:
         self._clear()
         self.scene_name = name
         self.scene_obj  = SCENES[name]
+        # Objek yang dibeli pemain (S7) di-overlay dulu supaya ikut dirender
+        # & bertahan lintas save (SCENES adalah template global).
+        try:
+            from .sims_build import apply_placed
+            apply_placed(self.state, self.scene_obj)
+        except Exception:
+            pass
         self._build_tiles()
         self._build_all_crops()
         if hasattr(self.scene_obj, 'builder') and self.scene_obj.builder:

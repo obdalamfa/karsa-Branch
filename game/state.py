@@ -76,6 +76,8 @@ class GameState:
     career_level: int  = 0
     work_days:    int  = 0
     worked_today: bool = False
+    # Mode Bangun/Beli (S7): objek yang dibeli pemain per scene
+    placed_objects: dict = field(default_factory=dict)  # scene -> {'x,y': tile_id}
 
     # ─── Majelis Batin (4 suara + skill-check ala Disco Elysium) ───
     batin: dict = field(default_factory=lambda: {'bara': 1, 'akar': 1, 'sukma': 1, 'lapar': 1})

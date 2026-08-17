@@ -636,6 +636,10 @@ class Game3D:
             self.panels.batin_check_input(key)
             return
 
+        if self.panels.mode == 'buy':
+            self.panels.buy_input(key, self.player, self.world)
+            return
+
         if self.panels.mode == 'pause':
             act = self.panels.pause_input(key)
             if act == 'resume':
@@ -722,6 +726,8 @@ class Game3D:
             # Hotkeys menu
             if key == 'i':
                 self.panels.open_panel('inventory')
+            elif key == 'l':
+                self.panels.open_buy()      # mode Bangun/Beli (S7)
             elif key == 'tab':
                 self.panels.toggle_batin()        # buka/tutup Majelis Batin (4 suara)
             elif key == 'm':

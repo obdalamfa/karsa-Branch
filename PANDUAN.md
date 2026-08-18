@@ -63,6 +63,20 @@ menua=kering), nutrisi tanah, dan gulma. Mutu tinggi -> hasil lebih banyak.
   makin mahal bila anggota & barangmu banyak — kalau tak mampu bayar, jadi
   utang.
 
+## Keinginan, Aspirasi, Tahap Hidup
+- **Keinginan harian (3)** muncul tiap pagi & menyesuaikan keadaanmu (belum
+  kerja -> muncul "Melamar pekerjaan"). Memenuhinya memberi Simoleon + rasa
+  senang. Yang sudah tuntas tak muncul lagi.
+- **Aspirasi hidup** dipilih sekali: Juragan Tani, Ahli Serba Bisa, Dicintai
+  Sedesa, Hartawan, atau Rumah Penuh. Tuntas = hadiah besar (800-1200G) +
+  gelar permanen.
+- **Tahap hidup** ikut umur (hari yang dijalani), dan efeknya NYATA:
+  - **Anak** (0-13 hari): belum boleh bekerja, cepat bosan, badan lebih
+    kecil, TAPI belajar 1.35x lebih cepat.
+  - **Dewasa** (14-59): serba normal, masa produktif berkarier.
+  - **Lansia** (60+): langkah 0.78x & tenaga cepat terkuras, tetapi
+    pengalaman membuat interaksi sosial 1.25x & belajar 1.15x lebih berbobot.
+
 ## Kontrol
 | Tombol | Aksi | Tombol | Aksi |
 |---|---|---|---|

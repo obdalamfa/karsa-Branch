@@ -82,6 +82,15 @@ class GameState:
     household:    list = field(default_factory=list)   # npc_id yang tinggal bersama
     bill_days:    int  = 0
     unpaid_bills: int  = 0
+    # Keinginan & aspirasi (S9)
+    wants:           list = field(default_factory=list)
+    wants_done:      int  = 0
+    aspiration:      str  = ''
+    aspiration_done: bool = False
+    title:           str  = ''
+    # Tahap hidup (S10)
+    age_days:   int = 14          # mulai sebagai dewasa
+    life_stage: str = 'dewasa'
 
     # ─── Majelis Batin (4 suara + skill-check ala Disco Elysium) ───
     batin: dict = field(default_factory=lambda: {'bara': 1, 'akar': 1, 'sukma': 1, 'lapar': 1})

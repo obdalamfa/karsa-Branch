@@ -974,6 +974,20 @@ class Player3D(Entity):
     # ─── POSE BERTAHAN (Sims S2/S4) ──────────────────────
     # Beda dari _play_tool_anim yang one-shot 350ms: pose ini DITAHAN selama
     # aksi objek berlangsung (duduk 3s, tidur 6s, mandi 4s) lalu dilepas.
+    def apply_life_stage(self):
+        """Terapkan efek tahap hidup (S10): kecepatan langkah & ukuran badan."""
+        try:
+            from .sims_lifestage import speed_multiplier, body_scale
+            self.speed = PLAYER_SPEED * speed_multiplier(self.state)
+            if self.mover:
+                self.mover.speed = self.speed
+            sc = body_scale(self.state)
+            for part in self.children:
+                pass                       # child memakai skala root
+            self.scale = sc
+        except Exception:
+            pass
+
     def set_pose(self, pose):
         """pose: None | 'sit' | 'sleep' | 'shower' | 'read' | 'cook'."""
         self._pose = pose

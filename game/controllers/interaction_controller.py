@@ -25,6 +25,11 @@ class InteractionController:
         supaya berinteraksi tak pernah sia-sia. Return delta yang diberikan."""
         from ..sims_mood import mood_social_bonus
         delta = max(1.0, base * (1.0 + mood_social_bonus(s) / 100.0))
+        try:                              # tahap hidup (S10)
+            from ..sims_lifestage import social_multiplier
+            delta *= social_multiplier(s)
+        except Exception:
+            pass
         s.sosial = min(NEED_MAX, s.sosial + delta)
         return delta
 

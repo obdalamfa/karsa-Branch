@@ -21,7 +21,14 @@ class TimeController:
         ingame_dt = dt * INGAME_MINUTES_PER_REAL_SECOND
         s.lapar   = max(0.0, s.lapar   - NEED_DECAY_LAPAR   * ingame_dt)
         s.sosial  = max(0.0, s.sosial  - NEED_DECAY_SOSIAL  * ingame_dt)
-        s.senang  = max(0.0, s.senang  - NEED_DECAY_SENANG  * ingame_dt)
+        try:                              # tahap hidup (S10)
+            from ..sims_lifestage import traits as _lt
+            _fun_m = _lt(s)['fun_decay']; _en_m = _lt(s)['energy_decay']
+        except Exception:
+            _fun_m = _en_m = 1.0
+        s.senang  = max(0.0, s.senang  - NEED_DECAY_SENANG * _fun_m * ingame_dt)
+        if _en_m > 1.0:                   # lansia: tenaga terkuras lebih cepat
+            s.energy = max(0.0, s.energy - 0.010 * (_en_m - 1.0) * ingame_dt)
         s.kandung = max(0.0, s.kandung - NEED_DECAY_KANDUNG * ingame_dt)
         s.bersih  = max(0.0, s.bersih  - NEED_DECAY_BERSIH  * ingame_dt)
 
@@ -68,6 +75,24 @@ class TimeController:
         try:
             from ..sims_career import reset_daily
             reset_daily(s)
+        except Exception:
+            pass
+        # Menua (S10) + keinginan harian baru & cek aspirasi (S9)
+        self._last_stage_up = None
+        self._last_wants = []
+        self._last_aspir = None
+        try:
+            from ..sims_lifestage import age_one_day
+            self._last_stage_up = age_one_day(s)
+            if self._last_stage_up and hasattr(player, 'apply_life_stage'):
+                player.apply_life_stage()      # efek langsung terasa
+        except Exception:
+            pass
+        try:
+            from ..sims_aspiration import check_wants, roll_wants, check_aspiration
+            self._last_wants = check_wants(s)
+            self._last_aspir = check_aspiration(s)
+            roll_wants(s)
         except Exception:
             pass
         # Rumah tangga: setoran anggota + tagihan berkala (S8)
@@ -188,6 +213,17 @@ class TimeController:
             panels.flash_msg("Tidur... Hari baru dimulai!", 2.0)
             self.advance_day(player)
             # Ringkasan penjualan Peti Kirim (Stardew)
+            from ursina import invoke as _inv0
+            if getattr(self, '_last_stage_up', None):
+                from ..sims_lifestage import stage_label
+                _inv0(panels.flash_msg,
+                      f"Kamu memasuki tahap hidup baru: {stage_label(self.state)}!", 3.4, delay=0.6)
+            for _lbl, _g in (getattr(self, '_last_wants', None) or []):
+                _inv0(panels.flash_msg, f"Keinginan tercapai: {_lbl} (+{_g}G)", 2.6, delay=1.0)
+            if getattr(self, '_last_aspir', None):
+                _al, _ag, _at = self._last_aspir
+                _inv0(panels.flash_msg,
+                      f"ASPIRASI TUNTAS: {_al}! +{_ag}G, gelar '{_at}'", 4.0, delay=1.6)
             hh = getattr(self, '_last_household', None)
             if hh:
                 from ursina import invoke as _inv

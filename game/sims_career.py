@@ -88,6 +88,12 @@ def add_skill_xp(state, skill_id: str, amount: float):
     """Tambah XP. Return (level_sekarang, naik_level_bool)."""
     if skill_id not in SKILLS or amount <= 0:
         return skill_level(state, skill_id), False
+    # Tahap hidup (S10): anak belajar cepat, lansia berpengalaman
+    try:
+        from .sims_lifestage import skill_multiplier
+        amount = amount * skill_multiplier(state)
+    except Exception:
+        pass
     sk = _skills(state).setdefault(skill_id, {'lv': 0, 'xp': 0.0})
     sk['xp'] = float(sk.get('xp', 0.0)) + float(amount)
     leveled = False
@@ -151,6 +157,12 @@ def can_work_now(state):
     c, _ = career_info(state)
     if not c:
         return False, "Kamu belum punya pekerjaan."
+    try:
+        from .sims_lifestage import can_work as _cw, stage_label as _sl
+        if not _cw(state):
+            return False, f"{_sl(state)} belum boleh bekerja."
+    except Exception:
+        pass
     if getattr(state, 'worked_today', False):
         return False, "Kamu sudah bekerja hari ini."
     if not is_work_hour(state):

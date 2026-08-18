@@ -814,5 +814,74 @@ for _f in ('household', 'bill_days', 'unpaid_bills'):
     assert _f in game.state.__dict__, f"{_f} tak ter-serialize"
 print("[OK] S8 rumah tangga ikut save")
 
+# -- S9 Keinginan & Aspirasi --
+from game.sims_aspiration import (WANTS, ASPIRATIONS, roll_wants, check_wants,
+                                  want_lines, set_aspiration, check_aspiration,
+                                  aspiration_line, WANT_SLOTS)
+_s.wants = []; _s.wants_done = 0; _s.aspiration = ''; _s.aspiration_done = False
+_s.career = ''; _s.gold = 0; _s.household = []; _s.placed_objects = {}; _s.npc_hearts = {}
+_w = roll_wants(_s)
+assert 0 < len(_w) <= WANT_SLOTS, f"keinginan harian tak terisi: {_w}"
+assert 'cari_kerja' in _w, "keinginan tak menyesuaikan keadaan (belum kerja)"
+print(f"[OK] S9 keinginan harian ({len(_w)}): {', '.join(want_lines(_s))}")
+# Memenuhi keinginan -> hadiah emas + senang
+_s.senang = 40.0; _g0 = _s.gold
+_s.career = 'tani'                       # penuhi 'cari_kerja'
+_done = check_wants(_s)
+assert any('pekerjaan' in d[0].lower() for d in _done), f"keinginan tak terdeteksi: {_done}"
+assert _s.gold > _g0 and _s.senang > 40.0, "hadiah keinginan tak diberikan"
+print(f"[OK] S9 keinginan tercapai: {_done[0][0]} (+{_done[0][1]}G, senang naik)")
+# Keinginan yang sudah tuntas tak muncul lagi
+assert 'cari_kerja' not in roll_wants(_s), "keinginan tuntas muncul lagi"
+print("[OK] S9 keinginan tuntas tak diulang")
+# Aspirasi: tuntas -> hadiah besar + gelar
+assert set_aspiration(_s, 'hartawan'), "gagal memilih aspirasi"
+assert check_aspiration(_s) is None, "aspirasi tuntas padahal syarat belum"
+_s.gold = 5000
+_res = check_aspiration(_s)
+assert _res and _s.aspiration_done and _s.title, f"aspirasi tak tuntas: {_res}"
+print(f"[OK] S9 aspirasi TUNTAS: {_res[0]} (+{_res[1]}G, gelar '{_res[2]}')")
+assert check_aspiration(_s) is None, "aspirasi dihadiahi dua kali"
+print("[OK] S9 aspirasi tak bisa diklaim dua kali")
+
+# -- S10 Tahap hidup --
+from game.sims_lifestage import (stage_for_age, current_stage, age_one_day,
+                                 can_work, skill_multiplier, social_multiplier,
+                                 speed_multiplier, body_scale, days_to_next_stage,
+                                 summary as _lsum, STAGE_START)
+assert stage_for_age(0) == 'anak' and stage_for_age(20) == 'dewasa' and stage_for_age(70) == 'lansia'
+print("[OK] S10 tahap dari umur: 0=anak, 20=dewasa, 70=lansia")
+# Anak: belum boleh kerja, belajar lebih cepat
+_s.age_days = 5; _s.life_stage = 'anak'
+assert not can_work(_s) and skill_multiplier(_s) > 1.0, "sifat anak tak berlaku"
+from game.sims_career import can_work_now as _cwn2, join_career as _jc2
+_jc2(_s, 'tani'); _s.scene_name = 'farm'; _s.time_minutes = 10*60; _s.worked_today = False
+_ok, _why = _cwn2(_s)
+assert not _ok and 'belum boleh bekerja' in _why.lower(), f"anak bisa kerja: {_why}"
+print(f"[OK] S10 anak: dilarang bekerja ('{_why}'), belajar x{skill_multiplier(_s):.2f}")
+# Dewasa: normal & boleh kerja
+_s.life_stage = 'dewasa'
+assert can_work(_s) and abs(speed_multiplier(_s) - 1.0) < 0.01
+_ok, _ = _cwn2(_s); assert _ok, "dewasa tak boleh kerja"
+print("[OK] S10 dewasa: boleh bekerja, kecepatan normal")
+# Lansia: lebih lambat tapi sosial lebih berbobot
+_s.life_stage = 'lansia'
+assert speed_multiplier(_s) < 1.0 and social_multiplier(_s) > 1.0 and can_work(_s)
+print(f"[OK] S10 lansia: langkah x{speed_multiplier(_s):.2f}, sosial x{social_multiplier(_s):.2f}")
+# XP skill benar-benar diskala tahap
+from game.sims_career import add_skill_xp as _axp, skill_xp as _sxp
+_s.skills = {}; _s.life_stage = 'dewasa'; _axp(_s, 'logika', 10.0); _base = _sxp(_s, 'logika')
+_s.skills = {}; _s.life_stage = 'anak';   _axp(_s, 'logika', 10.0); _kid = _sxp(_s, 'logika')
+assert _kid > _base, f"anak tak belajar lebih cepat ({_kid} vs {_base})"
+print(f"[OK] S10 XP diskala tahap: anak {_kid:.1f} > dewasa {_base:.1f} dari aksi sama")
+# Menua saat hari berganti & naik tahap tepat di ambang
+_s.age_days = STAGE_START['lansia'] - 1; _s.life_stage = 'dewasa'
+_up = age_one_day(_s)
+assert _up == 'lansia' and current_stage(_s) == 'lansia', f"tak naik tahap: {_up}"
+print(f"[OK] S10 menua: {_lsum(_s)}")
+for _f in ('wants', 'aspiration', 'aspiration_done', 'title', 'age_days', 'life_stage'):
+    assert _f in game.state.__dict__, f"{_f} tak ter-serialize"
+print("[OK] S9+S10 keinginan/aspirasi/umur ikut save")
+
 print("SMOKE BOOT PASS")
 os._exit(0)

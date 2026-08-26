@@ -40,6 +40,9 @@ class GameState:
     sword_id:     str = ''
 
     inventory:       dict = field(default_factory=lambda: {'lobak_seed': 3})
+    # Catatan ternak: {animal_id: {'kenyang': sisa_hari, 'siap': hari_terkumpul}}.
+    # Dict biasa supaya save tetap JSON murni, sama seperti `soil` dan `motives`.
+    animals:         dict = field(default_factory=dict)
     soil:            dict = field(default_factory=dict)
     npc_hearts:      dict = field(default_factory=dict)
     npc_dialog_index:dict = field(default_factory=dict)
@@ -59,10 +62,18 @@ class GameState:
         'hoe': False, 'water': False, 'bag': False, 'axe': False
     })
 
-    # ─── Needs / Motives (ala The Sims / FreeSO) ───
-    lapar:  float = 100.0   # Hunger  — turun waktu → isi dengan makan
-    sosial: float = 100.0   # Social  — turun waktu → isi dengan ngobrol
-    senang: float = 100.0   # Fun     — turun waktu → isi dengan panen/jelajah
+    # ─── Needs / Motives (ala The Sims 1) ───
+    # Delapan motif berskala -100..+100 dengan laju peluruhan asli TS1 hidup di
+    # `game/motives.py`. Yang disimpan di sini hanya dict biasa supaya save
+    # tetap JSON — objek mesinnya dibangun ulang saat load lewat `mv`.
+    motives: dict = field(default_factory=dict)
+
+    # Tiga need lama (skala 0..100) dipertahankan HANYA supaya save lama tetap
+    # bisa dibuka dan kode lama yang membacanya tidak meledak. Sumber kebenaran
+    # sekarang adalah `motives`; ketiganya dicerminkan tiap tick.
+    lapar:  float = 100.0
+    sosial: float = 100.0
+    senang: float = 100.0
 
     # ─── Penampilan karakter (chargen) ───
     char_name:  str = ''         # kosong = belum buat karakter (trigger chargen)
@@ -97,8 +108,37 @@ class GameState:
     def is_night(self):        return self.get_hour() < 5 or self.get_hour() >= 19
     def get_player_tile(self): return (int(round(self.player_x)), int(round(self.player_y)))
 
+    @property
+    def mv(self):
+        """Mesin motif, dibangun sekali lalu dipakai ulang.
+
+        Disimpan di luar dataclass field supaya tidak ikut ke json.dump.
+        """
+        eng = self.__dict__.get('_mv')
+        if eng is None:
+            from .motives import Motives
+            eng = Motives()
+            eng.load_save(self.motives)
+            self.__dict__['_mv'] = eng
+        return eng
+
+    def sync_motives(self) -> None:
+        """Tulis balik mesin ke dict yang dipersistenkan, dan cerminkan ke tiga
+        need lama (dipetakan dari -100..100 ke 0..100) agar UI dan kode lama
+        yang belum dipindahkan tetap menampilkan angka yang benar."""
+        eng = self.mv
+        self.motives = eng.to_save()
+        self.lapar  = (eng.lapar + 100.0) / 2.0
+        self.sosial = (eng.sosial + 100.0) / 2.0
+        self.senang = (eng.senang + 100.0) / 2.0
+
     def get_mood(self) -> float:
-        return (self.lapar + self.sosial + self.senang) / 3.0
+        """Mood dalam skala 0..100 untuk konsumen lama.
+
+        Mesin memakai skala -100..+100 (rata-rata delapan motif); di sini
+        dipetakan ulang supaya ambang NEED_* yang ada tetap berlaku.
+        """
+        return (self.mv.mood + 100.0) / 2.0
 
     def mood_energy_multiplier(self) -> float:
         mood = self.get_mood()
@@ -112,7 +152,9 @@ class GameState:
     def save(self):
         try:
             with open(SAVE_FILE, 'w') as f:
-                json.dump({k: v for k, v in self.__dict__.items()}, f, indent=2)
+                self.sync_motives()
+                json.dump({k: v for k, v in self.__dict__.items()
+                           if not k.startswith('_')}, f, indent=2)
             return True
         except Exception as e:
             print(f"Save error: {e}")

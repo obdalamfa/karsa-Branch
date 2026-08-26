@@ -1,5 +1,5 @@
 class Scene:
-    def __init__(self, name, display, tiles, portals=None, indoor=False, builder=None, has_horizon=True):
+    def __init__(self, name, display, tiles, portals=None, indoor=False, builder=None, has_horizon=None):
         if builder is None:
             from .props import default_prop_builder
             self.builder = lambda world: default_prop_builder(world, self)
@@ -12,7 +12,10 @@ class Scene:
         self.h       = len(tiles) if tiles else 0
         self.portals = portals or []
         self.indoor  = indoor
-        self.has_horizon = has_horizon
+        # Horizon = pelat putih raksasa 1000x1000 di world.py. Di dalam ruangan
+        # pelat itu menelan seluruh interior jadi void putih ("rumah ga muncul"),
+        # jadi defaultnya harus ikut `indoor`, bukan True untuk semua scene.
+        self.has_horizon = (not indoor) if has_horizon is None else has_horizon
 
 def _build_indoor_room(name, display, objects, portal_exit):
     from game.config import WL, FL, DR

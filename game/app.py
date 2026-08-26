@@ -19,7 +19,7 @@ from .panels import UIManager
 from .sky import SkyDome
 from .chargen import ChargenScreen
 from . import grass_shader as _grass
-from .config import (SCREEN_W, SCREEN_H, CAM_HEIGHT, CAM_BACK, CAM_LERP,
+from .config import (SCREEN_W, SCREEN_H, CAM_LERP,
                      CAM_TARGET_LIFT, INGAME_MINUTES_PER_REAL_SECOND, FORCE_SLEEP_HOUR,
                      NEED_MAX, NEED_CRITICAL, NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG)
 
@@ -187,8 +187,8 @@ class Game3D:
         camera.orthographic = False
         camera.fov          = 60
         self.camera_yaw     = 0.0
-        self.camera_pitch   = 12.0
-        self.camera_dist    = 13.0
+        self.camera_pitch   = 34.0   # sudut baca ala life-sim isometrik
+        self.camera_dist    = 19.0
 
         # Chargen — muncul jika first run (char_name kosong) atau tekan F2
         self._chargen: ChargenScreen = None
@@ -275,18 +275,7 @@ class Game3D:
                 self.player._set_initial_rotation()
 
                 # Snap kamera langsung ke posisi baru (mencegah trailing berputar/meluncur liar saat ganti scene)
-                ideal_focus = self.player.position + Vec3(0, CAM_TARGET_LIFT, 0)
-                self.camera_focus = ideal_focus
-                
-                cy = math.radians(self.camera_yaw)
-                cp = math.radians(self.camera_pitch)
-                dx = math.sin(cy) * math.cos(cp)
-                dy = math.sin(cp)
-                dz = -math.cos(cy) * math.cos(cp)
-                
-                camera.position = self.camera_focus + Vec3(dx, dy, dz) * self.camera_dist
-                camera.look_at(self.camera_focus)
-                camera.rotation_z = 0
+                self._snap_camera_to_player()
 
                 # Reset portal cooldown supaya tidak ada lock dari portal sebelumnya
                 self.player._portal_cd = 0.5  # cukup buat hindari portal-ping-pong tapi tidak block movement
@@ -326,20 +315,20 @@ class Game3D:
             ideal_focus = self.player.position + Vec3(0, CAM_TARGET_LIFT, 0)
             if not hasattr(self, 'camera_focus'):
                 self.camera_focus = ideal_focus
-            
-            # Smooth trailing focus point
-            self.camera_focus = lerp(self.camera_focus, ideal_focus, CAM_LERP * 1.5 * dt)
-            
-            cy = math.radians(self.camera_yaw)
-            cp = math.radians(self.camera_pitch)
-            dx = math.sin(cy) * math.cos(cp)
-            dy = math.sin(cp)
-            dz = -math.cos(cy) * math.cos(cp)
-            
-            target_cam = self.camera_focus + Vec3(dx, dy, dz) * self.camera_dist
-            camera.position += (target_cam - camera.position) * CAM_LERP * dt
+
+            # Smooth trailing focus point. Faktor lerp di-clamp ke 1.0 supaya
+            # frame panjang (hitch / stepping manual) tidak membuat kamera
+            # melewati target lalu berayun.
+            k = min(1.0, CAM_LERP * 1.5 * dt)
+            self.camera_focus = lerp(self.camera_focus, ideal_focus, k)
+
+            target_cam = self.camera_focus + self._camera_offset()
+            camera.position += (target_cam - camera.position) * min(1.0, CAM_LERP * dt)
             camera.look_at(self.camera_focus)
             camera.rotation_z = 0
+
+            # Pangkas dinding yang menghalangi pandangan (wall cutaway ala Sims 1)
+            self.world.update_wall_cutaway(camera.position, self.camera_focus)
 
             # ── Sky Dome + Grass Shader update ──────────────
             is_indoor = self.world.scene_obj.indoor if self.world.scene_obj else False
@@ -469,6 +458,14 @@ class Game3D:
         if self.panels.mode == 'panel':
             if key == 'escape':
                 self.panels.close_all()
+            elif self.panels._panel_name in ('shop', 'olahan') and key in ('tab', '0'):
+                # Warung punya dua sisi (BELI/JUAL); tanpa tombol ini sisi jual
+                # tidak bisa dicapai sama sekali.
+                self.panels.cycle_market_mode()
+            elif self.panels._panel_name in ('shop', 'olahan') and key in ('q', 'r'):
+                # Input panel hanya menerima angka 1-9, jadi daftar yang lebih
+                # panjang dari sembilan baris butuh halaman.
+                self.panels.market_page(-1 if key == 'q' else 1)
             elif key.isdigit():
                 msg = self.panels.panel_action(int(key))
                 if msg:
@@ -517,7 +514,17 @@ class Game3D:
                 if self.state.scene_name == 'shop':
                     self.panels.open_panel('shop')
                 else:
-                    self.panels.flash_msg("Pergi ke Warung Bu Sari!")
+                    self.panels.flash_msg(
+                        "Warung Bu Sari ada di Desa. Peti Kirim di kebun "
+                        "membeli hasil panen 85% tanpa perlu jalan.", 2.5)
+            elif key == 'o':
+                # Dapur bisa dibuka dari depan kompor lewat menu perabot; ini
+                # jalan pintas supaya pemain yang sudah tahu tidak perlu
+                # berdiri persis di tempat yang benar.
+                if self.state.scene_name in ('house', 'shop'):
+                    self.panels.open_panel('olahan')
+                else:
+                    self.panels.flash_msg("Mengolah hasil panen dilakukan di dapur rumah.", 2.0)
             elif key == 'u':
                 if self.state.scene_name == 'smith':
                     self.panels.open_panel('crafting')
@@ -641,6 +648,26 @@ class Game3D:
                 pass
         for cloud in self.clouds:
             cloud.color = cloud_col
+
+    def _camera_offset(self) -> Vec3:
+        """Vektor offset kamera dari titik fokus, dari yaw/pitch/dist saat ini."""
+        cy = math.radians(self.camera_yaw)
+        cp = math.radians(self.camera_pitch)
+        return Vec3(math.sin(cy) * math.cos(cp),
+                    math.sin(cp),
+                    -math.cos(cy) * math.cos(cp)) * self.camera_dist
+
+    def _snap_camera_to_player(self):
+        """Tempatkan kamera langsung di posisi idealnya, tanpa lerp.
+
+        Dipakai saat ganti scene dan oleh harness tangkapan layar — tanpa ini
+        kamera perlu ~1 detik dt untuk konvergen, jadi frame awal selalu salah.
+        """
+        self.camera_focus = self.player.position + Vec3(0, CAM_TARGET_LIFT, 0)
+        camera.position = self.camera_focus + self._camera_offset()
+        camera.look_at(self.camera_focus)
+        camera.rotation_z = 0
+        self.world.update_wall_cutaway(camera.position, self.camera_focus)
 
     @staticmethod
     def _is_opengl_pipeline_static() -> bool:

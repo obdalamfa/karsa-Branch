@@ -137,7 +137,12 @@ class Player3D(Entity):
         self.velocity_z        = 0.0
         self.is_jumping        = False
 
-        self.action_queue: list = []  # [(tx, ty, tool_idx, priority), ...]
+        self.action_queue: list = []  # lama: [(tx, ty, tool_idx, priority), ...]
+
+        # Antrian aksi ala The Sims: klik -> menu -> antri -> dijalankan
+        # bertahap sambil mengisi motif. Ini yang menutup loop permainan.
+        from .action_queue import ActionQueue
+        self.queue = ActionQueue(state.mv)
         self._shirt_col = BODY_COLOR
 
         # Story system: pending messages delivered after scene transition
@@ -380,6 +385,29 @@ class Player3D(Entity):
         return self.x / TS, self.z / TS
 
     # ─── TICK (dipanggil manual dari app.py saat mode='hud') ──
+    def _escape_to_walkable(self, tx: int, tz: int, max_r: int = 8) -> bool:
+        """Pindahkan pemain ke tile terdekat yang bisa dijalani.
+
+        Dipakai hanya saat pemain benar-benar terkurung. Radius dicari melebar
+        sampai 8 tile — jauh lebih longgar daripada radius 5 di app.py, yang
+        gagal ketika koordinat basi meleset lebih dari lima tile dari peta baru.
+        """
+        for r in range(1, max_r + 1):
+            for dz in range(-r, r + 1):
+                for dx in range(-r, r + 1):
+                    if max(abs(dx), abs(dz)) != r:
+                        continue          # hanya cincin terluar tiap putaran
+                    nx, nz = tx + dx, tz + dz
+                    if self.world.is_walkable(nx, nz):
+                        self.set_tile_pos(nx, nz)
+                        self.velocity_x = self.velocity_z = 0.0
+                        self.state.player_x, self.state.player_y = float(nx), float(nz)
+                        import logging
+                        logging.warning(
+                            f"[STUCK] pemain terkurung di ({tx},{tz}) -> dipindah ke ({nx},{nz})")
+                        return True
+        return False
+
     def tick(self, dt: float = None, panels=None):
         if dt is None:
             dt = time.dt
@@ -419,18 +447,44 @@ class Player3D(Entity):
             max_speed = max(max_speed, 38.0)
         
         ACCEL = 85.0 * spd_factor
-        FRICTION = 6.0
+        # Gesekan rendah membuat karakter meluncur setelah tombol dilepas —
+        # terasa licin dan sulit berhenti tepat di depan objek yang mau dipakai.
+        FRICTION = 14.0
         
         if dx_in or dz_in:
             # Normalisasi vector input
             mag = math.sqrt(dx_in * dx_in + dz_in * dz_in)
             dx_in /= mag; dz_in /= mag
 
-            # Gerakan relatif terhadap arah kamera saat ini
+            # Gerakan relatif terhadap arah kamera saat ini.
+            #
+            # Basis diturunkan dari vektor kamera -> pemain yang SEBENARNYA,
+            # bukan dari camera.world_rotation_y. Memakai sudut itu membuat
+            # keempat arah WASD terbalik: diukur di _bench/probes/probe_wasd.py,
+            # W menggerakkan pemain ke arah kamera (turun layar) dan D ke kiri.
+            # Selisih posisi selalu benar apa pun konvensi rotasi kamera, dan
+            # tetap benar saat pemain memutar kamera dengan klik kanan.
             from ursina import camera
-            cam_yaw = math.radians(camera.world_rotation_y)
-            fwd_x   = math.sin(cam_yaw);  fwd_z   = math.cos(cam_yaw)
-            right_x = math.cos(cam_yaw);  right_z = -math.sin(cam_yaw)
+            # Pakai koordinat DUNIA di kedua sisi. Mencampur self.x (lokal)
+            # dengan camera.world_x membuat basis salah kalau parent pemain
+            # tidak identitas.
+            fx = self.world_x - camera.world_x
+            fz = self.world_z - camera.world_z
+            fmag = math.hypot(fx, fz)
+            if fmag < 1e-4:
+                fwd_x, fwd_z = 0.0, -1.0
+            else:
+                # Tanda dibalik. Ini DIUKUR, bukan diturunkan dari konvensi:
+                # _bench/probes/probe_screen.py memproyeksikan pemain lewat
+                # lensa Panda3D sendiri sambil mengembalikan kamera ke transform
+                # sebelum bergerak, dan vektor kamera->pemain apa adanya membuat
+                # W turun layar. Konvensi arah hadap kamera Ursina tidak searah
+                # dengan selisih posisi ini.
+                fwd_x, fwd_z = -fx / fmag, -fz / fmag
+            # Kanan layar = arah maju diputar 90 derajat. Arah putarannya juga
+            # diukur, bukan diasumsikan: putaran ke sisi satunya membuat A/D
+            # tertukar.
+            right_x, right_z = fwd_z, -fwd_x
             mx = dz_in * fwd_x + dx_in * right_x
             mz = dz_in * fwd_z + dx_in * right_z
 
@@ -463,6 +517,31 @@ class Player3D(Entity):
             tx_new = int(round((new_x + math.copysign(radius, self.velocity_x)) / TS))
             tz_new = int(round((new_z + math.copysign(radius, self.velocity_z)) / TS))
             tx_cur, tz_cur = self.get_tile_pos()
+
+            # ── JALAN KELUAR SAAT TERJEPIT ─────────────────────────────
+            # Seluruh uji tabrakan di bawah memakai tile SAAT INI sebagai
+            # jangkar. Kalau pemain sampai berdiri di atas tile terblokir,
+            # tx_cur/tz_cur ikut terblokir sehingga SETIAP arah ditolak dan
+            # pemain terjepit selamanya. Diukur di _bench/probes/probe_stuck.py:
+            # di tile terblokir, keempat arah menghasilkan perpindahan 0,00.
+            #
+            # Pemain bisa sampai di sana lewat banyak jalan yang wajar: ganti
+            # scene, pohon tumbuh di petaknya, medan berubah, atau memuat save
+            # dengan koordinat basi. Jadi ini bukan kasus mustahil — ini yang
+            # dilaporkan pemilik sebagai "stuck di tempat yang tidak seharusnya".
+            if not self.world.is_walkable(tx_cur, tz_cur):
+                # Izinkan gerak apa pun yang MENDARAT di tile yang bisa dijalani.
+                if self.world.is_walkable(tx_new, tz_new):
+                    self.x, self.z = new_x, new_z
+                elif self.world.is_walkable(tx_new, tz_cur):
+                    self.x = new_x
+                elif self.world.is_walkable(tx_cur, tz_new):
+                    self.z = new_z
+                else:
+                    # Terkurung sepenuhnya: dorong ke tile terdekat yang bisa
+                    # dijalani, bukan biarkan pemain kehilangan kendali.
+                    self._escape_to_walkable(tx_cur, tz_cur)
+                return
 
             # Diagonal check: prevent clipping inside diagonal corner obstacles
             if self.world.is_walkable(tx_new, tz_cur) and self.world.is_walkable(tx_cur, tz_new):

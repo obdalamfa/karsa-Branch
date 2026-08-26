@@ -22,12 +22,33 @@ _ASSET_DIR = Path(__file__).resolve().parent.parent / 'assets' / 'textures'
 _MODEL_CACHE: dict = {}
 _TEX_CACHE: dict = {}
 
+def _model_instance(cached):
+    """Salinan lepas dari model cache — WAJIB, sama alasannya dengan
+    meshes._instance() (BRIEF §8.1).
+
+    Model hasil `loader.loadModel()` adalah NodePath Panda3D, dan sebuah
+    NodePath hanya boleh punya SATU parent. `Entity.model = <NodePath>`
+    me-reparent node itu, jadi actor kedua yang memakai nama model yang sama
+    MENCURI geometri dari actor pertama. Diukur di scene farm sebelum perbaikan:
+    dari 6 hewan yang semuanya memakai 'humanoid.obj', hanya SATU (yang dibuat
+    terakhir) punya tight-bounds bervolume; lima sisanya kosong dan hanya
+    menyisakan nameplate melayang.
+    """
+    if cached is None:
+        return None
+    from panda3d.core import NodePath
+    holder = NodePath('_model_instance')
+    copy = cached.copy_to(holder)
+    copy.detach_node()
+    return copy
+
+
 def load_model_file(name: str):
     """Load model from assets/models/."""
     if not name: return None
     if name in _MODEL_CACHE:
-        return _MODEL_CACHE[name]
-        
+        return _model_instance(_MODEL_CACHE[name])
+
     path_obj = _MODELS_DIR / f'{name}.obj'
     path_glb = _MODELS_DIR / f'{name}.glb'
     
@@ -42,7 +63,7 @@ def load_model_file(name: str):
         fn = Filename.fromOsSpecific(str(path))
         m = base.loader.loadModel(fn)
         _MODEL_CACHE[name] = m
-        return m
+        return _model_instance(m)
     except Exception as e:
         import logging
         logging.warning(f"Failed to load model '{name}': {e}")
@@ -214,15 +235,45 @@ class EntitiesManager:
             actor.position = (actor.logical_x * TS, 0, actor.logical_y * TS)
             
             # Setup Model
-            apr_list = NPC_APPEARANCES.get(actor_id)
+            lbl_y, lbl_scale = GH + 3.1, 5
+            is_animal = actor_id in ANIMAL_NPCS
+            if is_animal:
+                # Hewan memakai rig prosedural berskala meter. Sebelum ini
+                # get_npc_model_name() mengembalikan 'humanoid' untuk SEMUA
+                # hewan — sapi, ayam dan kucing memakai mesh manusia yang sama.
+                from .animal_models import build_animal
+                h = build_animal(actor, ANIMAL_NPCS[actor_id].get('type', ''))
+                # Hewan dibangun menghadap +Z (konvensi base_actor.sync_visuals),
+                # dan kamera default juga memandang ke +Z — jadi pada rotation_y
+                # 0 pemain selalu melihat PUNGGUNG hewan, sementara kepala,
+                # tanduk, paruh dan moncong (satu-satunya yang membedakan
+                # spesies) menghadap menjauh. Putar ke arah kamera, dengan
+                # variasi deterministik supaya sekandang tidak seragam.
+                # (sum(ord) — bukan hash(), yang di-randomisasi per proses)
+                actor.rotation_y = 180 + (sum(map(ord, actor_id)) % 5 - 2) * 22
+                # Nameplate duduk tepat di atas hewan. Di ketinggian manusia
+                # (3,1 m) label ayam melayang lepas dari badannya sehingga
+                # pemain tidak bisa memasangkan nama dengan bentuk.
+                lbl_y, lbl_scale = h + 0.45, 2.6
+            apr_list = None if is_animal else NPC_APPEARANCES.get(actor_id)
+            # Vitaboy memuat aset TSO asli dari path absolut mesin tertentu
+            # (vitaboy/tso_paths.py). Tanpa try/except, satu mesin tanpa TSO
+            # membuat load_scene() crash total dan game tidak bisa dibuka sama
+            # sekali. player.py sudah punya fallback ini; di sini belum.
             if apr_list:
-                from .vitaboy import VitaboyAvatar
-                sc = 0.19 if actor_id in ('cici', 'bowo') else 0.32
-                actor._va = VitaboyAvatar(actor, apr_list, scale=sc)
-                actor._va.set_animation("a2a-talk-idle-loop")
-                actor.model = 'cube'  # dummy parent
-                actor.color = color.clear # hide dummy
-            else:
+                try:
+                    from .vitaboy import VitaboyAvatar
+                    sc = 0.19 if actor_id in ('cici', 'bowo') else 0.32
+                    actor._va = VitaboyAvatar(actor, apr_list, scale=sc)
+                    actor._va.set_animation("a2a-talk-idle-loop")
+                    actor.model = 'cube'  # dummy parent
+                    actor.color = color.clear # hide dummy
+                except Exception as e:
+                    import logging
+                    logging.warning(
+                        f"Vitaboy gagal untuk '{actor_id}' ({e}); pakai model biasa.")
+                    apr_list = None
+            if not apr_list and not is_animal:
                 model_name = get_npc_model_name(actor_id)
                 panda_model = load_model_file(model_name)
                 if panda_model:
@@ -240,8 +291,8 @@ class EntitiesManager:
             all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
             name = all_d.get(actor_id, {}).get('name', actor_id)
             actor._lbl = Text(name, parent=actor, billboard=True,
-                             position=(0, GH + 3.1, 0),
-                             scale=5, color=color.rgb(255, 240, 160),
+                             position=(0, lbl_y, 0),
+                             scale=lbl_scale, color=color.rgb(255, 240, 160),
                              background=True)
                              
             self.actors[actor_id] = actor

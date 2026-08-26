@@ -15,6 +15,11 @@ def build_farm():
     # Jalan setapak dari teras depan pintu rumah (3,4) ke jalan raya utama kebun
     m[4][3] = P
     m[4][4] = P
+
+    # Peti Kirim: satu-satunya cara menjual tanpa berjalan ke Warung (85%
+    # harga). Ditaruh menempel jalan setapak keluar rumah supaya pemain
+    # melewatinya setiap pagi dan tidak mungkin tidak menemukannya.
+    m[4][6] = CH
     for y in range(5, 14):
         m[y][4] = P
 

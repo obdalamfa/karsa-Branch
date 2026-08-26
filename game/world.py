@@ -25,6 +25,11 @@ from .config import (TILE_SIZE, GROUND_H, WALL_H, TREE_H, HOUSE_H, OBJ_H, SMALL_
                      STAIRS_DOWN, STAIRS_UP, MINED, SD, LGH_B, LGH_F, CLOUD, GOLD_W, PALM, TV, CHR, CAL)
 from .scenes import SCENES
 from .data import CROPS
+# Impor ini BUKAN sekadar dekorasi: game/crops.py mendaftarkan katalog palawija,
+# padi dan pohon ke data.CROPS saat diimpor (tanpa menimpa entri yang sudah
+# ada). Semua kode lama yang membaca CROPS — pemilih benih Q/R di player.py,
+# HUD, panel toko — langsung ikut melihat tanaman baru tanpa diubah.
+from . import crops as _crops_registry  # noqa: F401
 
 TS = TILE_SIZE
 
@@ -54,9 +59,12 @@ def _tex(name: str):
             pass
     return None
 
-def _e(model, pos, scale, tex_name, tint=color.white, smooth=True, soft=True, **kw):
+def _e(model, pos, scale, tex_name, tint=color.white, smooth=True, soft=True,
+       tex_obj=None, **kw):
     """Buat Entity dengan tekstur + tint opsional.
-    `soft=True`: cube → soft cube (rounded). Set soft=False untuk tile ground / detail tajam."""
+    `soft=True`: cube → soft cube (rounded). Set soft=False untuk tile ground / detail tajam.
+    `tex_obj`: Texture yang sudah jadi (mis. palet pagar yang dibuat runtime,
+    bukan file di assets/textures) — melewati _tex() sepenuhnya."""
     if soft:
         if model == 'cube':
             from .meshes import soft_cube_mesh
@@ -66,7 +74,7 @@ def _e(model, pos, scale, tex_name, tint=color.white, smooth=True, soft=True, **
             model = soft_capsule_mesh()
     elif model == 'cylinder':
         model = Cylinder()
-    t = _tex(tex_name)
+    t = tex_obj if tex_obj is not None else _tex(tex_name)
     if t:
         e = Entity(model=model, position=pos, scale=scale,
                    texture=t, color=tint, **kw)
@@ -92,9 +100,12 @@ def _c(r, g_, b):
 _CB_LIGHT = color.rgb(148, 205, 105)
 _CB_DARK  = color.rgb(125, 182, 85)
 
-# Checkerboard indoor — warm honey wood
-_FL_LIGHT = color.rgb(228, 200, 148)
-_FL_DARK  = color.rgb(200, 170, 115)
+# Checkerboard indoor — kayu jati gelap.
+# Nilai (value) sengaja jauh di bawah dinding: mata membaca ruangan lewat beda
+# terang-gelap, bukan beda warna. Sebelumnya lantai (228,200,148) dan dinding
+# (235,215,185) hampir identik, jadi ruangan terlihat seperti satu gumpalan.
+_FL_LIGHT = color.rgb(150, 112, 74)
+_FL_DARK  = color.rgb(131, 96, 62)
 
 # Cave floor — cool purple-grey
 _CV_LIGHT = color.rgb(132, 118, 152)
@@ -198,17 +209,17 @@ OBJ_COLORS = {
     DR:  _c(168, 112, 62),
     FN:  _c(178, 148, 95),   # warmer fence
     GT:  _c(168, 130, 72),
-    BD:  _c(238, 205, 162),  # warm bed
-    ST:  _c(145, 115, 95),
-    TB:  _c(205, 168, 112),  # warm table
-    BS:  _c(162, 118, 72),
+    BD:  _c(196, 92, 88),  # warm bed
+    ST:  _c(198, 200, 204),
+    TB:  _c(96, 130, 122),  # warm table
+    BS:  _c(72, 96, 140),
     MR:  _c(165, 225, 255),  # brighter mirror
     FP:  _c(255, 148, 55),   # vivid fireplace
     CL:  _c(105, 85, 68),
     PP:  _c(88, 215, 88),    # vivid plant
-    CH:  _c(185, 138, 82),
-    CT:  _c(198, 158, 105),
-    SH:  _c(185, 145, 95),
+    CH:  _c(120, 92, 158),
+    CT:  _c(206, 208, 212),
+    SH:  _c(86, 112, 96),
     GR:  _c(148, 132, 165),  # softer grave
     LN:  _c(255, 248, 120),  # bright lantern
     DT:  _c(112, 85, 55),
@@ -223,16 +234,16 @@ OBJ_COLORS = {
     ORE_MTH:_c(165, 245, 255),
 }
 
-CROP_TEX = {
-    'lobak':    'crop_lobak',
-    'wortel':   'crop_wortel',
-    'stroberi': 'crop_stroberi',
-    'jagung':   'crop_jagung',
-    'tomat':    'crop_tomat',
-    'labu':     'crop_labu',
-    'bayam':    'crop_bayam',
-    'jamur':    'crop_jamur',
-}
+# Tile yang dianggap satu keluarga pagar. Sebuah tile pagar hanya bisa memilih
+# bentuknya kalau ia tahu sisi mana yang diteruskan tetangga — dan gerbang harus
+# ikut dihitung, kalau tidak palang berhenti satu tile sebelum tiang gerbang.
+_FENCE_LIKE = (FN, GT, PEN)
+
+# CROP_TEX DIHAPUS. Delapan tekstur bola tanaman (crop_lobak.png dkk) dipakai
+# oleh renderer lama yang menggambar semua tanaman sebagai satu bola bertekstur.
+# Renderer sekarang membangun siluet dari bentuk tumbuh dan mewarnainya dari
+# CROP_CATALOG, jadi tabel ini tidak dibaca siapa pun lagi. File PNG-nya SENGAJA
+# dibiarkan di assets/textures — tidak ada yang dihapus dari disk.
 
 
 class World3D:
@@ -250,6 +261,10 @@ class World3D:
         self._water_ents: list  = []   # untuk animasi warna
         self._grass_ents: list  = []   # untuk grass shader (FreeSO GrassShader.fx)
         self._water_t    = 0.0
+        # Dinding dilacak terpisah supaya bisa dipotong (wall cutaway ala Sims 1):
+        # (entity, tinggi_penuh, y_penuh, tx, ty)
+        self._wall_ents: list   = []
+        self._cutaway_state     = None   # cache arah kamera terakhir
         self.ground_collider = None
         # Craig-Macomber pattern: cache tinggi surface per tile (tx,ty) → float
         self._tile_heights: dict = {}
@@ -293,6 +308,18 @@ class World3D:
         w = int(self.get_tile(tx - 1, ty    ) == P)
         return n | (e << 1) | (s << 2) | (w << 3)
 
+    def _fence_bitmask(self, tx: int, ty: int) -> int:
+        """4-bit N/E/S/W untuk pagar — pola persis sama dengan _road_bitmask.
+
+        Pagar didefinisikan oleh sambungannya: tanpa ini, tile sudut memasang
+        palang ke arah yang kosong dan ujung larik menggantung di udara.
+        """
+        n = int(self.get_tile(tx,     ty - 1) in _FENCE_LIKE)
+        e = int(self.get_tile(tx + 1, ty    ) in _FENCE_LIKE)
+        s = int(self.get_tile(tx,     ty + 1) in _FENCE_LIKE)
+        w = int(self.get_tile(tx - 1, ty    ) in _FENCE_LIKE)
+        return n | (e << 1) | (s << 2) | (w << 3)
+
     def get_tile(self, tx: int, ty: int) -> int:
         sc = self.scene_obj
         if sc:
@@ -304,7 +331,22 @@ class World3D:
         return WL  # out-of-bounds = blocking
 
     def is_walkable(self, tx: int, ty: int) -> bool:
-        return self.get_tile(tx, ty) in WALKABLE
+        if not self.get_tile(tx, ty) in WALKABLE:
+            return False
+        # Pohon yang DITANAM pemain menempati tilenya secara permanen — itu
+        # ongkos utama menanam pohon dibanding tanaman semusim, dan ongkos itu
+        # hanya nyata kalau tilenya benar-benar tidak bisa dilewati lagi.
+        return not self.has_planted_tree(tx, ty)
+
+    def has_planted_tree(self, tx: int, ty: int) -> bool:
+        soil = self.state.soil.get(f"{tx},{ty},{self.scene_name}")
+        if not soil:
+            return False
+        cid = soil.get('crop')
+        if not cid:
+            return False
+        from . import crops
+        return crops.is_tree(cid)
 
     def refresh_tile(self, tx: int, ty: int, soil_key: str):
         """Update visual tanah/tanaman di satu tile."""
@@ -329,19 +371,71 @@ class World3D:
             e.color = col
 
     # ─── INTERNAL: CLEAR ─────────────────────────────────
+    # ─── WALL CUTAWAY (pelajaran inti dari The Sims 1) ───
+    # Ruangan hanya terbaca kalau dinding yang berdiri antara kamera dan isi
+    # ruangan dipangkas jadi tembok setinggi lutut. Sims 1 memangkas dinding
+    # sisi-dekat; kita lakukan hal yang sama, tapi dihitung dari arah kamera
+    # supaya tetap benar saat kamera diputar.
+    CUTAWAY_STUB = 0.42          # tinggi sisa dinding yang dipangkas (world units)
+
+    def update_wall_cutaway(self, cam_pos, focus_pos):
+        """Pangkas dinding yang menghalangi pandangan ke titik fokus.
+
+        Sebuah dinding dipangkas kalau ia berada di sisi kamera relatif terhadap
+        fokus, diukur sepanjang sumbu pandang mendatar. Murah: hanya beberapa
+        puluh dinding per scene, dan kita lewati seluruhnya kalau arah pandang
+        belum berubah cukup jauh sejak frame sebelumnya.
+        """
+        if not self._wall_ents:
+            return
+
+        vx, vz = focus_pos[0] - cam_pos[0], focus_pos[2] - cam_pos[2]
+        mag = math.hypot(vx, vz)
+        if mag < 1e-4:
+            return
+        vx /= mag; vz /= mag
+
+        # Proyeksi fokus ke sumbu pandang — dinding dengan proyeksi lebih kecil
+        # berada di depan fokus (lebih dekat ke kamera) dan karenanya menghalangi.
+        f_proj = focus_pos[0] * vx + focus_pos[2] * vz
+
+        state = (round(vx, 2), round(vz, 2), round(f_proj, 1))
+        if state == self._cutaway_state:
+            return
+        self._cutaway_state = state
+
+        stub = self.CUTAWAY_STUB
+        for rec in self._wall_ents:
+            e, full_h, full_y = rec[0], rec[1], rec[2]
+            if not e:
+                continue
+            proj = e.x * vx + e.z * vz
+            # Ambang setengah tile: dinding tepat sejajar fokus dibiarkan berdiri
+            # supaya ruangan tetap punya batas yang terbaca.
+            cut = proj < f_proj - TS * 0.5
+            want_h = stub if cut else full_h
+            if abs(e.scale_y - want_h) > 1e-3:
+                e.scale_y = want_h
+                e.y = want_h / 2 + GROUND_H if cut else full_y
+
     def _clear(self):
         for e in self._tile_ents + self._obj_ents:
             destroy(e)
         for e in self._soil_ents.values():
             destroy(e)
-        for e in self._crop_ents.values():
-            destroy(e)
+        # Satu petak sekarang berisi BANYAK entity (batang, daun, buah,
+        # penanda), jadi nilainya list — bukan satu Entity seperti dulu.
+        for ents in self._crop_ents.values():
+            for e in ents:
+                destroy(e)
         self._tile_ents.clear()
         self._obj_ents.clear()
         self._soil_ents.clear()
         self._crop_ents.clear()
         self._water_ents.clear()
         self._grass_ents.clear()
+        self._wall_ents.clear()
+        self._cutaway_state = None
         self._tile_heights.clear()
         
         if self.ground_collider:
@@ -399,9 +493,34 @@ class World3D:
             tint = _cb(tx, ty)
 
         if tid in BLOCKING or tid == MB:
-            ge = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS), default_tex, tint, soft=False)
+            if tid in _FENCE_LIKE and default_tex == 'grass':
+                # Pagar sekarang berlubang, jadi tanah di bawahnya ikut terlihat.
+                # Dulu tersembunyi di balik kubus pagar; kalau dibiarkan setinggi
+                # GROUND_H saja, jalur pagar terbaca sebagai pita gelap yang
+                # melesak di antara rumput. Samakan tinggi dengan tutup rumput
+                # tetangga (GROUND_H + 0.04) dan pakai tekstur yang sama.
+                # Tambahan 2 mm bukan hiasan: tutup rumput tetangga dibuat
+                # selebar TS * 1.005, jadi tepinya menjorok ~1 cm ke tile ini.
+                # Kalau tingginya PERSIS sama, dua bidang jadi sebidang dan
+                # z-fighting bikin garis belang di kaki tiang.
+                gh = GROUND_H + 0.042
+                ge = _e('cube', (wx, gh / 2, wz), (TS, gh, TS),
+                        'snow_ground' if self.state.season_index == 3 else 'grass_tso',
+                        tint, soft=False)
+            else:
+                ge = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS), default_tex, tint, soft=False)
             self._tile_ents.append(ge)
             self._make_blocking_obj(tid, wx, wz)
+
+        elif tid == GT:
+            # Ambang gerbang: tanah padat terinjak, bukan rumput. Bukaan harus
+            # terbaca sebagai jalur masuk dari satu frame diam, tanpa kursor.
+            gh = GROUND_H + 0.042
+            ge = _e('cube', (wx, gh / 2, wz), (TS, gh, TS), 'sand_ground',
+                    _c(176, 150, 112), soft=False)
+            self._tile_ents.append(ge)
+            self._tile_heights[(tx, ty)] = 0.0
+            self._make_gate(wx, wz)
 
         elif tid == G:
             # Resolve FreeSO/TSO high-fidelity textures
@@ -450,11 +569,27 @@ class World3D:
             bm   = self._road_bitmask(tx, ty)
             
             # Add solid dirt base so transparent road doesn't show sky
-            base_dirt = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS), 'sand_ground', tint, soft=False)
+            # Jalan diberi warna tanah, bukan `tint` papan-catur rumput — dengan
+            # tint rumput, jalan desa terbaca sebagai petak hijau-limau menyala
+            # dan pemain tidak bisa membedakan jalan dari halaman.
+            base_dirt = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS),
+                           'sand_ground', _c(176, 150, 112), soft=False)
             self._tile_ents.append(base_dirt)
             
-            base = _e('cube', (wx, GROUND_H/2 + 0.01, wz), (TS, GROUND_H, TS),
-                      f'terrain/road{bm:02d}', tint, soft=False)
+            # Lapisan jalan dibuat SLAB TIPIS di atas dasar, bukan kubus setinggi
+            # penuh. Dua kubus dengan volume nyaris sama menghasilkan z-fighting
+            # hebat di sisi-sisinya — itulah kisi hitam/magenta yang berkedip di
+            # sepanjang jalan desa, bukan tekstur yang hilang.
+            # transparent=True WAJIB di sini: tekstur road* punya alpha nyata
+            # (road00 seluruhnya alpha=0) dengan RGB hitam di bawahnya. Tanpa
+            # alpha, yang tergambar adalah hitam pekat plus garis kuning — itulah
+            # kisi gelap yang menutupi seluruh jalan desa.
+            # smooth=False juga wajib: smooth_shader menulis alpha opak sehingga
+            # transparent=True saja tidak cukup untuk membuat area kosong tekstur
+            # jalan benar-benar tembus ke dasar pasir.
+            base = _e('cube', (wx, GROUND_H + 0.012, wz), (TS, 0.024, TS),
+                      f'terrain/road{bm:02d}', _c(196, 178, 148), soft=False,
+                      smooth=False, transparent=True)
             self._tile_ents.append(base)
             nv2 = _noise2(tx, ty)
             if nv2 > 0.55:
@@ -509,13 +644,56 @@ class World3D:
                         (0.2, 0.2, 0.2), 'lamp_glow', _c(255, 255, 255))
             self._tile_ents.append(flower)
 
+    # ─── INTERNAL: PAGAR & GERBANG ──────────────────────────
+    # Sebuah pagar dikenali dari CELAH-nya, bukan dari massanya. Satu kubus utuh
+    # per tile — yang dipakai sebelumnya — tidak bisa terbaca sebagai pagar dari
+    # sudut kamera mana pun; ia hanya bisa terbaca sebagai kardus. Geometri
+    # sebenarnya (tiang + palang + bilah) ada di meshes.fence_mesh().
+
+    def _make_fence(self, tid, wx, wz):
+        from .meshes import fence_mesh, fence_palette_texture
+        tx, ty = self.world_to_tile(wx, wz)
+        bm = self._fence_bitmask(tx, ty)
+        # Kandang ternak sengaja beda gaya dari pagar keliling: pemain harus
+        # bisa membedakan "batas kebun" dari "tempat hewan" sekali lihat.
+        style = 'kandang' if tid == PEN else 'bambu'
+        var = (tx * 7 + ty * 13) % 3
+        # scale WAJIB (1,1,1) — mesh sudah dibangun dalam meter.
+        e = _e(fence_mesh(bm, style, var), (wx, GROUND_H + 0.02, wz), (1, 1, 1),
+               None, color.white, soft=False, tex_obj=fence_palette_texture())
+        self._obj_ents.append(e)
+
+    def _make_gate(self, wx, wz):
+        from .meshes import gate_mesh, fence_palette_texture
+        tx, ty = self.world_to_tile(wx, wz)
+        bm = self._fence_bitmask(tx, ty)
+        ew = ((bm >> 1) & 1) + ((bm >> 3) & 1)
+        ns = (bm & 1) + ((bm >> 2) & 1)
+        axis = 'x' if ew >= ns else 'z'
+        # Tiang dilewati kalau tetangga di sisi itu juga gerbang: gerbang dua
+        # tile (kuburan) harus jadi SATU bukaan lebar, bukan empat tiang rapat.
+        if axis == 'x':
+            lo = self.get_tile(tx - 1, ty) != GT
+            hi = self.get_tile(tx + 1, ty) != GT
+        else:
+            lo = self.get_tile(tx, ty - 1) != GT
+            hi = self.get_tile(tx, ty + 1) != GT
+        var = (tx * 7 + ty * 13) % 3
+        e = _e(gate_mesh(axis, lo, hi, var), (wx, GROUND_H + 0.02, wz), (1, 1, 1),
+               None, color.white, soft=False, tex_obj=fence_palette_texture())
+        self._obj_ents.append(e)
+
     def _make_blocking_obj(self, tid, wx, wz):
         if tid in (TR, PALM, DT, LN, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS, H, FP, GR, TV, CHR, CAL):
             # Handled by Scene builder/props.py
             return
 
+        elif tid in (FN, PEN):
+            self._make_fence(tid, wx, wz)
+            return
+
         else:
-            oh = {WL: WALL_H, CV_W: WALL_H, FN: OBJ_H * 0.75, GT: OBJ_H, PEN: OBJ_H * 0.95,
+            oh = {WL: WALL_H, CV_W: WALL_H,
                   BD: 0.62, TB: 0.82, BS: OBJ_H * 1.4, MR: OBJ_H * 1.2,
                   CL: OBJ_H * 1.35, PP: 0.70, CH: 0.80, CT: 0.90, SH: OBJ_H * 1.5,
                   GR: OBJ_H * 0.90, BOT: 0.60, MB: 0.85, ST: 0.95,
@@ -526,23 +704,37 @@ class World3D:
             col = OBJ_COLORS.get(tid, _c(130, 130, 130))
             
             sc = 0.88
+            # Dinding dan batu gua dirender sebagai balok TAJAM (soft=False).
+            # Soft cube membulatkan sudut sampai dinding terbaca seperti bongkahan
+            # batu/bantal, bukan bidang tegak — sudut siku justru yang bikin
+            # ruangan terbaca sebagai ruangan.
+            sharp = False
             if tid == WL:
                 sc = 1.0
+                sharp = True
                 if getattr(self.scene_obj, 'indoor', False):
-                    tex = 'wood_plank'
-                    col = _c(235, 215, 185) # Warm indoor wallpaper
+                    # Tanpa tekstur: 'wood_plank' berwarna oranye kuat sehingga
+                    # tint apa pun tetap terbaca oranye dan dinding lebur dengan
+                    # lantai kayu. Plester polos memberi bidang tenang yang
+                    # membuat perabot dan karakter menonjol.
+                    tex = None
+                    # Nilai ditahan di ~0,67: smooth_shader menambah cahaya di
+                    # atas warna dasar, jadi plester putih langsung clipping ke
+                    # putih rata dan detail dinding hilang.
+                    col = _c(170, 164, 150)
             elif tid == CV_W:
                 sc = 0.98
+                sharp = True
             elif tid == DR:
                 sc = 1.0
 
-            if tex:
-                e = _e('cube', (wx, oh / 2 + GROUND_H, wz),
-                       (TS * sc, oh, TS * sc), tex, col)
-            else:
-                e = _e('cube', (wx, oh / 2 + GROUND_H, wz),
-                       (TS * sc, oh, TS * sc), None, col)
+            pos_y = oh / 2 + GROUND_H
+            e = _e('cube', (wx, pos_y, wz), (TS * sc, oh, TS * sc),
+                   tex, col, soft=not sharp)
             self._obj_ents.append(e)
+            if tid in (WL, CV_W):
+                tx, ty = self.world_to_tile(wx, wz)
+                self._wall_ents.append([e, oh, pos_y, tx, ty])
 
     # ─── INTERNAL: SOIL / CROP ───────────────────────────
     def _build_all_crops(self):
@@ -563,44 +755,370 @@ class World3D:
         if not soil.get('tilled'):
             return
         wx, wz = tx * TS, ty * TS
-        soil_tex = 'soil_wet' if soil.get('watered') else 'soil_dry'
+        # Tanah punya TIGA keadaan, bukan dua. Basah dan kering sudah ada;
+        # yang ketiga adalah tanah yang sudah berhari-hari kering — warnanya
+        # dipucatkan supaya petak yang terlupakan terbaca sebagai satu blok
+        # pucat dari kejauhan, sebelum pemain sempat memeriksa satu per satu.
+        basah = soil.get('watered')
+        soil_tex = 'soil_wet' if basah else 'soil_dry'
+        if basah:
+            tint = color.rgb(255, 255, 255)
+        elif soil.get('kering', 0) >= 2:
+            tint = color.rgb(214, 198, 172)
+        else:
+            tint = color.rgb(236, 226, 210)
         e = _e('cube', (wx, GROUND_H + 0.06, wz),
-               (TS * 0.92, 0.10, TS * 0.92), soil_tex)
+               (TS * 0.92, 0.10, TS * 0.92), soil_tex, tint)
         self._soil_ents[key] = e
 
-    def _update_crop(self, key, tx, ty, soil):
-        self._destroy_crop(key)
-        crop_id = soil.get('crop')
-        if not crop_id:
+    # ─── INTERNAL: TANAMAN & POHON ───────────────────────
+    # Kenapa bagian ini ditulis ulang: renderer lama menggambar SEMUA tanaman
+    # sebagai satu bola + satu batang, hanya berganti tekstur di tahap akhir.
+    # Dari kamera lot, delapan tanaman berbeda tampil sebagai delapan bola
+    # identik, dan "baru tumbuh" tidak bisa dibedakan dari "siap panen".
+    # Tanaman yang keadaannya tidak bisa dibaca adalah tanaman yang akan
+    # dilupakan pemain — lalu pemain menyalahkan game, bukan dirinya.
+    #
+    # Sekarang SILUET ditentukan oleh bentuk tumbuh (umbi/daun/rumpun/tegak/
+    # rambat/padi/jamur) dan UKURAN oleh tahap. Jagung tidak akan tertukar
+    # dengan bayam. Dua penanda melayang memisahkan dua pertanyaan yang paling
+    # sering ditanyakan pemain: butuh air (kerucut BIRU menghadap bawah)
+    # versus siap panen (berlian EMAS). Warnanya sengaja berjauhan di roda
+    # warna — bukan dua nuansa hijau yang harus dibandingkan berdampingan.
+    #
+    # JEBAKAN MESH BERBAGI (BRIEF §8.1): tiap Entity di sini memanggil getter
+    # mesh-nya sendiri (low_cone_mesh() / soft_cube_mesh() lewat _e), yang
+    # sudah mengembalikan _instance(). Tidak ada satu Mesh pun yang disimpan
+    # ke variabel lalu dipakai ulang oleh dua Entity.
+
+    @staticmethod
+    def _plant_tint(rgb, soil):
+        """Warna daun digeser oleh KEADAAN, bukan cuma oleh jenis tanaman.
+
+        Kering → menguning. Layu → coklat. Mati → abu kecoklatan tanpa hijau.
+        Ini lapisan keterbacaan kedua: penanda melayang bekerja dari jauh,
+        warna daun bekerja saat pemain berdiri tepat di petaknya.
+        """
+        r, g_, b = rgb
+        if soil.get('mati'):
+            return color.rgb(92, 80, 68)
+        if soil.get('layu'):
+            return color.rgb(min(235, int(r * 0.72 + 60)), int(g_ * 0.55 + 34),
+                             int(b * 0.45 + 22))
+        if soil.get('kering', 0) > 0 and not soil.get('watered'):
+            return color.rgb(min(235, int(r * 0.85 + 52)), int(g_ * 0.88 + 26),
+                             int(b * 0.70))
+        return color.rgb(r, g_, b)
+
+    def _p(self, key, model, pos, scale, tex=None, tint=color.white, **kw):
+        """Buat satu bagian tanaman dan daftarkan ke petak `key`."""
+        e = _e(model, pos, scale, tex, tint, **kw)
+        self._crop_ents.setdefault(key, []).append(e)
+        return e
+
+    def _plant_markers(self, key, cid, soil, wx, wz, top_y):
+        """Penanda melayang: tetes biru = butuh air, berlian emas = siap panen."""
+        from . import crops
+        from .meshes import low_cone_mesh
+        if soil.get('mati'):
+            self._p(key, 'cube', (wx, top_y + 0.26, wz), (0.16, 0.16, 0.16),
+                    None, color.rgb(74, 62, 54), smooth=False, rotation=(0, 45, 45))
             return
-        crop_data = CROPS.get(crop_id, {})
-        days  = crop_data.get('days', 4)
-        age   = soil.get('age', 0)
-        stage = min(3, int(age / max(days, 1) * 4))
+        if crops.is_ready(cid, soil):
+            # Berlian emas — satu-satunya benda emas di petak, jadi mata
+            # menemukannya dari seberang kebun tanpa harus dicari.
+            self._p(key, 'cube', (wx, top_y + 0.30, wz), (0.20, 0.20, 0.20),
+                    None, color.rgb(248, 206, 72), smooth=False, rotation=(0, 45, 45))
+        elif crops.needs_water(cid, soil):
+            # Kerucut menghadap BAWAH = bentuk tetes air, bukan sekadar kubus
+            # berwarna lain. Bentuk terbaca lebih cepat daripada warna.
+            self._p(key, low_cone_mesh(), (wx, top_y + 0.26, wz),
+                    (0.20, 0.26, 0.20), None, color.rgb(88, 168, 236),
+                    smooth=False, rotation=(180, 0, 0))
 
+    def _update_crop(self, key, tx, ty, soil):
+        """Gambar satu petak — dipakai untuk tanaman semusim MAUPUN pohon."""
+        from . import crops
+        self._destroy_crop(key)
+        cid = soil.get('crop')
+        if not cid:
+            return
         wx, wz = tx * TS, ty * TS
-        scale_y = 0.30 + stage * 0.25
-        cy = GROUND_H + 0.16 + scale_y / 2
-
-        if stage == 0:
-            crop_tex = 'crop_seed'
-        elif stage == 1:
-            crop_tex = 'crop_sprout'
+        if crops.is_tree(cid):
+            self._build_tree_plant(key, cid, soil, wx, wz)
         else:
-            crop_tex = CROP_TEX.get(crop_id, 'crop_lobak')
+            self._build_crop_plant(key, cid, soil, wx, wz)
 
-        e = _e('sphere', (wx, cy, wz),
-               (TS * 0.40, scale_y, TS * 0.40), crop_tex)
-        stem_h = scale_y * 0.55
-        stem = _e('cylinder',
-                  (wx, GROUND_H + 0.12 + stem_h / 2, wz),
-                  (TS * 0.08, stem_h, TS * 0.08),
-                  'cloth_green')
-        self._crop_ents[key] = e
-        self._crop_ents[key + '_stem'] = stem
+    # ── TANAMAN SEMUSIM ──────────────────────────────────
+    def _build_crop_plant(self, key, cid, soil, wx, wz):
+        from . import crops
+        sp     = crops.spec(cid)
+        stage  = crops.crop_stage(cid, soil)
+        daun   = self._plant_tint(sp.get('warna', (96, 140, 70)), soil)
+        buah   = color.rgb(*sp.get('buah', (200, 160, 60)))
+        base   = GROUND_H + 0.12
+        bentuk = sp.get('bentuk', 'rumpun')
+
+        # ── Tahap 0: benih. Gundukan pipih + dua keping biji. Sengaja nyaris
+        # rata tanah: pemain harus bisa melihat "belum ada apa-apa di sini".
+        if stage == 0:
+            self._p(key, 'cube', (wx, base + 0.03, wz), (0.42, 0.07, 0.42),
+                    'soil_dry', color.rgb(122, 96, 70))
+            for sx in (-0.09, 0.09):
+                self._p(key, 'cube', (wx + sx, base + 0.09, wz), (0.09, 0.03, 0.13),
+                        None, color.rgb(186, 196, 148))
+            self._plant_markers(key, cid, soil, wx, wz, base + 0.10)
+            return
+
+        # ── Tahap 1: tunas. Satu batang tipis + dua daun keping. Sama untuk
+        # semua jenis — tunas memang belum punya ciri, dan berpura-pura punya
+        # akan membuat tahap 2 kehilangan kejutannya.
+        if stage == 1:
+            self._p(key, 'cylinder', (wx, base + 0.11, wz), (0.045, 0.22, 0.045),
+                    None, color.rgb(118, 156, 84))
+            for sgn in (-1, 1):
+                self._p(key, 'cube', (wx + 0.11 * sgn, base + 0.20, wz),
+                        (0.20, 0.03, 0.11), None, daun, rotation=(0, 0, -18 * sgn))
+            self._plant_markers(key, cid, soil, wx, wz, base + 0.26)
+            return
+
+        siap = (stage == 4)
+        f    = 0.62 if stage == 2 else (0.84 if stage == 3 else 1.0)
+
+        if bentuk == 'umbi':
+            # Umbi: roset daun memancar dari satu titik + BAHU UMBI yang
+            # menyembul saat siap. Umbi menyembul memang tanda panen di kebun
+            # sungguhan, jadi dipakai apa adanya.
+            h = 0.46 * f
+            for i in range(5):
+                a = math.radians(i * 72)
+                self._p(key, 'cube',
+                        (wx + math.cos(a) * 0.13 * f, base + h * 0.55,
+                         wz + math.sin(a) * 0.13 * f),
+                        (0.09, h, 0.05), None, daun,
+                        rotation=(math.sin(a) * 26, i * 72, -math.cos(a) * 26))
+            if siap:
+                self._p(key, 'sphere', (wx, base + 0.05, wz),
+                        (0.34, 0.26, 0.34), None, buah)
+            self._plant_markers(key, cid, soil, wx, wz, base + h + 0.06)
+
+        elif bentuk == 'daun':
+            # Daun: roset rendah dan lebar, hampir menutup petak saat siap.
+            h = 0.30 * f
+            for i in range(6):
+                a = math.radians(i * 60 + 12)
+                self._p(key, 'cube',
+                        (wx + math.cos(a) * 0.17 * f, base + h * 0.5,
+                         wz + math.sin(a) * 0.17 * f),
+                        (0.30 * f, 0.045, 0.17 * f), None, daun,
+                        rotation=(0, i * 60, 22))
+            self._plant_markers(key, cid, soil, wx, wz, base + h + 0.14)
+
+        elif bentuk == 'tegak':
+            # Tegak (jagung/sorgum): satu batang TINGGI dengan daun panjang
+            # melengkung. Siluet paling menonjol di kebun — memang harus,
+            # karena jagung di kebun sungguhan juga menjulang begitu.
+            h = 1.50 * f
+            self._p(key, 'cylinder', (wx, base + h * 0.5, wz), (0.075, h, 0.075),
+                    None, daun)
+            for i in range(5):
+                a  = math.radians(i * 72 + 20)
+                ly = base + h * (0.32 + 0.13 * i)
+                self._p(key, 'cube',
+                        (wx + math.cos(a) * 0.24, ly, wz + math.sin(a) * 0.24),
+                        (0.50, 0.035, 0.10), None, daun,
+                        rotation=(0, i * 72 + 20, 34))
+            if siap:
+                # Tongkol menempel miring di batang — bukan bola melayang.
+                for sgn in (-1, 1):
+                    self._p(key, 'cylinder',
+                            (wx + 0.11 * sgn, base + h * 0.60, wz),
+                            (0.15, 0.34, 0.15), None, buah,
+                            rotation=(0, 0, 16 * sgn))
+            self._plant_markers(key, cid, soil, wx, wz, base + h + 0.06)
+
+        elif bentuk == 'rambat':
+            # Rambat (labu/ubi jalar/kacang panjang): hamparan daun menutup
+            # tanah + sulur. Rendah dan LEBAR — kebalikan siluet 'tegak'.
+            for i in range(7):
+                a = math.radians(i * 51 + 8)
+                r = 0.34 * f
+                self._p(key, 'cube',
+                        (wx + math.cos(a) * r, base + 0.07, wz + math.sin(a) * r),
+                        (0.26 * f, 0.04, 0.22 * f), None, daun,
+                        rotation=(0, i * 51, 6))
+            self._p(key, 'cylinder', (wx, base + 0.16 * f, wz),
+                    (0.05, 0.32 * f, 0.05), None, daun, rotation=(9, 0, 14))
+            if siap:
+                if sp.get('hasil', 1) <= 1:
+                    # Satu buah besar bertumpu di hamparan (labu).
+                    self._p(key, 'sphere', (wx + 0.13, base + 0.19, wz - 0.09),
+                            (0.42, 0.34, 0.42), None, buah)
+                else:
+                    # Polong menggantung (kacang panjang / ubi jalar).
+                    for i in range(3):
+                        a = math.radians(i * 120 + 30)
+                        self._p(key, 'cylinder',
+                                (wx + math.cos(a) * 0.18, base + 0.18,
+                                 wz + math.sin(a) * 0.18),
+                                (0.05, 0.30, 0.05), None, buah,
+                                rotation=(24, i * 120, 18))
+            self._plant_markers(key, cid, soil, wx, wz, base + 0.34)
+
+        elif bentuk == 'padi':
+            # Padi: rumpun rapat berisi banyak helai halus. Saat masak helainya
+            # MERUNDUK dan menguning — tanda padi siap panen yang dikenal semua
+            # orang, dan tidak butuh satu kata pun untuk dijelaskan.
+            h = 0.72 * f
+            n = 9
+            for i in range(n):
+                a = math.radians(i * (360 / n) + 11)
+                r = 0.10 + (i % 3) * 0.035
+                lean = 44 if siap else 13
+                self._p(key, 'cube',
+                        (wx + math.cos(a) * r, base + h * 0.5, wz + math.sin(a) * r),
+                        (0.05, h, 0.035), None, buah if siap else daun,
+                        rotation=(math.sin(a) * lean, i * 41, -math.cos(a) * lean))
+            self._plant_markers(key, cid, soil, wx, wz, base + h * 0.9)
+
+        elif bentuk == 'jamur':
+            # Jamur: batang pendek + tudung pipih. Tidak punya daun sama sekali,
+            # jadi tidak mungkin tertukar dengan apa pun di kebun.
+            n = 3 if siap else 2
+            for i in range(n):
+                a  = math.radians(i * 120 + 25)
+                ox, oz = math.cos(a) * 0.14, math.sin(a) * 0.14
+                hh = (0.16 + 0.05 * i) * f
+                self._p(key, 'cylinder', (wx + ox, base + hh * 0.5, wz + oz),
+                        (0.07, hh, 0.07), None, color.rgb(206, 196, 176))
+                self._p(key, 'sphere', (wx + ox, base + hh + 0.03, wz + oz),
+                        (0.26 * f, 0.13 * f, 0.26 * f), None, daun)
+            self._plant_markers(key, cid, soil, wx, wz, base + 0.34)
+
+        else:   # 'rumpun' — tomat, cabai, kacang tanah, kedelai, stroberi
+            # Rumpun: batang tengah + tiga cabang bergerombol daun. Buah
+            # menggantung di cabang saat siap, bukan melayang di tengah.
+            h = 0.72 * f
+            self._p(key, 'cylinder', (wx, base + h * 0.42, wz),
+                    (0.06, h * 0.84, 0.06), None, daun)
+            for i in range(3):
+                a  = math.radians(i * 120 + 18)
+                ox, oz = math.cos(a) * 0.17 * f, math.sin(a) * 0.17 * f
+                self._p(key, 'sphere', (wx + ox, base + h * 0.66, wz + oz),
+                        (0.34 * f, 0.26 * f, 0.34 * f), None, daun)
+                if siap:
+                    self._p(key, 'sphere',
+                            (wx + ox * 1.25, base + h * 0.46, wz + oz * 1.25),
+                            (0.16, 0.16, 0.16), None, buah)
+            self._plant_markers(key, cid, soil, wx, wz, base + h + 0.06)
+
+    # ── POHON ────────────────────────────────────────────
+    def _build_tree_plant(self, key, cid, soil, wx, wz):
+        """Pohon yang ditanam pemain.
+
+        Bedanya dari tanaman semusim harus TERLIHAT, bukan cuma tertulis di
+        tabel: batang berkayu, tinggi bertambah tiap tahap, dan tajuknya tetap
+        berdiri setelah dipanen. Bibit sengaja diberi AJIR bambu supaya sekali
+        lihat pemain tahu "ini pohon yang sedang tumbuh", bukan tunas sayur.
+        """
+        from . import crops
+        sp     = crops.spec(cid)
+        st     = crops.tree_stage(cid, soil)
+        daun   = self._plant_tint(sp.get('warna', (78, 126, 62)), soil)
+        buah   = color.rgb(*sp.get('buah', (196, 162, 62)))
+        kayu   = color.rgb(88, 78, 70) if soil.get('mati') else color.rgb(104, 80, 56)
+        tinggi_penuh = sp.get('tinggi', 4.0)
+        bentuk = sp.get('bentuk', 'rindang')
+        base   = GROUND_H
+
+        # Tinggi per tahap: bibit 18%, muda 52%, dewasa/berbuah 100%.
+        h = tinggi_penuh * (0.18, 0.52, 1.0, 1.0)[st]
+
+        if st == 0:
+            self._p(key, 'cylinder', (wx, base + h * 0.5, wz), (0.06, h, 0.06),
+                    None, kayu)
+            for i in range(3):
+                a = math.radians(i * 120 + 30)
+                self._p(key, 'cube',
+                        (wx + math.cos(a) * 0.13, base + h * 0.86,
+                         wz + math.sin(a) * 0.13),
+                        (0.24, 0.035, 0.13), None, daun, rotation=(0, i * 120, 18))
+            self._p(key, 'cylinder', (wx + 0.16, base + h * 0.62, wz + 0.10),
+                    (0.035, h * 1.24, 0.035), None, color.rgb(176, 156, 108),
+                    rotation=(0, 0, 5))
+            self._plant_markers(key, cid, soil, wx, wz, base + h * 1.3)
+            return
+
+        # Batang berkayu — makin tua makin gemuk.
+        tebal = 0.11 + 0.13 * (h / max(tinggi_penuh, 0.01))
+        self._p(key, 'cylinder', (wx, base + h * 0.44, wz),
+                (tebal, h * 0.88, tebal), None, kayu)
+
+        if bentuk == 'kelapa':
+            # Kelapa: batang polos tinggi, pelepah memancar hanya di puncak.
+            for i in range(6):
+                a = math.radians(i * 60)
+                self._p(key, 'cube',
+                        (wx + math.cos(a) * 0.62, base + h * 0.90,
+                         wz + math.sin(a) * 0.62),
+                        (1.35, 0.05, 0.30), None, daun, rotation=(0, i * 60 + 90, 18))
+            if st == 3:
+                for i in range(3):
+                    a = math.radians(i * 120 + 40)
+                    self._p(key, 'sphere',
+                            (wx + math.cos(a) * 0.22, base + h * 0.80,
+                             wz + math.sin(a) * 0.22),
+                            (0.26, 0.28, 0.26), None, buah)
+        elif bentuk == 'pisang':
+            # Pisang: daun panjang tegak melengkung, tandan menggantung.
+            for i in range(5):
+                a = math.radians(i * 72 + 15)
+                self._p(key, 'cube',
+                        (wx + math.cos(a) * 0.40, base + h * 0.86,
+                         wz + math.sin(a) * 0.40),
+                        (1.05, 0.05, 0.42), None, daun, rotation=(0, i * 72 + 90, 30))
+            if st == 3:
+                self._p(key, 'cylinder', (wx + 0.26, base + h * 0.66, wz),
+                        (0.30, 0.42, 0.30), None, buah, rotation=(0, 0, 18))
+        elif bentuk == 'pepaya':
+            # Pepaya: batang tunggal tak bercabang, daun berjari di puncak,
+            # buah menempel LANGSUNG di batang — cirinya yang paling khas.
+            for i in range(5):
+                a = math.radians(i * 72 + 30)
+                self._p(key, 'cube',
+                        (wx + math.cos(a) * 0.34, base + h * 0.92,
+                         wz + math.sin(a) * 0.34),
+                        (0.72, 0.05, 0.44), None, daun, rotation=(0, i * 72, 24))
+            if st == 3:
+                for i in range(3):
+                    a = math.radians(i * 120)
+                    self._p(key, 'sphere',
+                            (wx + math.cos(a) * 0.17,
+                             base + h * (0.66 + 0.06 * i),
+                             wz + math.sin(a) * 0.17),
+                            (0.24, 0.30, 0.24), None, buah)
+        else:
+            # Rindang (mangga / rambutan / nangka / jambu): tajuk bertumpuk.
+            lebar = tinggi_penuh * 0.52 * (0.72 if st == 1 else 1.0)
+            self._p(key, 'sphere', (wx, base + h * 0.92, wz),
+                    (lebar, lebar * 0.80, lebar), 'tree_leaf', daun)
+            self._p(key, 'sphere',
+                    (wx + lebar * 0.16, base + h * 1.14, wz - lebar * 0.14),
+                    (lebar * 0.74, lebar * 0.62, lebar * 0.74), 'tree_leaf', daun)
+            if st == 3:
+                for i in range(4):
+                    a = math.radians(i * 90 + 25)
+                    self._p(key, 'sphere',
+                            (wx + math.cos(a) * lebar * 0.42, base + h * 0.86,
+                             wz + math.sin(a) * lebar * 0.42),
+                            (0.24, 0.24, 0.24), None, buah)
+
+        self._plant_markers(key, cid, soil, wx, wz, base + h * 1.28)
 
     def _destroy_crop(self, key):
-        for k in (key, key + '_stem'):
-            if k in self._crop_ents:
-                destroy(self._crop_ents.pop(k))
+        ents = self._crop_ents.pop(key, None)
+        if not ents:
+            return
+        for e in ents:
+            destroy(e)
 

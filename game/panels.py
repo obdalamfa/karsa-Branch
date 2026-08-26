@@ -93,6 +93,8 @@ class UIManager:
         self.state = state
         if self.mode == 'hud':
             self._refresh_hud()
+            self._update_motive_panel()
+            self._update_action_readout()
 
         # Flash message timer
         if self._flash_t > 0:
@@ -136,11 +138,51 @@ class UIManager:
         self._buff_txt = _txt('', pos=(X_L, 0.28), scale=0.75, col=color.rgb(120, 255, 180))
         self._queue_txt = _txt('', pos=(X_L, 0.24), scale=0.75, col=color.rgb(255, 210, 80))
 
+        # ── Kiri Bawah: Panel Motif (termometer ala The Sims 1) ──
+        # Delapan motif ditumpuk vertikal dengan Mood di puncaknya. Tanpa panel
+        # ini seluruh mesin motif tidak terlihat oleh pemain, dan need yang tak
+        # terlihat sama saja dengan tidak ada.
+        from .motives import MOTIVES, LABELS
+        self._motive_keys = MOTIVES
+        self._NBAR_W = 0.20
+        self._NBAR_X = -0.86
+        self._NBAR_H = 0.018
+        self._NBAR_GAP = 0.038      # cukup renggang agar label tidak tertimpa bar
+        top_y = -0.06
+
+        # Panel latar gelap: tanpa ini termometer hilang di atas lantai terang.
+        panel_h = 0.052 + self._NBAR_GAP * len(self._motive_keys) + 0.03
+        self._motive_panel_bg = _ui(
+            scale=(self._NBAR_W + 0.045, panel_h),
+            position=(self._NBAR_X + self._NBAR_W / 2 - 0.006,
+                      top_y + 0.046 - panel_h / 2),
+            color=color.rgb(12, 20, 24, 205))
+
+        self._mood_lbl = _txt('SUASANA HATI', pos=(self._NBAR_X, top_y + 0.052),
+                              scale=0.62, col=color.rgb(196, 178, 148))
+        self._mood_bg = _ui(scale=(self._NBAR_W, 0.026),
+                            position=(self._NBAR_X + self._NBAR_W / 2, top_y + 0.032),
+                            color=color.rgb(28, 34, 40, 210))
+        self._mood_fill = _ui(scale=(self._NBAR_W, 0.026),
+                              position=(self._NBAR_X + self._NBAR_W / 2, top_y + 0.032),
+                              color=color.rgb(120, 210, 140))
+
         self._need_lbl_ents  = []
         self._need_bg_ents   = []
         self._need_fill_ents = []
-        self._NBAR_W = 0
-        self._NBAR_X = 0
+        for i, key in enumerate(self._motive_keys):
+            y = top_y - 0.020 - i * self._NBAR_GAP
+            self._need_lbl_ents.append(
+                _txt(LABELS[key], pos=(self._NBAR_X, y + 0.019), scale=0.55,
+                     col=color.rgb(186, 198, 204)))
+            self._need_bg_ents.append(
+                _ui(scale=(self._NBAR_W, self._NBAR_H),
+                    position=(self._NBAR_X + self._NBAR_W / 2, y),
+                    color=color.rgb(28, 34, 40, 200)))
+            self._need_fill_ents.append(
+                _ui(scale=(self._NBAR_W, self._NBAR_H),
+                    position=(self._NBAR_X + self._NBAR_W / 2, y),
+                    color=color.rgb(120, 200, 130)))
 
         # ── Flash message tengah ───────────────────────────────
         self._flash_ent = _txt('', pos=(0, 0.108), scale=1.1,
@@ -152,6 +194,61 @@ class UIManager:
             '', pos=(0.60, -0.45), scale=0.8,
             col=color.rgb(220, 235, 255), origin=(0, 0)
         )
+
+    # Warna termometer: hijau aman, kuning waspada, merah mendesak. Pemain harus
+    # bisa membaca "yang mana yang gawat" tanpa membaca satu kata pun.
+    _MOTIVE_OK   = (108, 196, 128)
+    _MOTIVE_WARN = (226, 178,  70)
+    _MOTIVE_CRIT = (214,  86,  92)
+
+    @staticmethod
+    def _motive_color(v: float):
+        """v dalam skala motif -100..+100."""
+        if v <= -40:
+            return color.rgb(*UIManager._MOTIVE_CRIT)
+        if v <= 10:
+            return color.rgb(*UIManager._MOTIVE_WARN)
+        return color.rgb(*UIManager._MOTIVE_OK)
+
+    def _update_action_readout(self):
+        """Tampilkan aksi yang sedang dijalankan + sisa antrian.
+
+        Tanpa ini pemain menekan E lalu tidak melihat apa pun terjadi selama
+        beberapa puluh detik-sim, dan menyimpulkan tombolnya rusak.
+        """
+        txt = getattr(self, '_queue_txt', None)
+        if txt is None:
+            return
+        q = getattr(getattr(self, 'player', None), 'queue', None)
+        if q is None or not q.busy:
+            txt.text = ''
+            return
+        cur = q.current
+        bar_n = 10
+        filled = int(round(cur.progress * bar_n))
+        bar = '#' * filled + '.' * (bar_n - filled)
+        sisa = len(q.items) - 1
+        ekor = f'  (+{sisa} antri)' if sisa > 0 else ''
+        txt.text = f'{cur.name}  [{bar}] {int(cur.progress*100)}%{ekor}'
+
+    def _update_motive_panel(self):
+        """Isi termometer dari mesin motif. Bar diisi dari kiri; skala -100..+100
+        dipetakan ke 0..1 sehingga bar setengah berarti motif netral."""
+        if not self._need_fill_ents:
+            return
+        eng = self.state.mv
+        for i, key in enumerate(self._motive_keys):
+            v = eng.get(key)
+            frac = max(0.0, min(1.0, (v + 100.0) / 200.0))
+            fill = self._need_fill_ents[i]
+            fill.scale_x = max(0.001, self._NBAR_W * frac)
+            fill.x = self._NBAR_X + fill.scale_x / 2
+            fill.color = self._motive_color(v)
+        m = eng.mood
+        frac = max(0.0, min(1.0, (m + 100.0) / 200.0))
+        self._mood_fill.scale_x = max(0.001, self._NBAR_W * frac)
+        self._mood_fill.x = self._NBAR_X + self._mood_fill.scale_x / 2
+        self._mood_fill.color = self._motive_color(m)
 
     def _refresh_hud(self):
         s = self.state
@@ -522,7 +619,8 @@ class UIManager:
             'quest':     'Catatan Quest',
             'map':       'Peta Dunia',
             'relations': 'Hubungan NPC',
-            'shop':      'Toko Bu Sari',
+            'shop':      'Warung Bu Sari',
+            'olahan':    'Dapur - Olah Hasil Panen',
             'crafting':  'Bengkel Pak Budi',
             'help':      'Panduan Kontrol',
             'catatan':   'Catatan Lembah',
@@ -530,19 +628,40 @@ class UIManager:
         self._panel_title.text = titles.get(name, name.capitalize())
         # Update hint sesuai panel
         if name == 'shop':
-            self._panel_hint.text = '[1-9: Beli]   [ESC: Tutup]'
+            self._panel_hint.text = ('[TAB atau 0: ganti BELI/JUAL]   [1-9: pilih baris]'
+                                     '   [Q/R: halaman]   [ESC: Tutup]')
+        elif name == 'olahan':
+            self._panel_hint.text = '[1-9: Olah]   [Q/R: halaman]   [ESC: Tutup]'
         elif name == 'crafting':
             self._panel_hint.text = '[1-5: Pickaxe]   [6-9: Pedang]   [ESC: Tutup]'
         else:
             self._panel_hint.text = '[ESC: tutup]'
 
         if name == 'inventory':
+            # Tas dulu mencetak kunci dict mentah tanpa harga ('lobak_seed: 3').
+            # Angka yang tidak bisa ditemukan pemain tidak mengajarkan apa-apa,
+            # jadi tiap baris kini membawa nama layak baca, harga satuan, nilai
+            # total, dan - hanya kalau mengolahnya memang lebih untung - ke mana
+            # barang itu sebaiknya pergi.
+            from .economy import (item_name, sell_price, best_process_hint,
+                                  inventory_value)
             lines = [f"Emas: {s.gold}G   HP: {s.hp}/{s.max_hp}   Energi: {s.energy}/{s.max_energy}",
                      f"Pickaxe: Tier {s.pickaxe_tier}   Pedang: {s.sword_id or 'Tidak punya'}", '']
-            if s.inventory:
-                for item, qty in sorted(s.inventory.items()):
-                    if qty > 0:
-                        lines.append(f"  {item}: {qty}")
+            rows = [(k, q) for k, q in s.inventory.items() if q > 0]
+            if rows:
+                # Paling berharga di atas: itu yang sedang dipikirkan pemain.
+                rows.sort(key=lambda r: (-sell_price(r[0]) * r[1], r[0]))
+                lines.append(f"  {'BARANG':<18}{'JML':>4}{'@':>7}{'TOTAL':>8}   SARAN")
+                for item, qty in rows[:19]:
+                    harga = sell_price(item)
+                    hrg_s = f"{harga}G" if harga else "-"
+                    tot_s = f"{harga * qty}G" if harga else "-"
+                    lines.append(f"  {item_name(item)[:18]:<18}{qty:>4}{hrg_s:>7}"
+                                 f"{tot_s:>8}   {best_process_hint(item)}")
+                lines.append('')
+                lines.append("  Nilai seluruh tas bila dijual di Warung: "
+                             f"{inventory_value(s.inventory)}G")
+                lines.append("  Peti Kirim di kebun membayar 85% tanpa perlu jalan.")
             else:
                 lines.append("  (Kosong)")
             self._panel_body.text = '\n'.join(lines[:28])
@@ -607,12 +726,14 @@ class UIManager:
             self._panel_body.text = '\n'.join(lines[:25])
 
         elif name == 'shop':
-            lines = [f"Emas: {s.gold}G   Musim: {self._season_name(s)}", '']
-            for i, it in enumerate(SHOP_ITEMS):
-                num = i + 1
-                lines.append(f"  [{num}] {it['name']:18s}  {it['price']:>4}G   ({it['season']})")
-            lines.append('')
-            lines.append("Tekan angka untuk beli (kurangi gold).")
+            # Warung sekarang punya dua sisi. Sebelumnya hanya BELI ada, jadi
+            # setiap barang yang dikumpulkan pemain tidak punya jalan keluar
+            # dan harganya tidak pernah terlihat di mana pun.
+            lines = self._render_market(s)
+            self._set_body(lines)
+
+        elif name == 'olahan':
+            lines = self._render_olahan(s)
             self._panel_body.text = '\n'.join(lines)
 
         elif name == 'crafting':
@@ -668,7 +789,10 @@ class UIManager:
                 "  I: Inventori   M: Peta\n"
                 "  J: Quest       H: Relasi NPC\n"
                 "  N: Catatan Lembah (lore)\n"
-                "  K: Toko (di Warung)  U: Kerajinan (di Bengkel)\n"
+                "  K: Warung, beli & JUAL (di Warung)\n"
+                "  O: Dapur, olah hasil panen (di Rumah)\n"
+                "  Peti Kirim di kebun: jual cepat 85% harga\n"
+                "  U: Kerajinan (di Bengkel)\n"
                 "  F2: Ubah penampilan karakter\n"
                 "  F5: Simpan     F9: Muat\n"
                 "  ESC: Tutup panel"
@@ -700,6 +824,9 @@ class UIManager:
                     lines.append('')
             self._panel_body.text = '\n'.join(lines[:28])
 
+    def _set_body(self, lines):
+        self._panel_body.text = chr(10).join(lines)
+
     @staticmethod
     def _season_name(s):
         try:
@@ -708,21 +835,122 @@ class UIManager:
         except Exception:
             return '-'
 
+    # ─── PASAR: BELI / JUAL ──────────────────────────────
+    # Sembilan baris per halaman karena input panel hanya menerima angka 1-9.
+    ROWS_PER_PAGE = 9
+
+    def _market_state(self):
+        """(mode, halaman). Hidup di UIManager, bukan di save — ini keadaan
+        layar, bukan keadaan dunia."""
+        if not hasattr(self, '_market_mode'):
+            self._market_mode = 'beli'
+            self._market_page = 0
+        return self._market_mode, self._market_page
+
+    def cycle_market_mode(self):
+        mode, _ = self._market_state()
+        self._market_mode = 'jual' if mode == 'beli' else 'beli'
+        self._market_page = 0
+        self._render_panel(self._panel_name or 'shop')
+
+    def market_page(self, delta: int):
+        self._market_state()
+        self._market_page = max(0, self._market_page + delta)
+        self._render_panel(self._panel_name or 'shop')
+
+    def _page_slice(self, rows):
+        self._market_state()
+        n_pages = max(1, -(-len(rows) // self.ROWS_PER_PAGE))
+        self._market_page = min(self._market_page, n_pages - 1)
+        start = self._market_page * self.ROWS_PER_PAGE
+        return rows[start:start + self.ROWS_PER_PAGE], self._market_page, n_pages
+
+    def _render_market(self, s) -> list:
+        from .economy import (margin_hint, sellable_items, sell_price,
+                              item_name, inventory_value)
+        mode, _ = self._market_state()
+        tab = ('>> BELI <<      jual' if mode == 'beli'
+               else '   beli      >> JUAL <<')
+        lines = [f"Emas: {s.gold}G   Musim: {self._season_name(s)}   "
+                 f"Nilai tas: {inventory_value(s.inventory)}G",
+                 tab, '']
+
+        if mode == 'beli':
+            rows, page, n_pages = self._page_slice(list(SHOP_ITEMS))
+            lines.append(f"  {'BARANG':<20}{'HARGA':>6}  {'MUSIM':<11} HASILNYA NANTI")
+            for i, it in enumerate(rows):
+                mampu = '' if s.gold >= it['price'] else '  (gold kurang)'
+                lines.append(f"  [{i+1}] {it['name'][:16]:<16}{it['price']:>5}G  "
+                             f"{it['season']:<11} {margin_hint(it)}{mampu}")
+            lines.append('')
+            lines.append("  Angka = beli 1. Kolom kanan memberi tahu berapa hasil")
+            lines.append("  panennya nanti, jadi untung-ruginya terlihat sebelum bayar.")
+        else:
+            all_rows = sellable_items(s.inventory)
+            if not all_rows:
+                lines.append("  Tidak ada yang bisa dijual. Panen dulu, atau ambil")
+                lines.append("  hasil ternak di kandang.")
+                return lines
+            rows, page, n_pages = self._page_slice(all_rows)
+            lines.append(f"  {'BARANG':<20}{'JML':>4}{'@':>7}{'SEMUA':>8}")
+            for i, (item, qty, total) in enumerate(rows):
+                lines.append(f"  [{i+1}] {item_name(item)[:16]:<16}{qty:>4}"
+                             f"{sell_price(item):>6}G{total:>7}G")
+            lines.append('')
+            lines.append("  Angka = jual SEMUA barang di baris itu, harga penuh.")
+            lines.append("  Peti Kirim di kebun lebih cepat tapi hanya membayar 85%.")
+
+        if n_pages > 1:
+            lines.append(f"  -- halaman {page+1}/{n_pages}  [Q/R] --")
+        return lines
+
+    def _render_olahan(self, s) -> list:
+        from .economy import (PROCESS_RECIPES, recipe_input_value,
+                              recipe_output_value, recipe_uplift, item_name)
+        lines = [f"Emas: {s.gold}G   Energi: {s.energy}/{s.max_energy}", '',
+                 "Mengolah menambah sekitar 40% nilai, dibayar dengan energi.",
+                 '']
+        rows, page, n_pages = self._page_slice(list(PROCESS_RECIPES))
+        lines.append(f"  {'HASIL':<20}{'DARI':<22}{'NILAI':>14}  EN")
+        for i, r in enumerate(rows):
+            bahan = ', '.join(f"{item_name(k)} x{v}" for k, v in r['needs'].items())
+            punya = all(s.inventory.get(k, 0) >= v for k, v in r['needs'].items())
+            cukup = s.energy >= r['en']
+            mark  = '[o]' if (punya and cukup) else '[ ]'
+            masuk = recipe_input_value(r)
+            keluar = recipe_output_value(r)
+            naik  = int(round((recipe_uplift(r) - 1) * 100))
+            out_n = f"{item_name(r['out'])} x{r['n']}" if r['n'] > 1 else item_name(r['out'])
+            lines.append(f"  [{i+1}]{mark} {out_n[:15]:<15}{bahan[:22]:<22}"
+                         f"{masuk:>4}G > {keluar:>4}G +{naik}%{r['en']:>3}")
+        lines.append('')
+        lines.append("  [o] = bahan & energi cukup.  [ ] = belum bisa.")
+        lines.append("  Pakan Ternak dinilai dari jerami yang tidak jadi dibeli")
+        lines.append("  (18G/hari-pakan) — menjualnya rugi, memakainya untung.")
+        if n_pages > 1:
+            lines.append(f"  -- halaman {page+1}/{n_pages}  [Q/R] --")
+        return lines
+
     # ─── PANEL ACTIONS (shop/craft) ──────────────────────
     def panel_action(self, idx: int) -> str:
         """Dipanggil dari app.input() saat user tekan angka di panel.
         idx 1-based. Return pesan untuk flash_msg."""
         if self._panel_name == 'shop':
-            return self._buy_shop_item(idx)
+            mode, _ = self._market_state()
+            return (self._buy_shop_item(idx) if mode == 'beli'
+                    else self._sell_stack(idx))
+        elif self._panel_name == 'olahan':
+            return self._process_item(idx)
         elif self._panel_name == 'crafting':
             return self._craft_item(idx)
         return ''
 
     def _buy_shop_item(self, idx: int) -> str:
         s = self.state
-        if not (1 <= idx <= len(SHOP_ITEMS)):
+        rows, _page, _n = self._page_slice(list(SHOP_ITEMS))
+        if not (1 <= idx <= len(rows)):
             return ''
-        it = SHOP_ITEMS[idx - 1]
+        it = rows[idx - 1]
         if s.gold < it['price']:
             return f"Gold kurang ({it['price']}G)."
         s.gold -= it['price']
@@ -731,6 +959,51 @@ class UIManager:
             s.shop_unlocked = True
         self._render_panel('shop')   # refresh tampilan
         return f"Beli {it['name']} -{it['price']}G"
+
+    def _sell_stack(self, idx: int) -> str:
+        """Jual seluruh tumpukan di satu baris, harga penuh Warung.
+
+        Per-tumpukan, bukan per-butir: pemain dengan 40 lobak tidak boleh harus
+        menekan tombol 40 kali. Peti Kirim tetap ada untuk yang ingin menjual
+        semuanya sekaligus dengan potongan.
+        """
+        from .economy import sellable_items, item_name
+        s = self.state
+        rows, _page, _n = self._page_slice(sellable_items(s.inventory))
+        if not (1 <= idx <= len(rows)):
+            return ''
+        item, qty, total = rows[idx - 1]
+        del s.inventory[item]
+        s.gold += total
+        s.stats['earned'] = s.stats.get('earned', 0) + total
+        self._render_panel('shop')
+        return f"Jual {item_name(item)} x{qty} +{total}G"
+
+    def _process_item(self, idx: int) -> str:
+        """Olah bahan mentah jadi barang lebih mahal, bayar dengan energi."""
+        from .economy import (PROCESS_RECIPES, item_name, recipe_output_value,
+                              recipe_input_value)
+        s = self.state
+        rows, _page, _n = self._page_slice(list(PROCESS_RECIPES))
+        if not (1 <= idx <= len(rows)):
+            return ''
+        r = rows[idx - 1]
+        for k, v in r['needs'].items():
+            if s.inventory.get(k, 0) < v:
+                return f"Bahan kurang: butuh {item_name(k)} x{v}."
+        if s.energy < r['en']:
+            return f"Energi kurang (butuh {r['en']})."
+        for k, v in r['needs'].items():
+            s.inventory[k] -= v
+            if s.inventory[k] <= 0:
+                del s.inventory[k]
+        s.energy -= r['en']
+        s.inventory[r['out']] = s.inventory.get(r['out'], 0) + r['n']
+        s.stats['processed'] = s.stats.get('processed', 0) + 1
+        self._render_panel('olahan')
+        untung = recipe_output_value(r) - recipe_input_value(r)
+        return (f"+{r['n']} {item_name(r['out'])} "
+                f"(nilai naik {untung}G, -{r['en']} EN)")
 
     def _craft_item(self, idx: int) -> str:
         s = self.state
@@ -781,18 +1054,18 @@ class UIManager:
     def _build_pie_menu(self):
         BG = color.rgb(12, 6, 28, 235)
         BD = color.rgb(140, 80, 200, 220)
-        self._pie_bg     = _ui(scale=(0.45, 0.32), position=(-0.60, -0.10), color=BG)
-        self._pie_border = _ui(scale=(0.452, 0.322), position=(-0.60, -0.10), color=BD)
-        self._pie_title  = _txt('', pos=(-0.80, 0.040), scale=0.90,
+        self._pie_bg     = _ui(scale=(0.45, 0.32), position=(-0.14, -0.10), color=BG)
+        self._pie_border = _ui(scale=(0.452, 0.322), position=(-0.14, -0.10), color=BD)
+        self._pie_title  = _txt('', pos=(-0.34, 0.040), scale=0.90,
                                 col=color.rgb(245, 215, 80))
         self._pie_items  = [
-            _txt('', pos=(-0.80, 0.010 - i * 0.030), scale=0.80, col=color.white)
+            _txt('', pos=(-0.34, 0.010 - i * 0.030), scale=0.80, col=color.white)
             for i in range(6)
         ]
-        self._pie_fx     = _txt('', pos=(-0.80, -0.200), scale=0.72,
+        self._pie_fx     = _txt('', pos=(-0.34, -0.200), scale=0.72,
                                 col=color.rgb(127, 220, 255))
         self._pie_hint   = _txt('[</> ] Pilih  [SPACE] OK  [ESC] Batal',
-                                pos=(-0.60, -0.240), scale=0.65,
+                                pos=(-0.34, -0.240), scale=0.65,
                                 col=color.rgb(160, 140, 200))
         self._pie_hint.origin = (0, 0)
         self._set_pie_visible(False)
@@ -843,8 +1116,13 @@ class UIManager:
     def _refresh_pie_ui(self):
         from .data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS
         all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
-        npc   = all_d.get(self._pie_npc_id, {})
-        self._pie_title.text = f">> {npc.get('name', self._pie_npc_id)}"
+        # Menu perabot mengirim id 'obj:<Nama>' — pakai nama itu apa adanya,
+        # jangan cari di daftar NPC (dulu judulnya tampil sebagai 'obj:12').
+        if self._pie_npc_id.startswith('obj:'):
+            self._pie_title.text = f">> {self._pie_npc_id[4:]}"
+        else:
+            npc = all_d.get(self._pie_npc_id, {})
+            self._pie_title.text = f">> {npc.get('name', self._pie_npc_id)}"
 
         for i, item_ent in enumerate(self._pie_items):
             if i < len(self._pie_options):

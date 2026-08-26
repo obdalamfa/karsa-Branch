@@ -16,11 +16,22 @@ class TimeController:
         if s.time_minutes >= 1440:
             s.time_minutes -= 1440
 
-        # Needs / Motives decay
+        # Peluruhan delapan motif dengan laju asli TS1 (lihat game/motives.py).
+        # Menggantikan tiga need seragam yang butuh 3,5-5,8 HARI untuk turun —
+        # terlalu lambat untuk pernah terasa mendesak oleh pemain.
         ingame_dt = dt * INGAME_MINUTES_PER_REAL_SECOND
-        s.lapar  = max(0.0, s.lapar  - NEED_DECAY_LAPAR  * ingame_dt)
-        s.sosial = max(0.0, s.sosial - NEED_DECAY_SOSIAL * ingame_dt)
-        s.senang = max(0.0, s.senang - NEED_DECAY_SENANG * ingame_dt)
+        s.mv.tick(ingame_dt)
+
+        # Jalankan aksi terdepan di antrian. Motif diisi SELAMA aksi berjalan
+        # supaya pemain melihat termometer merangkak naik dan langsung paham
+        # sebab-akibatnya.
+        q = getattr(player, 'queue', None)
+        if q is not None:
+            selesai = q.tick(ingame_dt)
+            if selesai:
+                self._last_action_done = selesai
+
+        s.sync_motives()
 
         if s.get_hour() >= FORCE_SLEEP_HOUR:
             self.advance_day(player)
@@ -62,6 +73,13 @@ class TimeController:
                 growth = 2 if cur_season in crop_seasons else 1
                 soil['age'] = soil.get('age', 0) + growth
                 soil['watered'] = False
+
+        # Ternak maju semalam persis seperti tanaman: yang kenyang mendekat
+        # satu hari ke hasilnya, yang lapar diam di tempat. Diletakkan tepat
+        # di bawah pertumbuhan tanaman supaya kedua siklus hidup di satu tempat
+        # dan tidak bisa lagi menyimpang satu sama lain.
+        from ..economy import tick_animals_daily
+        tick_animals_daily(s)
 
         if s.day_in_season > DAYS_PER_SEASON:
             s.day_in_season = 1

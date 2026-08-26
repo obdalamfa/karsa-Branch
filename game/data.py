@@ -3,13 +3,22 @@ data.py — Tanaman, 31 NPC, dialog, schedule, quest, dungeon, combat, crafting.
 Identik dengan v17 — tidak ada perubahan (pure data, bebas dari rendering).
 """
 
+# 'days' = umur yang harus dicapai sebelum bisa dipanen. Satu malam yang
+# disiram menambah 2 umur kalau musimnya cocok, 1 kalau tidak — jadi jumlah
+# penyiraman yang dibutuhkan (N) adalah ceil(days/2) di musimnya sendiri.
+# Energi satu siklus penuh = cangkul 2 + tanam 2 + siram N + panen 2 = 6+N.
+# Harga jual disusun supaya (sell-cost)/(6+N) jatuh di pita 3,0-5,7 G/energi;
+# lihat docs/EKONOMI.md untuk perhitungan tiap baris.
+# Dua angka diubah dari versi lama: lobak 22->26 (dulu 2,4 G/EN, tidak pernah
+# layak ditanam lagi setelah hari kedua) dan labu 70->66 (dulu 6,1 G/EN,
+# mendominasi semua tanaman lain).
 CROPS = {
-    'lobak':    {'name':'Lobak','days':2,'sell':22,'cost':5,'seasons':['Semi']},
+    'lobak':    {'name':'Lobak','days':2,'sell':26,'cost':5,'seasons':['Semi']},
     'wortel':   {'name':'Wortel','days':3,'sell':35,'cost':8,'seasons':['Semi','Gugur']},
     'stroberi': {'name':'Stroberi','days':4,'sell':55,'cost':12,'seasons':['Semi']},
     'jagung':   {'name':'Jagung','days':4,'sell':48,'cost':10,'seasons':['Panas']},
     'tomat':    {'name':'Tomat','days':5,'sell':65,'cost':14,'seasons':['Panas']},
-    'labu':     {'name':'Labu','days':5,'sell':70,'cost':15,'seasons':['Gugur']},
+    'labu':     {'name':'Labu','days':5,'sell':66,'cost':15,'seasons':['Gugur']},
     'bayam':    {'name':'Bayam','days':2,'sell':30,'cost':7,'seasons':['Dingin']},
     'jamur':    {'name':'Jamur','days':3,'sell':55,'cost':12,'seasons':['Dingin']},
 }
@@ -330,11 +339,15 @@ SUPERNATURAL_NPCS = {
         'gift':'ore_emas','gift_r':"Emas yang bersinar murni."},
 }
 
+# 'product' hanya label lama. Yang benar-benar dibaca adalah
+# economy.ANIMAL_PRODUCE, yang dikunci per JENIS ('type') bukan per id — dulu
+# peta hasil ternak dikunci 'sapi_betina'/'ayam'/'kambing' yang tidak pernah
+# cocok dengan id di sini, jadi tidak satu pun hewan pernah menghasilkan.
 ANIMAL_NPCS = {
     'sapi_betsy':      {'name':'Betsy','type':'sapi','talks':[["Moo..."]],'product':'susu'},
     'ayam_kuning':     {'name':'Pio','type':'ayam','talks':[["Petok!"]],'product':'telur'},
     'kambing_jenggot': {'name':'Jenggot','type':'kambing','talks':[["Mbekkk..."]],'product':'wol'},
-    'bebek_donald':    {'name':'Donald','type':'bebek','talks':[["Wek wek!"]],'product':None},
+    'bebek_donald':    {'name':'Donald','type':'bebek','talks':[["Wek wek!"]],'product':'telur'},
     'domba_woolly':    {'name':'Woolly','type':'domba','talks':[["Bee..."]],'product':'wol'},
     'kuda_pegasus':    {'name':'Pegasus','type':'kuda','talks':[["Hiiyaa!"]],'product':None},
     'kucing_oren':     {'name':'Oren','type':'kucing','talks':[["Meong"]],'product':None},
@@ -535,16 +548,20 @@ SEASONAL_EVENTS = {
 }
 
 # ── SHOP — barang yang dijual Bu Sari di warung ──────────
+# Daftar benih DITURUNKAN dari CROPS, tidak ditulis tangan lagi. Dulu harga
+# benih hidup di dua tempat (CROPS['cost'] dan daftar literal di sini) dan
+# tidak ada yang menjaga keduanya sama; sekarang mustahil menyimpang.
+# Harga jual-kembali setiap barang ada di game/economy.py — selalu di bawah
+# harga beli, supaya beli-lalu-jual-ulang tidak jadi mesin uang.
 SHOP_ITEMS = [
-    {'id':'lobak_seed',    'name':'Benih Lobak',    'price':5,   'season':'Semi'},
-    {'id':'wortel_seed',   'name':'Benih Wortel',   'price':8,   'season':'Semi/Gugur'},
-    {'id':'stroberi_seed', 'name':'Benih Stroberi', 'price':12,  'season':'Semi'},
-    {'id':'jagung_seed',   'name':'Benih Jagung',   'price':10,  'season':'Panas'},
-    {'id':'tomat_seed',    'name':'Benih Tomat',    'price':14,  'season':'Panas'},
-    {'id':'labu_seed',     'name':'Benih Labu',     'price':15,  'season':'Gugur'},
-    {'id':'bayam_seed',    'name':'Benih Bayam',    'price':7,   'season':'Dingin'},
-    {'id':'jamur_seed',    'name':'Benih Jamur',    'price':12,  'season':'Dingin'},
-    {'id':'kayu',          'name':'Kayu',           'price':20,  'season':'all'},
+    {'id': f'{_k}_seed', 'name': f"Benih {_c['name']}", 'price': int(_c['cost']),
+     'season': '/'.join(_c['seasons']) or 'all', 'crop': _k}
+    for _k, _c in CROPS.items()
+] + [
+    # Jerami = satu hari-pakan untuk satu ekor ternak. Harganya (18G) adalah
+    # patokan yang dipakai economy.py untuk menilai pakan buatan sendiri.
+    {'id': 'jerami', 'name': 'Jerami',  'price': 18, 'season': 'all', 'crop': None},
+    {'id': 'kayu',   'name': 'Kayu',    'price': 20, 'season': 'all', 'crop': None},
 ]
 
 # ─── BRANCHING DIALOGUE TREES ────────────────────────────

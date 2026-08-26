@@ -21,9 +21,10 @@ SCREEN_H = 1080
 FPS      = 60
 
 # ─── CAMERA (RF4-style fixed-angle) ──────────────────────
-CAM_HEIGHT      = 14    # lebih rendah agar terasa lebih dekat (Action-RPG)
-CAM_BACK        = 18    # sedikit menjauh ke belakang agar pandangan luas
-CAM_SIDE        = 0
+# CAM_HEIGHT / CAM_BACK / CAM_SIDE DIHAPUS: tidak pernah dibaca siapa pun.
+# Kamera sebenarnya dikendalikan camera_pitch / camera_dist / camera_yaw di
+# game/app.py. Menyetel angka di sini tidak berpengaruh apa-apa, dan itu
+# menyesatkan siapa pun yang mencoba menyetel kamera dari config.
 CAM_TARGET_LIFT = 1.0   # titik fokus kamera lebih terpusat ke badan karakter
 CAM_LERP        = 8.0   # kamera bergerak mengikuti lebih cepat
 
@@ -34,8 +35,11 @@ FORCE_SLEEP_HOUR                = 23
 SAVE_FILE                       = "lembah_karsa_3d_save.json"
 
 # ─── PLAYER ──────────────────────────────────────────────
-PLAYER_SPEED            = 12.0  # pergerakan dasar dipercepat
-PLAYER_RUN_MULTIPLIER   = 1.85  # lari (SHIFT) menjadi sangat gesit
+# Satu tile = TILE_SIZE (2.0 unit). Kecepatan 12.0 berarti 6 tile per detik —
+# rumah 15 tile terlintasi dalam 2,5 detik, terlalu cepat untuk dikendalikan
+# dan bikin pemain terus menabrak dinding. Life sim butuh langkah yang terbaca.
+PLAYER_SPEED            = 6.0   # ~3 tile/detik berjalan
+PLAYER_RUN_MULTIPLIER   = 1.6   # ~4,8 tile/detik saat lari
 NPC_SPEED               = 5.0   # world-units / detik
 ANIMATION_FPS           = 8
 DAYS_PER_SEASON         = 28

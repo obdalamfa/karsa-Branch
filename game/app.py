@@ -146,21 +146,9 @@ class Game3D:
         # Load map awal
         self.world.load_scene(self.state.scene_name)
         
-        # Safety walkable snap on initial load
-        if not self.world.is_walkable(int(round(self.state.player_x)), int(round(self.state.player_y))):
-            found = None
-            for r in range(1, 6):
-                for dx in range(-r, r+1):
-                    for dy in range(-r, r+1):
-                        nx, ny = int(round(self.state.player_x)) + dx, int(round(self.state.player_y)) + dy
-                        if self.world.is_walkable(nx, ny):
-                            found = (nx, ny); break
-                    if found: break
-                if found: break
-            if found:
-                logging.warning(f"[INIT] Landing tile not walkable, snap to {found}")
-                self.state.player_x, self.state.player_y = float(found[0]), float(found[1])
-                
+        # Pendaratan awal memakai jalur yang sama dengan transisi scene.
+        self._land_player_safely(self.state)
+
         self.entities.load_scene(self.state.scene_name)
         # Ambient loop sesuai scene awal
         try:
@@ -256,21 +244,7 @@ class Game3D:
                 t0 = _time.time()
                 self.entities.load_scene(current_scene)
                 logging.info(f"[SCENE_T] entities.load_scene: {_time.time()-t0:.3f}s")
-                # Safety: kalau landing tile bukan walkable, snap ke walkable terdekat
-                if not self.world.is_walkable(int(round(s.player_x)), int(round(s.player_y))):
-                    sc = self.world.scene_obj
-                    found = None
-                    for r in range(1, 6):
-                        for dx in range(-r, r+1):
-                            for dy in range(-r, r+1):
-                                nx, ny = int(round(s.player_x)) + dx, int(round(s.player_y)) + dy
-                                if self.world.is_walkable(nx, ny):
-                                    found = (nx, ny); break
-                            if found: break
-                        if found: break
-                    if found:
-                        logging.warning(f"[SCENE_T] landing tile not walkable, snap to {found}")
-                        s.player_x, s.player_y = float(found[0]), float(found[1])
+                self._land_player_safely(s)
                 self.player.set_tile_pos(s.player_x, s.player_y)
                 self.player._set_initial_rotation()
 
@@ -648,6 +622,41 @@ class Game3D:
                 pass
         for cloud in self.clouds:
             cloud.color = cloud_col
+
+    def _land_player_safely(self, s):
+        """Tempatkan pemain di petak yang bisa dijalani pada scene yang baru.
+
+        Kenapa perlu MENJEPIT dulu ke batas peta: koordinat pemain dibawa apa
+        adanya lintas scene, jadi masuk 'house' (15x6) dari 'farm' membawa
+        koordinat seperti (19,5) — sembilan belas kolom, padahal peta cuma 15.
+        Pencarian melebar radius 5 yang lama tidak pernah sampai ke peta, jadi
+        pemain mendarat di tile terblokir dan langsung terjepit. Terdeteksi
+        otomatis oleh tools/regress.py pada scene house dan shop.
+        """
+        sc = self.world.scene_obj
+        grid = getattr(sc, 'tiles', None)
+        tx, ty = int(round(s.player_x)), int(round(s.player_y))
+        if grid:
+            rows, cols = len(grid), len(grid[0])
+            tx = max(0, min(cols - 1, tx))
+            ty = max(0, min(rows - 1, ty))
+        if self.world.is_walkable(tx, ty):
+            s.player_x, s.player_y = float(tx), float(ty)
+            return
+        # Cari melebar dari titik yang sudah dijepit, cincin demi cincin.
+        span = max(len(grid[0]), len(grid)) if grid else 12
+        for r in range(1, span + 1):
+            for dy in range(-r, r + 1):
+                for dx in range(-r, r + 1):
+                    if max(abs(dx), abs(dy)) != r:
+                        continue
+                    nx, ny = tx + dx, ty + dy
+                    if self.world.is_walkable(nx, ny):
+                        logging.warning(
+                            f"[SCENE_T] petak pendaratan terblokir, pindah ke ({nx},{ny})")
+                        s.player_x, s.player_y = float(nx), float(ny)
+                        return
+        logging.error("[SCENE_T] tidak ada petak yang bisa dijalani di scene ini")
 
     def _camera_offset(self) -> Vec3:
         """Vektor offset kamera dari titik fokus, dari yaw/pitch/dist saat ini."""

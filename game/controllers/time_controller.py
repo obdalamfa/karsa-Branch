@@ -51,6 +51,18 @@ class TimeController:
 
         s.day           += 1
         s.day_in_season += 1
+
+        # Satu malam berlalu untuk ternak: kenyang turun, yang terlalu lama
+        # dilalaikan jatuh sakit, yang terawat siap dipanen hasilnya.
+        # game/husbandry.py sudah lengkap tapi tidak ada pemanggilnya sama
+        # sekali — tanpa baris ini, merawat hewan tidak berakibat apa pun.
+        try:
+            from ..husbandry import daily_tick as _ternak_tick
+            self._ternak_pagi = _ternak_tick(s)
+        except Exception as e:
+            import logging
+            logging.warning(f"[TERNAK] daily_tick gagal: {e}")
+            self._ternak_pagi = None
         s.time_minutes   = 360.0
         s.energy         = s.max_energy
         s.hp             = s.max_hp

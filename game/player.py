@@ -385,6 +385,46 @@ class Player3D(Entity):
         return self.x / TS, self.z / TS
 
     # ─── TICK (dipanggil manual dari app.py saat mode='hud') ──
+    def refresh_held_tool(self, force: bool = False) -> None:
+        """Pasang model alat yang sedang dipilih ke tangan kanan.
+
+        game/tool_models.py sudah berisi model lengkap untuk cangkul, penyiram,
+        kapak, beliung, pedang, pancing, benih, bakul dan kado — tapi tidak ada
+        satu pun pemanggilnya, jadi alatnya tidak pernah muncul dan HUD cuma
+        menulis kata "Cangkul". Ini yang menyambungkannya.
+
+        build_tool() sengaja membuat Entity + Mesh baru tiap kali, tanpa cache.
+        Itu bukan pemborosan: Mesh Ursina adalah NodePath Panda3D yang hanya
+        boleh punya SATU parent, dan mesh cache yang dibagi-pakai membuat semua
+        entity kecuali yang terakhir kehilangan geometri. Bug itu sudah dua kali
+        terjadi di proyek ini.
+        """
+        idx = getattr(self.state, 'tool_index', 0)
+        if not force and idx == getattr(self, '_held_tool_idx', None):
+            return
+        self._held_tool_idx = idx
+
+        lama = getattr(self, '_held_tool', None)
+        if lama is not None:
+            from ursina import destroy as _destroy
+            _destroy(lama)
+            self._held_tool = None
+
+        try:
+            from .tool_models import build_tool, kind_for_tool_index
+            kind = kind_for_tool_index(idx)
+            induk = getattr(self, '_pivot_shoulder_r', None) or self
+            alat = build_tool(kind, parent=induk)
+            if alat is not None:
+                # Digenggam sedikit di bawah dan di depan bahu kanan.
+                alat.position = Vec3(0.06, -0.34, 0.14)
+                alat.rotation = Vec3(-12, 0, 6)
+            self._held_tool = alat
+        except Exception as e:
+            import logging
+            logging.warning(f"[ALAT] gagal memasang model alat: {e}")
+            self._held_tool = None
+
     def _escape_to_walkable(self, tx: int, tz: int, max_r: int = 8) -> bool:
         """Pindahkan pemain ke tile terdekat yang bisa dijalani.
 
@@ -428,6 +468,9 @@ class Player3D(Entity):
         # Slide Cooldown Tick
         if hasattr(self, '_slide_cooldown_ms') and self._slide_cooldown_ms > 0:
             self._slide_cooldown_ms = max(0.0, self._slide_cooldown_ms - dt * 1000)
+
+        # Alat di tangan mengikuti pilihan pemain (murah: keluar cepat kalau sama)
+        self.refresh_held_tool()
 
         # ── WASD MOVEMENT (kamera-relative isometric) ──────────────────────
         dx_in, dz_in = 0.0, 0.0

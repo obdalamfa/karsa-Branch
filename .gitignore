@@ -1,0 +1,6 @@
+# Bytecode Python. Sesi agen menjalankan game dengan versi Python yang
+# berbeda dari mesin pemilik, dan tiap kali itu meninggalkan puluhan berkas
+# .pyc baru yang tidak ada hubungannya dengan perubahan apa pun.
+# Berkas .pyc yang sudah terlanjur terlacak tidak ikut terpengaruh aturan ini.
+__pycache__/
+*.pyc

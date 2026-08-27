@@ -19,6 +19,11 @@ bukan pada kemungkinan yang dikarang:
   save_bolak     format save berubah; save lama tidak boleh merusak loader.
   ms_frame       4-29 FPS dan belum pernah diprofil. Dicatat sebagai angka
                  supaya regresi performa terlihat, bukan cuma terasa.
+  arah_wasd      arah WASD terbalik. Kegagalan yang PALING sering kembali di
+                 proyek ini — tiga kali, dan tiap kali "diperbaiki" dengan
+                 membalik tanda sampai terasa benar. Diukur sekali di akhir
+                 lewat tools/probe_arah.py, alat ukur yang sama dengan probe
+                 manual, supaya tidak ada dua kebenaran.
 
 Pemakaian:
     python tools/regress.py                 semua scene
@@ -126,10 +131,28 @@ def cek_motif_waras(g):
     mood = mv.mood
     if mood != mood or abs(mood) > 1e6:
         return _fail(f'mood tidak terhingga: {mood}')
-    sebelum = mv.get('lapar')
-    mv.tick(240.0)
-    if mv.get('lapar') >= sebelum:
-        return _fail('lapar tidak turun setelah 4 jam-sim')
+    # Peluruhan diuji pada SALINAN, bukan pada state yang dipakai game.
+    #
+    # Versi sebelumnya men-tick state hidup, dan pemeriksaan ini jalan sekali
+    # per scene: di scene keempat belas motifnya sudah diluruhkan 14 x 4 jam
+    # tanpa pernah makan. Peluruhannya asimtotik (lajunya sebanding dengan
+    # jarak ke lantai), jadi di sekitar -98 satu tick tidak lagi memindahkan
+    # satu poin penuh dan pemeriksaannya melaporkan GAGAL — padahal mesinnya
+    # sehat: yang salah alat ukurnya, yang merusak barang yang diukurnya
+    # sendiri lalu terkejut melihatnya rusak. Scene terakhir dihukum karena
+    # kebetulan berdiri paling belakang di antrean.
+    import copy
+    try:
+        uji = copy.deepcopy(mv)
+    except Exception:
+        uji = mv        # kalau tidak bisa disalin, lebih baik tetap diuji
+    sebelum = uji.get('lapar')
+    uji.tick(240.0)
+    sesudah = uji.get('lapar')
+    if sesudah >= sebelum and sesudah > MOTIVE_MIN + 5.0:
+        return _fail(f'lapar tidak turun setelah 4 jam-sim ({sebelum:.1f} -> {sesudah:.1f})')
+    if sesudah < MOTIVE_MIN - 0.01:
+        return _fail(f'lapar tembus lantai ({sesudah:.1f} < {MOTIVE_MIN})')
     return _ok(f'mood {mood:+.1f}')
 
 
@@ -221,6 +244,19 @@ def main():
         gagal_total += len(buruk)
         baris.append((nama, hasil, ms, n_ent, buruk))
 
+    # ── arah WASD (sekali saja; mahal, dan tidak bergantung scene) ──
+    arah_baris = []
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from probe_arah import uji_arah
+        for key, ok, catatan, _ in uji_arah(g, base):
+            arah_baris.append((key, ok, catatan))
+            if not ok:
+                gagal_total += 1
+    except Exception as e:
+        arah_baris.append(('?', False, f'probe arah gagal jalan: {e}'))
+        gagal_total += 1
+
     # ── laporan ──
     print()
     print(f'{"scene":14s} {"hasil":>7s} {"ms/frame":>9s} {"entity":>7s}  catatan')
@@ -230,6 +266,10 @@ def main():
         catatan = '; '.join(f'{k}: {hasil[k][1]}' for k in buruk) if buruk else \
                   hasil.get('pemain_valid', (True, ''))[1]
         print(f'{nama:14s} {tanda:>7s} {ms:9.1f} {n_ent:7d}  {catatan[:44]}')
+    print('-' * 78)
+    tanda_arah = 'LULUS' if all(ok for _, ok, _ in arah_baris) else 'GAGAL'
+    rangkum = ', '.join(f'{k.upper()}={c.split(" ")[0]}' for k, ok, c in arah_baris)
+    print(f'{"arah WASD":14s} {tanda_arah:>7s} {"":>9s} {"":>7s}  {rangkum[:44]}')
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b in baris if not b)
     print(f'{n_lulus}/{len(baris)} scene lulus, {gagal_total} pemeriksaan gagal, '
@@ -244,6 +284,9 @@ def main():
             tanda = 'LULUS' if not buruk else '**GAGAL**'
             catatan = '; '.join(f'`{k}` {hasil[k][1]}' for k in buruk) or '-'
             f.write(f'| {nama} | {tanda} | {ms:.1f} | {n_ent} | {catatan} |\n')
+        f.write('\n## Arah WASD\n\n| tombol | hasil | catatan |\n|---|---|---|\n')
+        for k, ok, c in arah_baris:
+            f.write(f'| {k.upper()} | {"LULUS" if ok else "**GAGAL**"} | {c} |\n')
     print(f'laporan: {laporan}')
 
     try:

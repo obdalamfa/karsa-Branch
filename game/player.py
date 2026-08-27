@@ -234,13 +234,19 @@ class Player3D(Entity):
         self._pivot_neck = Entity(parent=p)
 
         try:
-            from .vitaboy import VitaboyAvatar
-            apr_list = [x for x in ['mabd000_leathers.apr', 'mahd000_proxy.apr', None] if x]
-            self._va = VitaboyAvatar(self, apr_list, scale=0.32)
-            self._va.set_animation("a2a-talk-idle-loop")
+            # Lewat pabrik tunggal di vitaboy_npc.py: ia memilih Character
+            # Panda3D (skinning C++, 0,288 ms/avatar) kalau ada, dan jatuh ke
+            # skinning Python (6,387 ms/avatar) kalau tidak. Pemain memakai
+            # jalur yang sama dengan NPC supaya tidak ada dua kebenaran.
+            from .vitaboy_npc import build_vitaboy_avatar
+            apr_list = ['mabd000_leathers.apr', 'mahd000_proxy.apr']
+            self._va = build_vitaboy_avatar(self, apr_list, scale=0.32)
+            if self._va is None:
+                raise RuntimeError('kedua backend avatar gagal')
         except Exception as e:
             import logging
             logging.error(f"Failed to load Vitaboy for Player: {e}")
+            self._va = None
             self._is_vitaboy = False
 
             # Build full gorgeous voxel character fallback
@@ -338,13 +344,24 @@ class Player3D(Entity):
             head_apr = 'mahd000_proxy.apr' if sh == 0 else 'fahd001_alt.apr'
             hair_apr = 'fahl003_longhair02.apr' if hr > 0 else None
             try:
-                from .vitaboy import VitaboyAvatar
-                if hasattr(self._va, 'root_entity') and self._va.root_entity:
-                    destroy(self._va.root_entity)
+                from .vitaboy_npc import build_vitaboy_avatar
+                # Jalur native memegang Character Panda3D; membuang root_entity
+                # saja menyisakan node Character menggantung. Panggil cleanup()
+                # dulu kalau backend-nya menyediakannya.
+                lama_va = self._va
+                if hasattr(lama_va, 'cleanup'):
+                    try:
+                        lama_va.cleanup()
+                    except Exception:
+                        pass
+                if getattr(lama_va, 'root_entity', None):
+                    destroy(lama_va.root_entity)
                 apr_list = [x for x in [body_apr, head_apr, hair_apr] if x]
-                self._va = VitaboyAvatar(self, apr_list, scale=0.32)
                 anim = "a2o-walking-loop" if getattr(self, '_was_moving', False) else "a2a-talk-idle-loop"
-                self._va.set_animation(anim)
+                baru_va = build_vitaboy_avatar(self, apr_list, scale=0.32,
+                                               idle_anim=anim)
+                if baru_va is not None:
+                    self._va = baru_va
             except Exception:
                 pass
         elif not getattr(self, '_is_vitaboy', True):
@@ -511,23 +528,45 @@ class Player3D(Entity):
             # Pakai koordinat DUNIA di kedua sisi. Mencampur self.x (lokal)
             # dengan camera.world_x membuat basis salah kalau parent pemain
             # tidak identitas.
-            fx = self.world_x - camera.world_x
-            fz = self.world_z - camera.world_z
-            fmag = math.hypot(fx, fz)
-            if fmag < 1e-4:
-                fwd_x, fwd_z = 0.0, -1.0
+            # Arah "atas layar" diambil dari VEKTOR HADAP KAMERA milik Panda3D
+            # sendiri, bukan dari selisih posisi kamera-pemain.
+            #
+            # Kenapa: versi sebelumnya menurunkan basis dari (pemain - kamera)
+            # lalu tandanya disetel empiris sampai benar. Itu rapuh — begitu ada
+            # yang mengubah kamera (parent, orbit, snap), tandanya terbalik lagi
+            # dan keempat arah WASD ikut terbalik. Sudah terjadi dua kali.
+            #
+            # getQuat(render).getForward() adalah arah pandang kamera yang
+            # sesungguhnya menurut engine, apa pun konvensi rotasi Ursina dan
+            # apa pun parent-nya. Tidak ada tanda yang perlu ditebak.
+            try:
+                from direct.showbase.ShowBaseGlobal import base as _p3d
+                _q = _p3d.cam.getQuat(_p3d.render)
+                _f, _r = _q.getForward(), _q.getRight()
+                # Maju DINEGASIKAN: kamera Ursina menghadap ke arah berlawanan
+                # dengan sumbu +Z Ursina yang dipakai posisi entity, jadi
+                # getForward() menunjuk menjauhi layar-atas. Sumbu kanan tidak
+                # kena efek ini. Keduanya diverifikasi pada yaw 0/90/215 lewat
+                # proyeksi lensa di _bench/probes/probe_screen.py.
+                fwd_x, fwd_z = -_f.x, -_f.y    # Panda3D Z-up: y mendatar = z Ursina
+                right_x, right_z = _r.x, _r.y
+            except Exception:
+                # Cadangan kalau base belum ada (mis. di unit test murni)
+                cy = math.radians(camera.world_rotation_y)
+                fwd_x, fwd_z = math.sin(cy), math.cos(cy)
+                right_x, right_z = math.cos(cy), -math.sin(cy)
+
+            _fm = math.hypot(fwd_x, fwd_z)
+            if _fm < 1e-4:
+                fwd_x, fwd_z = 0.0, 1.0
             else:
-                # Tanda dibalik. Ini DIUKUR, bukan diturunkan dari konvensi:
-                # _bench/probes/probe_screen.py memproyeksikan pemain lewat
-                # lensa Panda3D sendiri sambil mengembalikan kamera ke transform
-                # sebelum bergerak, dan vektor kamera->pemain apa adanya membuat
-                # W turun layar. Konvensi arah hadap kamera Ursina tidak searah
-                # dengan selisih posisi ini.
-                fwd_x, fwd_z = -fx / fmag, -fz / fmag
-            # Kanan layar = arah maju diputar 90 derajat. Arah putarannya juga
-            # diukur, bukan diasumsikan: putaran ke sisi satunya membuat A/D
-            # tertukar.
-            right_x, right_z = fwd_z, -fwd_x
+                fwd_x, fwd_z = fwd_x / _fm, fwd_z / _fm
+            _rm = math.hypot(right_x, right_z)
+            if _rm < 1e-4:
+                right_x, right_z = 1.0, 0.0
+            else:
+                right_x, right_z = right_x / _rm, right_z / _rm
+
             mx = dz_in * fwd_x + dx_in * right_x
             mz = dz_in * fwd_z + dx_in * right_z
 

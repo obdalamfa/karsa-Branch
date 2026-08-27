@@ -428,6 +428,113 @@ class AnimationHandle:
 # ---------------------------------------------------------------------------
 # Animator utama (seperti Animator class di FreeSO)
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# HeadSeekController — bagian animator.py yang benar-benar dipakai game
+# ---------------------------------------------------------------------------
+class HeadSeekController:
+    """Menghitung ke mana kepala harus menoleh. Hanya sudut, tanpa skeleton.
+
+    KENAPA DIPISAH DARI `Animator`
+    ==============================
+    `Animator` di bawah menjalankan SELURUH skeleton di Python. Sejak karakter
+    pindah ke `vitaboy_baked.NativeAvatar` (Character Panda3D, deformasi di
+    C++), menjalankan skeleton Python untuk seluruh badan berarti membayar lagi
+    persis biaya yang baru saja dihapus — 6,387 ms per avatar lawan 0,288 ms
+    (`_bench/probes/probe_native_wire.py`).
+
+    Tapi head-seek bukan skinning. Ia satu joint, beberapa operasi trigonometri.
+    Panda3D bisa menyerahkan SATU joint ke Python lewat `control_joint()`
+    sementara sisa badan tetap dianimasikan C++ — dibuktikan di
+    `_bench/probes/probe_headseek.py`: joint HEAD berhasil diambil alih (14,40%
+    piksel berubah saat diputar 55 derajat) dan animasi tubuh TETAP jalan
+    (59.951 piksel berubah antar frame sesudahnya).
+
+    Jadi kelas ini memegang matematika CalculateHeadSeek FreeSO — clamp
+    +-65 horizontal / +-45 vertikal, plus pelembutan — terlepas dari kelas
+    Bone/Skeleton, supaya bisa dipakai jalur native MAUPUN oleh
+    `Animator._apply_head_seek` di bawah.
+
+    DUA KOREKSI TERHADAP KODE ASLI
+    ==============================
+    1. `_apply_head_seek` versi lama menghitung sudut di ruang DUNIA lalu
+       memakainya sebagai rotasi LOKAL bone. Untuk karakter yang badannya
+       sendiri berputar itu salah: kepalanya akan menghadap arah dunia yang
+       tetap, tidak peduli badannya menghadap ke mana. Di sini yaw badan
+       dikurangkan lebih dulu, sehingga clamp +-65 derajat berarti "65 derajat
+       dari lurus ke depan" — yang memang maksud FreeSO.
+    2. Versi lama menghitung dan meng-clamp `v_angle` lalu MEMBUANGNYA
+       (`Quat.from_euler_y` cuma memakai sudut horizontal). Di sini keduanya
+       dikembalikan sebagai pasangan (heading, pitch).
+    """
+
+    __slots__ = ('max_h', 'max_v', 'speed', 'h', 'v', 'target')
+
+    def __init__(self, max_h: float = 65.0, max_v: float = 45.0,
+                 speed: float = 5.0):
+        self.max_h = max_h
+        self.max_v = max_v
+        self.speed = speed
+        self.h = 0.0          # sudut sekarang (sudah dilembutkan), derajat
+        self.v = 0.0
+        self.target: Optional[Tuple[float, float, float]] = None
+
+    def look_at(self, world_pos: Optional[Tuple[float, float, float]]):
+        """Titik yang dipandang, koordinat dunia. None = kepala kembali lurus."""
+        self.target = world_pos
+
+    def clear(self):
+        self.target = None
+
+    @staticmethod
+    def _pendekkan(sudut: float) -> float:
+        """Bawa sudut ke -180..180 supaya kepala tidak memutar lewat jalan jauh."""
+        while sudut > 180.0:
+            sudut -= 360.0
+        while sudut < -180.0:
+            sudut += 360.0
+        return sudut
+
+    def update(self, dt: float, head_world: Tuple[float, float, float],
+               body_yaw_deg: float = 0.0) -> Tuple[float, float]:
+        """Majukan satu langkah; kembalikan (heading, pitch) derajat, lokal ke badan.
+
+        head_world   : posisi kepala di dunia (x, y, z), y ke atas
+        body_yaw_deg : rotation_y badan, supaya sudutnya relatif ke arah hadap
+        """
+        if self.target is None:
+            tuju_h, tuju_v = 0.0, 0.0
+        else:
+            dx = self.target[0] - head_world[0]
+            dy = self.target[1] - head_world[1]
+            dz = self.target[2] - head_world[2]
+            datar = math.sqrt(dx * dx + dz * dz)
+            if datar < 1e-3:
+                tuju_h, tuju_v = self.h, self.v
+            else:
+                tuju_h = self._pendekkan(
+                    math.degrees(math.atan2(dx, dz)) - body_yaw_deg)
+                tuju_v = math.degrees(math.atan2(dy, datar))
+                # Kalau target ada di belakang punggung, jangan patahkan leher:
+                # cukup di-clamp, kepala berhenti di batas pandang.
+                tuju_h = max(-self.max_h, min(self.max_h, tuju_h))
+                tuju_v = max(-self.max_v, min(self.max_v, tuju_v))
+
+        k = min(self.speed * dt, 1.0)
+        self.h += (tuju_h - self.h) * k
+        self.v += (tuju_v - self.v) * k
+        return self.h, self.v
+
+    @property
+    def aktif(self) -> bool:
+        """False kalau tidak ada target DAN kepala sudah selesai kembali lurus.
+
+        Dipakai pemanggil untuk berhenti menyentuh joint sama sekali begitu
+        kepala selesai kembali, supaya karakter yang tidak memandang apa pun
+        benar-benar nol biaya per frame.
+        """
+        return self.target is not None or abs(self.h) > 0.05 or abs(self.v) > 0.05
+
+
 class Animator:
     """
     Mengelola beberapa AnimationHandle secara bersamaan.
@@ -447,6 +554,7 @@ class Animator:
         self._head_bone: str = "head"
         self._max_horizontal_deg: float = 65.0
         self._max_vertical_deg: float = 45.0
+        self._head_ctrl: Optional[HeadSeekController] = None
 
     def play(self, skeleton: Skeleton, animation: Animation,
              loop: bool = False, weight: float = 1.0,
@@ -506,35 +614,32 @@ class Animator:
         Putar bone kepala agar menghadap target.
         Diadaptasi dari CalculateHeadSeek() di Vitaboy Animator.cs FreeSO.
         Clamp: ±65° horizontal, ±45° vertikal.
+
+        Matematikanya sekarang DIPINJAM dari `HeadSeekController` di atas,
+        bukan disalin, supaya jalur skeleton-Python ini dan jalur Character
+        Panda3D tidak bisa menyimpang perlahan-lahan tanpa ada yang sadar.
         """
+        target = self._head_seek_target
+        if target is None:
+            return
+        if self._head_ctrl is None:
+            self._head_ctrl = HeadSeekController(
+                max_h=self._max_horizontal_deg,
+                max_v=self._max_vertical_deg,
+                speed=self._head_seek_speed)
+        ctrl = self._head_ctrl
+        ctrl.speed = self._head_seek_speed
+        ctrl.look_at((target.x, target.y, target.z))
+
         for handle in self._handles:
             head_bone = handle.skeleton.get_bone(self._head_bone)
             if head_bone is None:
                 continue
-
-            target = self._head_seek_target
             hp = head_bone.world_pos
-
-            dx = target.x - hp.x
-            dy = target.y - hp.y
-            dz = target.z - hp.z
-            horiz_dist = math.sqrt(dx*dx + dz*dz)
-
-            if horiz_dist < 0.001:
-                continue
-
-            # Sudut horizontal dan vertikal
-            h_angle = math.degrees(math.atan2(dx, dz))
-            v_angle = math.degrees(math.atan2(dy, horiz_dist))
-
-            # Clamp seperti di FreeSO
-            h_angle = max(-self._max_horizontal_deg, min(self._max_horizontal_deg, h_angle))
-            v_angle = max(-self._max_vertical_deg,   min(self._max_vertical_deg,   v_angle))
-
-            target_rot = Quat.from_euler_y(h_angle)
-            current_rot = head_bone.local_rot
-            t = min(self._head_seek_speed * dt, 1.0)
-            head_bone.local_rot = Quat.slerp(current_rot, target_rot, t)
+            h_angle, _v = ctrl.update(dt, (hp.x, hp.y, hp.z))
+            # Bone di jalur ini hanya punya rotasi Y; pitch-nya sengaja
+            # diabaikan seperti perilaku lama supaya tampilannya tidak berubah.
+            head_bone.local_rot = Quat.from_euler_y(h_angle)
 
 
 # ---------------------------------------------------------------------------

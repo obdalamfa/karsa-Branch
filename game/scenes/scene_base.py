@@ -1,5 +1,6 @@
 class Scene:
-    def __init__(self, name, display, tiles, portals=None, indoor=False, builder=None, has_horizon=None):
+    def __init__(self, name, display, tiles, portals=None, indoor=False, builder=None,
+                 has_horizon=None, paint=None):
         if builder is None:
             from .props import default_prop_builder
             self.builder = lambda world: default_prop_builder(world, self)
@@ -12,6 +13,14 @@ class Scene:
         self.h       = len(tiles) if tiles else 0
         self.portals = portals or []
         self.indoor  = indoor
+        # Lapisan warna per-ZONA (lihat game/scenes/zone_paint.py). Tiap entri
+        # adalah satu Zone: satu persegi ubin yang dicat ulang oleh SATU entity.
+        # Dibutuhkan karena world.py mewarnai hampir semua ubin luar ruang
+        # dengan papan catur RUMPUT, sehingga ladang tanah terbaca sebagai
+        # halaman. Zona dipegang di sini, bukan di dalam builder, supaya
+        # default_prop_builder() tahu ubin mana yang SUDAH tertutup dan tidak
+        # perlu ditambal satu-satu.
+        self.paint   = list(paint or [])
         # Horizon = pelat putih raksasa 1000x1000 di world.py. Di dalam ruangan
         # pelat itu menelan seluruh interior jadi void putih ("rumah ga muncul"),
         # jadi defaultnya harus ikut `indoor`, bukan True untuk semua scene.

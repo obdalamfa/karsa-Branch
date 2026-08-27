@@ -23,6 +23,10 @@ from .config import (SCREEN_W, SCREEN_H, CAM_LERP,
                      CAM_TARGET_LIFT, INGAME_MINUTES_PER_REAL_SECOND, FORCE_SLEEP_HOUR,
                      NEED_MAX, NEED_CRITICAL, NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG)
 
+# Ambang perubahan warna kabut sebelum di-push ulang ke shader semua entity.
+# 1,5/255 — di bawah satu langkah warna 8-bit, jadi tidak pernah terlihat.
+_FOG_EPS = 1.5 / 255.0
+
 class GameHandler(Entity):
     """Menjembatani event update dan input Ursina ke class Game3D."""
     def __init__(self, game, **kwargs):
@@ -171,6 +175,12 @@ class Game3D:
         _grass.apply_to_entities(self.world._grass_ents)
         self._grass_time = 0.0
 
+        # Cache fog: dipakai untuk melewati setter Ursina yang mahal.
+        # Wajib di-None-kan tiap ganti scene — entity baru belum pernah
+        # menerima shader input fog_color dan akan tampil tanpa kabut.
+        self._fog_color_terakhir = None
+        self._fog_density_terakhir = None
+
         # Setup Kamera (Harvest Moon AWL / Third-person 3D)
         camera.orthographic = False
         camera.fov          = 60
@@ -243,6 +253,10 @@ class Game3D:
                 logging.info(f"[SCENE_T] world.load_scene: {_time.time()-t0:.3f}s")
                 t0 = _time.time()
                 self.entities.load_scene(current_scene)
+                # Entity baru belum punya shader input fog_color/density.
+                # Batalkan cache supaya frame berikutnya push ulang sekali.
+                self._fog_color_terakhir = None
+                self._fog_density_terakhir = None
                 logging.info(f"[SCENE_T] entities.load_scene: {_time.time()-t0:.3f}s")
                 self._land_player_safely(s)
                 self.player.set_tile_pos(s.player_x, s.player_y)
@@ -352,8 +366,27 @@ class Game3D:
             window.color = lerp(window.color, target_sky, dt)
             
             from ursina import scene
-            scene.fog_color = window.color
-            scene.fog_density = 0.0 if is_indoor else 0.035
+            # PERF (diukur, bukan ditebak): setter `scene.fog_color` milik Ursina
+            # melintasi SELURUH `scene.entities` tiap kali di-assign — memanggil
+            # has_ancestor() untuk tiap entity (yang naik sampai 100 parent) lalu
+            # set_shader_input untuk yang butuh. Profil di scene `town`:
+            # 2104 has_ancestor + 244 set_shader_input per frame = 51,9 ms dari
+            # 79,9 ms total logika (65%), hanya untuk satu baris assignment.
+            # window.color di-lerp tiap frame sehingga hampir selalu bernilai
+            # sama; selisih di bawah ~1,5/255 tidak mungkin terlihat mata.
+            # Jadi: assign hanya kalau warnanya benar-benar berubah.
+            wc = window.color
+            lama_fog = self._fog_color_terakhir
+            if lama_fog is None or max(abs(wc[i] - lama_fog[i]) for i in range(3)) > _FOG_EPS:
+                scene.fog_color = wc
+                self._fog_color_terakhir = (wc[0], wc[1], wc[2])
+            # fog_density juga punya setter yang melintasi semua entity kalau
+            # nilainya tuple. Di sini nilainya float dan cuma dua kemungkinan,
+            # jadi cukup di-assign saat berpindah indoor/outdoor.
+            dens = 0.0 if is_indoor else 0.035
+            if dens != self._fog_density_terakhir:
+                scene.fog_density = dens
+                self._fog_density_terakhir = dens
             
             self._sync_smooth_lighting()
 

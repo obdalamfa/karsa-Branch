@@ -164,14 +164,44 @@ def build_house_block(world, scene, tx, ty, wx, wz):
                      (TS * 0.26, 0.08, TS * 0.26), None, color.rgb(90, 80, 72))
     world._obj_ents.extend([foundation, body, door, porch, pillar1, pillar2, roof1, chimney, chimney_cap])
 
+# Ubin penghalang yang ubinnya TIDAK diurus benar oleh world.py di luar ruang.
+# Cabang `_make_tile()` untuk penghalang memakai `default_tex` = 'grass', dan
+# grass.png di repo ini hampir hitam (rata-rata 44,14,46) — jadi tiap pohon,
+# tunggul, lentera, dan peti berdiri di atas kotak hitam. Pagar TIDAK ikut
+# terdaftar di sini: world.py sudah punya cabang khusus yang memakai
+# 'grass_tso' untuk FN/GT/PEN. Dinding dan bangunan juga tidak: massanya
+# menutupi ubinnya sendiri.
+# Lihat zone_paint.patch_tile() — ini tambalan sementara, bukan perbaikan.
+_TILE_TAMBALAN = (TR, PALM, DT, LN, CH, MB, PP, CL, MR, BS, SH, CT, TB, BD,
+                  ST, FP, GR, TV, CHR, CAL, BOT, DR)
+
+
 def default_prop_builder(world, scene):
     from game.world import OBJ_TEX
+    from game.scenes.zone_paint import paint_zone, patch_tile
+
+    outdoor = not getattr(scene, 'indoor', False)
+
+    # ── Lapisan zona ────────────────────────────────────────────────────────
+    # Dijalankan LEBIH DULU dari prop supaya urutan gambar tanah → prop, dan
+    # supaya daftar zona sudah siap dipakai sebagai penyaring tambalan di bawah.
+    zones = getattr(scene, 'paint', None) or ()
+    for z in zones:
+        paint_zone(world, z.x0, z.y0, z.x1, z.y1, z.base, z.light, z.dark)
+
     # Scan tiles and place complex props
     for ty in range(scene.h):
         for tx in range(scene.w):
             tid = scene.tiles[ty][tx]
             wx, wz = tx * TS, ty * TS
-            
+
+            # Ubin di dalam zona TIDAK ditambal: lapisan zona sudah menutupi
+            # kotak hitamnya, dan menambal di sana justru akan menempelkan
+            # petak RUMPUT di tengah ladang tanah.
+            if outdoor and tid in _TILE_TAMBALAN and \
+                    not any(z.covers(tx, ty) for z in zones):
+                patch_tile(world, tx, ty)
+
             if tid == TR: build_tree(world, wx, wz)
             elif tid == PALM: build_palm(world, wx, wz)
             elif tid == DT: build_dead_tree(world, wx, wz)

@@ -70,18 +70,28 @@ def load_model_file(name: str):
         _MODEL_CACHE[name] = None
         return None
 
-NPC_APPEARANCES = {
-    'arya': ['mabd000_sw__default.apr', 'mahd001_romeo.apr'],
-    'sari': ['fabd002_mom01.apr', 'fahd001_sharon.apr', 'fahl001_sharon.apr'],
-    'raka': ['mabd000_sl__teepjs.apr', 'mahd001_ross.apr'],
-    'maya': ['fabd001_slacker.apr', 'fahd001_shannon01.apr', 'fahl001_shannon01.apr'],
-    'mbok_jum': ['fabd002_gma1.apr', 'fahd001_alt.apr', 'fahl001_alt.apr'],
-    'budi': ['mabd000_leathers.apr', 'mahd000_proxy.apr'],
-    'jaka_ronda': ['mabd000_robin.apr', 'mahd001_robin.apr'],
-    'kapten_kuro': ['mabd000_leathers3.apr', 'mahd002_asian.apr'],
-    'cici': ['fabd001_summer01.apr'],
-    'bowo': ['mabd000_sl__teepjs2.apr'],
-}
+# Tabel outfit sekarang dimiliki `vitaboy_npc.py` — di sana ia digabung dengan
+# tabel kedua yang dulu tercecer dan tidak pernah diadu dengan yang ini, sehingga
+# tiga orang lagi (ningsih, joko, pak_guru) punya wajah sendiri. Alias ini
+# dipertahankan supaya kode lama yang mengimpor nama ini tidak putus.
+from .vitaboy_npc import NPC_OUTFIT as NPC_APPEARANCES, resolve_outfit
+
+# Radius warga mulai menoleh ke pemain (unit dunia), dikuadratkan supaya tidak
+# perlu akar kuadrat di dalam loop NPC. 9 unit kira-kira sejauh mata memang
+# masuk akal memperhatikan seseorang, dan cukup dekat sehingga hanya beberapa
+# orang aktif sekaligus.
+_R_TOLEH_KUADRAT = 9.0 * 9.0
+
+# Player3D dibangun SETELAH EntitiesManager, jadi manager tidak bisa menerima
+# referensinya lewat konstruktor. Satu slot modul, diisi Player3D saat lahir —
+# jauh lebih jujur daripada menyusuri scene graph mencari pemain tiap frame.
+_PEMAIN_AKTIF = [None]
+
+
+def daftarkan_pemain(pl):
+    """Dipanggil Player3D.__init__ supaya head-seek tahu harus melihat siapa."""
+    _PEMAIN_AKTIF[0] = pl
+
 
 def get_npc_model_name(npc_id):
     if npc_id == 'naga_bijak':
@@ -255,23 +265,29 @@ class EntitiesManager:
                 # (3,1 m) label ayam melayang lepas dari badannya sehingga
                 # pemain tidak bisa memasangkan nama dengan bentuk.
                 lbl_y, lbl_scale = h + 0.45, 2.6
-            apr_list = None if is_animal else NPC_APPEARANCES.get(actor_id)
+            apr_list = None if is_animal else resolve_outfit(actor_id, default=False)
             # Vitaboy memuat aset TSO asli dari path absolut mesin tertentu
             # (vitaboy/tso_paths.py). Tanpa try/except, satu mesin tanpa TSO
             # membuat load_scene() crash total dan game tidak bisa dibuka sama
-            # sekali. player.py sudah punya fallback ini; di sini belum.
+            # sekali. Pembungkus gagal-lunak ini WAJIB dipertahankan.
             if apr_list:
                 try:
-                    from .vitaboy import VitaboyAvatar
+                    from .vitaboy_npc import build_vitaboy_human_npc
                     sc = 0.19 if actor_id in ('cici', 'bowo') else 0.32
-                    actor._va = VitaboyAvatar(actor, apr_list, scale=sc)
-                    actor._va.set_animation("a2a-talk-idle-loop")
+                    # Pabrik memilih backend sendiri: Character Panda3D (skinning
+                    # C++, 0,288 ms/avatar) kalau bisa, jatuh ke skinning Python
+                    # (6,387 ms/avatar) kalau tidak. Lihat vitaboy_npc.py.
+                    actor._va = build_vitaboy_human_npc(actor, actor_id, scale=sc,
+                                                       apr_list=apr_list)
+                    if actor._va is None:
+                        raise RuntimeError('kedua backend avatar gagal')
                     actor.model = 'cube'  # dummy parent
                     actor.color = color.clear # hide dummy
                 except Exception as e:
                     import logging
                     logging.warning(
                         f"Vitaboy gagal untuk '{actor_id}' ({e}); pakai model biasa.")
+                    actor._va = None
                     apr_list = None
             if not apr_list and not is_animal:
                 model_name = get_npc_model_name(actor_id)
@@ -352,6 +368,18 @@ class EntitiesManager:
 
     def update(self, dt: float):
         s = self.state
+
+        # Posisi pemain untuk head-seek, dihitung SEKALI per frame. Kalau
+        # dihitung di dalam loop NPC, ongkosnya ikut naik seiring jumlah warga
+        # — persis pola yang membuat frame proyek ini berat sejak awal
+        # (lihat _bench/reports/profil-logika.md).
+        _lihat_pemain = None
+        pl = _PEMAIN_AKTIF[0]
+        if pl is not None:
+            try:
+                _lihat_pemain = (pl.world_x, pl.world_y + 1.6, pl.world_z)
+            except Exception:
+                _lihat_pemain = None
         
         if self.brains is not None:
             self.brains.tick(dt)
@@ -424,6 +452,23 @@ class EntitiesManager:
                         actor._va.set_animation("a2o-walking-loop")
                     else:
                         actor._va.set_animation("a2a-talk-idle-loop")
+                    # Head-seek: warga menoleh ke pemain kalau ia cukup dekat.
+                    # Ini tanda khas Sims/FreeSO — desa terasa memperhatikan,
+                    # bukan cuma berjalan melewati kita. Ongkosnya SATU joint
+                    # per orang (lihat HeadSeekController di animator.py):
+                    # `look_at_world` baru membangun apa pun saat pertama kali
+                    # ada yang benar-benar dipandang, dan `update()` keluar di
+                    # baris pertama untuk kepala yang sudah lurus kembali.
+                    if _lihat_pemain is not None and not is_sleeping:
+                        dxp = _lihat_pemain[0] - actor.world_x
+                        dzp = _lihat_pemain[2] - actor.world_z
+                        dekat = (dxp * dxp + dzp * dzp) <= _R_TOLEH_KUADRAT
+                        try:
+                            actor._va.look_at_world(_lihat_pemain if dekat else None)
+                        except AttributeError:
+                            # Jalur VitaboyAvatar (skinning Python) belum punya
+                            # head-seek. Bukan error — orangnya cuma tidak menoleh.
+                            pass
                     actor._va.update(dt)
                 else:
                     if not is_moving_now:

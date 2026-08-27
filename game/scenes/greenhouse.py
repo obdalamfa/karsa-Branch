@@ -24,6 +24,6 @@ def build_greenhouse():
     m[4][1] = TB; m[5][1] = SH
     m[4][13] = TB; m[5][13] = SH
     return Scene('greenhouse', 'Rumah Kaca', m,
-                 portals=[(7, 11, 'town', 21, 22)], indoor=True)
+                 portals=[(7, 11, 'farm', 25, 6)], indoor=True)
 
 

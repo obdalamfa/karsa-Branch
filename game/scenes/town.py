@@ -22,11 +22,11 @@ def build_town():
     m[12][12] = LN; m[12][17] = LN; m[17][12] = LN; m[17][17] = LN
     for x in range(11, 19): m[14][x] = CT
     return Scene('town', 'Desa Karsa', m, portals=[
-        (0, 14, 'farm', 23, 14), (0, 15, 'farm', 23, 15),
+        (0, 14, 'farm', 26, 9), (0, 15, 'farm', 26, 10),
         (14, 0, 'mountain', 14, 23), (15, 0, 'mountain', 15, 23),
         (29, 14, 'lake', 1, 7), (29, 15, 'lake', 1, 8),
         (4, 8, 'shop', 7, 9), (11, 8, 'clinic', 7, 9), (22, 8, 'studio', 7, 9),
-        (7, 21, 'smith', 7, 9), (21, 21, 'greenhouse', 7, 9),
+        (7, 21, 'smith', 7, 9),
         (14, 24, 'beach', 14, 1), (15, 24, 'beach', 15, 1),
     ])
 

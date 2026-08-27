@@ -84,12 +84,27 @@ def get_grass_shader():
     return _grass_shader
 
 
+def _induk_uniform():
+    """Node tempat uniform rumput dipasang SEKALI, bukan per entity.
+
+    Shader input di Panda3D diwariskan ke seluruh keturunan node. Jadi satu
+    assignment di `scene` sampai ke semua rumput di bawahnya, dan tidak ada
+    alasan menyentuh tiap entity satu per satu.
+    """
+    from ursina import scene
+    return scene
+
+
 def apply_to_entities(entities: list, time: float = 0.0, wind: float = 0.06):
     """Terapkan grass shader ke list entity rumput.
 
     entities : list Entity yang sudah dibuat di world.py
     time     : nilai waktu animasi (detik real)
     wind     : kekuatan angin (0 = tidak ada, 0.1 = sepoi, 0.3 = kencang)
+
+    Shader-nya dipasang per entity — memang harus, itu yang menentukan entity
+    mana yang melambai. Tapi NILAI uniform-nya tidak: itu sama untuk semua
+    rumput dan dipasang sekali di induknya (lihat update_time).
     """
     sh = get_grass_shader()
     if sh is None:
@@ -97,19 +112,35 @@ def apply_to_entities(entities: list, time: float = 0.0, wind: float = 0.06):
     for e in entities:
         try:
             e.shader = sh
-            e.set_shader_input('grs_time', time)
-            e.set_shader_input('grs_wind', wind)
+            # Uniform SENGAJA tidak dipasang di sini. Input yang dipasang di
+            # entity MENIMPA input dari induknya, jadi satu saja yang
+            # tertinggal di sini sudah cukup membuat rumput itu membeku
+            # sementara yang lain melambai.
         except Exception:
             pass
+    update_time(entities, time, wind)
 
 
 def update_time(entities: list, time: float, wind: float = 0.06):
-    """Update uniform `grs_time` dan `grs_wind` tiap frame."""
-    if _grass_failed:
+    """Update uniform `grs_time` dan `grs_wind`. Dipanggil tiap frame.
+
+    Dulu ini melintasi seluruh daftar rumput dan memanggil set_shader_input
+    dua kali per entity. Di scene `mountain` itu 488 entity x 2 = 976
+    panggilan PER FRAME, dan cProfile menunjukkannya sebagai satu-satunya
+    biaya Python terbesar di luar render: 39.320 panggilan dalam 40 frame,
+    ~12,5 ms per frame — untuk memasang dua angka yang sama ke semua orang.
+
+    Sekarang dua panggilan, titik. Shader input diwariskan ke keturunan, dan
+    tiap rumput ada di bawah `scene`.
+
+    `entities` dipertahankan di tanda tangan supaya pemanggil lama tidak
+    perlu diubah, dan supaya nol-rumput tetap berarti nol kerja.
+    """
+    if _grass_failed or not entities:
         return
-    for e in entities:
-        try:
-            e.set_shader_input('grs_time', time)
-            e.set_shader_input('grs_wind', wind)
-        except Exception:
-            pass
+    try:
+        induk = _induk_uniform()
+        induk.set_shader_input('grs_time', time)
+        induk.set_shader_input('grs_wind', wind)
+    except Exception:
+        pass

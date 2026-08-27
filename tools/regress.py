@@ -44,6 +44,12 @@ bukan pada kemungkinan yang dikarang:
                  Yang kedua bukan tambahan: shader hasil setShaderAuto() Panda
                  mengabaikan kolom warna vertex, jadi mesh yang sudah diwarnai
                  tetap keluar putih tanpa smooth_shader.
+  rumput_lambai  uniform rumput dipindah dari per-entity ke induknya (976
+                 panggilan set_shader_input per frame jadi 2). Kalau nilainya
+                 berhenti sampai ke shader, rumputnya BEKU — dan beku itu
+                 tidak melempar error, tidak menulis log, dan tidak terlihat
+                 di frame diam. Diukur sebagai piksel yang berubah antara dua
+                 nilai grs_time yang jauh.
   arah_wasd      arah WASD terbalik. Kegagalan yang PALING sering kembali di
                  proyek ini — tiga kali, dan tiap kali "diperbaiki" dengan
                  membalik tanda sampai terasa benar. Diukur sekali di akhir
@@ -436,6 +442,97 @@ def cek_avatar_berwarna(g):
     return _ok(f'{diperiksa} avatar berwarna')
 
 
+def cek_rumput_melambai(g, base, tmp: Path):
+    """Angin rumput harus benar-benar sampai ke shader.
+
+    Uniform `grs_time`/`grs_wind` dipasang SEKALI di induk, bukan per entity —
+    976 panggilan per frame di mountain jadi 2. Yang dibayar untuk itu: kalau
+    suatu saat ada yang memasang uniform di entity lagi, input entity MENIMPA
+    input induknya dan rumput itu membeku sendirian; kalau assignment di
+    induknya hilang, semuanya membeku. Dua-duanya diam: tidak melempar error,
+    tidak menulis log, dan tidak terlihat sama sekali di frame diam.
+
+    Jadi diuji dari luar: render dua kali dengan grs_time yang jauh berbeda,
+    lalu hitung piksel yang berubah. Rumput yang melambai menggeser vertex;
+    rumput yang beku menghasilkan dua frame yang identik.
+    """
+    ge = list(getattr(getattr(g, 'world', None), '_grass_ents', None) or [])
+    if len(ge) < 16:
+        return _ok(f'{len(ge)} rumput, tidak diukur')
+    try:
+        import game.grass_shader as gs
+    except Exception as e:
+        return _fail(f'grass_shader tidak bisa diimpor: {e}')
+    if getattr(gs, '_grass_failed', False) or gs.get_grass_shader() is None:
+        return _ok('grass shader tidak tersedia di pipeline ini')
+
+    try:
+        from PIL import Image
+    except Exception as e:
+        return _fail(f'butuh Pillow: {e}')
+
+    def tembak(t, nama):
+        gs.update_time(ge, t, 0.30)     # angin kencang supaya geserannya terukur
+        for _ in range(2):
+            base.taskMgr.step()
+        p = tmp / nama
+        img = base.win.getScreenshot()
+        if img is None:
+            return None
+        img.write(Filename.fromOsSpecific(str(p)))
+        return Image.open(p).convert('RGB')
+
+    semula = getattr(g, '_grass_time', 0.0)
+    try:
+        a = tembak(0.0, '_lambai_a.png')
+        b = tembak(3.7, '_lambai_b.png')
+    finally:
+        # Kembalikan waktu rumput seperti semula supaya pemeriksaan berikutnya
+        # tidak menilai dunia yang sudah kita geser sendiri.
+        try:
+            gs.update_time(ge, semula, 0.06)
+        except Exception:
+            pass
+    if a is None or b is None:
+        return _fail('tidak ada tangkapan layar')
+    if a.size != b.size:
+        return _fail('ukuran frame berubah di tengah pengukuran')
+
+    beda = sum(1 for pa, pb in zip(a.getdata(), b.getdata()) if pa != pb)
+    total = a.size[0] * a.size[1]
+    frac = beda / total
+    if frac < 0.005:
+        return _fail(f'rumput beku — cuma {frac:.2%} piksel berubah antara '
+                     f'grs_time 0.0 dan 3.7')
+
+    # Separuh struktural, dan ini bukan pengulangan yang di atas.
+    #
+    # Uji piksel menangkap rumput yang beku SELURUHNYA. Ia tidak menangkap
+    # sebagian: diukur langsung, memaku separuh rumput di entity cuma
+    # menurunkan angkanya 9,5% -> 3,5%, masih jauh di atas ambang mana pun
+    # yang aman dari salah-vonis di scene yang rumputnya sedikit. Yang
+    # menangkapnya justru pemeriksaan yang jauh lebih murah: tidak boleh ada
+    # entity rumput yang menyimpan grs_time-nya sendiri, karena input entity
+    # menimpa input induknya (juga diukur, bukan diasumsikan).
+    try:
+        from panda3d.core import ShaderAttrib, ShaderInput
+        kosong = ShaderInput.get_blank()
+        sendiri = []
+        for e in ge:
+            sa = e.getState().getAttrib(ShaderAttrib)
+            if sa is None:
+                continue
+            if sa.get_shader_input('grs_time') != kosong:
+                sendiri.append(getattr(e, 'name', '?'))
+        if sendiri:
+            return _fail(f'{len(sendiri)} rumput memasang grs_time sendiri — '
+                         f'input entity menimpa induknya, jadi rumput itu beku')
+    except Exception:
+        pass        # versi Panda tanpa API ini: uji piksel di atas tetap jalan
+
+    return _ok(f'{frac:.1%} piksel bergeser')
+
+
 def cek_save_bolak(g):
     from game.state import GameState
     try:
@@ -519,6 +616,7 @@ def main():
             hasil['hud_terbaca'] = cek_hud_terbaca(g, png) if png.exists() \
                 else _fail('tidak ada tangkapan layar')
             hasil['save_bolak'] = cek_save_bolak(g)
+            hasil['rumput_lambai'] = cek_rumput_melambai(g, base, OUT)
             n_ent = len(uscene.children)
         except Exception as e:
             hasil['boot'] = _fail(f'{type(e).__name__}: {e}')

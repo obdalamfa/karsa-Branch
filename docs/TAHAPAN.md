@@ -68,15 +68,64 @@ daripada sistem yang belum dibuat.
 
 ---
 
-## Tahap 3 — Performa
+## Tahap 3 — Performa 🔨 SUDAH DIPROFIL
 
-4–29 FPS, belum pernah diprofil, jumlah entity terus naik (2.177 di mountain).
-Setiap perbaikan visual dinikmati lewat slideshow.
+`tools/profile_frame.py` memisahkan waktu frame jadi Python dan render, plus
+cProfile dan hitungan GeomNode/Geom.
 
-Dua jalan: optimasi bertahap (batching, culling, kurangi entity) yang aman,
-atau perombakan renderer yang berisiko. Mulai dari yang pertama **sambil
-mengukur**. Kalau mentok di bawah 30 FPS, itu keputusan besar tentang seberapa
-jauh Ursina sanggup dibawa — dan itu keputusan pemilik, bukan keputusanku.
+### Peringatan yang harus dibaca sebelum angka mana pun
+
+Container sesi web ini **tidak punya GPU** — `/dev/dri` tidak ada dan Mesa
+jatuh ke `llvmpipe`, rasterizer perangkat lunak di CPU. Di sana biaya frame
+didominasi fill rate: mountain 158 ms di 1280×720 turun jadi 77 ms di 640×360
+untuk seperempat piksel, artinya ~50 ms biaya tetap + ~108 ms fill.
+
+Di mesin ber-GPU susunannya terbalik. Jadi **angka ms/frame dari sini tidak
+boleh dipakai menilai target 30 FPS, dan tidak boleh dipakai memilih
+optimasi.** Angka "104 ms per frame" yang beredar dari sesi-sesi sebelumnya
+juga angka llvmpipe, bukan angka mesin pemilik.
+
+Yang tetap sah diukur di sini karena tidak bergantung GPU: jumlah
+Entity/GeomNode/Geom, waktu Python per frame, dan jumlah panggilan di
+cProfile. Optimasi yang dipilih dari tiga angka itu menolong di mesin mana
+pun.
+
+### Yang sudah diukur
+
+| scene | entity | GeomNode | Geom | python ms |
+|---|--:|--:|--:|--:|
+| mountain | 2.177 | 2.224 | 2.224 | ~24 |
+| town | 1.884 | 1.906 | 1.906 | ~27 |
+| farm | 1.257 | 1.390 | 1.390 | ~16 |
+
+**GeomNode ≈ jumlah entity: hampir tiap entity satu batch sendiri.** Itu
+masalah di mesin mana pun, bukan cuma di llvmpipe.
+
+`flattenStrong()` **tidak menggabung apa pun** (1.993 → 1.993), bahkan setelah
+`clearModelNodes()`. Jadi batching tidak bisa didapat dengan memanggil satu
+fungsi; ia menuntut terrain dibangun sebagai mesh gabungan sejak awal, bukan
+sebagai N entity kubus. Itu perombakan `world.py` yang besar, dan payoff-nya
+**tidak bisa diukur di container ini** — jadi keputusannya milik pemilik, bukan
+milikku.
+
+### Yang sudah diperbaiki
+
+Uniform rumput dipindah dari per-entity ke induknya. `update_time()` dulu
+memanggil `set_shader_input` dua kali untuk tiap entity rumput, tiap frame — di
+mountain 488 × 2 = 976 panggilan per frame, dan cProfile menunjukkannya sebagai
+biaya Python terbesar di luar render (39.320 panggilan dalam 40 frame). Shader
+input diwariskan ke keturunan, jadi sekarang dua panggilan. `_update` Ursina
+turun 28,4 → 23,8 ms per frame. Penghematan ini portabel: ia sama besarnya di
+mesin ber-GPU.
+
+Sisa biaya Python didominasi Ursina sendiri (`has_disabled_ancestor` 2.044
+panggilan per frame) — itu berbanding lurus dengan jumlah entity, jadi ia ikut
+turun hanya kalau entity-nya berkurang.
+
+Dijaga `rumput_lambai` di regress.py, yang menguji dua-duanya: piksel benar
+bergeser saat `grs_time` berubah, DAN tidak ada entity rumput yang memasang
+`grs_time` sendiri — karena input entity menimpa input induknya, dan satu
+entity yang tertinggal akan membeku sendirian tanpa error apa pun.
 
 ---
 

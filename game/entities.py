@@ -292,16 +292,44 @@ class EntitiesManager:
             if not apr_list and not is_animal:
                 model_name = get_npc_model_name(actor_id)
                 panda_model = load_model_file(model_name)
+                if not panda_model:
+                    model_name = 'humanoid'
+                    panda_model = load_model_file(model_name)
                 if panda_model:
+                    # Mesh humanoid tidak punya warna sama sekali, dan satu
+                    # mesh cuma punya satu entity.color. Tanpa ini setiap
+                    # warga desa sampai ke layar sebagai gumpalan PUTIH POLOS
+                    # di mesin tanpa instalasi TSO — bukan karena avatarnya
+                    # hilang, tapi karena tidak ada yang pernah memberitahu
+                    # warnanya. Diwarnai per-vertex, jadi kulit, baju, celana
+                    # dan rambut muat dalam SATU entity. Lihat human_paint.py
+                    # untuk kenapa bukan lima entity.
+                    warnai = (model_name == 'humanoid')
+                    if warnai:
+                        try:
+                            from .human_paint import paint_humanoid, palet_untuk
+                            warnai = paint_humanoid(panda_model, palet_untuk(actor_id))
+                        except Exception as e:
+                            import logging
+                            logging.warning(f"human_paint gagal untuk '{actor_id}': {e}")
+                            warnai = False
                     actor.model = panda_model
                     actor.scale = 1.0
+                    if warnai:
+                        # WAJIB, dan bukan sekadar hiasan. Lampu di scene ini
+                        # memicu setShaderAuto() Panda3D (lihat app.py:74), dan
+                        # shader hasil generator itu MENGABAIKAN kolom warna
+                        # vertex — diuji: mesh yang sudah diwarnai tetap keluar
+                        # putih pucat sampai smooth_shader dipasang. Yang membaca
+                        # p3d_Color cuma smooth_shader, jadi tanpa baris ini
+                        # seluruh kerja pewarnaan tidak sampai ke layar.
+                        try:
+                            from .smooth_shader import apply_smooth
+                            apply_smooth(actor, has_texture=False)
+                        except Exception:
+                            pass
                 else:
-                    # Fallback model if missing
-                    panda_fallback = load_model_file('humanoid')
-                    if panda_fallback:
-                        actor.model = panda_fallback
-                    else:
-                        actor.model = 'cube'
+                    actor.model = 'cube'
                     
             # Setup Label
             all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}

@@ -36,6 +36,14 @@ bukan pada kemungkinan yang dikarang:
                  membacanya sebagai tanah. Diukur sebagai korelasi antara
                  terang ubin dan paritasnya, jadi "sudah tidak catur" jadi
                  angka, bukan pendapat.
+  avatar_warna   di mesin tanpa instalasi TSO avatar Vitaboy gagal dimuat dan
+                 warga desa jatuh ke humanoid.obj — mesh yang benar, tapi tanpa
+                 warna sama sekali, jadi semua orang sampai ke layar sebagai
+                 gumpalan PUTIH POLOS. Diperiksa dua-duanya: warnanya benar ADA
+                 di vertex data, DAN shader yang membacanya benar terpasang.
+                 Yang kedua bukan tambahan: shader hasil setShaderAuto() Panda
+                 mengabaikan kolom warna vertex, jadi mesh yang sudah diwarnai
+                 tetap keluar putih tanpa smooth_shader.
   arah_wasd      arah WASD terbalik. Kegagalan yang PALING sering kembali di
                  proyek ini — tiga kali, dan tiap kali "diperbaiki" dengan
                  membalik tanda sampai terasa benar. Diukur sekali di akhir
@@ -357,6 +365,77 @@ def cek_rumput_tak_catur(g):
     return _ok(f'paritas {rasio:.2f}')
 
 
+def cek_avatar_berwarna(g):
+    """Warga desa yang jatuh ke humanoid.obj tidak boleh jadi gumpalan putih.
+
+    Dua syarat, dan kegagalan salah satunya sudah pernah terjadi:
+
+      1. vertex data punya kolom warna dengan lebih dari satu warna. Tanpa ini
+         satu mesh cuma punya satu entity.color, dan warna itu memang tidak
+         pernah diisi.
+      2. ada shader terpasang di aktornya. Lampu scene memicu setShaderAuto()
+         Panda3D, dan shader hasil generator itu MENGABAIKAN kolom warna
+         vertex — diuji langsung: mesh yang sudah diwarnai tetap keluar putih
+         pucat sampai smooth_shader dipasang. Memeriksa syarat 1 saja akan
+         LULUS pada bug yang sebenarnya masih terlihat di layar.
+    """
+    from panda3d.core import GeomVertexReader
+    ents = getattr(g, 'entities', None)
+    aktor = getattr(ents, 'actors', None) or {}
+    polos, tanpa_shader, diperiksa = [], [], 0
+
+    for aid, a in aktor.items():
+        m = getattr(a, 'model', None)
+        if m is None or not hasattr(m, 'findAllMatches'):
+            continue
+        gns = list(m.findAllMatches('**/+GeomNode'))
+        if not any(gn.getName().endswith('part_0') for gn in gns):
+            continue        # bukan humanoid.obj — Vitaboy atau rig hewan
+        diperiksa += 1
+        unik = set()
+        for gn in gns:
+            node = gn.node()
+            for i in range(node.getNumGeoms()):
+                vd = node.getGeom(i).getVertexData()
+                if not vd.hasColumn('color'):
+                    continue
+                r = GeomVertexReader(vd, 'color')
+                while not r.isAtEnd():
+                    c = r.getData4()
+                    unik.add((round(c[0] * 255), round(c[1] * 255), round(c[2] * 255)))
+        if len(unik) < 3:
+            polos.append(f'{aid}({len(unik)} warna)')
+            continue
+        # Bukan cuma "ada shader": shader yang terpasang harus benar-benar
+        # MEMBACA warna vertex. Versi pertama pemeriksaan ini cuma menuntut
+        # shader tidak None, dan ia tetap LULUS ketika p3d_Color dicabut dari
+        # smooth_shader — bug yang masih terlihat jelas di layar. Sumber
+        # fragmennya dibaca langsung supaya tidak ada celah itu lagi.
+        sh = getattr(a, 'shader', None)
+        baca_warna = False
+        if sh is not None:
+            try:
+                src = sh.fragment if isinstance(getattr(sh, 'fragment', None), str) else ''
+                # Dicari `v_color`, BUKAN `p3d_Color`: `p3d_Color` adalah
+                # substring dari `p3d_ColorScale`, yang ada di setiap versi
+                # shader ini. Versi pertama pemeriksaan ini memakainya dan
+                # karena itu lulus pada uji negatifnya sendiri.
+                baca_warna = 'v_color' in src
+            except Exception:
+                baca_warna = False
+        if not baca_warna:
+            tanpa_shader.append(aid)
+
+    if polos:
+        return _fail(f'{len(polos)} avatar tanpa warna ({", ".join(polos[:3])})')
+    if tanpa_shader:
+        return _fail(f'{len(tanpa_shader)} avatar berwarna tapi tanpa shader '
+                     f'pembaca warna vertex ({", ".join(tanpa_shader[:3])})')
+    if not diperiksa:
+        return _ok('tidak ada avatar cadangan')
+    return _ok(f'{diperiksa} avatar berwarna')
+
+
 def cek_save_bolak(g):
     from game.state import GameState
     try:
@@ -435,6 +514,7 @@ def main():
             hasil['pemain_valid'] = cek_pemain_valid(g)
             hasil['motif_waras'] = cek_motif_waras(g)
             hasil['rumput_catur'] = cek_rumput_tak_catur(g)
+            hasil['avatar_warna'] = cek_avatar_berwarna(g)
             hasil['hud_muat'] = cek_hud_muat(g)
             hasil['hud_terbaca'] = cek_hud_terbaca(g, png) if png.exists() \
                 else _fail('tidak ada tangkapan layar')

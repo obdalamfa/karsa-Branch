@@ -21,30 +21,38 @@ from ursina import Shader, Vec3
 
 _VERT = """
 #version 140
-// v5 2026-05-17
+// v6 2026-08-27
 uniform mat4 p3d_ModelViewProjectionMatrix;
 uniform mat4 p3d_ModelMatrix;
 uniform mat3 p3d_NormalMatrix;
 in vec4 p3d_Vertex;
 in vec3 p3d_Normal;
 in vec2 p3d_MultiTexCoord0;
+// Warna per-vertex. Kalau geometri tidak punya kolom warna, Panda mengikat
+// ini ke putih, jadi entity lama tidak berubah sedikit pun. Yang dibuka:
+// satu mesh boleh punya banyak warna tanpa dipecah jadi banyak Entity —
+// dan itu satu-satunya cara mewarnai kulit, baju, dan celana pada humanoid
+// tanpa menambah tiga entity per warga desa.
+in vec4 p3d_Color;
 
 out vec3 v_world_pos;
 out vec3 v_world_normal;
 out vec2 v_uv;
+out vec4 v_color;
 
 void main() {
     vec4 world = p3d_ModelMatrix * p3d_Vertex;
     v_world_pos = world.xyz;
     v_world_normal = normalize(mat3(p3d_ModelMatrix) * p3d_Normal);
     v_uv = p3d_MultiTexCoord0;
+    v_color = p3d_Color;
     gl_Position = p3d_ModelViewProjectionMatrix * p3d_Vertex;
 }
 """
 
 _FRAG = """
 #version 140
-// v5 2026-05-17
+// v6 2026-08-27
 uniform sampler2D p3d_Texture0;
 uniform vec4 p3d_ColorScale;
 uniform mat4 p3d_ViewMatrixInverse;
@@ -60,6 +68,7 @@ uniform float sm_saturation;
 in vec3 v_world_pos;
 in vec3 v_world_normal;
 in vec2 v_uv;
+in vec4 v_color;
 
 out vec4 fragColor;
 
@@ -70,7 +79,7 @@ vec3 lift_saturation(vec3 c, float s) {
 
 void main() {
     // Base color dari p3d_ColorScale — Ursina menyimpan entity.color di sini via setColorScale()
-    vec4 base = p3d_ColorScale;
+    vec4 base = p3d_ColorScale * v_color;
     if (sm_has_tex == 1) {
         base *= texture(p3d_Texture0, v_uv);
     }

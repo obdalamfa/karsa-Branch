@@ -935,11 +935,17 @@ class Player3D(Entity):
                 del s.buffs[buff_name]
 
         # Invuln: kedip merah
+        # Alpha 0,4 di cabang TANPA invuln adalah salin-tempel dari cabang
+        # kedipnya: hasilnya dada pemain 60% tembus pandang sepanjang permainan,
+        # bukan cuma selama kebal. Yang kedip tetap kedip; yang tidak, pejal.
         if self._invuln > 0:
             blink = int(self._invuln / 80) % 2 == 0
-            self.body.color = color.rgb(255, 80, 80, 102) if blink else Vec4(self._shirt_col[0], self._shirt_col[1], self._shirt_col[2], 0.4)
+            self.body.color = (color.rgb(255, 80, 80, 102) if blink else
+                               Vec4(self._shirt_col[0], self._shirt_col[1],
+                                    self._shirt_col[2], 0.4))
         else:
-            self.body.color = Vec4(self._shirt_col[0], self._shirt_col[1], self._shirt_col[2], 0.4)
+            self.body.color = Vec4(self._shirt_col[0], self._shirt_col[1],
+                                   self._shirt_col[2], 1.0)
 
         # Sync state
         s.player_x = self.x / TS

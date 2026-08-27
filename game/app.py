@@ -23,6 +23,16 @@ from .config import (SCREEN_W, SCREEN_H, CAM_LERP,
                      CAM_TARGET_LIFT, INGAME_MINUTES_PER_REAL_SECOND, FORCE_SLEEP_HOUR,
                      NEED_MAX, NEED_CRITICAL, NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG)
 
+# Font: Ursina 5 mencari file font dengan glob rekursif di asset_folder,
+# Ursina 7 menyerahkannya ke loader.loadFont yang HANYA melihat model-path
+# Panda3D. Daftarkan root dan assets/fonts sekali di sini supaya kedua versi
+# menemukan Montserrat-Bold.ttf — tanpa ini panels.py mati saat membangun HUD.
+from panda3d.core import getModelPath as _getModelPath  # noqa: E402
+_ROOT_DIR = _Path(__file__).resolve().parent.parent
+for _fp in (_ROOT_DIR, _ROOT_DIR / 'assets' / 'fonts'):
+    if _fp.is_dir():
+        _getModelPath().appendPath(str(_fp))
+
 # Ambang perubahan warna kabut sebelum di-push ulang ke shader semua entity.
 # 1,5/255 — di bawah satu langkah warna 8-bit, jadi tidak pernah terlihat.
 _FOG_EPS = 1.5 / 255.0
@@ -188,6 +198,13 @@ class Game3D:
         self.camera_pitch   = 34.0   # sudut baca ala life-sim isometrik
         self.camera_dist    = 19.0
 
+        # Bingkai kamera SEBELUM frame pertama. Seluruh blok pengikut kamera
+        # ada di dalam gerbang `mode == 'hud'`, jadi selama chargen terbuka
+        # kamera tidak pernah bergerak: pemain baru melihat sudut default
+        # Ursina yang menatap titik nol, bukan karakternya sendiri — padahal
+        # chargen justru layar untuk melihat karakter itu.
+        self._snap_camera_to_player()
+
         # Chargen — muncul jika first run (char_name kosong) atau tekan F2
         self._chargen: ChargenScreen = None
         if not self.state.char_name:
@@ -217,6 +234,7 @@ class Game3D:
 
         # Update UI HUD
         self.panels.update(s, dt)
+        self._pulihkan_mode_yatim()
 
         if self.panels.mode == 'hud':
             # ── Maju waktu in-game & Needs Decay (via TimeManager) ──
@@ -573,6 +591,41 @@ class Game3D:
                     self.player._set_initial_rotation()
                     self._init_env()
                     self.panels.flash_msg("[F9] Game Dimuat!")
+
+    def _pulihkan_mode_yatim(self):
+        """Kembalikan ke HUD kalau mode aktif kehilangan UI pemiliknya.
+
+        Semua yang menggerakkan dunia — waktu, pemain, entitas, kamera —
+        ada di dalam gerbang `mode == 'hud'`. Itu memang disengaja: panel
+        terbuka berarti permainan berhenti. Konsekuensinya, mode yang
+        tertinggal tanpa UI yang menampakkannya membekukan game TOTAL tanpa
+        satu pun petunjuk di layar, dan tidak ada tombol yang bisa
+        mengeluarkan pemain karena input pun ikut dibajak mode itu.
+
+        Ini bukan kemungkinan yang dikarang: satu exception di tengah dialog
+        atau pie menu sudah cukup untuk meninggalkan mode tanpa pemilik, dan
+        laporan "jalan saja tidak bisa" persis berbentuk seperti itu. Biarkan
+        game menyembuhkan dirinya sendiri di frame berikutnya.
+        """
+        p = self.panels
+        mode = p.mode
+        if mode == 'hud':
+            return
+        yatim = False
+        if mode == 'chargen':
+            yatim = self._chargen is None
+        elif mode == 'pie':
+            yatim = not getattr(p, '_pie_options', None)
+        elif mode == 'panel':
+            yatim = getattr(p, '_panel_name', None) is None
+        elif mode == 'dialog':
+            bg = getattr(p, '_dlg_bg', None)
+            yatim = bg is None or not getattr(bg, 'enabled', False)
+        else:
+            yatim = True    # mode yang tidak dikenal sama sekali
+        if yatim:
+            logging.warning(f"Mode UI '{mode}' tidak punya pemilik — kembali ke HUD.")
+            p.mode = 'hud'
 
     # ─── CHARACTER CREATION ─────────────────────────────────
     def _open_chargen(self):

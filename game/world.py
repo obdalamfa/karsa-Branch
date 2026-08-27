@@ -111,14 +111,60 @@ _FL_DARK  = color.rgb(131, 96, 62)
 _CV_LIGHT = color.rgb(132, 118, 152)
 _CV_DARK  = color.rgb(108, 95, 128)
 
+def _tile_hash(tx, ty):
+    """Acak per-ubin yang deterministik, [0..1]. Tetangga tidak berkorelasi."""
+    h = (int(tx) * 374761393 + int(ty) * 668265263) & 0xFFFFFFFF
+    h = ((h ^ (h >> 13)) * 1274126177) & 0xFFFFFFFF
+    return ((h ^ (h >> 16)) & 0xFFFF) / 65535.0
+
+
+def tint_mix(tx, ty):
+    """Seberapa terang ubin (tx, ty) seharusnya, [0..1].
+
+    Ini pengganti papan catur. Yang lama benar-benar papan catur: (tx+ty) % 2
+    memilih antara dua warna, dan periode DUA adalah pola paling teratur yang
+    bisa dibuat. Mata mengunci grid semacam itu sebelum sempat membaca apa pun
+    sebagai tanah — di screenshot ladangnya terbaca sebagai papan catur, bukan
+    rumput. Maksud aslinya (variasi halus ala Sims 1) tidak salah; yang salah
+    periodenya.
+
+    Dua lapis, dan keduanya perlu:
+
+      bercak  tiga sinus berfrekuensi rendah (periode ~7, ~9, dan ~20 ubin)
+              memberi bercak selebar beberapa ubin — terang di satu tempat,
+              lebih tua di tempat lain, seperti tanah yang tidak rata sinarnya.
+      bintik  hash per-ubin memecah bercaknya. Tanpa ini jumlah sinus tetap
+              periodik dan matanya menemukan pita, cuma pita yang lebih besar.
+              Dengan ini tepian bercaknya berbutir, bukan bergaris.
+
+    Deterministik dari koordinat ubin: scene yang sama selalu terlihat sama,
+    jadi tangkapan layar regresi tidak berkedip antar-jalan.
+    """
+    s = (math.sin(tx * 0.31 + ty * 0.47) * 0.45 +
+         math.sin(tx * 0.73 - ty * 0.19 + 2.1) * 0.30 +
+         math.sin(tx * 0.17 + ty * 0.91 + 4.3) * 0.25)
+    bercak = (s + 1.0) * 0.5
+    return max(0.0, min(1.0, bercak * 0.70 + _tile_hash(tx, ty) * 0.30))
+
+
+def _campur(gelap, terang, t):
+    return color.rgb(*[int(round(a + (b - a) * t))
+                       for a, b in (( gelap[0] * 255, terang[0] * 255),
+                                    ( gelap[1] * 255, terang[1] * 255),
+                                    ( gelap[2] * 255, terang[2] * 255))])
+
+
 def _cb(tx, ty):
-    return _CB_DARK if (tx + ty) % 2 == 1 else _CB_LIGHT
+    return _campur(_CB_DARK, _CB_LIGHT, tint_mix(tx, ty))
 
 def _cb_floor(tx, ty):
+    # Di dalam ruangan papan catur justru BENAR: lantai papan/ubin memang
+    # dipasang berselang, dan ruangannya kecil sehingga polanya terbaca
+    # sebagai lantai, bukan sebagai grid yang menutupi dunia.
     return _FL_DARK if (tx + ty) % 2 == 1 else _FL_LIGHT
 
 def _cb_cave(tx, ty):
-    return _CV_DARK if (tx + ty) % 2 == 1 else _CV_LIGHT
+    return _campur(_CV_DARK, _CV_LIGHT, tint_mix(tx, ty))
 
 
 # ─── TERRAIN NOISE (dari filosofi Panda3D Terrain + Ursina minecraft_clone) ──
@@ -260,6 +306,7 @@ class World3D:
         self._crop_ents: dict   = {}   # key → Entity
         self._water_ents: list  = []   # untuk animasi warna
         self._grass_ents: list  = []   # untuk grass shader (FreeSO GrassShader.fx)
+        self._grass_tiles: list = []   # (tx, ty) sejajar _grass_ents, untuk cek regresi
         self._water_t    = 0.0
         # Dinding dilacak terpisah supaya bisa dipotong (wall cutaway ala Sims 1):
         # (entity, tinggi_penuh, y_penuh, tx, ty)
@@ -434,6 +481,7 @@ class World3D:
         self._crop_ents.clear()
         self._water_ents.clear()
         self._grass_ents.clear()
+        self._grass_tiles.clear()
         self._wall_ents.clear()
         self._cutaway_state = None
         self._tile_heights.clear()
@@ -542,6 +590,7 @@ class World3D:
                        tint, soft=False)
             self._tile_ents.append(cap)
             self._grass_ents.append(cap)   # kumpulkan untuk grass shader
+            self._grass_tiles.append((tx, ty))
 
             # Cache tinggi surface untuk player terrain-following (selalu rata)
             self._tile_heights[(tx, ty)] = 0.0

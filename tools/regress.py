@@ -30,6 +30,12 @@ bukan pada kemungkinan yang dikarang:
                  transparan Panda dan menutupi barnya. Diukur dari PIKSEL
                  tangkapan layar, bukan dari properti color, supaya "ada di
                  memori" tidak lagi dianggap sama dengan "terlihat".
+  rumput_catur   rumput luar ruang terbaca sebagai papan catur. Tint ubin
+                 dipilih (tx+ty) % 2 — periode DUA, pola paling teratur yang
+                 bisa dibuat, dan mata mengunci grid-nya sebelum sempat
+                 membacanya sebagai tanah. Diukur sebagai korelasi antara
+                 terang ubin dan paritasnya, jadi "sudah tidak catur" jadi
+                 angka, bukan pendapat.
   arah_wasd      arah WASD terbalik. Kegagalan yang PALING sering kembali di
                  proyek ini — tiga kali, dan tiap kali "diperbaiki" dengan
                  membalik tanda sampai terasa benar. Diukur sekali di akhir
@@ -313,6 +319,44 @@ def cek_hud_terbaca(g, png):
     return _ok(f'{diperiksa} bar terbaca')
 
 
+def cek_rumput_tak_catur(g):
+    """Terang ubin rumput tidak boleh terkunci ke paritas (tx+ty) % 2.
+
+    Papan catur bukan soal selera warna, tapi soal PERIODE. Dua warna
+    berselang tiap satu ubin adalah pola paling teratur yang bisa dibuat, dan
+    mata menemukan grid-nya seketika. Variasi halus ala Sims 1 tetap boleh —
+    yang dilarang variasi yang bisa diramalkan dari paritas ubin.
+
+    Diukur sebagai jarak rata-rata dua kelompok paritas dibagi sebaran
+    seluruh ubin. Papan catur murni memberi 2.00 (dua nilai, masing-masing
+    satu paritas). Medan bising memberi mendekati 0.
+    """
+    import statistics
+    w = getattr(g, 'world', None)
+    ents = list(getattr(w, '_grass_ents', None) or [])
+    tiles = list(getattr(w, '_grass_tiles', None) or [])
+    if len(ents) != len(tiles):
+        return _fail(f'{len(ents)} entity rumput vs {len(tiles)} koordinat')
+    if len(ents) < 24:
+        return _ok(f'{len(ents)} ubin rumput, tidak diukur')
+
+    genap, ganjil = [], []
+    for e, (tx, ty) in zip(ents, tiles):
+        c = e.color
+        lum = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+        (ganjil if (tx + ty) % 2 else genap).append(lum)
+    if not genap or not ganjil:
+        return _ok('satu paritas saja')
+
+    sebar = statistics.pstdev(genap + ganjil)
+    if sebar < 1e-6:
+        return _ok('semua ubin sewarna')
+    rasio = abs(statistics.fmean(genap) - statistics.fmean(ganjil)) / sebar
+    if rasio > 0.5:
+        return _fail(f'tint terkunci ke paritas ubin (rasio {rasio:.2f}, catur murni = 2.00)')
+    return _ok(f'paritas {rasio:.2f}')
+
+
 def cek_save_bolak(g):
     from game.state import GameState
     try:
@@ -390,6 +434,7 @@ def main():
                 else _fail('tidak ada tangkapan layar')
             hasil['pemain_valid'] = cek_pemain_valid(g)
             hasil['motif_waras'] = cek_motif_waras(g)
+            hasil['rumput_catur'] = cek_rumput_tak_catur(g)
             hasil['hud_muat'] = cek_hud_muat(g)
             hasil['hud_terbaca'] = cek_hud_terbaca(g, png) if png.exists() \
                 else _fail('tidak ada tangkapan layar')

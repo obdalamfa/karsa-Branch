@@ -16,7 +16,7 @@ Panel (inventori, quest, dll.): overlay penuh semi-transparan.
 from pathlib import Path as _Path
 from PIL import Image as _PILImg
 from ursina import (Entity, Text, Texture, color, camera, destroy,
-                    Vec2, Vec4, invoke)
+                    Vec2, Vec4, invoke, window)
 
 from .config import SEASON_NAMES, NEED_LOW, NEED_CRITICAL, NEED_MAX
 
@@ -112,15 +112,26 @@ class UIManager:
         TIME_C   = color.rgb(255, 255, 255)
         GOLD_C   = color.rgb(255, 215,  60)
         
-        # ── Kanan Atas: Jam & Tanggal ──
-        self._time_txt    = _txt('06:00',         pos=(0.70, 0.45), scale=1.3, col=TIME_C)
-        self._date_txt    = _txt('Hari 1 | Semi', pos=(0.70, 0.40), scale=0.8, col=color.rgb(170, 200, 255))
-        self._weather_txt = _txt('^ Cerah',       pos=(0.70, 0.36), scale=0.8, col=color.rgb(255, 240, 130))
-        self._scene_txt   = _txt('> Kebun',       pos=(0.70, 0.32), scale=0.8, col=color.rgb(140, 255, 160))
-        self._gold_txt    = _txt('§ 0G',          pos=(0.70, 0.28), scale=1.0, col=GOLD_C)
+        # ── Tepi layar yang sebenarnya ──
+        # camera.ui membentang -aspect/2..+aspect/2 mendatar, BUKAN -0.5..0.5.
+        # Angka mati 0.70 lahir dari menebak layar 16:9 lalu menjangkar teks di
+        # KIRI-nya; tiap teks lalu tumbuh ke kanan sampai lewat tepi 0.889.
+        # Itu sebabnya jam, tanggal, dan nama scene terpotong di screenshot.
+        # Yang duduk di kanan dijangkar di KANAN (origin x = +0.5) supaya
+        # tumbuhnya ke dalam layar, berapa pun panjang teksnya.
+        self._edge_x = window.aspect_ratio / 2
+        X_R = self._edge_x - 0.028
+        X_L = -self._edge_x + 0.038
+        self._RA = (0.5, 0.5)       # rata kanan, jangkar atas
+
+        # ── Kanan Atas: Jam & Tanggal (rata kanan) ──
+        self._time_txt    = _txt('06:00',         pos=(X_R, 0.45), scale=1.3, col=TIME_C, origin=self._RA)
+        self._date_txt    = _txt('Hari 1 | Semi', pos=(X_R, 0.40), scale=0.8, col=color.rgb(170, 200, 255), origin=self._RA)
+        self._weather_txt = _txt('^ Cerah',       pos=(X_R, 0.36), scale=0.8, col=color.rgb(255, 240, 130), origin=self._RA)
+        self._scene_txt   = _txt('> Kebun',       pos=(X_R, 0.32), scale=0.8, col=color.rgb(140, 255, 160), origin=self._RA)
+        self._gold_txt    = _txt('§ 0G',          pos=(X_R, 0.28), scale=1.0, col=GOLD_C, origin=self._RA)
 
         # ── Kiri Atas: Tool & Stamina ──
-        X_L = -0.85
         self._tool_name = _txt('Cangkul', pos=(X_L, 0.45), scale=1.1, col=color.rgb(255, 240, 100))
         self._seed_txt  = _txt('',        pos=(X_L, 0.41), scale=0.8, col=color.rgb(155, 255, 155))
         
@@ -145,25 +156,49 @@ class UIManager:
         from .motives import MOTIVES, LABELS
         self._motive_keys = MOTIVES
         self._NBAR_W = 0.20
-        self._NBAR_X = -0.86
+        self._NBAR_X = -self._edge_x + 0.030
         self._NBAR_H = 0.018
         self._NBAR_GAP = 0.038      # cukup renggang agar label tidak tertimpa bar
         top_y = -0.06
 
         # Panel latar gelap: tanpa ini termometer hilang di atas lantai terang.
-        panel_h = 0.052 + self._NBAR_GAP * len(self._motive_keys) + 0.03
+        #
+        # Tingginya DIHITUNG dari isi, tidak lagi ditebak. Rumus lama
+        # (0.052 + GAP*n + 0.03) dijangkar di tengah panel lewat offset 0.046
+        # yang tidak berhubungan dengan apa pun, dan tepi atasnya jatuh di
+        # -0.014 sementara judul "SUASANA HATI" duduk di -0.008 — judulnya
+        # menyembul keluar dan terbaca terpotong. Sekarang tepi panel diturunkan
+        # dari puncak judul dan dasar bar terakhir, jadi menambah atau
+        # mengurangi motif tidak bisa lagi membuatnya meleset.
+        PAD       = 0.016
+        title_top = top_y + 0.052                    # Text origin (-0.5, 0.5): pos.y = tepi ATAS
+        last_y    = top_y - 0.020 - self._NBAR_GAP * (len(self._motive_keys) - 1)
+        panel_top = title_top + PAD
+        panel_bot = last_y - self._NBAR_H / 2 - PAD
+        panel_h   = panel_top - panel_bot
+        panel_w   = self._NBAR_W + 0.050
+        # z eksplisit, dan ini bukan hiasan.
+        #
+        # Semua elemen camera.ui duduk di z=0, jadi Panda menyortir bin
+        # transparannya tanpa urutan yang bisa diandalkan — dan yang menang
+        # ternyata latar panelnya. Termometernya SELALU ada, cuma dilihat
+        # menembus kotak gelap 93% opak: fill hijau rgb(120,200,130) terukur
+        # jadi rgb(19,33,31) di layar, persis 0.926*latar + 0.074*fill. Itu
+        # sebabnya panel motif terbaca mati sejak awal. Yang di belakang diberi
+        # z lebih besar, yang di depan lebih kecil.
         self._motive_panel_bg = _ui(
-            scale=(self._NBAR_W + 0.045, panel_h),
-            position=(self._NBAR_X + self._NBAR_W / 2 - 0.006,
-                      top_y + 0.046 - panel_h / 2),
-            color=color.rgb(12, 20, 24, 205))
+            scale=(panel_w, panel_h),
+            position=(self._NBAR_X + panel_w / 2 - 0.014,
+                      (panel_top + panel_bot) / 2),
+            z=0.10,
+            color=color.rgb(12, 20, 24, 236))
 
-        self._mood_lbl = _txt('SUASANA HATI', pos=(self._NBAR_X, top_y + 0.052),
-                              scale=0.62, col=color.rgb(196, 178, 148))
-        self._mood_bg = _ui(scale=(self._NBAR_W, 0.026),
+        self._mood_lbl = _txt('SUASANA HATI', pos=(self._NBAR_X, title_top),
+                              scale=0.62, col=color.rgb(226, 206, 168), z=-0.02)
+        self._mood_bg = _ui(scale=(self._NBAR_W, 0.026), z=0.06,
                             position=(self._NBAR_X + self._NBAR_W / 2, top_y + 0.032),
                             color=color.rgb(28, 34, 40, 210))
-        self._mood_fill = _ui(scale=(self._NBAR_W, 0.026),
+        self._mood_fill = _ui(scale=(self._NBAR_W, 0.026), z=0.03,
                               position=(self._NBAR_X + self._NBAR_W / 2, top_y + 0.032),
                               color=color.rgb(120, 210, 140))
 
@@ -174,13 +209,13 @@ class UIManager:
             y = top_y - 0.020 - i * self._NBAR_GAP
             self._need_lbl_ents.append(
                 _txt(LABELS[key], pos=(self._NBAR_X, y + 0.019), scale=0.55,
-                     col=color.rgb(186, 198, 204)))
+                     col=color.rgb(208, 218, 224), z=-0.02))
             self._need_bg_ents.append(
-                _ui(scale=(self._NBAR_W, self._NBAR_H),
+                _ui(scale=(self._NBAR_W, self._NBAR_H), z=0.06,
                     position=(self._NBAR_X + self._NBAR_W / 2, y),
                     color=color.rgb(28, 34, 40, 200)))
             self._need_fill_ents.append(
-                _ui(scale=(self._NBAR_W, self._NBAR_H),
+                _ui(scale=(self._NBAR_W, self._NBAR_H), z=0.03,
                     position=(self._NBAR_X + self._NBAR_W / 2, y),
                     color=color.rgb(120, 200, 130)))
 
@@ -190,9 +225,12 @@ class UIManager:
         self._flash_ent.enabled = False
 
         # ── Bawah Kanan: Action Prompts dinamis ───────
+        # Dipusatkan di 0.60 berarti separuh barisnya tumbuh melewati tepi
+        # 0.889 dan "[I] Inv" hilang. Dijangkar di kanan, jadi seberapa pun
+        # panjang prompt aksinya, ekornya tetap di dalam layar.
         self._control_hint = _txt(
-            '', pos=(0.60, -0.45), scale=0.8,
-            col=color.rgb(220, 235, 255), origin=(0, 0)
+            '', pos=(X_R, -0.45), scale=0.8,
+            col=color.rgb(220, 235, 255), origin=(0.5, 0)
         )
 
     # Warna termometer: hijau aman, kuning waspada, merah mendesak. Pemain harus

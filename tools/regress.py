@@ -19,6 +19,17 @@ bukan pada kemungkinan yang dikarang:
   save_bolak     format save berubah; save lama tidak boleh merusak loader.
   ms_frame       4-29 FPS dan belum pernah diprofil. Dicatat sebagai angka
                  supaya regresi performa terlihat, bukan cuma terasa.
+  hud_muat       HUD terpotong di tepi kanan: jam, tanggal, nama scene, dan
+                 baris kontrol tumbuh melewati tepi layar karena dijangkar di
+                 KIRI pada koordinat mati 0.70/0.60, sementara camera.ui
+                 sebenarnya membentang -aspect/2..+aspect/2. Bertahan lama
+                 justru karena cuma bisa dilihat: tiap screenshot dinilai
+                 dengan mata, dan mata memaafkan. Sekarang jadi angka.
+  hud_terbaca    panel motif terbaca mati sejak awal. Termometernya selalu
+                 ada; yang salah urutan gambarnya — latar panel menang di bin
+                 transparan Panda dan menutupi barnya. Diukur dari PIKSEL
+                 tangkapan layar, bukan dari properti color, supaya "ada di
+                 memori" tidak lagi dianggap sama dengan "terlihat".
   arah_wasd      arah WASD terbalik. Kegagalan yang PALING sering kembali di
                  proyek ini — tiga kali, dan tiap kali "diperbaiki" dengan
                  membalik tanda sampai terasa benar. Diukur sekali di akhir
@@ -156,6 +167,152 @@ def cek_motif_waras(g):
     return _ok(f'mood {mood:+.1f}')
 
 
+_HUD_TUNGGAL = (
+    '_time_txt', '_date_txt', '_weather_txt', '_scene_txt', '_gold_txt',
+    '_tool_name', '_seed_txt', '_hp_bar', '_hp_val', '_en_bar', '_en_val',
+    '_buff_txt', '_queue_txt', '_control_hint',
+    '_motive_panel_bg', '_mood_lbl', '_mood_bg', '_mood_fill',
+)
+_HUD_DERET = ('_need_lbl_ents', '_need_bg_ents', '_need_fill_ents')
+
+
+def cek_hud_muat(g):
+    """Tiap elemen HUD harus muat di layar, dan isi panel harus di dalam panel.
+
+    Dua kegagalan nyata sekaligus. (1) camera.ui membentang
+    -aspect/2..+aspect/2 mendatar, bukan -0.5..0.5; teks kanan dijangkar di
+    KIRI pada x=0.70 lalu tumbuh melewati tepi 0.889, jadi jam, tanggal, nama
+    scene, dan ekor baris kontrol terpotong. (2) tinggi panel SUASANA HATI
+    dihitung dengan rumus tebakan sehingga tepi atasnya jatuh DI BAWAH judul
+    dan judulnya menyembul keluar.
+
+    Diukur lewat getTightBounds di ruang camera.ui — bukan lewat rumus yang
+    sama dengan yang dipakai membangunnya, supaya alat ukurnya tidak ikut
+    salah bersama barang yang diukurnya.
+    """
+    from ursina import camera, window
+    ui = camera.ui
+    ex = window.aspect_ratio / 2
+    EPS = 0.004
+
+    pan = getattr(g, 'panels', None)
+    if pan is None:
+        return _fail('tidak ada UIManager untuk diperiksa')
+    if getattr(pan, 'mode', 'hud') != 'hud':
+        return _ok('mode bukan hud, dilewati')
+
+    def kotak(e):
+        if e is None:
+            return None
+        try:
+            if e.is_hidden():
+                return None
+            tb = e.getTightBounds(ui)
+        except Exception:
+            return None
+        if tb is None:
+            return None
+        lo, hi = tb
+        return (lo.x, hi.x, lo.y, hi.y)
+
+    def elemen():
+        for nama in _HUD_TUNGGAL:
+            yield nama, getattr(pan, nama, None)
+        for nama in _HUD_DERET:
+            for i, e in enumerate(getattr(pan, nama, []) or []):
+                yield f'{nama}[{i}]', e
+
+    luber = []
+    for nama, e in elemen():
+        k = kotak(e)
+        if k is None:
+            continue
+        x0, x1, y0, y1 = k
+        lewat = max(-ex - x0, x1 - ex, -0.5 - y0, y1 - 0.5)
+        if lewat > EPS:
+            luber.append(f'{nama} lewat tepi {lewat:+.3f}')
+
+    # Isi panel motif harus benar-benar di dalam kotak panelnya.
+    pk = kotak(getattr(pan, '_motive_panel_bg', None))
+    if pk:
+        px0, px1, py0, py1 = pk
+        for nama, e in elemen():
+            if nama == '_motive_panel_bg' or not nama.startswith(
+                    ('_mood', '_need')):
+                continue
+            k = kotak(e)
+            if k is None:
+                continue
+            x0, x1, y0, y1 = k
+            lewat = max(px0 - x0, x1 - px1, py0 - y0, y1 - py1)
+            if lewat > EPS:
+                luber.append(f'{nama} keluar panel {lewat:+.3f}')
+
+    if luber:
+        return _fail(f'{len(luber)} elemen terpotong ({"; ".join(luber[:3])})')
+    return _ok(f'tepi ±{ex:.3f}')
+
+
+def cek_hud_terbaca(g, png):
+    """Bar termometer harus TERLIHAT, bukan cuma ada di memori.
+
+    Warna fill dibaca dari piksel tangkapan layar lalu dibandingkan dengan
+    warna yang diminta entity-nya. Sebelum ini fill hijau rgb(120,200,130)
+    sampai ke layar sebagai rgb(19,33,31) — semua elemen camera.ui duduk di
+    z=0, Panda menyortir bin transparannya sesukanya, dan latar panel 93% opak
+    yang menang. Memeriksa `entity.color` tidak akan pernah menangkap itu:
+    properti warnanya benar sepanjang waktu.
+    """
+    from ursina import camera, window
+    pan = getattr(g, 'panels', None)
+    if pan is None or getattr(pan, 'mode', 'hud') != 'hud':
+        return _ok('mode bukan hud, dilewati')
+    fills = list(getattr(pan, '_need_fill_ents', None) or [])
+    mf = getattr(pan, '_mood_fill', None)
+    if mf is not None:
+        fills.append(mf)
+    if not fills:
+        return _ok('tidak ada termometer')
+    try:
+        from PIL import Image
+        im = Image.open(png).convert('RGB')
+    except Exception as e:
+        return _fail(f'gagal baca png: {e}')
+
+    w_px, h_px = im.size
+    ex = window.aspect_ratio / 2
+    ui = camera.ui
+    buruk = []
+    diperiksa = 0
+    for i, e in enumerate(fills):
+        try:
+            if e.is_hidden():
+                continue
+            tb = e.getTightBounds(ui)
+        except Exception:
+            continue
+        if tb is None:
+            continue
+        lo, hi = tb
+        if (hi.x - lo.x) < 0.05:        # bar nyaris kosong: tidak ada yang bisa dibaca
+            continue
+        cx = lo.x + (hi.x - lo.x) * 0.35
+        cy = (lo.y + hi.y) / 2
+        px = min(w_px - 1, max(0, int(round((cx + ex) / (2 * ex) * w_px))))
+        py = min(h_px - 1, max(0, int(round((0.5 - cy) * h_px))))
+        dapat = im.getpixel((px, py))
+        minta = tuple(int(round(c * 255)) for c in tuple(e.color)[:3])
+        beda = sum(abs(a - b) for a, b in zip(dapat, minta))
+        diperiksa += 1
+        if beda > 90:
+            buruk.append(f'bar{i} layar{dapat} bukan {minta}')
+    if buruk:
+        return _fail(f'{len(buruk)} bar tertimbun ({buruk[0]})')
+    if not diperiksa:
+        return _ok('semua bar kosong')
+    return _ok(f'{diperiksa} bar terbaca')
+
+
 def cek_save_bolak(g):
     from game.state import GameState
     try:
@@ -233,6 +390,9 @@ def main():
                 else _fail('tidak ada tangkapan layar')
             hasil['pemain_valid'] = cek_pemain_valid(g)
             hasil['motif_waras'] = cek_motif_waras(g)
+            hasil['hud_muat'] = cek_hud_muat(g)
+            hasil['hud_terbaca'] = cek_hud_terbaca(g, png) if png.exists() \
+                else _fail('tidak ada tangkapan layar')
             hasil['save_bolak'] = cek_save_bolak(g)
             n_ent = len(uscene.children)
         except Exception as e:

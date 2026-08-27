@@ -1,4 +1,18 @@
-# Benchmark scratch: reference imagery, renders, comparison sheets.
-# Not part of the shipped game.
+# Benchmark scratch: render, lembar perbandingan, keluaran regresi.
+# Bukan bagian dari game yang dikirim.
 *
 !.gitignore
+!refs/
+!refs/**
+
+# refs/ SENGAJA tidak diabaikan.
+#
+# Sebelum ini barisnya cuma `*`, dan akibatnya patokan AWL yang sudah diambil
+# TIDAK PERNAH ter-commit. Begitu container sesi itu ditarik, patokannya hilang
+# dan tidak bisa diambil ulang: egress sesi web cuma mengizinkan GitHub — Steam,
+# Wikipedia, Fandom semuanya ditolak (diukur, bukan diduga: 000, 000, 200).
+#
+# Kehilangan itu bukan kerugian kecil. Tanpa frame patokan, kritikus dalam
+# gauntlet loop akan MENGARANG perbandingannya lalu meluluskan semuanya —
+# kegagalan yang disebut skill-nya sendiri sebagai yang paling sering terjadi.
+# Jadi gambar patokan harus ikut ter-commit, dan itu yang dijaga baris di atas.

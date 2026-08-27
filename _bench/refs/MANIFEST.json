@@ -1,0 +1,40 @@
+{
+  "bar": "Story of Seasons: A Wonderful Life (remake 2023)",
+  "source": "Tangkapan layar dan footage dari game yang benar-benar dijalankan. Bukan art resmi, bukan trailer, bukan gambar promosi — yang dibandingkan adalah apa yang benar-benar terlihat saat bermain.",
+  "kenapa_harus_ter-commit": "Sesi web tidak bisa mengambil ini sendiri. Egress-nya cuma GitHub; Steam, Wikipedia, dan Fandom semuanya ditolak. Patokan yang tidak ada di repo sama dengan patokan yang tidak ada, dan kritikus tanpa patokan akan mengarang perbandingannya.",
+  "cara_mengambil": "Jalankan AWL, masuk ke situasi yang diminta tiap entri, ambil PNG resolusi penuh (minimal 1280x720), simpan sebagai _bench/refs/<slug>.png, lalu commit. Jangan di-crop dan jangan disunting — yang dinilai termasuk bagaimana permainannya membingkai layarnya sendiri.",
+  "frames": [
+    {
+      "slug": "farm_wide",
+      "catatan": "Ladang pertanian dari jarak main biasa, siang cerah, kamera pada sudut default. Ini patokan untuk rumput, tanah, dan bagaimana petak ladang dibedakan dari rumput di sekelilingnya."
+    },
+    {
+      "slug": "farm_closeup",
+      "catatan": "Berdiri di antara tanaman, kamera dekat. Patokan untuk detail permukaan tanah dan tanaman dari dekat — jarak di mana tekstur ubin paling mudah ketahuan mengulang."
+    },
+    {
+      "slug": "hud_default",
+      "catatan": "Layar main biasa tanpa menu terbuka. Patokan untuk berapa banyak layar yang boleh dimakan HUD, di mana ia menempel, dan seberapa besar teksnya."
+    },
+    {
+      "slug": "character_closeup",
+      "catatan": "Satu penduduk desa dari jarak percakapan, menghadap kamera. Patokan untuk proporsi, warna kulit dan pakaian, dan seberapa jauh wajah dibaca sebagai wajah."
+    },
+    {
+      "slug": "character_midshot",
+      "catatan": "Penduduk desa dari jarak main biasa, seluruh badan. Jarak inilah yang menentukan apakah orang terbaca sebagai orang, dan di jarak inilah avatar kita paling sering gagal."
+    },
+    {
+      "slug": "village_wide",
+      "catatan": "Pemandangan desa dengan beberapa bangunan dan penduduk sekaligus. Patokan untuk kepadatan, jarak antar-bangunan, dan bagaimana banyak benda tetap terbaca dalam satu frame."
+    },
+    {
+      "slug": "barn_interior",
+      "catatan": "Di dalam kandang bersama ternak. Patokan untuk pencahayaan dalam ruangan, lantai, dan skala hewan terhadap pemain."
+    },
+    {
+      "slug": "evening_light",
+      "catatan": "Adegan luar ruang saat senja. Patokan untuk warna langit, arah bayangan, dan seberapa jauh warna dunia bergeser mengikuti waktu."
+    }
+  ]
+}

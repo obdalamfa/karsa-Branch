@@ -13,7 +13,7 @@ working tree tanpa jaring apa pun, dan satu agen sudah pernah menjalankan
 
 ---
 
-## Tahap 1 — Jaring pengaman 🔨 SEDANG DIKERJAKAN
+## Tahap 1 — Jaring pengaman ✅ SELESAI (dan terus bertambah)
 
 **`tools/regress.py`** — boot tiap scene, buktikan ia dirender, dan periksa
 hal-hal yang memang PERNAH rusak di proyek ini.
@@ -37,6 +37,23 @@ Yang diperiksa, tiap satu terikat kegagalan nyata:
 **Selesai kalau:** perintahnya jalan, mengeluarkan tabel LULUS/GAGAL, dan
 melaporkan kondisi SEKARANG apa adanya — termasuk yang gagal.
 
+Empat pemeriksaan ditambahkan setelah cacat-cacat yang hanya bisa DILIHAT
+ternyata bertahan berbulan-bulan justru karena hanya bisa dilihat: tiap
+screenshot dinilai dengan mata, dan mata memaafkan.
+
+| Cek | Kegagalan nyata yang melatarinya |
+|---|---|
+| `hud_muat` | jam, tanggal, nama scene, dan ekor baris kontrol tumbuh lewat tepi layar |
+| `hud_terbaca` | bar motif tertimbun latar panelnya sendiri — warnanya benar, yang sampai ke mata tidak |
+| `rumput_catur` | tint ubin terkunci ke paritas `(tx+ty) % 2`, jadi ladang terbaca sebagai papan catur |
+| `avatar_warna` | warga desa jadi gumpalan putih di mesin tanpa instalasi TSO |
+
+Aturannya: **tiap pemeriksaan diuji GAGAL dulu pada kode lama sebelum
+dipercaya.** Dua di antaranya lulus pada uji negatifnya sendiri di percobaan
+pertama dan harus diperketat — `avatar_warna` bahkan dua kali. Cek yang tidak
+pernah bisa gagal tidak membuktikan apa pun, dan lebih berbahaya daripada
+tidak ada cek, karena ia memberi rasa aman.
+
 ---
 
 ## Tahap 2 — Verifikasi yang sudah terlanjur ada
@@ -53,7 +70,7 @@ daripada sistem yang belum dibuat.
 
 ## Tahap 3 — Performa
 
-4–29 FPS, belum pernah diprofil, jumlah entity terus naik (1126 di kandang).
+4–29 FPS, belum pernah diprofil, jumlah entity terus naik (2.177 di mountain).
 Setiap perbaikan visual dinikmati lewat slideshow.
 
 Dua jalan: optimasi bertahap (batching, culling, kurangi entity) yang aman,
@@ -112,6 +129,22 @@ kehidupan biasanya belum ada, horornya tidak punya latar untuk mengganggu.
 Musik masih terasa seram; agennya gagal empat kali kena limit sesi. Materi
 seramnya tidak dibuang — dipindah ke kuburan, gua, dan dungeon. Kontras itu
 justru yang membuat lapisan horor bekerja.
+
+---
+
+## Patokan luar — lihat `docs/PATOKAN.md`
+
+Gauntlet loop melawan Story of Seasons: A Wonderful Life **belum bisa
+dijalankan** dari sesi web: egress-nya cuma GitHub (Steam dan Wikipedia
+terukur ditolak) dan `_bench/refs/` kosong. Kritikus tanpa frame patokan akan
+mengarang perbandingan lalu meluluskan semuanya — kegagalan nomor satu menurut
+skill-nya sendiri.
+
+`tools/bar_gate.py` sudah dipasang supaya itu tidak bisa terjadi diam-diam:
+`check` menolak jalan tanpa patokan, `pair` mengacak urutan A/B dan memisahkan
+kuncinya, `reveal` memutuskan lanjut-atau-ulang di luar agen mana pun.
+`_bench/.gitignore` sekarang mengizinkan `refs/` supaya patokan yang diambil
+tidak hilang lagi.
 
 ---
 

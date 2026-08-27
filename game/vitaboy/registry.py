@@ -12,6 +12,7 @@ Pemakaian:
 """
 from __future__ import annotations
 import io as _io
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
@@ -82,6 +83,22 @@ class AssetRegistry:
                 pass
         # Cache miss → full scan + save
         self.scan()
+        if not self._index and cache_file.exists():
+            # Scan kosong artinya arsip TSO tidak ada DI MESIN INI — bukan
+            # artinya indeks lama salah. Menimpanya dengan hasil kosong
+            # menghapus indeks 4,5 MB yang TIDAK BISA dibangun ulang tanpa
+            # instalasi The Sims Online, dan itu bukan kemungkinan yang
+            # dikarang: satu sesi yang cuma menjalankan game di mesin tanpa
+            # TSO memangkas berkasnya jadi 64 byte, dan seluruh avatar
+            # Vitaboy berubah jadi gumpalan putih tanpa satu pun error.
+            #
+            # Berkas ini memang generated, tapi generated dari sesuatu yang
+            # tidak ikut di repo. Jadi ia data, bukan cache — dan cache yang
+            # kosong tidak pernah lebih benar daripada indeks yang terisi.
+            logging.warning(
+                "Vitaboy: scan tidak menemukan aset apa pun di mesin ini; "
+                "indeks lama di %s DIPERTAHANKAN, tidak ditimpa.", cache_file)
+            return
         try:
             self._save_cache()
         except Exception:

@@ -218,6 +218,22 @@ class Game3D:
         # Update UI HUD
         self.panels.update(s, dt)
 
+        # ── MENJAUH MEMBATALKAN PIE MENU ───────────────────────────────
+        # Pie menu objek dibuka dengan E dan sebelumnya hanya bisa ditutup
+        # dengan memilih atau ESC. Karena mode non-'hud' membekukan pemain
+        # sepenuhnya, pemain yang menekan WASD merasa game-nya menggantung —
+        # persis laporan "jalan saja tidak bisa". Di The Sims, bergerak
+        # memang membatalkan menu; itu afordans yang sudah dikenal orang.
+        if self.panels.mode == 'pie':
+            from ursina import held_keys as _hk
+            if (_hk['w'] or _hk['a'] or _hk['s'] or _hk['d']
+                    or _hk['up arrow'] or _hk['down arrow']
+                    or _hk['left arrow'] or _hk['right arrow']):
+                try:
+                    self.panels.close_pie()
+                except Exception:
+                    self.panels.mode = 'hud'
+
         if self.panels.mode == 'hud':
             # ── Maju waktu in-game & Needs Decay (via TimeManager) ──
             msg = self.player.time_controller.tick(dt, self.player)
@@ -426,6 +442,25 @@ class Game3D:
                         drop.y = random.uniform(10, 20)
 
     def input(self, key):
+        # ── ESC SELALU BEKERJA ─────────────────────────────────────────
+        # player.tick() hanya dipanggil kalau panels.mode == 'hud' (lihat
+        # update()). Artinya mode apa pun yang macet MEMBEKUKAN pemain total:
+        # tidak jalan, waktu berhenti, motif berhenti meluruh.
+        #
+        # Diukur di _bench/probes/probe_beku.py: mode dialog/panel/pie semuanya
+        # memberi jarak tempuh 0,00 unit, dan ESC di mode 'dialog' TIDAK
+        # mengembalikan ke hud — pemain terkunci selamanya tanpa jalan keluar.
+        # Itu sebab laporan pemilik "jalan saja tidak bisa".
+        #
+        # Chargen dikecualikan: ia memang layar wajib sebelum main.
+        if key == 'escape' and self.panels.mode not in ('hud', 'chargen'):
+            try:
+                self.panels.close_all()
+            except Exception:
+                pass
+            self.panels.mode = 'hud'    # jaring terakhir kalau close_all lupa
+            return
+
         # Chargen mode — semua input ke ChargenScreen
         if self.panels.mode == 'chargen':
             if self._chargen:

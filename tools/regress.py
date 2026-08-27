@@ -103,6 +103,32 @@ def cek_frame_kosong(png: Path):
     return _ok(f'{unik} warna')
 
 
+def cek_bisa_keluar(g):
+    """ESC harus mengembalikan mode panel apa pun ke 'hud'.
+
+    player.tick() hanya dipanggil saat mode == 'hud', jadi mode yang macet
+    membekukan pemain sepenuhnya — tidak jalan, waktu berhenti, motif berhenti.
+    Pernah terjadi: ESC tidak berfungsi di mode 'dialog', dan pie menu objek
+    tidak punya jalan keluar selain memilih. Pemilik melaporkannya sebagai
+    "jalan saja tidak bisa".
+    """
+    asal = g.panels.mode
+    macet = []
+    for mode in ('dialog', 'panel', 'pie'):
+        g.panels.mode = mode
+        try:
+            g.input('escape')
+        except Exception as e:
+            macet.append(f'{mode} (ESC error: {type(e).__name__})')
+            continue
+        if g.panels.mode != 'hud':
+            macet.append(f'{mode} -> {g.panels.mode}')
+    g.panels.mode = asal if asal in ('hud',) else 'hud'
+    if macet:
+        return _fail('terkunci: ' + ', '.join(macet))
+    return _ok()
+
+
 def cek_pemain_valid(g):
     tx, ty = g.player.get_tile_pos()
     if not g.world.is_walkable(tx, ty):
@@ -209,6 +235,7 @@ def main():
             hasil['frame_kosong'] = cek_frame_kosong(png) if png.exists() \
                 else _fail('tidak ada tangkapan layar')
             hasil['pemain_valid'] = cek_pemain_valid(g)
+            hasil['bisa_keluar'] = cek_bisa_keluar(g)
             hasil['motif_waras'] = cek_motif_waras(g)
             hasil['save_bolak'] = cek_save_bolak(g)
             n_ent = len(uscene.children)

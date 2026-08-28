@@ -4,6 +4,8 @@
 !.gitignore
 !refs/
 !refs/**
+!temuan.json
+!progress.html
 
 # refs/ SENGAJA tidak diabaikan.
 #

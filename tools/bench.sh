@@ -55,7 +55,10 @@ fi
 
 echo
 echo "== gerbang patokan =="
-python tools/bar_gate.py check 2>&1 | tail -4
+# Baris vonisnya yang penting, bukan ekor keluarannya. `tail -n` memotong
+# justru baris itu ketika daftar frame yang hilang panjang, dan yang tersisa
+# di layar cuma saran tanpa vonis.
+python tools/bar_gate.py check 2>&1 | grep -E 'GERBANG|patokan :' | sed 's/^/  /'
 
 echo
 echo "== halaman =="

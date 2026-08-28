@@ -10,9 +10,9 @@ Skill-nya sendiri menyebut satu kegagalan sebagai yang paling sering terjadi:
      Most common failure by far."
 
 Dan di repo ini kegagalan itu bukan kemungkinan, tapi sudah pernah terjadi
-setengahnya: `_bench/refs/` di-gitignore dengan `*`, jadi patokan AWL yang
-sudah diambil tidak pernah ter-commit dan hilang bersama container-nya. Tidak
-bisa diambil ulang, karena egress sesi web cuma mengizinkan GitHub. Diukur:
+setengahnya: patokan AWL yang sudah diambil hilang bersama container-nya, dan
+tidak bisa diambil ulang karena egress sesi web cuma mengizinkan GitHub.
+Diukur:
 
     https://store.steampowered.com -> 000  ditolak
     https://en.wikipedia.org       -> 000  ditolak
@@ -27,7 +27,10 @@ Alat ini menutup dua celah, dan sengaja dua-duanya:
 
   check   Menolak jalan kalau frame patokan yang diminta MANIFEST tidak ada.
           Bukan peringatan — keluar dengan kode 1, supaya loopnya berhenti,
-          bukan melanjutkan tanpa patokan.
+          bukan melanjutkan tanpa patokan. Juga menolak jalan kalau patokan
+          justru MASUK git: repo ini publik, dan meng-commit tangkapan layar
+          orang lain adalah redistribusi. Termasuk lewat pintu belakang —
+          progress.html meng-embed lembar perbandingan sebagai data URI.
 
   pair    Menyusun lembar A/B dengan label DICOPOT dan urutan diacak, lalu
           menulis kuncinya ke berkas TERPISAH. Kritikus melihat lembarnya;
@@ -63,6 +66,44 @@ MANIFEST = REFS / 'MANIFEST.json'
 # gerbangnya — dan itu persis lubang yang alat ini dibuat untuk menutup.
 MIN_BYTES = 20_000
 MIN_SISI = 480
+
+
+def _ter_track_git(paths) -> list:
+    """Berkas mana dari `paths` yang dilacak git."""
+    import subprocess
+    ada = [str(x) for x in paths if x.exists()]
+    if not ada:
+        return []
+    try:
+        out = subprocess.run(['git', 'ls-files', '--error-unmatch', '--'] + ada,
+                             cwd=str(ROOT), capture_output=True, text=True)
+    except Exception:
+        return []
+    return [b.strip() for b in out.stdout.splitlines() if b.strip()]
+
+
+def _periksa_kebocoran() -> list:
+    """Patokan dan lembar perbandingan TIDAK BOLEH masuk git.
+
+    Repo ini publik. Tangkapan layar Story of Seasons boleh disimpan lokal
+    untuk pembandingan internal — itu yang ditulis MANIFEST-nya sendiri — tapi
+    meng-commit-nya ke repo publik adalah redistribusi karya orang lain.
+
+    Dijaga di sini, bukan dengan komentar di .gitignore, karena komentar yang
+    meminta orang mengingat bukan jaring pengaman. Dan ada satu pintu belakang
+    yang tidak terlihat dari nama berkasnya: progress_page.py meng-embed
+    _bench/sheets/*.png sebagai data URI, jadi meng-commit progress.html
+    menyelundupkan frame patokan ke dalam repo tanpa satu pun berkas gambar
+    ikut ter-stage.
+    """
+    from itertools import chain
+    kandidat = list(chain(
+        (p for p in REFS.glob('*') if p.suffix.lower() in
+         ('.png', '.jpg', '.jpeg', '.webp')),
+        (ROOT / '_bench' / 'sheets').glob('*') if (ROOT / '_bench' / 'sheets').exists() else [],
+        [ROOT / '_bench' / 'progress.html'],
+    ))
+    return _ter_track_git(kandidat)
 
 
 def _muat_manifest():
@@ -113,6 +154,22 @@ def perintah_check(_args):
         print('  meluluskan semuanya — kegagalan nomor satu gauntlet loop.')
         return 1
 
+    bocor = _periksa_kebocoran()
+    if bocor:
+        print('GERBANG TERTUTUP — patokan bocor ke git\n')
+        for b in bocor[:8]:
+            print(f'  ter-track: {b}')
+        print()
+        print('  Repo ini publik. Frame patokan dan lembar perbandingan boleh')
+        print('  ada di disk, tapi tidak boleh ter-commit — itu redistribusi')
+        print('  karya orang lain. Keluarkan dulu:')
+        print()
+        print('      git rm --cached <berkas>')
+        print()
+        print('  progress.html termasuk: ia meng-embed lembar perbandingan')
+        print('  sebagai data URI, jadi ia membawa frame patokan ikut serta.')
+        return 1
+
     print(f"patokan : {data.get('bar', '(tidak disebut)')}")
     print(f"sumber  : {data.get('source', '(tidak disebut)')}\n")
     import textwrap
@@ -131,9 +188,11 @@ def perintah_check(_args):
     print()
     if kurang:
         print(f'GERBANG TERTUTUP — {kurang}/{len(hasil)} patokan tidak ada.\n')
-        print('  Ambil frame yang kurang di mesin yang punya game-nya, commit')
-        print('  ke _bench/refs/, lalu jalankan ini lagi. Sesi ini tidak bisa')
-        print('  mengambilnya sendiri: egress-nya cuma GitHub.')
+        print('  Taruh frame yang kurang di _bench/refs/ lalu jalankan ini')
+        print('  lagi. JANGAN di-commit: repo ini publik, dan berkasnya karya')
+        print('  orang lain. Karena itu ia hilang tiap container ditarik, dan')
+        print('  karena itu loop ini hanya bisa jalan di mesin yang punya')
+        print('  berkasnya — bukan di sesi web.')
         return 1
     print(f'GERBANG TERBUKA — {len(hasil)}/{len(hasil)} patokan ada.')
     return 0

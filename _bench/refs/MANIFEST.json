@@ -1,8 +1,7 @@
 {
   "bar": "Story of Seasons: A Wonderful Life (remake 2023)",
-  "source": "Tangkapan layar dan footage dari game yang benar-benar dijalankan. Bukan art resmi, bukan trailer, bukan gambar promosi — yang dibandingkan adalah apa yang benar-benar terlihat saat bermain.",
-  "kenapa_harus_ter-commit": "Sesi web tidak bisa mengambil ini sendiri. Egress-nya cuma GitHub; Steam, Wikipedia, dan Fandom semuanya ditolak. Patokan yang tidak ada di repo sama dengan patokan yang tidak ada, dan kritikus tanpa patokan akan mengarang perbandingannya.",
-  "cara_mengambil": "Jalankan AWL, masuk ke situasi yang diminta tiap entri, ambil PNG resolusi penuh (minimal 1280x720), simpan sebagai _bench/refs/<slug>.png, lalu commit. Jangan di-crop dan jangan disunting — yang dinilai termasuk bagaimana permainannya membingkai layarnya sendiri.",
+  "source": "Screenshot gameplay — game yang sedang dimainkan, oleh siapa pun. Bukan art resmi, bukan render, bukan still cutscene, bukan frame trailer. Yang dibandingkan apa yang benar-benar terlihat saat bermain.",
+  "cara_mengambil": "Screenshot GAMEPLAY, dari sumber mana pun — Anda main sendiri, halaman Steam, atau frame dari video gameplay. Yang tidak boleh: art resmi, render, still cutscene, dan frame trailer. Semuanya lewat pipeline berbeda, sering di-stage, dan biasanya HUD-nya dicopot — untuk `hud_default` itu membuat frame-nya tidak berguna, dan untuk `character_closeup` still cutscene punya kamera dan pencahayaan yang bukan kamera main. Minimal 1280x720, tidak di-crop dan tidak disunting. Idealnya kedelapan frame dari sumber dan pengaturan grafis yang sama, supaya perbandingannya tidak tercemar beda setting. Simpan sebagai _bench/refs/<slug>.png — jangan di-commit.",
   "frames": [
     {
       "slug": "farm_wide",
@@ -36,5 +35,6 @@
       "slug": "evening_light",
       "catatan": "Adegan luar ruang saat senja. Patokan untuk warna langit, arah bayangan, dan seberapa jauh warna dunia bergeser mengikuti waktu."
     }
-  ]
+  ],
+  "jangan_di_commit": "Repo ini PUBLIK. Frame patokan boleh ada di disk untuk pembandingan internal, tapi tidak boleh ter-commit — itu redistribusi karya orang lain. `_bench/.gitignore` menjaganya, dan `bar_gate.py check` menolak jalan kalau ada yang bocor. Akibat yang diterima dengan sadar: berkasnya hilang tiap container ditarik, jadi loop ini hanya bisa dijalankan di mesin yang menyimpan berkasnya, bukan di sesi web."
 }

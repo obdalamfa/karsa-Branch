@@ -1,11 +1,18 @@
 # PATOKAN — kenapa gauntlet loop belum bisa dijalankan di sini
 
 Patokannya **Story of Seasons: A Wonderful Life (remake 2023)**. Yang
-dibandingkan tangkapan layar dari game yang benar-benar dijalankan — bukan art
-resmi, bukan trailer, bukan gambar promosi, dan **bukan ingatan tentang
-game-nya**.
+dibandingkan **screenshot gameplay** — game yang sedang dimainkan, oleh siapa
+pun. Halaman Steam-nya sendiri dan frame dari video gameplay sama sahnya
+dengan main sendiri; itu tetap game yang merender dirinya.
 
-Baris terakhir itu yang jadi masalah.
+Yang tidak boleh: art resmi, render, still cutscene, dan frame trailer.
+Semuanya lewat pipeline berbeda, sering di-stage, dan biasanya HUD-nya
+dicopot — untuk potongan `hud_default` itu membuat frame-nya tidak berguna,
+dan untuk `character_closeup`, still cutscene punya kamera dan pencahayaan
+yang bukan kamera main.
+
+Dan yang paling tidak boleh: **ingatan tentang game-nya**. Baris itu yang jadi
+masalah.
 
 ---
 
@@ -19,12 +26,11 @@ https://en.wikipedia.org       -> 000   ditolak
 https://api.github.com         -> 200
 ```
 
-Dan `_bench/refs/` kosong. `_bench/.gitignore` dulu berisi `*`, jadi patokan
-yang sudah pernah diambil **tidak pernah ter-commit** dan hilang bersama
-container sesi itu.
+Dan `_bench/refs/` kosong, karena patokan **sengaja tidak di-commit** — lihat
+bagian berikutnya.
 
-Dua hal itu bersama-sama berarti: kritikus yang dijalankan di sini tidak punya
-apa pun untuk dibandingkan.
+Dua hal itu bersama-sama berarti: kritikus yang dijalankan di sesi web tidak
+punya apa pun untuk dibandingkan, dan tidak akan pernah punya.
 
 ---
 
@@ -49,8 +55,31 @@ menghasilkan bukti palsu bahwa pekerjaannya sudah selesai.
 
 ## Yang sudah dipasang supaya itu tidak bisa terjadi
 
-**`_bench/.gitignore` sekarang mengizinkan `refs/`.** Patokan yang diambil
-akan ikut ter-commit dan tidak bisa hilang lagi bersama container.
+**`_bench/.gitignore` mengabaikan `refs/`, dan itu keputusan sadar.**
+
+Sempat dibuka supaya patokan tidak hilang tiap container ditarik. Itu memang
+masalahnya, tapi jalan keluarnya salah: **repo ini publik**. Meng-commit
+tangkapan layar Story of Seasons ke repo publik adalah redistribusi karya
+orang lain — beda urusan dengan menyimpannya lokal untuk pembandingan
+internal, yang justru dituliskan MANIFEST-nya sendiri.
+
+Konsekuensinya diterima dengan sadar dan tidak perlu dikeluhkan lagi:
+**patokan hilang tiap container ditarik, jadi gauntlet loop hanya bisa
+dijalankan di mesin yang menyimpan berkasnya — bukan di sesi web.**
+
+`MANIFEST.json` tetap ter-commit; ia bukan karya orang lain, ia daftar frame
+apa yang dibutuhkan.
+
+`_bench/progress.html` juga tidak di-commit, dan itu bukan kelalaian.
+`progress_page.py` meng-embed lembar perbandingan sebagai data URI, jadi
+meng-commit halaman itu akan menyelundupkan frame patokan lewat pintu belakang
+tanpa satu pun berkas gambar ikut ter-stage. Tidak ada yang hilang: halaman itu
+turunan, dan `bash tools/bench.sh` membangunnya ulang dalam ~3,5 menit.
+
+**`bar_gate.py check` menolak jalan kalau patokan bocor ke git.** Komentar yang
+meminta orang mengingat bukan jaring pengaman. Sudah diuji dua arah: bersih
+lolos, satu berkas yang di-`git add -f` membuat gerbangnya tertutup dengan
+sebab yang disebut.
 
 **`tools/bar_gate.py check`** menolak jalan kalau frame yang diminta
 `_bench/refs/MANIFEST.json` tidak ada — keluar dengan kode 1, bukan sekadar
@@ -108,7 +137,11 @@ dengan situasi yang harus ditangkap:
 
 PNG resolusi penuh, minimal 1280×720, **tidak di-crop dan tidak disunting** —
 yang dinilai termasuk bagaimana permainannya membingkai layarnya sendiri.
-Simpan sebagai `_bench/refs/<slug>.png`, commit, lalu:
+Idealnya kedelapan frame dari sumber dan pengaturan grafis yang sama, supaya
+perbandingannya tidak tercemar beda setting.
+
+Simpan sebagai `_bench/refs/<slug>.png`. **Jangan di-commit** — gitignore dan
+`bar_gate` sudah menjaganya. Lalu:
 
 ```
 python tools/bar_gate.py check

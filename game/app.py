@@ -382,6 +382,14 @@ class Game3D:
             self.sun.color = lerp(self.sun.color, target_sun, dt)
             self.ambient.color = lerp(self.ambient.color, target_amb, dt)
             window.color = lerp(window.color, target_sky, dt)
+
+            # Dua baris di atas mengubah lampu Panda, dan smooth_shader sama
+            # sekali tidak membacanya — ia membaca sm_sun_color/sm_ambient.
+            # Jembatannya _sync_smooth_lighting(), dipanggil ~25 baris di bawah
+            # ini. Jembatan itu SUDAH ADA dan SUDAH DIPANGGIL sejak lama; yang
+            # membuatnya tidak berefek apa pun adalah default_input shader, yang
+            # menaruh salinan sm_* di TIAP entity dan menimpa nilai di scene.
+            # Lihat smooth_shader.get_smooth_shader().
             
             from ursina import scene
             # PERF (diukur, bukan ditebak): setter `scene.fog_color` milik Ursina

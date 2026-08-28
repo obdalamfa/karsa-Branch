@@ -50,6 +50,13 @@ bukan pada kemungkinan yang dikarang:
                  tidak melempar error, tidak menulis log, dan tidak terlihat
                  di frame diam. Diukur sebagai piksel yang berubah antara dua
                  nilai grs_time yang jauh.
+  cahaya_global  siang-malam tidak pernah sampai ke permukaan mana pun.
+                 smooth_shader tidak membaca lampu Panda, ia membaca
+                 sm_sun_color/sm_ambient; jembatannya ada dan dipanggil tiap
+                 frame, tapi `default_input` Ursina memasang salinan sm_* di
+                 TIAP entity, dan input entity menimpa input scene. Diukur
+                 sebelum perbaikan: mengubah sm_ambient di scene menggeser
+                 0,00% piksel. Yang berubah malam hari cuma langit dan kabut.
   arah_wasd      arah WASD terbalik. Kegagalan yang PALING sering kembali di
                  proyek ini — tiga kali, dan tiap kali "diperbaiki" dengan
                  membalik tanda sampai terasa benar. Diukur sekali di akhir
@@ -442,6 +449,36 @@ def cek_avatar_berwarna(g):
     return _ok(f'{diperiksa} avatar berwarna')
 
 
+class _TanpaUpdate:
+    """Bekukan task update game selama pengukuran, lalu pasang lagi.
+
+    Wajib untuk tiap pemeriksaan yang MEMAKSA sebuah nilai lalu melihat
+    layarnya. Tanpa ini game menimpa nilai paksaan itu di frame berikutnya —
+    dan yang lebih buruk, pemeriksaannya tetap bisa LULUS karena dunia memang
+    berubah sendiri antara dua tangkapan layar. Lulus karena alasan yang salah
+    lebih berbahaya daripada gagal.
+    """
+
+    def __init__(self, base):
+        self.base = base
+        self.tugas = []
+
+    def __enter__(self):
+        self.tugas = list(self.base.taskMgr.getTasksNamed('update'))
+        for t in self.tugas:
+            t.remove()
+        for _ in range(2):
+            self.base.taskMgr.step()
+        return self
+
+    def __exit__(self, *a):
+        for t in self.tugas:
+            self.base.taskMgr.add(t)
+        for _ in range(2):
+            self.base.taskMgr.step()
+        return False
+
+
 def cek_rumput_melambai(g, base, tmp: Path):
     """Angin rumput harus benar-benar sampai ke shader.
 
@@ -484,8 +521,12 @@ def cek_rumput_melambai(g, base, tmp: Path):
 
     semula = getattr(g, '_grass_time', 0.0)
     try:
-        a = tembak(0.0, '_lambai_a.png')
-        b = tembak(3.7, '_lambai_b.png')
+        # Update dibekukan: kalau tidak, game memanggil update_time sendiri di
+        # antara dua tangkapan layar dan pemeriksaan ini lulus karena waktu
+        # berjalan, bukan karena nilai yang kita paksa benar-benar sampai.
+        with _TanpaUpdate(base):
+            a = tembak(0.0, '_lambai_a.png')
+            b = tembak(3.7, '_lambai_b.png')
     finally:
         # Kembalikan waktu rumput seperti semula supaya pemeriksaan berikutnya
         # tidak menilai dunia yang sudah kita geser sendiri.
@@ -531,6 +572,99 @@ def cek_rumput_melambai(g, base, tmp: Path):
         pass        # versi Panda tanpa API ini: uji piksel di atas tetap jalan
 
     return _ok(f'{frac:.1%} piksel bergeser')
+
+
+def cek_cahaya_global(g, base, tmp: Path):
+    """Uniform cahaya di `scene` harus benar-benar turun ke seluruh dunia.
+
+    Ini menjaga satu kegagalan yang sudah terjadi dan berumur panjang: uniform
+    siang-malam dipasang di `scene` tiap frame, tapi `default_input` shader
+    memasang salinannya di TIAP entity lewat Ursina, dan input entity menimpa
+    input induknya. Hasilnya jembatan siang-malam berjalan sempurna tanpa
+    mengubah satu piksel pun — tanah, rumput, rumah dan orang tetap seterang
+    tengah hari pukul dua pagi.
+
+    Tidak bisa dijaga dengan memeriksa nilai uniform-nya: nilainya BENAR di
+    kedua tempat. Yang membedakan cuma siapa yang menang, dan itu hanya
+    terlihat di piksel. Jadi diuji begitu: paksa ambient ke nilai ekstrem di
+    `scene`, render, dan tuntut layarnya berubah.
+    """
+    try:
+        from ursina import Vec3
+        from game.smooth_shader import get_smooth_shader
+    except Exception as e:
+        return _fail(f'smooth_shader tidak bisa diimpor: {e}')
+    if get_smooth_shader() is None:
+        return _ok('smooth shader tidak tersedia di pipeline ini')
+    try:
+        from PIL import Image
+    except Exception as e:
+        return _fail(f'butuh Pillow: {e}')
+
+    from ursina import scene as uscene
+
+    def tembak(nama):
+        for _ in range(2):
+            base.taskMgr.step()
+        p = tmp / nama
+        img = base.win.getScreenshot()
+        if img is None:
+            return None
+        img.write(Filename.fromOsSpecific(str(p)))
+        return Image.open(p).convert('RGB')
+
+    def rerata(im):
+        px = list(im.getdata())
+        n = max(1, len(px))
+        return tuple(sum(p[i] for p in px) / n for i in range(3))
+
+    try:
+        # Sama seperti rumput: game memanggil _sync_smooth_lighting() tiap
+        # frame, jadi tanpa membekukan update, nilai gelap yang kita paksa
+        # sudah ditimpa sebelum sempat dirender.
+        with _TanpaUpdate(base):
+            a = tembak('_cahaya_a.png')
+            uscene.set_shader_input('sm_ambient', Vec3(0.02, 0.02, 0.03))
+            uscene.set_shader_input('sm_sun_color', Vec3(0.05, 0.05, 0.10))
+            b = tembak('_cahaya_b.png')
+    finally:
+        # Kembalikan seperti semula lewat jalur yang dipakai game sendiri,
+        # supaya pemeriksaan berikutnya tidak menilai dunia yang kita gelapkan.
+        try:
+            g._sync_smooth_lighting()
+        except Exception:
+            from game.smooth_shader import pasang_uniform_global
+            pasang_uniform_global()
+        for _ in range(2):
+            base.taskMgr.step()
+
+    if a is None or b is None:
+        return _fail('tidak ada tangkapan layar')
+    ra, rb = rerata(a), rerata(b)
+    turun = sum(ra) - sum(rb)
+    if turun < 30.0:
+        return _fail(f'cahaya scene tidak sampai ke dunia — layar cuma turun '
+                     f'{turun:.1f} saat ambient dipaksa gelap '
+                     f'({tuple(round(v) for v in ra)} -> {tuple(round(v) for v in rb)})')
+
+    # Separuh struktural, untuk permukaan yang terlalu kecil di layar untuk
+    # menggeser rata-rata. Rumput pernah memakai fragmen satu baris —
+    # `fragColor = texture(...)` — yang membuang tint, cahaya, dan siang-malam
+    # sekaligus. Diukur: mengembalikan fragmen itu TIDAK menggagalkan uji
+    # rata-rata di atas, karena 112 tutup rumput tidak cukup menggeser seluruh
+    # layar. Yang menangkapnya cuma membaca sumber fragmennya.
+    try:
+        from game.grass_shader import get_grass_shader
+        gsh = get_grass_shader()
+        if gsh is not None:
+            src = getattr(gsh, 'fragment', '') or ''
+            if 'sm_ambient' not in src:
+                return _fail('fragmen grass_shader tidak membaca sm_ambient — '
+                             'rumput dirender tanpa cahaya dan tanpa tint')
+    except Exception:
+        pass
+
+    return _ok(f'gelap {turun:.0f}')
 
 
 def cek_save_bolak(g):
@@ -617,6 +751,7 @@ def main():
                 else _fail('tidak ada tangkapan layar')
             hasil['save_bolak'] = cek_save_bolak(g)
             hasil['rumput_lambai'] = cek_rumput_melambai(g, base, OUT)
+            hasil['cahaya_global'] = cek_cahaya_global(g, base, OUT)
             n_ent = len(uscene.children)
         except Exception as e:
             hasil['boot'] = _fail(f'{type(e).__name__}: {e}')

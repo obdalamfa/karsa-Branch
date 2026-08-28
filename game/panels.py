@@ -224,10 +224,51 @@ class UIManager:
                                col=color.rgb(255, 245, 80), origin=(0, 0))
         self._flash_ent.enabled = False
 
+        # ── Scrim: jaminan kontras untuk teks HUD ──────────────
+        #
+        # Teks HUD putih tanpa apa pun di belakangnya menghilang total di atas
+        # latar terang. Terukur di scene farm jam 10: kotak jam berisi 2.528
+        # piksel dan 95% di antaranya nyaris putih — teksnya AD, warnanya
+        # benar, dan tidak satu pun huruf bisa dibaca karena bangunan di
+        # belakangnya sama putihnya.
+        #
+        # Bukan diperbaiki dengan mengganti warna teks: latar dunia berubah
+        # sepanjang hari dan antar-scene, jadi warna teks apa pun akan kalah di
+        # suatu tempat. Yang dijamin harus latarnya sendiri.
+        #
+        # z lebih besar = di belakang. Pelajaran yang sudah dibayar sekali di
+        # panel motif: semua elemen camera.ui duduk di z=0 dan Panda menyortir
+        # bin transparannya tanpa urutan yang bisa diandalkan.
+        def _scrim(kiri, kanan, atas, bawah, pad=0.018):
+            w = (kanan - kiri) + pad * 2
+            h = (atas - bawah) + pad * 2
+            return _ui(scale=(w, h), z=0.20,
+                       position=((kiri + kanan) / 2, (atas + bawah) / 2),
+                       color=color.rgb(10, 16, 20, 128))
+
+        # Kanan atas: dari puncak jam sampai dasar emas.
+        self._scrim_kanan = _scrim(X_R - 0.30, X_R, 0.462, 0.262)
+        # Kiri atas: dari puncak nama alat sampai dasar baris antrian.
+        self._scrim_kiri = _scrim(X_L, X_L + 0.30, 0.462, 0.228)
+
         # ── Bawah Kanan: Action Prompts dinamis ───────
         # Dipusatkan di 0.60 berarti separuh barisnya tumbuh melewati tepi
         # 0.889 dan "[I] Inv" hilang. Dijangkar di kanan, jadi seberapa pun
         # panjang prompt aksinya, ekornya tetap di dalam layar.
+        # Pita bawah selebar layar, bukan scrim selebar teksnya.
+        #
+        # Isi baris ini berubah: prompt aksi kontekstual bisa pendek, daftar
+        # tombol lengkap panjang. Scrim yang dipas ke satu panjang akan meleset
+        # pada panjang yang lain, dan yang meleset justru tidak terlihat sampai
+        # ada yang menangkap layarnya di scene yang tepat. Pemeriksaan
+        # hud_kontras menangkap ini di `swarga` dan satu scene lain — dua
+        # scene, dari empat belas, dengan lantai yang kebetulan seterang
+        # teksnya.
+        self._scrim_bawah = _ui(
+            scale=(self._edge_x * 2, 0.072), z=0.20,
+            position=(0, -0.452),
+            color=color.rgb(10, 16, 20, 118))
+
         self._control_hint = _txt(
             '', pos=(X_R, -0.45), scale=0.8,
             col=color.rgb(220, 235, 255), origin=(0.5, 0)

@@ -49,6 +49,28 @@ class GameHandler(Entity):
     def input(self, key):
         self.game.input(key)
 
+
+_OVERLAY_DEBUG = ('exit_button', 'fps_counter', 'entity_counter',
+                  'collider_counter')
+
+
+def _pasang_overlay_debug(nyala: bool) -> None:
+    """Nyalakan/matikan overlay debug bawaan Ursina.
+
+    Dibungkus karena namanya empat dan letaknya di modul window Ursina, bukan
+    di sini — kalau versi Ursina berganti dan salah satu hilang, yang terjadi
+    cuma satu overlay tidak ikut diatur, bukan game yang gagal boot.
+    """
+    from ursina import window
+    for nama in _OVERLAY_DEBUG:
+        e = getattr(window, nama, None)
+        if e is not None:
+            try:
+                e.enabled = nyala
+            except Exception:
+                pass
+
+
 class Game3D:
     def __init__(self):
         logging.info("Inisialisasi Game Engine 3D (Ursina)...")
@@ -58,7 +80,20 @@ class Game3D:
                           title='Lembah Karsa 3D — v0.10 [Cozy Edition]',
                           borderless=False)
         window.color = color.rgb(30, 20, 40)
-        window.fps_counter.enabled = True
+
+        # Overlay debug bawaan Ursina dimatikan, dan ini bukan soal selera.
+        #
+        # exit_button, fps_counter, entity_counter dan collider_counter semuanya
+        # duduk di x 0,839–0,897 dan y 0,359–0,500 — persis di atas kolom kanan
+        # HUD: jam di y 0,45, tanggal 0,40, cuaca 0,36. Selama ini jam terlihat
+        # "terpotong" di setiap tangkapan layar; ia tidak terpotong, ia
+        # TERTIMBUN tombol X merah dan tiga angka putih. entity_counter bahkan
+        # menjorok sampai x 0,897, lewat tepi layar 0,889 yang dijaga hud_muat.
+        #
+        # Tidak dibuang, cuma disembunyikan: F3 menyalakannya lagi saat butuh
+        # mengukur. Alat ukur yang dibuang akan ditulis ulang dengan buruk.
+        self._debug_overlay = False
+        _pasang_overlay_debug(False)
         
         # Pencahayaan — arah lebih datar agar detail karakter chibi terlihat
         self.sun = DirectionalLight(shadows=False)
@@ -563,6 +598,9 @@ class Game3D:
                     self.panels.open_panel('crafting')
                 else:
                     self.panels.flash_msg("Pergi ke Bengkel Budi!")
+            elif key == 'f3':
+                self._debug_overlay = not getattr(self, '_debug_overlay', False)
+                _pasang_overlay_debug(self._debug_overlay)
             elif key == 'f1':
                 self.panels.open_panel('help')
             elif key == 'f2':

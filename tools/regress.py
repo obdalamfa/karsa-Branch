@@ -64,6 +64,13 @@ bukan pada kemungkinan yang dikarang:
                  dari daftar mati tiga baris dan tidak pernah melihat
                  sekelilingnya. Sekarang tersambung, dan cek ini yang menjaga
                  sambungannya: putus lagi tidak melempar error apa pun.
+  hud_kontras    teks HUD hilang di atas latar terang. Jam putih di scene farm
+                 jam 10 terukur: 95% piksel di kotaknya nyaris putih, karena
+                 bangunan di belakangnya sama putihnya. Teksnya ADA, warnanya
+                 benar, dan tidak satu huruf pun bisa dibaca. Tidak bisa
+                 diperbaiki dengan mengganti warna teks — latar dunia berubah
+                 sepanjang hari dan antar-scene, jadi warna apa pun kalah di
+                 suatu tempat.
   arah_wasd      arah WASD terbalik. Kegagalan yang PALING sering kembali di
                  proyek ini — tiga kali, dan tiap kali "diperbaiki" dengan
                  membalik tanda sampai terasa benar. Diukur sekali di akhir
@@ -732,6 +739,75 @@ def cek_otonomi_hidup(g):
     return _ok(f'{len(hadir)} warga, {dunia} dunia, {tuntas} tuntas{contoh}')
 
 
+_HUD_TEKS = ('_time_txt', '_date_txt', '_weather_txt', '_scene_txt',
+             '_gold_txt', '_tool_name', '_control_hint')
+
+
+def cek_hud_kontras(g, png: Path):
+    """Tiap teks HUD harus BEDA dari latarnya sendiri.
+
+    Diukur sebagai: berapa besar bagian kotak teks yang warnanya nyaris sama
+    dengan warna teks itu. Kalau hampir seluruh kotak sewarna teksnya, yang
+    terlihat bukan tulisan melainkan bidang polos — entah putih di atas putih
+    atau gelap di atas gelap. Terukur sebelum scrim dipasang: kotak jam 95%
+    nyaris putih; sesudah: 25%.
+
+    Memeriksa `entity.color` tidak akan pernah menangkap ini, sama seperti
+    pada bug urutan gambar di panel motif: warnanya benar sepanjang waktu.
+    Yang salah apa yang ada DI BELAKANGNYA.
+    """
+    from ursina import camera, window
+    pan = getattr(g, 'panels', None)
+    if pan is None or getattr(pan, 'mode', 'hud') != 'hud':
+        return _ok('mode bukan hud, dilewati')
+    try:
+        from PIL import Image
+        im = Image.open(png).convert('RGB')
+    except Exception as e:
+        return _fail(f'gagal baca png: {e}')
+
+    w_px, h_px = im.size
+    ex = window.aspect_ratio / 2
+    ui = camera.ui
+    buruk, diperiksa = [], 0
+
+    for nama in _HUD_TEKS:
+        e = getattr(pan, nama, None)
+        if e is None or not str(getattr(e, 'text', '')).strip():
+            continue
+        try:
+            if e.is_hidden():
+                continue
+            tb = e.getTightBounds(ui)
+        except Exception:
+            continue
+        if tb is None:
+            continue
+        lo, hi = tb
+        x0 = max(0, min(w_px - 1, int((lo.x + ex) / (2 * ex) * w_px)))
+        x1 = max(0, min(w_px, int((hi.x + ex) / (2 * ex) * w_px)))
+        y0 = max(0, min(h_px - 1, int((0.5 - hi.y) * h_px)))
+        y1 = max(0, min(h_px, int((0.5 - lo.y) * h_px)))
+        if x1 - x0 < 4 or y1 - y0 < 4:
+            continue
+        kotak = list(im.crop((x0, y0, x1, y1)).getdata())
+        if not kotak:
+            continue
+        warna = tuple(int(round(c * 255)) for c in tuple(e.color)[:3])
+        dekat = sum(1 for c in kotak
+                    if sum(abs(a - b) for a, b in zip(c, warna)) < 90)
+        frac = dekat / len(kotak)
+        diperiksa += 1
+        if frac > 0.85:
+            buruk.append(f'{nama} {frac:.0%} sewarna teksnya')
+
+    if buruk:
+        return _fail(f'{len(buruk)} teks HUD tanpa kontras ({buruk[0]})')
+    if not diperiksa:
+        return _ok('tidak ada teks HUD terukur')
+    return _ok(f'{diperiksa} teks berkontras')
+
+
 def cek_save_bolak(g):
     from game.state import GameState
     try:
@@ -812,6 +888,8 @@ def main():
             hasil['rumput_catur'] = cek_rumput_tak_catur(g)
             hasil['avatar_warna'] = cek_avatar_berwarna(g)
             hasil['hud_muat'] = cek_hud_muat(g)
+            hasil['hud_kontras'] = cek_hud_kontras(g, png) if png.exists() \
+                else _fail('tidak ada tangkapan layar')
             hasil['hud_terbaca'] = cek_hud_terbaca(g, png) if png.exists() \
                 else _fail('tidak ada tangkapan layar')
             hasil['save_bolak'] = cek_save_bolak(g)

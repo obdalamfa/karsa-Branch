@@ -89,6 +89,17 @@ def newest(pattern: str) -> Path | None:
 _BUKAN_POTONGAN = {'REGRESI', 'REGRESS', 'PROFIL'}
 
 
+def _ref_ada(slug: str) -> bool:
+    """Frame patokan untuk potongan ini benar-benar ada dan bukan placeholder?"""
+    if not slug:
+        return False
+    for ext in ('.png', '.jpg', '.jpeg', '.webp'):
+        f = BENCH / 'refs' / f'{slug}{ext}'
+        if f.exists() and f.stat().st_size >= 20_000:
+            return True
+    return False
+
+
 def baca_patokan() -> dict:
     """Patokan dan status gerbangnya, dari sumber yang sama dengan bar_gate."""
     man = BENCH / 'refs' / 'MANIFEST.json'
@@ -183,9 +194,10 @@ def build_model():
             'rounds': rounds,
             'won': won,
             'open_gap': '' if won else (rounds[-1]['gap'] if rounds else ''),
+            'ref_ada': _ref_ada(s.get('bar_image') or ''),
             'sheet': thumb(sheet) if sheet else None,
             'sheet_name': sheet.name if sheet else '',
-            'shot': thumb(shot, 560) if (shot and not sheet) else None,
+            'shot': thumb(shot, THUMB_W) if (shot and not sheet) else None,
             'events': len(evs),
         })
 
@@ -454,12 +466,15 @@ def render() -> str:
             '<code>_bench/refs/</code> lalu jalankan '
             '<code>python tools/bar_gate.py check</code>.</div>')
 
+    menunggu = sum(1 for r in rows if not r['won'] and not r['rounds']
+                   and not r['ref_ada'])
+    kalah = sum(1 for r in rows if not r['won'] and r['rounds'])
     out.append('<div class="console">')
     for k, v, cls in (('Bagian', total, ''),
                       ('Menang buta', won, 'ours'),
-                      ('Masih kalah', open_, 'open'),
-                      ('Ronde dinilai', attempts, ''),
-                      ('Peristiwa', len(events), '')):
+                      ('Masih kalah', kalah, 'open'),
+                      ('Menunggu patokan', menunggu, 'open'),
+                      ('Ronde dinilai', attempts, '')):
         out.append(f'<div class="cell"><span class="k">{k}</span>'
                    f'<span class="v {cls}">{v}</span></div>')
     out.append('</div>')
@@ -483,6 +498,11 @@ def render() -> str:
             out.append('<span class="pill ours">menang buta</span>')
         elif r['rounds']:
             out.append('<span class="pill bar">masih kalah</span>')
+        elif not r['ref_ada']:
+            # Bukan "belum dinilai" — tidak ada yang BISA menilainya. Dua
+            # keadaan itu terlihat sama di halaman lama, dan menyamakannya
+            # membuat pembaca mengira loopnya jalan tapi mandek.
+            out.append('<span class="pill idle">menunggu patokan</span>')
         else:
             out.append('<span class="pill idle">belum dinilai</span>')
         out.append('</div><div class="body">')
@@ -502,7 +522,9 @@ def render() -> str:
         img = r['sheet'] or r['shot']
         if img:
             cap = (f'lembar perbandingan buta · {html.escape(r["sheet_name"])}'
-                   if r['sheet'] else 'tangkapan mentah dari game')
+                   if r['sheet'] else
+                   'keadaan kita sekarang — belum ada frame patokan untuk '
+                   'disandingkan')
             out.append(f'<figure><img src="{img}" alt="Perbandingan {html.escape(r["id"])}">'
                        f'<figcaption>{cap}</figcaption></figure>')
         out.append('</div></article>')

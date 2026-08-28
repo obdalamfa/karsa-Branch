@@ -70,6 +70,26 @@ menilai dirinya sendiri.
 
 ---
 
+## Halaman progres
+
+`_bench/progress.html` — **Karsa Bench**. Delapan potongan, tiap satu terikat
+pada satu frame patokan di MANIFEST, lengkap dengan pertanyaan jurinya dan
+tangkapan layar keadaan kita sekarang.
+
+Perbarui dengan satu perintah, lalu publish ke URL Artifact yang sama:
+
+```
+bash tools/bench.sh          # tangkapan + regresi + gerbang + halaman
+bash tools/bench.sh --cepat  # lewati regresi
+```
+
+Halaman itu sengaja membedakan tiga keadaan yang mudah tertukar:
+**menunggu patokan** (frame aslinya belum ada — belum ada yang BISA menilai),
+**masih kalah** (sudah dinilai buta dan kalah), dan **menang buta**. Selama
+gerbangnya tertutup, kedelapan potongan berstatus yang pertama.
+
+---
+
 ## Yang perlu Anda lakukan supaya loopnya bisa jalan
 
 Delapan frame, semuanya tercantum di `_bench/refs/MANIFEST.json` lengkap

@@ -5,6 +5,7 @@
 !refs/
 !refs/**
 !temuan.json
+!slices.json
 !progress.html
 
 # refs/ SENGAJA tidak diabaikan.

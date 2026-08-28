@@ -144,11 +144,70 @@ Prioritas tertinggi setelah fondasi bersih. Di atas seni apa pun.
 
 ---
 
-## Tahap 5 — Autonomi
+## Tahap 5 — Autonomi 🔨 TERSAMBUNG
 
-Termurah, dampak paling besar. `choose_action()` dan `autonomy_candidates()`
-**sudah dibangun dan teruji**; belum ada yang memanggilnya. Begitu tersambung
-ke NPC, desa mulai hidup sendiri.
+Klaimnya benar: `choose_action()` dan `autonomy_candidates()` memang lengkap
+dan memang tidak pernah dipanggil siapa pun. Warga desa memilih dari daftar
+mati tiga baris — lapar<35 makan, energi<25 tidur, sosial<30 bicara — dan
+tidak pernah melihat sekelilingnya. Seluruh katalog iklan di `objects.py`
+(kasur, kompor, meja, kursi, TV, rak buku, cermin, tungku, peti, dermaga, air,
+pot tanaman) tidak pernah dibaca satu kali pun.
+
+Sekarang tersambung, dan terukur: 51 interaksi dunia dipilih dan 43 tuntas
+dalam satu jalan regresi penuh. Contoh nyata di `farm`: *Buka Peti pada Peti*,
+*Cuci Muka pada Air*, *Duduk di Dermaga pada Dermaga*. Di `house`: *Tidur pada
+Kasur*, *Nonton TV pada Televisi*, *Baca Buku pada Rak Buku*.
+
+Empat hal yang harus dibetulkan di sepanjang jalan, tiap satu ketahuan karena
+diukur, bukan karena terlihat:
+
+1. **Iklan dibayar saat memilih.** Sim mendapat manfaatnya tanpa melakukan
+   apa pun, lalu langsung memilih hal lain: 195 pilihan dalam 400 tick,
+   desanya kedutan. Sekarang dibayar setelah `Interaction.duration` berlalu —
+   19 pilihan dalam rentang yang sama, dan sim berkomitmen.
+2. **NPC luar scene ikut meluruh.** Hanya satu scene hidup pada satu waktu,
+   jadi perabot yang bisa menolong mereka ada di scene yang tidak
+   disimulasikan. Terukur: warga yang jadwalnya menaruhnya di `town` jatuh ke
+   −100 pada SEMUA motif sambil `house` dirender, dengan nol interaksi seumur
+   hidupnya.
+3. **Daftar cadangan memakai first-match.** Lapar selalu menang lebih dulu,
+   jadi "tidur" dan "bicara" tidak pernah sempat dipertimbangkan — keempat
+   warga di `farm` terkunci di energi −100 padahal Istirahat tersedia.
+   Cadangannya sekarang dinilai `choose_action` yang sama, sebagai kandidat
+   berjarak nol.
+4. **Menit-sim vs detik-real.** Satu hari dalam game = 900 detik real, jadi
+   1 detik = 1,6 menit sim. Memakai `dt` mentah membuat motif NPC berjalan
+   1,6× lebih lambat daripada jam yang mereka tinggali.
+
+Dijaga `otonomi_hidup` (per scene: mesinnya hidup) dan baris `otonomi` tingkat
+suite (nol pilihan-dunia di seluruh empat belas scene = sambungan putus).
+Tuntutan pilihan-dunia sengaja TIDAK per scene: di `town` cuma ada dua warga
+dan perabot terdekat mereka kalah skor melawan kebutuhan yang lebih mendesak,
+jadi jatuh ke cadangan itu sah. Cek yang menyalak tanpa sebab akan dimatikan
+orang.
+
+### Yang ditemukan dan BELUM dikerjakan: katalognya kurang bertenaga
+
+Diukur langsung, satu hari-sim tanpa satu pun interaksi:
+
+| motif | turun | | motif | turun |
+|---|--:|---|---|--:|
+| energi | 180 | | nyaman | 150 |
+| kandung | 170 | | senang | 140 |
+| lapar | 160 | | higiene | 122 |
+| sosial | 84 | | | |
+
+Totalnya ±1.006 poin per hari. Sim punya 1.440 menit, dan interaksi tipikal
+memberi ~40 poin per ~60 menit — 0,67 poin/menit, jadi ±965 poin kalau ia
+sibuk 100% waktu dengan pilihan sempurna dan tanpa perjalanan. **Anggarannya
+defisit sebelum satu langkah pun diambil.** Karena itu warga desa berakhir
+di mood −20 sampai −38 setelah sehari hidup sendiri.
+
+Ini berlaku untuk **pemain juga** — mesin motifnya sama.
+
+Menaikkan delta iklan atau menurunkan laju luruh adalah keputusan rasa: mau
+seberapa menuntut game ini. Itu keputusan pemilik, bukan keputusanku. Yang
+kutinggalkan aritmetikanya, bukan tebakan.
 
 ---
 

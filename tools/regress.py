@@ -57,6 +57,13 @@ bukan pada kemungkinan yang dikarang:
                  TIAP entity, dan input entity menimpa input scene. Diukur
                  sebelum perbaikan: mengubah sm_ambient di scene menggeser
                  0,00% piksel. Yang berubah malam hari cuma langit dan kabut.
+  otonomi_hidup  `choose_action()` dan `autonomy_candidates()` dibangun lengkap
+                 lalu tidak pernah dipanggil siapa pun — seluruh katalog iklan
+                 di objects.py (kasur, kompor, meja, TV, rak buku, cermin,
+                 dermaga) tidak pernah dibaca satu kali pun. Warga desa memilih
+                 dari daftar mati tiga baris dan tidak pernah melihat
+                 sekelilingnya. Sekarang tersambung, dan cek ini yang menjaga
+                 sambungannya: putus lagi tidak melempar error apa pun.
   arah_wasd      arah WASD terbalik. Kegagalan yang PALING sering kembali di
                  proyek ini — tiga kali, dan tiap kali "diperbaiki" dengan
                  membalik tanda sampai terasa benar. Diukur sekali di akhir
@@ -667,6 +674,64 @@ def cek_cahaya_global(g, base, tmp: Path):
     return _ok(f'gelap {turun:.0f}')
 
 
+def cek_otonomi_hidup(g):
+    """Warga desa harus memilih perabot NYATA di sekitarnya, bukan daftar mati.
+
+    Dijaga karena putusnya sambungan ini TIDAK melempar error: NPC tetap
+    berjalan, tetap beranimasi, dan tetap terlihat sibuk — mereka cuma berhenti
+    peduli pada apa yang ada di sekelilingnya. Persis jenis kerusakan yang di
+    repo ini berulang kali lolos karena "kelihatannya jalan".
+
+    Hanya diuji di scene yang memang berpenghuni DAN punya perabot dalam
+    jangkauan. Menuntut otonomi di gudang kosong akan menghasilkan GAGAL yang
+    tidak berarti apa-apa, dan cek yang menyalak tanpa sebab akan dimatikan
+    orang — itu cara paling cepat kehilangan sebuah jaring pengaman.
+    """
+    br = getattr(getattr(g, 'entities', None), 'brains', None)
+    if br is None:
+        return _fail('NPCBrains tidak ada — otonomi tidak mungkin jalan')
+    if getattr(br, 'peta', None) is None:
+        return _fail('peta otonomi belum diarahkan ke scene aktif')
+
+    hadir = [n for n in br._brains if br._di_scene_aktif(n)]
+    if not hadir:
+        return _ok('tidak ada warga di scene ini')
+
+    from game.objects import autonomy_candidates
+    ada_perabot = False
+    for npc_id in hadir:
+        ubin = br._posisi_ubin(npc_id)
+        if ubin and autonomy_candidates(br.peta, ubin[0], ubin[1]):
+            ada_perabot = True
+            break
+    if not ada_perabot:
+        return _ok(f'{len(hadir)} warga, tidak ada perabot dalam jangkauan')
+
+    sblm_dunia = br.jml_pilihan_dunia
+    sblm_tuntas = br.jml_selesai
+    for _ in range(120):
+        br.tick(1.0)
+    dunia = br.jml_pilihan_dunia - sblm_dunia
+    tuntas = br.jml_selesai - sblm_tuntas
+
+    # Yang dituntut per scene cuma: mesinnya HIDUP — warga memilih sesuatu dan
+    # menyelesaikannya. Menuntut pilihan-dunia di SETIAP scene salah: di `town`
+    # cuma ada dua warga dan perabot terdekat mereka kalah skor melawan
+    # kebutuhan yang lebih mendesak, jadi mereka sah-sah saja jatuh ke
+    # cadangan. Cek yang menyalak tanpa sebab akan dimatikan orang, dan itu
+    # cara paling cepat kehilangan sebuah jaring pengaman.
+    #
+    # Tuntutan "perabot benar-benar dipakai" dipindah ke tingkat suite, di
+    # bawah — di sana nol pilihan-dunia SELALU berarti sambungannya putus.
+    if dunia <= 0 and tuntas <= 0 and not br._sisa:
+        return _fail(f'{len(hadir)} warga hadir, tapi nol pilihan dan nol '
+                     f'interaksi berjalan dalam 120 tick — mesin otonomi mati')
+
+    nyata = [v for v in br.ringkas_pilihan().values() if '(cadangan)' not in v]
+    contoh = f', mis. {nyata[0]}' if nyata else ', semuanya cadangan'
+    return _ok(f'{len(hadir)} warga, {dunia} dunia, {tuntas} tuntas{contoh}')
+
+
 def cek_save_bolak(g):
     from game.state import GameState
     try:
@@ -752,6 +817,7 @@ def main():
             hasil['save_bolak'] = cek_save_bolak(g)
             hasil['rumput_lambai'] = cek_rumput_melambai(g, base, OUT)
             hasil['cahaya_global'] = cek_cahaya_global(g, base, OUT)
+            hasil['otonomi_hidup'] = cek_otonomi_hidup(g)
             n_ent = len(uscene.children)
         except Exception as e:
             hasil['boot'] = _fail(f'{type(e).__name__}: {e}')
@@ -761,6 +827,28 @@ def main():
         buruk = [k for k, (ok, _) in hasil.items() if not ok]
         gagal_total += len(buruk)
         baris.append((nama, hasil, ms, n_ent, buruk))
+
+    # ── otonomi tingkat suite ──────────────────────────────────────
+    # Nol pilihan-dunia di SELURUH empat belas scene tidak mungkin benar: itu
+    # berarti `autonomy_candidates`/`choose_action` tidak tersambung lagi, dan
+    # putusnya sambungan itu tidak melempar error apa pun.
+    otonomi_baris = []
+    try:
+        br_akhir = getattr(getattr(g, 'entities', None), 'brains', None)
+        total_dunia = getattr(br_akhir, 'jml_pilihan_dunia', 0) if br_akhir else 0
+        total_tuntas = getattr(br_akhir, 'jml_selesai', 0) if br_akhir else 0
+        if total_dunia <= 0:
+            otonomi_baris.append(('otonomi', False,
+                                  'nol interaksi dunia di seluruh scene — '
+                                  'katalog perabot tidak pernah terpakai'))
+            gagal_total += 1
+        else:
+            otonomi_baris.append(('otonomi', True,
+                                  f'{total_dunia} pilihan dunia, '
+                                  f'{total_tuntas} tuntas'))
+    except Exception as e:
+        otonomi_baris.append(('otonomi', False, f'tidak bisa diperiksa: {e}'))
+        gagal_total += 1
 
     # ── arah WASD (sekali saja; mahal, dan tidak bergantung scene) ──
     arah_baris = []
@@ -784,6 +872,9 @@ def main():
         catatan = '; '.join(f'{k}: {hasil[k][1]}' for k in buruk) if buruk else \
                   hasil.get('pemain_valid', (True, ''))[1]
         print(f'{nama:14s} {tanda:>7s} {ms:9.1f} {n_ent:7d}  {catatan[:44]}')
+    print('-' * 78)
+    for k, ok, c in otonomi_baris:
+        print(f'{"otonomi":14s} {"LULUS" if ok else "GAGAL":>7s} {"":>9s} {"":>7s}  {c[:44]}')
     print('-' * 78)
     tanda_arah = 'LULUS' if all(ok for _, ok, _ in arah_baris) else 'GAGAL'
     rangkum = ', '.join(f'{k.upper()}={c.split(" ")[0]}' for k, ok, c in arah_baris)

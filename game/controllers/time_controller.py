@@ -86,12 +86,16 @@ class TimeController:
                 soil['age'] = soil.get('age', 0) + growth
                 soil['watered'] = False
 
-        # Ternak maju semalam persis seperti tanaman: yang kenyang mendekat
-        # satu hari ke hasilnya, yang lapar diam di tempat. Diletakkan tepat
-        # di bawah pertumbuhan tanaman supaya kedua siklus hidup di satu tempat
-        # dan tidak bisa lagi menyimpang satu sama lain.
-        from ..economy import tick_animals_daily
-        tick_animals_daily(s)
+        # `economy.tick_animals_daily` DIHAPUS dari sini, dan itu perbaikan
+        # bukan penghilangan fitur. Dulu DUA tick ternak jalan tiap malam:
+        # yang ini di atas catatan economy {kenyang, siap}, dan
+        # `husbandry.daily_tick` di atas catatan {kenyang, air, bersih, lalai,
+        # sakit}. Keduanya mensimulasikan hewan yang sama, di dua tempat, tanpa
+        # saling tahu. Yang dibaca pie menu cuma milik economy — jadi air dan
+        # bersih meluruh tanpa satu pun cara menaikkannya, dan terukur pada
+        # hari ke-4 setiap hewan sakit permanen karena syarat sembuh menuntut
+        # ketiganya >= 60. Sekarang husbandry satu-satunya yang memegang
+        # ternak, dan aksinya sudah tersambung ke pie menu.
 
         if s.day_in_season > DAYS_PER_SEASON:
             s.day_in_season = 1
@@ -129,6 +133,25 @@ class TimeController:
             sound_play('sleep', 0.8)
             panels.flash_msg("Tidur... Hari baru dimulai!", 2.0)
             self.advance_day(player)
+            # Laporan kandang. `daily_tick` sudah mengembalikan ringkasan ini
+            # sejak lama dan `advance_day` menyimpannya di `_ternak_pagi` —
+            # tapi tidak ada satu pun yang menampilkannya, jadi hewan bisa
+            # kelaparan sampai sakit tanpa pemain pernah diberi tahu. Ternak
+            # yang sakit berhenti menghasilkan sama sekali, jadi diamnya mahal.
+            lap = getattr(self, '_ternak_pagi', None)
+            if lap:
+                if lap.get('sakit'):
+                    invoke(panels.flash_msg,
+                           f"SAKIT: {', '.join(lap['sakit'])} — beri makan, "
+                           f"minum, dan bersihkan kandangnya.", 4.0, delay=2.2)
+                elif lap.get('lapar'):
+                    invoke(panels.flash_msg,
+                           f"Kelaparan: {', '.join(lap['lapar'])}", 3.0,
+                           delay=2.2)
+                elif lap.get('siap'):
+                    invoke(panels.flash_msg,
+                           f"Siap dipanen: {', '.join(lap['siap'])}", 3.0,
+                           delay=2.2)
             # Deliver pending story messages after sleep
             if getattr(player, '_pending_seasonal_event', None):
                 invoke(panels.flash_msg,

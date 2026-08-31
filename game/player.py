@@ -871,7 +871,7 @@ class Player3D(Entity):
 
         # Animasi alat/serangan — per mode
         if self._attack_anim > 0:
-            t  = self._attack_anim / 350.0
+            t  = self._attack_anim / float(getattr(self, '_anim_dur', 350.0) or 350.0)
             # Gaya voxel: ayunan kaku linier (segitiga 0 -> 1 -> 0), bukan gelombang sinus halus
             st = 1.0 - abs(t * 2.0 - 1.0)
             m  = self._anim_mode
@@ -910,6 +910,25 @@ class Player3D(Entity):
                 self._pivot_shoulder_r.rotation_x = -85 * st
                 self._pivot_shoulder_l.rotation_x = -85 * st
                 if va_root: va_root.rotation_x = -45 * st
+            elif m == 'gosok':
+                # Menggosok bukan mengayun. Yang membedakan keduanya BOLAK-BALIK
+                # berulang, jadi lengannya diayun tiga kali dalam satu aksi
+                # (sin 6*pi = 3 siklus penuh) alih-alih sekali naik-turun.
+                # Badan condong sedikit dan TETAP condong sepanjang aksi —
+                # menyikat itu bertumpu, bukan memukul.
+                sapu = math.sin(t * math.pi * 6.0)
+                self._pivot_shoulder_r.rotation_x = -55 + 28 * sapu
+                self._pivot_shoulder_l.rotation_x = -20
+                self.body.rotation_x = 12
+                if va_root: va_root.rotation_x = -25
+            elif m == 'bicara':
+                # Bicara: satu tangan terangkat sebentar lalu turun, badan
+                # tegak. Tidak ada ayunan sama sekali — gerakan yang terlalu
+                # besar membuat menyapa tetangga terlihat seperti melempar.
+                self._pivot_shoulder_r.rotation_x = -32 * st
+                self._pivot_shoulder_r.rotation_z = -14 * st
+                self._pivot_shoulder_l.rotation_x = 0
+                if va_root: va_root.rotation_x = 0
         else:
             self._pivot_shoulder_r.rotation_z = 0
             if moving_now and not getattr(self, '_is_vitaboy', True):
@@ -1154,8 +1173,15 @@ class Player3D(Entity):
         # ── Lore pickup at specific dungeon levels ──
         self.quest_controller.check_dungeon_lore(s.dungeon_level, self)
 
-    def _play_tool_anim(self, mode='swing'):
-        self._attack_anim = 350
+    def _play_tool_anim(self, mode='swing', ms=350):
+        """Mainkan satu pose alat/aksi selama `ms` milidetik.
+
+        Durasinya jadi parameter karena tidak semua aksi selesai dalam 350 ms.
+        Menggosok butuh cukup lama untuk terbaca sebagai BOLAK-BALIK — satu
+        sapuan 350 ms tidak bisa dibedakan dari mengayun.
+        """
+        self._attack_anim = float(ms)
+        self._anim_dur    = float(ms)
         self._anim_mode   = mode
 
     def _fx_burst(self, wx, wy, wz, col, n=5, spread=0.45, dur=0.38):

@@ -43,6 +43,20 @@ class GameState:
     # Catatan ternak: {animal_id: {'kenyang': sisa_hari, 'siap': hari_terkumpul}}.
     # Dict biasa supaya save tetap JSON murni, sama seperti `soil` dan `motives`.
     animals:         dict = field(default_factory=dict)
+
+    # Ternak yang SUDAH DIBELI. Daftar id, bukan set — save memakai json.dump
+    # atas __dict__, dan set tidak bisa di-JSON-kan.
+    #
+    # Kosong di awal, dan itu keputusan: sebelumnya kesembilan hewan muncul
+    # gratis pada hari pertama, jadi kandang sudah penuh sebelum pemain
+    # melakukan apa pun dan "membeli ternak" tidak punya arti. Sekarang ayam
+    # pertama harus dibeli 392G sementara emas awal 100G — jadi bertani dulu,
+    # baru beternak. Itu urutan yang sama dengan patokan kita.
+    #
+    # Hanya mengatur ternak PENGHASIL (LIVESTOCK_FOR_SALE). Kuda, kucing,
+    # rubah, dan kelinci tetap muncul apa adanya: mereka bukan ternak, mereka
+    # penghuni, dan tidak ada yang dijual atau dihasilkan dari mereka.
+    owned_animals:   list = field(default_factory=list)
     soil:            dict = field(default_factory=dict)
     npc_hearts:      dict = field(default_factory=dict)
     npc_dialog_index:dict = field(default_factory=dict)

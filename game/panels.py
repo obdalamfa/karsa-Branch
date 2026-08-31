@@ -959,6 +959,11 @@ class UIManager:
             lines.append(f"  {'BARANG':<20}{'HARGA':>6}  {'MUSIM':<11} HASILNYA NANTI")
             for i, it in enumerate(rows):
                 mampu = '' if s.gold >= it['price'] else '  (gold kurang)'
+                # Ternak yang sudah dibeli tetap terdaftar tapi ditandai, bukan
+                # dihilangkan: daftar yang barisnya berpindah-pindah tiap kali
+                # membeli membuat nomor pilihannya tidak bisa dihafal.
+                if it.get('animal') in getattr(s, 'owned_animals', []):
+                    mampu = '  (sudah di kandang)'
                 lines.append(f"  [{i+1}] {it['name'][:16]:<16}{it['price']:>5}G  "
                              f"{it['season']:<11} {margin_hint(it)}{mampu}")
             lines.append('')
@@ -1032,6 +1037,24 @@ class UIManager:
         it = rows[idx - 1]
         if s.gold < it['price']:
             return f"Gold kurang ({it['price']}G)."
+
+        # Ternak tidak masuk tas. Ia pindah ke kandang, dan itu satu-satunya
+        # baris toko yang mengubah dunia alih-alih inventori.
+        aid = it.get('animal')
+        if aid:
+            punya = getattr(s, 'owned_animals', None)
+            if punya is None:
+                punya = s.owned_animals = []
+            if aid in punya:
+                return f"{it['name']} sudah ada di kandangmu."
+            s.gold -= it['price']
+            punya.append(aid)
+            if not s.shop_unlocked:
+                s.shop_unlocked = True
+            self._render_panel('shop')
+            return (f"{it['name']} dibeli -{it['price']}G. "
+                    f"Ia menunggu di kandang — beri makan hari ini.")
+
         s.gold -= it['price']
         s.inventory[it['id']] = s.inventory.get(it['id'], 0) + 1
         if not s.shop_unlocked:

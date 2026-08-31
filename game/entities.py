@@ -220,10 +220,19 @@ class EntitiesManager:
         
         # Spawn NPCs and Animals
         s = self.state
+        from .data import LIVESTOCK_FOR_SALE
         for actor_id, pos in s.npc_positions.items():
             if pos.get('scene') != self.scene_name: continue
             if pos.get('x', -1) < 0: continue
-            
+
+            # Ternak penghasil hanya muncul kalau sudah dibeli. Tanpa baris ini
+            # kandang penuh sejak hari pertama dan transaksi di Warung tidak
+            # mengubah apa pun yang terlihat. Hewan bukan-ternak tidak lewat
+            # sini sama sekali — mereka penghuni, bukan barang dagangan.
+            if actor_id in LIVESTOCK_FOR_SALE and \
+                    actor_id not in getattr(s, 'owned_animals', []):
+                continue
+
             # Determine class
             if actor_id in ANIMAL_NPCS:
                 actor = FarmAnimal(s, actor_id)

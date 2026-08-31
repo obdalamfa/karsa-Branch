@@ -137,10 +137,13 @@ def main():
     if any(v is not None for v in (args.pitch, args.yaw, args.dist)):
         g._snap_camera_to_player()
     if args.hour is not None:
-        try:
-            g.state.hour = args.hour
-        except Exception:
-            pass
+        # GameState menyimpan waktu sebagai `time_minutes`; tidak ada atribut
+        # `hour`. Versi lama menulis `g.state.hour = args.hour` di dalam
+        # try/except telanjang, jadi ia membuat atribut baru yang tidak dibaca
+        # siapa pun dan tidak pernah melempar apa pun — `--hour` diam-diam
+        # tidak berpengaruh, dan potongan SENJA terambil pagi hari selama ini.
+        # Tanpa try/except: kalau ini rusak lagi, ia harus berisik.
+        g.state.time_minutes = float(args.hour) * 60.0
 
     if args.toolrack:
         _build_toolrack(g, base)

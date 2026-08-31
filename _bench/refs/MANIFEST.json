@@ -1,0 +1,40 @@
+{
+  "bar": "Story of Seasons: A Wonderful Life (remake 2023)",
+  "source": "Screenshot gameplay — game yang sedang dimainkan, oleh siapa pun. Bukan art resmi, bukan render, bukan still cutscene, bukan frame trailer. Yang dibandingkan apa yang benar-benar terlihat saat bermain.",
+  "cara_mengambil": "Screenshot GAMEPLAY, dari sumber mana pun — Anda main sendiri, halaman Steam, atau frame dari video gameplay. Yang tidak boleh: art resmi, render, still cutscene, dan frame trailer. Semuanya lewat pipeline berbeda, sering di-stage, dan biasanya HUD-nya dicopot — untuk `hud_default` itu membuat frame-nya tidak berguna, dan untuk `character_closeup` still cutscene punya kamera dan pencahayaan yang bukan kamera main. Minimal 1280x720, tidak di-crop dan tidak disunting. Idealnya kedelapan frame dari sumber dan pengaturan grafis yang sama, supaya perbandingannya tidak tercemar beda setting. Simpan sebagai _bench/refs/<slug>.png — jangan di-commit.",
+  "frames": [
+    {
+      "slug": "farm_wide",
+      "catatan": "Ladang pertanian dari jarak main biasa, siang cerah, kamera pada sudut default. Ini patokan untuk rumput, tanah, dan bagaimana petak ladang dibedakan dari rumput di sekelilingnya."
+    },
+    {
+      "slug": "farm_closeup",
+      "catatan": "Berdiri di antara tanaman, kamera dekat. Patokan untuk detail permukaan tanah dan tanaman dari dekat — jarak di mana tekstur ubin paling mudah ketahuan mengulang."
+    },
+    {
+      "slug": "hud_default",
+      "catatan": "Layar main biasa tanpa menu terbuka. Patokan untuk berapa banyak layar yang boleh dimakan HUD, di mana ia menempel, dan seberapa besar teksnya."
+    },
+    {
+      "slug": "character_closeup",
+      "catatan": "Satu penduduk desa dari jarak percakapan, menghadap kamera. Patokan untuk proporsi, warna kulit dan pakaian, dan seberapa jauh wajah dibaca sebagai wajah."
+    },
+    {
+      "slug": "character_midshot",
+      "catatan": "Penduduk desa dari jarak main biasa, seluruh badan. Jarak inilah yang menentukan apakah orang terbaca sebagai orang, dan di jarak inilah avatar kita paling sering gagal."
+    },
+    {
+      "slug": "village_wide",
+      "catatan": "Pemandangan desa dengan beberapa bangunan dan penduduk sekaligus. Patokan untuk kepadatan, jarak antar-bangunan, dan bagaimana banyak benda tetap terbaca dalam satu frame."
+    },
+    {
+      "slug": "barn_interior",
+      "catatan": "Di dalam kandang bersama ternak. Patokan untuk pencahayaan dalam ruangan, lantai, dan skala hewan terhadap pemain."
+    },
+    {
+      "slug": "evening_light",
+      "catatan": "Adegan luar ruang saat senja. Patokan untuk warna langit, arah bayangan, dan seberapa jauh warna dunia bergeser mengikuti waktu."
+    }
+  ],
+  "jangan_di_commit": "Repo ini PUBLIK. Frame patokan boleh ada di disk untuk pembandingan internal, tapi tidak boleh ter-commit — itu redistribusi karya orang lain. `_bench/.gitignore` menjaganya, dan `bar_gate.py check` menolak jalan kalau ada yang bocor. Akibat yang diterima dengan sadar: berkasnya hilang tiap container ditarik, jadi loop ini hanya bisa dijalankan di mesin yang menyimpan berkasnya, bukan di sesi web."
+}

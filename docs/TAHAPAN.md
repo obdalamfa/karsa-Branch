@@ -13,7 +13,7 @@ working tree tanpa jaring apa pun, dan satu agen sudah pernah menjalankan
 
 ---
 
-## Tahap 1 — Jaring pengaman 🔨 SEDANG DIKERJAKAN
+## Tahap 1 — Jaring pengaman ✅ SELESAI (dan terus bertambah)
 
 **`tools/regress.py`** — boot tiap scene, buktikan ia dirender, dan periksa
 hal-hal yang memang PERNAH rusak di proyek ini.
@@ -37,6 +37,23 @@ Yang diperiksa, tiap satu terikat kegagalan nyata:
 **Selesai kalau:** perintahnya jalan, mengeluarkan tabel LULUS/GAGAL, dan
 melaporkan kondisi SEKARANG apa adanya — termasuk yang gagal.
 
+Empat pemeriksaan ditambahkan setelah cacat-cacat yang hanya bisa DILIHAT
+ternyata bertahan berbulan-bulan justru karena hanya bisa dilihat: tiap
+screenshot dinilai dengan mata, dan mata memaafkan.
+
+| Cek | Kegagalan nyata yang melatarinya |
+|---|---|
+| `hud_muat` | jam, tanggal, nama scene, dan ekor baris kontrol tumbuh lewat tepi layar |
+| `hud_terbaca` | bar motif tertimbun latar panelnya sendiri — warnanya benar, yang sampai ke mata tidak |
+| `rumput_catur` | tint ubin terkunci ke paritas `(tx+ty) % 2`, jadi ladang terbaca sebagai papan catur |
+| `avatar_warna` | warga desa jadi gumpalan putih di mesin tanpa instalasi TSO |
+
+Aturannya: **tiap pemeriksaan diuji GAGAL dulu pada kode lama sebelum
+dipercaya.** Dua di antaranya lulus pada uji negatifnya sendiri di percobaan
+pertama dan harus diperketat — `avatar_warna` bahkan dua kali. Cek yang tidak
+pernah bisa gagal tidak membuktikan apa pun, dan lebih berbahaya daripada
+tidak ada cek, karena ia memberi rasa aman.
+
 ---
 
 ## Tahap 2 — Verifikasi yang sudah terlanjur ada
@@ -51,15 +68,64 @@ daripada sistem yang belum dibuat.
 
 ---
 
-## Tahap 3 — Performa
+## Tahap 3 — Performa 🔨 SUDAH DIPROFIL
 
-4–29 FPS, belum pernah diprofil, jumlah entity terus naik (1126 di kandang).
-Setiap perbaikan visual dinikmati lewat slideshow.
+`tools/profile_frame.py` memisahkan waktu frame jadi Python dan render, plus
+cProfile dan hitungan GeomNode/Geom.
 
-Dua jalan: optimasi bertahap (batching, culling, kurangi entity) yang aman,
-atau perombakan renderer yang berisiko. Mulai dari yang pertama **sambil
-mengukur**. Kalau mentok di bawah 30 FPS, itu keputusan besar tentang seberapa
-jauh Ursina sanggup dibawa — dan itu keputusan pemilik, bukan keputusanku.
+### Peringatan yang harus dibaca sebelum angka mana pun
+
+Container sesi web ini **tidak punya GPU** — `/dev/dri` tidak ada dan Mesa
+jatuh ke `llvmpipe`, rasterizer perangkat lunak di CPU. Di sana biaya frame
+didominasi fill rate: mountain 158 ms di 1280×720 turun jadi 77 ms di 640×360
+untuk seperempat piksel, artinya ~50 ms biaya tetap + ~108 ms fill.
+
+Di mesin ber-GPU susunannya terbalik. Jadi **angka ms/frame dari sini tidak
+boleh dipakai menilai target 30 FPS, dan tidak boleh dipakai memilih
+optimasi.** Angka "104 ms per frame" yang beredar dari sesi-sesi sebelumnya
+juga angka llvmpipe, bukan angka mesin pemilik.
+
+Yang tetap sah diukur di sini karena tidak bergantung GPU: jumlah
+Entity/GeomNode/Geom, waktu Python per frame, dan jumlah panggilan di
+cProfile. Optimasi yang dipilih dari tiga angka itu menolong di mesin mana
+pun.
+
+### Yang sudah diukur
+
+| scene | entity | GeomNode | Geom | python ms |
+|---|--:|--:|--:|--:|
+| mountain | 2.177 | 2.224 | 2.224 | ~24 |
+| town | 1.884 | 1.906 | 1.906 | ~27 |
+| farm | 1.257 | 1.390 | 1.390 | ~16 |
+
+**GeomNode ≈ jumlah entity: hampir tiap entity satu batch sendiri.** Itu
+masalah di mesin mana pun, bukan cuma di llvmpipe.
+
+`flattenStrong()` **tidak menggabung apa pun** (1.993 → 1.993), bahkan setelah
+`clearModelNodes()`. Jadi batching tidak bisa didapat dengan memanggil satu
+fungsi; ia menuntut terrain dibangun sebagai mesh gabungan sejak awal, bukan
+sebagai N entity kubus. Itu perombakan `world.py` yang besar, dan payoff-nya
+**tidak bisa diukur di container ini** — jadi keputusannya milik pemilik, bukan
+milikku.
+
+### Yang sudah diperbaiki
+
+Uniform rumput dipindah dari per-entity ke induknya. `update_time()` dulu
+memanggil `set_shader_input` dua kali untuk tiap entity rumput, tiap frame — di
+mountain 488 × 2 = 976 panggilan per frame, dan cProfile menunjukkannya sebagai
+biaya Python terbesar di luar render (39.320 panggilan dalam 40 frame). Shader
+input diwariskan ke keturunan, jadi sekarang dua panggilan. `_update` Ursina
+turun 28,4 → 23,8 ms per frame. Penghematan ini portabel: ia sama besarnya di
+mesin ber-GPU.
+
+Sisa biaya Python didominasi Ursina sendiri (`has_disabled_ancestor` 2.044
+panggilan per frame) — itu berbanding lurus dengan jumlah entity, jadi ia ikut
+turun hanya kalau entity-nya berkurang.
+
+Dijaga `rumput_lambai` di regress.py, yang menguji dua-duanya: piksel benar
+bergeser saat `grs_time` berubah, DAN tidak ada entity rumput yang memasang
+`grs_time` sendiri — karena input entity menimpa input induknya, dan satu
+entity yang tertinggal akan membeku sendirian tanpa error apa pun.
 
 ---
 
@@ -78,11 +144,70 @@ Prioritas tertinggi setelah fondasi bersih. Di atas seni apa pun.
 
 ---
 
-## Tahap 5 — Autonomi
+## Tahap 5 — Autonomi 🔨 TERSAMBUNG
 
-Termurah, dampak paling besar. `choose_action()` dan `autonomy_candidates()`
-**sudah dibangun dan teruji**; belum ada yang memanggilnya. Begitu tersambung
-ke NPC, desa mulai hidup sendiri.
+Klaimnya benar: `choose_action()` dan `autonomy_candidates()` memang lengkap
+dan memang tidak pernah dipanggil siapa pun. Warga desa memilih dari daftar
+mati tiga baris — lapar<35 makan, energi<25 tidur, sosial<30 bicara — dan
+tidak pernah melihat sekelilingnya. Seluruh katalog iklan di `objects.py`
+(kasur, kompor, meja, kursi, TV, rak buku, cermin, tungku, peti, dermaga, air,
+pot tanaman) tidak pernah dibaca satu kali pun.
+
+Sekarang tersambung, dan terukur: 51 interaksi dunia dipilih dan 43 tuntas
+dalam satu jalan regresi penuh. Contoh nyata di `farm`: *Buka Peti pada Peti*,
+*Cuci Muka pada Air*, *Duduk di Dermaga pada Dermaga*. Di `house`: *Tidur pada
+Kasur*, *Nonton TV pada Televisi*, *Baca Buku pada Rak Buku*.
+
+Empat hal yang harus dibetulkan di sepanjang jalan, tiap satu ketahuan karena
+diukur, bukan karena terlihat:
+
+1. **Iklan dibayar saat memilih.** Sim mendapat manfaatnya tanpa melakukan
+   apa pun, lalu langsung memilih hal lain: 195 pilihan dalam 400 tick,
+   desanya kedutan. Sekarang dibayar setelah `Interaction.duration` berlalu —
+   19 pilihan dalam rentang yang sama, dan sim berkomitmen.
+2. **NPC luar scene ikut meluruh.** Hanya satu scene hidup pada satu waktu,
+   jadi perabot yang bisa menolong mereka ada di scene yang tidak
+   disimulasikan. Terukur: warga yang jadwalnya menaruhnya di `town` jatuh ke
+   −100 pada SEMUA motif sambil `house` dirender, dengan nol interaksi seumur
+   hidupnya.
+3. **Daftar cadangan memakai first-match.** Lapar selalu menang lebih dulu,
+   jadi "tidur" dan "bicara" tidak pernah sempat dipertimbangkan — keempat
+   warga di `farm` terkunci di energi −100 padahal Istirahat tersedia.
+   Cadangannya sekarang dinilai `choose_action` yang sama, sebagai kandidat
+   berjarak nol.
+4. **Menit-sim vs detik-real.** Satu hari dalam game = 900 detik real, jadi
+   1 detik = 1,6 menit sim. Memakai `dt` mentah membuat motif NPC berjalan
+   1,6× lebih lambat daripada jam yang mereka tinggali.
+
+Dijaga `otonomi_hidup` (per scene: mesinnya hidup) dan baris `otonomi` tingkat
+suite (nol pilihan-dunia di seluruh empat belas scene = sambungan putus).
+Tuntutan pilihan-dunia sengaja TIDAK per scene: di `town` cuma ada dua warga
+dan perabot terdekat mereka kalah skor melawan kebutuhan yang lebih mendesak,
+jadi jatuh ke cadangan itu sah. Cek yang menyalak tanpa sebab akan dimatikan
+orang.
+
+### Yang ditemukan dan BELUM dikerjakan: katalognya kurang bertenaga
+
+Diukur langsung, satu hari-sim tanpa satu pun interaksi:
+
+| motif | turun | | motif | turun |
+|---|--:|---|---|--:|
+| energi | 180 | | nyaman | 150 |
+| kandung | 170 | | senang | 140 |
+| lapar | 160 | | higiene | 122 |
+| sosial | 84 | | | |
+
+Totalnya ±1.006 poin per hari. Sim punya 1.440 menit, dan interaksi tipikal
+memberi ~40 poin per ~60 menit — 0,67 poin/menit, jadi ±965 poin kalau ia
+sibuk 100% waktu dengan pilihan sempurna dan tanpa perjalanan. **Anggarannya
+defisit sebelum satu langkah pun diambil.** Karena itu warga desa berakhir
+di mood −20 sampai −38 setelah sehari hidup sendiri.
+
+Ini berlaku untuk **pemain juga** — mesin motifnya sama.
+
+Menaikkan delta iklan atau menurunkan laju luruh adalah keputusan rasa: mau
+seberapa menuntut game ini. Itu keputusan pemilik, bukan keputusanku. Yang
+kutinggalkan aritmetikanya, bukan tebakan.
 
 ---
 
@@ -112,6 +237,22 @@ kehidupan biasanya belum ada, horornya tidak punya latar untuk mengganggu.
 Musik masih terasa seram; agennya gagal empat kali kena limit sesi. Materi
 seramnya tidak dibuang — dipindah ke kuburan, gua, dan dungeon. Kontras itu
 justru yang membuat lapisan horor bekerja.
+
+---
+
+## Patokan luar — lihat `docs/PATOKAN.md`
+
+Gauntlet loop melawan Story of Seasons: A Wonderful Life **belum bisa
+dijalankan** dari sesi web: egress-nya cuma GitHub (Steam dan Wikipedia
+terukur ditolak) dan `_bench/refs/` kosong. Kritikus tanpa frame patokan akan
+mengarang perbandingan lalu meluluskan semuanya — kegagalan nomor satu menurut
+skill-nya sendiri.
+
+`tools/bar_gate.py` sudah dipasang supaya itu tidak bisa terjadi diam-diam:
+`check` menolak jalan tanpa patokan, `pair` mengacak urutan A/B dan memisahkan
+kuncinya, `reveal` memutuskan lanjut-atau-ulang di luar agen mana pun.
+`_bench/.gitignore` sekarang mengizinkan `refs/` supaya patokan yang diambil
+tidak hilang lagi.
 
 ---
 

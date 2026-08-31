@@ -111,14 +111,60 @@ _FL_DARK  = color.rgb(131, 96, 62)
 _CV_LIGHT = color.rgb(132, 118, 152)
 _CV_DARK  = color.rgb(108, 95, 128)
 
+def _tile_hash(tx, ty):
+    """Acak per-ubin yang deterministik, [0..1]. Tetangga tidak berkorelasi."""
+    h = (int(tx) * 374761393 + int(ty) * 668265263) & 0xFFFFFFFF
+    h = ((h ^ (h >> 13)) * 1274126177) & 0xFFFFFFFF
+    return ((h ^ (h >> 16)) & 0xFFFF) / 65535.0
+
+
+def tint_mix(tx, ty):
+    """Seberapa terang ubin (tx, ty) seharusnya, [0..1].
+
+    Ini pengganti papan catur. Yang lama benar-benar papan catur: (tx+ty) % 2
+    memilih antara dua warna, dan periode DUA adalah pola paling teratur yang
+    bisa dibuat. Mata mengunci grid semacam itu sebelum sempat membaca apa pun
+    sebagai tanah — di screenshot ladangnya terbaca sebagai papan catur, bukan
+    rumput. Maksud aslinya (variasi halus ala Sims 1) tidak salah; yang salah
+    periodenya.
+
+    Dua lapis, dan keduanya perlu:
+
+      bercak  tiga sinus berfrekuensi rendah (periode ~7, ~9, dan ~20 ubin)
+              memberi bercak selebar beberapa ubin — terang di satu tempat,
+              lebih tua di tempat lain, seperti tanah yang tidak rata sinarnya.
+      bintik  hash per-ubin memecah bercaknya. Tanpa ini jumlah sinus tetap
+              periodik dan matanya menemukan pita, cuma pita yang lebih besar.
+              Dengan ini tepian bercaknya berbutir, bukan bergaris.
+
+    Deterministik dari koordinat ubin: scene yang sama selalu terlihat sama,
+    jadi tangkapan layar regresi tidak berkedip antar-jalan.
+    """
+    s = (math.sin(tx * 0.31 + ty * 0.47) * 0.45 +
+         math.sin(tx * 0.73 - ty * 0.19 + 2.1) * 0.30 +
+         math.sin(tx * 0.17 + ty * 0.91 + 4.3) * 0.25)
+    bercak = (s + 1.0) * 0.5
+    return max(0.0, min(1.0, bercak * 0.70 + _tile_hash(tx, ty) * 0.30))
+
+
+def _campur(gelap, terang, t):
+    return color.rgb(*[int(round(a + (b - a) * t))
+                       for a, b in (( gelap[0] * 255, terang[0] * 255),
+                                    ( gelap[1] * 255, terang[1] * 255),
+                                    ( gelap[2] * 255, terang[2] * 255))])
+
+
 def _cb(tx, ty):
-    return _CB_DARK if (tx + ty) % 2 == 1 else _CB_LIGHT
+    return _campur(_CB_DARK, _CB_LIGHT, tint_mix(tx, ty))
 
 def _cb_floor(tx, ty):
+    # Di dalam ruangan papan catur justru BENAR: lantai papan/ubin memang
+    # dipasang berselang, dan ruangannya kecil sehingga polanya terbaca
+    # sebagai lantai, bukan sebagai grid yang menutupi dunia.
     return _FL_DARK if (tx + ty) % 2 == 1 else _FL_LIGHT
 
 def _cb_cave(tx, ty):
-    return _CV_DARK if (tx + ty) % 2 == 1 else _CV_LIGHT
+    return _campur(_CV_DARK, _CV_LIGHT, tint_mix(tx, ty))
 
 
 # ─── TERRAIN NOISE (dari filosofi Panda3D Terrain + Ursina minecraft_clone) ──
@@ -260,6 +306,7 @@ class World3D:
         self._crop_ents: dict   = {}   # key → Entity
         self._water_ents: list  = []   # untuk animasi warna
         self._grass_ents: list  = []   # untuk grass shader (FreeSO GrassShader.fx)
+        self._grass_tiles: list = []   # (tx, ty) sejajar _grass_ents, untuk cek regresi
         self._water_t    = 0.0
         # Dinding dilacak terpisah supaya bisa dipotong (wall cutaway ala Sims 1):
         # (entity, tinggi_penuh, y_penuh, tx, ty)
@@ -434,6 +481,7 @@ class World3D:
         self._crop_ents.clear()
         self._water_ents.clear()
         self._grass_ents.clear()
+        self._grass_tiles.clear()
         self._wall_ents.clear()
         self._cutaway_state = None
         self._tile_heights.clear()
@@ -484,6 +532,33 @@ class World3D:
             self._obj_ents.append(pl)
 
     def _make_tile(self, tid, wx, wz, default_tex, tx=0, ty=0):
+        # `default_tex` untuk scene luar ruang bernilai 'grass', dan grass.png
+        # di repo ini rata-ratanya (44,13,46) — nyaris hitam, dan UNGU karena
+        # R dan B jauh di atas G. Cabang normal di bawah sudah memetakannya ke
+        # 'grass_tso' (78,158,50) yang benar, tapi cabang penghalang tidak:
+        # ia meneruskan `default_tex` apa adanya. Akibatnya tiap ubin di bawah
+        # benda penghalang jadi kotak hitam-ungu, dan di sinar matahari tepinya
+        # menyala jadi kisi merah-muda.
+        #
+        # Untuk pohon dan lentera itu tertutup massanya sendiri. Untuk RUMAH
+        # tidak: `build_house_block` memberi badan rumah lebar TS * n * 0.94,
+        # jadi 6% sisa di tiap sisi membiarkan ubinnya mengintip — itulah pita
+        # hitam berkisi merah-muda yang melingkari tiap bangunan di `town`.
+        # props.py punya daftar tambalan `_TILE_TAMBALAN` yang mengecat ulang
+        # sebagian ubin ini satu per satu; komentarnya sendiri menyebut diri
+        # "tambalan sementara, bukan perbaikan", dan ia sengaja TIDAK memuat
+        # bangunan dengan alasan "massanya menutupi ubinnya sendiri" — alasan
+        # yang tidak berlaku justru karena angka 0,94 itu.
+        #
+        # Dinormalkan sekali di sini supaya semua cabang dapat tekstur yang
+        # benar, bukan ditambal per jenis benda. `luar` disimpan supaya
+        # perbandingan `== 'grass'` di bawah tetap berarti "ini scene luar
+        # ruang" setelah nilainya diganti.
+        luar = (default_tex == 'grass')
+        if luar:
+            default_tex = ('snow_ground' if self.state.season_index == 3
+                           else 'grass_tso')
+
         # Pick tint based on tile type so indoor rooms aren't all white
         if tid == FL or (tid in BLOCKING and default_tex == 'floor_wood'):
             tint = _cb_floor(tx, ty)
@@ -493,7 +568,7 @@ class World3D:
             tint = _cb(tx, ty)
 
         if tid in BLOCKING or tid == MB:
-            if tid in _FENCE_LIKE and default_tex == 'grass':
+            if tid in _FENCE_LIKE and luar:
                 # Pagar sekarang berlubang, jadi tanah di bawahnya ikut terlihat.
                 # Dulu tersembunyi di balik kubus pagar; kalau dibiarkan setinggi
                 # GROUND_H saja, jalur pagar terbaca sebagai pita gelap yang
@@ -542,6 +617,7 @@ class World3D:
                        tint, soft=False)
             self._tile_ents.append(cap)
             self._grass_ents.append(cap)   # kumpulkan untuk grass shader
+            self._grass_tiles.append((tx, ty))
 
             # Cache tinggi surface untuk player terrain-following (selalu rata)
             self._tile_heights[(tx, ty)] = 0.0
@@ -565,31 +641,34 @@ class World3D:
             self._tile_ents.append(base)
 
         elif tid == P and self._is_outdoor():
-            # Road tile: bitmask dari 4 tetangga P → pilih road00-15.png (FreeSO terrain pattern)
-            bm   = self._road_bitmask(tx, ty)
-            
-            # Add solid dirt base so transparent road doesn't show sky
-            # Jalan diberi warna tanah, bukan `tint` papan-catur rumput — dengan
-            # tint rumput, jalan desa terbaca sebagai petak hijau-limau menyala
-            # dan pemain tidak bisa membedakan jalan dari halaman.
-            base_dirt = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS),
-                           'sand_ground', _c(176, 150, 112), soft=False)
-            self._tile_ents.append(base_dirt)
-            
-            # Lapisan jalan dibuat SLAB TIPIS di atas dasar, bukan kubus setinggi
-            # penuh. Dua kubus dengan volume nyaris sama menghasilkan z-fighting
-            # hebat di sisi-sisinya — itulah kisi hitam/magenta yang berkedip di
-            # sepanjang jalan desa, bukan tekstur yang hilang.
-            # transparent=True WAJIB di sini: tekstur road* punya alpha nyata
-            # (road00 seluruhnya alpha=0) dengan RGB hitam di bawahnya. Tanpa
-            # alpha, yang tergambar adalah hitam pekat plus garis kuning — itulah
-            # kisi gelap yang menutupi seluruh jalan desa.
-            # smooth=False juga wajib: smooth_shader menulis alpha opak sehingga
-            # transparent=True saja tidak cukup untuk membuat area kosong tekstur
-            # jalan benar-benar tembus ke dasar pasir.
-            base = _e('cube', (wx, GROUND_H + 0.012, wz), (TS, 0.024, TS),
-                      f'terrain/road{bm:02d}', _c(196, 178, 148), soft=False,
-                      smooth=False, transparent=True)
+            # Jalan desa: SATU ubin tanah, bukan aspal.
+            #
+            # Sebelumnya di sini ada dua entitas — dasar pasir plus slab tipis
+            # bertekstur `terrain/road{00..15}`, dipilih lewat bitmask 4 tetangga
+            # supaya tepi jalan menyambung. Masalahnya bukan cara memasangnya,
+            # tapi asetnya: road*.png itu tileset JALAN KOTA dari FreeSO/The Sims
+            # Online — badan hitam aspal dengan MARKA KUNING PUTUS-PUTUS di tepi
+            # ubin (diperiksa: road01 punya 246 piksel (255,255,1) di x=125..127).
+            #
+            # Di layar hasilnya jalur gelap berkisi dengan garis putus-putus
+            # membelah petak ladang. Komentar lama di sini mengejar gejalanya
+            # — "hitam pekat plus garis kuning" — dan menambal dengan
+            # transparent=True supaya sebagian tembus ke dasar pasir. Yang
+            # tersisa tetap aspal, cuma lebih tipis.
+            #
+            # `dirt_path.png` sudah ada, dibuat `tools/gen_textures.py`
+            # (`gen_dirt_path`, komentarnya sendiri menyebutnya "alternatif road
+            # tile"), coklat tanah (152,125,89) — dan tidak pernah dipakai satu
+            # kali pun. TILE_TEX bahkan sudah memetakan P ke jalur, tapi cabang
+            # ini membajaknya sebelum sampai ke sana.
+            #
+            # Satu ubin menggantikan dua: marka jalannya hilang, dan z-fighting
+            # antara dasar dan slab yang dulu ditambal dengan slab tipis tidak
+            # bisa terjadi lagi karena tidak ada lagi dua permukaan yang
+            # bertumpuk. Tint dibuat nyaris putih supaya warna tekstur yang
+            # tampil, bukan hasil kali dua coklat.
+            base = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS),
+                      'dirt_path', _c(240, 232, 220), soft=False)
             self._tile_ents.append(base)
             nv2 = _noise2(tx, ty)
             if nv2 > 0.55:
@@ -624,25 +703,55 @@ class World3D:
 
     # ─── INTERNAL: OUTDOOR DECORATION ───────────────────────
     def _add_outdoor_deco(self, wx, wz, surface_y, tx, ty, nv):
-        """Surreal digital deco: floating cubes, wireframe pyramids"""
+        """Batu kecil, rumput tinggi, dan bunga liar — 30% ubin luar ruangan.
+
+        Isi fungsi ini dulu tidak ada hubungannya dengan namanya maupun dengan
+        komentar di situs pemanggilnya. Docstring-nya berbunyi "Surreal digital
+        deco: floating cubes, wireframe pyramids" dan yang ditaburkannya kubus
+        CYAN melayang berputar 45° plus tiang MAGENTA neon `_c(255, 0, 255)`.
+        Sementara pemanggilnya, satu-satunya, menulis "Dekorasi organik: batu
+        kecil / rumput tinggi / bunga liar".
+
+        Di layar itu tampak seperti gizmo debug yang lupa dimatikan: batang
+        magenta berdiri di tengah ladang dan pecahan cyan melayang di atas
+        rumput. Membandingkannya dengan frame patokan mana pun tidak ada
+        gunanya selama benda-benda itu masih ada — mata membaca frame-nya
+        sebagai level editor, bukan sebagai desa.
+
+        Ketiga cabangnya dipertahankan apa adanya: jumlah, posisi, dan
+        pemilihannya lewat hash ubin tidak berubah, jadi kepadatan dan
+        sebarannya persis sama. Yang berganti hanya benda apa yang berdiri di
+        titik itu.
+        """
         ox = math.sin(tx * 53.7 + ty * 89.1) * 0.42
         oz = math.cos(tx * 73.2 + ty * 47.5) * 0.42
         dtype = int(abs(math.sin(tx * 200.3 + ty * 150.7)) * 3)
 
-        if dtype == 0:   # Floating abstract cube
-            c1 = _e('cube', (wx + ox, surface_y + 0.8, wz + oz),
-                      (0.2, 0.2, 0.2), None, _c(0, 255, 255), rotation=(45, 45, 0))
-            self._tile_ents.append(c1)
+        if dtype == 0:    # Batu kecil
+            batu = _e('cube', (wx + ox, surface_y + 0.05, wz + oz),
+                      (0.22, 0.14, 0.20), 'rock_ground', _c(150, 142, 130))
+            self._tile_ents.append(batu)
 
-        elif dtype == 1:  # Wireframe pillar
-            c2 = _e('cylinder', (wx + ox, surface_y + 0.4, wz + oz),
-                      (0.05, 0.8, 0.05), None, _c(255, 0, 255))
-            self._tile_ents.append(c2)
+        elif dtype == 1:  # Rumput tinggi — dua bilah tipis, bukan satu tiang
+            for sx, sz, tinggi in ((0.0, 0.0, 0.42), (0.07, 0.05, 0.30)):
+                bilah = _e('cube',
+                           (wx + ox + sx, surface_y + tinggi / 2, wz + oz + sz),
+                           (0.05, tinggi, 0.05), 'grass_tso', _c(104, 150, 66))
+                self._tile_ents.append(bilah)
 
-        else:             # Glowing orb
-            flower = _e('sphere', (wx + ox, surface_y + 0.6, wz + oz),
-                        (0.2, 0.2, 0.2), 'lamp_glow', _c(255, 255, 255))
-            self._tile_ents.append(flower)
+        else:             # Bunga liar — tangkai hijau, kelopak warna dari hash
+            tangkai = _e('cube', (wx + ox, surface_y + 0.15, wz + oz),
+                         (0.035, 0.30, 0.035), 'grass_tso', _c(96, 138, 62))
+            self._tile_ents.append(tangkai)
+            # Warna dipilih dari hash ubin, bukan acak: ladang yang sama harus
+            # terlihat sama tiap kali dimuat, kalau tidak tangkapan regresi
+            # berkedip antar-jalan.
+            palet = (_c(232, 196, 84), _c(226, 122, 138), _c(198, 158, 226))
+            kelopak = palet[min(int(_tile_hash(tx * 7 + 3, ty * 11 + 5)
+                                    * len(palet)), len(palet) - 1)]
+            bunga = _e('sphere', (wx + ox, surface_y + 0.33, wz + oz),
+                       (0.13, 0.10, 0.13), None, kelopak)
+            self._tile_ents.append(bunga)
 
     # ─── INTERNAL: PAGAR & GERBANG ──────────────────────────
     # Sebuah pagar dikenali dari CELAH-nya, bukan dari massanya. Satu kubus utuh

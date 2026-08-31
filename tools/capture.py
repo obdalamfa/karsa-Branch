@@ -100,6 +100,22 @@ def main():
 
     from game.app import Game3D
     g = Game3D()
+    # Sinema dimatikan untuk alat ukur, dan ini bukan menyembunyikan masalah.
+    # Adegan pembuka memicu diri sendiri pada quest_stage 0 lalu menyetel
+    # panels.mode='sinema', yang membekukan waktu, pemain, entity, DAN
+    # pergantian scene — semuanya memang ada di dalam gerbang mode 'hud'.
+    # Terukur saat pertama disambungkan: keempat belas scene melaporkan jumlah
+    # entity yang sama persis (1205) karena tidak satu pun benar-benar dimuat,
+    # dan pemeriksaan arah WASD gagal keempat arahnya karena pemain terkunci.
+    #
+    # Dipakai mekanisme yang sudah ada — menandai semua adegan sudah ditonton —
+    # bukan bendera pintas baru, supaya jalur yang diuji tetap jalur yang
+    # dimainkan pemain.
+    try:
+        from game.cutscene import NASKAH as _NASKAH
+        g.state.sinema_selesai = list(_NASKAH)
+    except Exception:
+        pass
 
     from direct.showbase.ShowBaseGlobal import base
     from ursina import application
@@ -137,10 +153,13 @@ def main():
     if any(v is not None for v in (args.pitch, args.yaw, args.dist)):
         g._snap_camera_to_player()
     if args.hour is not None:
-        try:
-            g.state.hour = args.hour
-        except Exception:
-            pass
+        # GameState menyimpan waktu sebagai `time_minutes`; tidak ada atribut
+        # `hour`. Versi lama menulis `g.state.hour = args.hour` di dalam
+        # try/except telanjang, jadi ia membuat atribut baru yang tidak dibaca
+        # siapa pun dan tidak pernah melempar apa pun — `--hour` diam-diam
+        # tidak berpengaruh, dan potongan SENJA terambil pagi hari selama ini.
+        # Tanpa try/except: kalau ini rusak lagi, ia harus berisik.
+        g.state.time_minutes = float(args.hour) * 60.0
 
     if args.toolrack:
         _build_toolrack(g, base)

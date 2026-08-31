@@ -82,6 +82,77 @@ def newest(pattern: str) -> Path | None:
 
 # ── model ───────────────────────────────────────────────────────────────
 
+# Id yang BUKAN potongan gauntlet. Tanpa daftar ini, tiap event regresi
+# memunculkan "potongan" palsu bernama REGRESI yang lalu dihitung sebagai
+# "masih kalah" — padahal jaring pengaman tidak pernah ikut penilaian buta
+# sama sekali. Halaman yang menghitung begitu berbohong tentang keadaan.
+_BUKAN_POTONGAN = {'REGRESI', 'REGRESS', 'PROFIL'}
+
+
+def _ref_ada(slug: str) -> bool:
+    """Frame patokan untuk potongan ini benar-benar ada dan bukan placeholder?"""
+    if not slug:
+        return False
+    for ext in ('.png', '.jpg', '.jpeg', '.webp'):
+        f = BENCH / 'refs' / f'{slug}{ext}'
+        if f.exists() and f.stat().st_size >= 20_000:
+            return True
+    return False
+
+
+def baca_patokan() -> dict:
+    """Patokan dan status gerbangnya, dari sumber yang sama dengan bar_gate."""
+    man = BENCH / 'refs' / 'MANIFEST.json'
+    if not man.exists():
+        return {'bar': None, 'ada': 0, 'total': 0}
+    try:
+        data = json.loads(man.read_text(encoding='utf-8'))
+    except Exception:
+        return {'bar': None, 'ada': 0, 'total': 0}
+    frames = data.get('frames') or []
+    ada = 0
+    for it in frames:
+        slug = it.get('slug')
+        if not slug:
+            continue
+        for ext in ('.png', '.jpg', '.jpeg', '.webp'):
+            f = BENCH / 'refs' / f'{slug}{ext}'
+            if f.exists() and f.stat().st_size >= 20_000:
+                ada += 1
+                break
+    return {'bar': data.get('bar'), 'ada': ada, 'total': len(frames)}
+
+
+def load_temuan() -> dict:
+    """Temuan dan perbaikan, dari _bench/temuan.json.
+
+    Data, bukan prosa yang ditulis ke dalam generator. Halaman progres yang
+    kalimatnya dipahat di kode akan terus menyatakan hal yang benar SEKALI,
+    lalu perlahan jadi bohong tanpa ada yang menyadari.
+    """
+    f = BENCH / 'temuan.json'
+    if not f.exists():
+        return {}
+    try:
+        return json.loads(f.read_text(encoding='utf-8'))
+    except Exception:
+        return {}
+
+
+def baca_regresi() -> str:
+    """Baris ringkas laporan regresi terakhir, kalau ada."""
+    rep = BENCH / 'regress' / 'report.md'
+    if not rep.exists():
+        return ''
+    try:
+        for baris in rep.read_text(encoding='utf-8').splitlines():
+            if 'scene lulus' in baris:
+                return baris.strip()
+    except Exception:
+        pass
+    return ''
+
+
 def build_model():
     slices = load_slices()
     events = load_events()
@@ -93,8 +164,9 @@ def build_model():
     # Slice yang punya event tapi tidak terdaftar tetap ditampilkan.
     known = {str(s.get('id')) for s in slices}
     for sid in by_slice:
-        if sid not in known and sid != '?':
+        if sid not in known and sid != '?' and sid not in _BUKAN_POTONGAN:
             slices.append({'id': sid, 'title': sid, 'goal': '', 'kind': ''})
+    slices = [s for s in slices if str(s.get('id')) not in _BUKAN_POTONGAN]
 
     rows = []
     for s in slices:
@@ -122,9 +194,10 @@ def build_model():
             'rounds': rounds,
             'won': won,
             'open_gap': '' if won else (rounds[-1]['gap'] if rounds else ''),
+            'ref_ada': _ref_ada(s.get('bar_image') or ''),
             'sheet': thumb(sheet) if sheet else None,
             'sheet_name': sheet.name if sheet else '',
-            'shot': thumb(shot, 560) if (shot and not sheet) else None,
+            'shot': thumb(shot, THUMB_W) if (shot and not sheet) else None,
             'events': len(evs),
         })
 
@@ -364,20 +437,44 @@ def render() -> str:
     out.append(seal_svg(won, max(total, 1)))
     out.append('<div>')
     out.append('<h1>Karsa Bench</h1>')
-    out.append('<p class="sub">Lembah Karsa dibangun ulang menjadi The Sims 1, '
-               'dengan misteri StrangerVille tertanam di dalamnya. Setiap bagian '
-               'dinilai buta melawan tangkapan layar aslinya. Bagian dianggap '
-               'selesai hanya kalau juri yang tidak tahu mana milik kita '
-               'tetap memilih milik kita.</p>')
+    pat = baca_patokan()
+    nama_bar = html.escape(pat['bar'] or 'belum ditetapkan')
+    out.append(f'<p class="sub">Patokannya <b>{nama_bar}</b>. Setiap bagian '
+               'dinilai buta melawan tangkapan layar aslinya — label dicopot, '
+               'urutan diacak, kunci disimpan terpisah. Bagian dianggap selesai '
+               'hanya kalau juri yang tidak tahu mana milik kita tetap memilih '
+               'milik kita.</p>')
     out.append(f'<span class="stamp">diperbarui {stamp}</span>')
     out.append('</div></header>')
 
+    # Gerbang patokan, dan ini bagian terpenting halaman ini.
+    #
+    # Tanpa banner ini, angka "Menang buta 0" terbaca sebagai "sudah dicoba dan
+    # belum menang". Yang benar: belum pernah ada satu pun penilaian, karena
+    # frame aslinya tidak ada. Halaman progres yang membiarkan dua keadaan itu
+    # terlihat sama persis adalah halaman yang menyesatkan pembacanya.
+    if pat['total'] and pat['ada'] < pat['total']:
+        out.append(
+            '<div class="empty" style="border-color:var(--bronze);'
+            'color:var(--ink)">'
+            f'<b>GERBANG PATOKAN TERTUTUP — {pat["ada"]}/{pat["total"]} '
+            'frame ada.</b><br>'
+            'Belum ada satu pun penilaian buta, dan angka nol di bawah berarti '
+            '<i>belum pernah dinilai</i> — bukan <i>sudah dicoba dan kalah</i>. '
+            'Kritikus tanpa frame asli akan mengarang perbandingannya lalu '
+            'meluluskan semuanya. Taruh frame yang kurang di '
+            '<code>_bench/refs/</code> lalu jalankan '
+            '<code>python tools/bar_gate.py check</code>.</div>')
+
+    menunggu = sum(1 for r in rows if not r['won'] and not r['rounds']
+                   and not r['ref_ada'])
+    kalah = sum(1 for r in rows if not r['won'] and r['rounds'])
     out.append('<div class="console">')
     for k, v, cls in (('Bagian', total, ''),
                       ('Menang buta', won, 'ours'),
-                      ('Masih kalah', open_, 'open'),
-                      ('Ronde dinilai', attempts, ''),
-                      ('Peristiwa', len(events), '')):
+                      ('Masih kalah', kalah, 'open'),
+                      ('Menunggu patokan', menunggu, 'open'),
+                      ('Ronde dinilai', attempts, '')):
         out.append(f'<div class="cell"><span class="k">{k}</span>'
                    f'<span class="v {cls}">{v}</span></div>')
     out.append('</div>')
@@ -401,6 +498,11 @@ def render() -> str:
             out.append('<span class="pill ours">menang buta</span>')
         elif r['rounds']:
             out.append('<span class="pill bar">masih kalah</span>')
+        elif not r['ref_ada']:
+            # Bukan "belum dinilai" — tidak ada yang BISA menilainya. Dua
+            # keadaan itu terlihat sama di halaman lama, dan menyamakannya
+            # membuat pembaca mengira loopnya jalan tapi mandek.
+            out.append('<span class="pill idle">menunggu patokan</span>')
         else:
             out.append('<span class="pill idle">belum dinilai</span>')
         out.append('</div><div class="body">')
@@ -420,13 +522,61 @@ def render() -> str:
         img = r['sheet'] or r['shot']
         if img:
             cap = (f'lembar perbandingan buta · {html.escape(r["sheet_name"])}'
-                   if r['sheet'] else 'tangkapan mentah dari game')
+                   if r['sheet'] else
+                   'keadaan kita sekarang — belum ada frame patokan untuk '
+                   'disandingkan')
             out.append(f'<figure><img src="{img}" alt="Perbandingan {html.escape(r["id"])}">'
                        f'<figcaption>{cap}</figcaption></figure>')
         out.append('</div></article>')
 
+    tem = load_temuan()
+    if tem.get('temuan'):
+        out.append('<h2 class="sec">Temuan &amp; perbaikan</h2>')
+        for t in tem['temuan']:
+            out.append('<article class="slice">')
+            out.append('<div class="head">')
+            out.append(f'<span class="sid">{html.escape(str(t.get("id","")))}</span>')
+            out.append(f'<h3 class="stitle">{html.escape(str(t.get("judul","")))}</h3>')
+            if t.get('jaga'):
+                out.append('<span class="pill ours">dijaga</span>')
+            out.append('</div><div class="body">')
+            if t.get('sebab'):
+                out.append(f'<p class="goal">{html.escape(str(t["sebab"]))}</p>')
+            if t.get('ukur'):
+                out.append('<p class="gap"><span class="k">terukur</span>'
+                           f'{html.escape(str(t["ukur"]))}</p>')
+            if t.get('jaga'):
+                out.append(f'<p class="qn">{html.escape(str(t["jaga"]))}</p>')
+            out.append('</div></article>')
+
+    if tem.get('terbuka'):
+        out.append('<h2 class="sec">Masih terbuka — keputusan pemilik</h2>')
+        for t in tem['terbuka']:
+            out.append('<article class="slice"><div class="head">')
+            out.append(f'<h3 class="stitle">{html.escape(str(t.get("judul","")))}</h3>')
+            out.append('<span class="pill bar">belum dikerjakan</span>')
+            out.append('</div><div class="body">')
+            out.append(f'<p class="goal">{html.escape(str(t.get("isi","")))}</p>')
+            out.append('</div></article>')
+
+    reg = baca_regresi()
+    if reg:
+        out.append('<h2 class="sec">Jaring pengaman</h2>')
+        out.append('<div class="log"><div><b>regress.py</b> · '
+                   f'{html.escape(reg)}</div>'
+                   '<div>Ini BUKAN penilaian buta dan tidak pernah ikut '
+                   'dihitung sebagai potongan. Jaring pengaman menjawab '
+                   '"masih utuh?", bukan "sudah lebih baik dari patokan?".'
+                   '</div></div>')
+
     if events:
-        out.append('<h2 class="sec">Catatan terakhir</h2><div class="log">')
+        out.append('<h2 class="sec">Catatan regresi mentah</h2>')
+        out.append('<p class="legend">Baris <i>“pemeriksaan gagal”</i> di sini '
+                   'sebagian besar adalah UJI NEGATIF yang disengaja: tiap '
+                   'pemeriksaan baru dijalankan dulu pada kode lama untuk '
+                   'membuktikan ia bisa gagal. Pemeriksaan yang tidak pernah '
+                   'bisa gagal tidak membuktikan apa pun.</p>')
+        out.append('<div class="log">')
         for ev in events[-18:]:
             sid = html.escape(str(ev.get('slice', '—')))
             role = html.escape(str(ev.get('role', '')))
@@ -436,8 +586,8 @@ def render() -> str:
 
     out.append('<footer>Bukti mentah ada di <code>_bench/</code> — '
                'tangkapan game asli, lembar perbandingan buta, dan '
-               '<code>progress.jsonl</code>. Rujukan The Sims dipakai hanya '
-               'untuk pembandingan internal.</footer>')
+               '<code>progress.jsonl</code>. Frame patokan dipakai hanya untuk '
+               'pembandingan internal.</footer>')
     out.append('</div>')
     return '\n'.join(out)
 

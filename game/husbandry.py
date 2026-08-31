@@ -44,6 +44,18 @@ LALAI_JADI_SAKIT = 3
 SEMBUH_BUTUH_HARI = 2
 AMBANG_SEHAT = 60
 
+# Biaya energi tiap aksi perawatan. Ditaruh di sini, bukan di economy.py,
+# karena aksinya milik modul ini — economy.py menyimpan EN_FEED/EN_COLLECT
+# untuk jalur ternaknya sendiri yang sekarang pensiun.
+#
+# Urutannya disengaja: mengisi ember paling murah, menyikat paling mahal.
+# Menyikat sapi memang kerja badan, dan biayanya harus terasa supaya pemain
+# memilih hewan mana yang diurus lebih dulu saat energinya tinggal sedikit.
+EN_MAKAN   = 2
+EN_MINUM   = 1
+EN_GOSOK   = 3
+EN_AMBIL   = 2
+
 
 # ─── ATURAN PER SPESIES ──────────────────────────────────────────────────────
 # `tiap` = jeda hari antar hasil. Ayam bertelur tiap hari, domba dicukur
@@ -157,15 +169,35 @@ def daily_tick(state) -> dict:
     Mengembalikan ringkasan supaya pemain bisa diberi tahu pagi harinya:
     {'lapar': [nama...], 'sakit': [nama...], 'siap': [nama...]}
     """
-    from .data import ANIMAL_NPCS
+    from .data import ANIMAL_NPCS, LIVESTOCK_FOR_SALE
     lap = {'lapar': [], 'sakit': [], 'siap': []}
+    punya = getattr(state, 'owned_animals', None) or []
 
     for aid, meta in ANIMAL_NPCS.items():
         if not is_livestock(aid):
             continue
+        # Ternak yang belum dibeli tidak ada di kandang, jadi ia tidak boleh
+        # lapar, tidak boleh kotor, dan sama sekali tidak boleh jatuh sakit.
+        # Tanpa baris ini laporan pagi menyebut nama hewan yang belum pernah
+        # dimiliki pemain — dan itu sempat terjadi: sapi Betsy tercatat sakit
+        # pada hari ke-4 di save yang tidak punya satu ekor pun.
+        if aid in LIVESTOCK_FOR_SALE and aid not in punya:
+            continue
         r    = care_rules(aid)
         rec  = care_of(state, aid)
         mult = PENGALI_SUSUT.get(meta.get('type', ''), 1.0)
+
+        # Keadaan yang DITINGGALKAN pemain tadi malam, sebelum semalam
+        # menggerusnya. Syarat sembuh diperiksa terhadap angka ini, bukan
+        # terhadap sisa sesudah peluruhan — kalau tidak, ia mustahil dipenuhi:
+        # air paling tinggi hanya bisa mencapai ISI_MINUM 100 - SUSUT_AIR 55 =
+        # 45 pada saat pemeriksaan, sementara AMBANG_SEHAT 60. Terukur sebelum
+        # diperbaiki: sapi yang diberi makan, diberi minum, dan digosok setiap
+        # hari selama lima hari berturut-turut tetap sakit selamanya.
+        #
+        # Pertanyaannya memang "apakah kamu merawatnya hari ini", dan itu
+        # dijawab oleh keadaan saat pemain pergi tidur.
+        dirawat = (rec['kenyang'], rec['air'], rec['bersih'])
 
         rec['kenyang'] = _clamp(rec['kenyang'] - SUSUT_KENYANG * mult)
         rec['air']     = _clamp(rec['air']     - SUSUT_AIR     * mult)
@@ -187,8 +219,7 @@ def daily_tick(state) -> dict:
             state.npc_hearts[aid] = max(0, state.npc_hearts.get(aid, 0) - 2)
 
         if rec['sakit']:
-            if (rec['kenyang'] >= AMBANG_SEHAT and rec['air'] >= AMBANG_SEHAT
-                    and rec['bersih'] >= AMBANG_SEHAT):
+            if all(v >= AMBANG_SEHAT for v in dirawat):
                 rec['sembuh_t'] += 1
                 if rec['sembuh_t'] >= SEMBUH_BUTUH_HARI:
                     rec['sakit'] = False

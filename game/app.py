@@ -212,6 +212,11 @@ class Game3D:
         self.player = Player3D(self.state, self.world)
         self.panels.player = self.player
 
+        # Sinema. Dibuat sekali dan dipakai ulang; ia tidak menggambar apa pun
+        # sampai `mulai()` dipanggil, jadi biayanya nol saat tidak ada adegan.
+        from .cutscene import Sinema
+        self.sinema = Sinema(self)
+
         # Terapkan penampilan tersimpan (jika sudah pernah chargen)
         if self.state.char_name:
             self.player.apply_appearance(self.state)
@@ -271,7 +276,23 @@ class Game3D:
         self.panels.update(s, dt)
         self._pulihkan_mode_yatim()
 
+        if self.panels.mode == 'sinema':
+            # Sengaja di luar gerbang 'hud' di bawah: dunia memang harus beku,
+            # tapi kamera sinema justru satu-satunya yang masih harus bergerak.
+            self.sinema.tick(dt)
+
         if self.panels.mode == 'hud':
+            # Pemicu sinema. Diletakkan di sini, bukan di quest_controller,
+            # karena tahap quest dinaikkan dari beberapa tempat berbeda —
+            # membandingkan nilainya di satu tempat tidak bisa ketinggalan
+            # satu pun, sementara memanggil pemicu di tiap tempat bisa.
+            # `mulai()` sendiri menolak adegan yang sudah pernah ditonton,
+            # jadi memanggilnya berulang aman.
+            from .cutscene import pemicu_tahap
+            _adegan = pemicu_tahap(s.quest_stage)
+            if _adegan:
+                self.sinema.mulai(_adegan)
+
             # ── Maju waktu in-game & Needs Decay (via TimeManager) ──
             msg = self.player.time_controller.tick(dt, self.player)
             if msg:
@@ -493,6 +514,11 @@ class Game3D:
                 self._chargen.handle_input(key)
             return
 
+        # Sinema mengunci semuanya: cuma lanjut dan lewati yang diterima.
+        if self.panels.mode == 'sinema':
+            self.sinema.input(key)
+            return
+
         # Intercept input saat UI / Dialog aktif
         if self.panels.mode == 'dialog':
             if self.panels.is_choice_active():
@@ -667,6 +693,16 @@ class Game3D:
         elif mode == 'dialog':
             bg = getattr(p, '_dlg_bg', None)
             yatim = bg is None or not getattr(bg, 'enabled', False)
+        elif mode == 'sinema':
+            # Pemiliknya runner sinema, bukan entity UI: adegan yang sudah
+            # `selesai()` membongkar UI-nya sendiri, jadi keberadaan quad
+            # bukan tanda yang benar. Yang menentukan `aktif`.
+            #
+            # Baris ini ditambahkan setelah penjaga di bawah menangkap mode
+            # 'sinema' sebagai tak dikenal dan mengembalikannya ke HUD tiap
+            # frame — sinema tidak pernah bisa jalan satu beat pun. Penjaganya
+            # benar; mode barunya yang lupa didaftarkan.
+            yatim = not getattr(getattr(self, 'sinema', None), 'aktif', False)
         else:
             yatim = True    # mode yang tidak dikenal sama sekali
         if yatim:

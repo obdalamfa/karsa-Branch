@@ -105,6 +105,10 @@ class GameState:
     captured_supernatural: int = 0
 
     lore_collected: list = field(default_factory=list)  # list of lore item IDs found
+
+    # Sinema yang sudah pernah ditonton, supaya adegan pembuka tidak main lagi
+    # tiap kali save dimuat. List, bukan set — save memakai json.dump.
+    sinema_selesai: list = field(default_factory=list)
     post_game:      bool = False                        # True after quest_stage reaches 11
     side_quests: dict = field(default_factory=dict)
     lighthouse_fixed: bool = False                      # True after repairing lighthouse on the beach

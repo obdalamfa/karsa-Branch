@@ -850,6 +850,22 @@ def main():
     t0 = time.time()
     try:
         g = Game3D()
+        # Sinema dimatikan untuk alat ukur, dan ini bukan menyembunyikan masalah.
+        # Adegan pembuka memicu diri sendiri pada quest_stage 0 lalu menyetel
+        # panels.mode='sinema', yang membekukan waktu, pemain, entity, DAN
+        # pergantian scene — semuanya memang ada di dalam gerbang mode 'hud'.
+        # Terukur saat pertama disambungkan: keempat belas scene melaporkan jumlah
+        # entity yang sama persis (1205) karena tidak satu pun benar-benar dimuat,
+        # dan pemeriksaan arah WASD gagal keempat arahnya karena pemain terkunci.
+        #
+        # Dipakai mekanisme yang sudah ada — menandai semua adegan sudah ditonton —
+        # bukan bendera pintas baru, supaya jalur yang diuji tetap jalur yang
+        # dimainkan pemain.
+        try:
+            from game.cutscene import NASKAH as _NASKAH
+            g.state.sinema_selesai = list(_NASKAH)
+        except Exception:
+            pass
     except Exception:
         print('GAGAL TOTAL: game tidak bisa dibangun\n')
         traceback.print_exc()

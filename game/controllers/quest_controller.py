@@ -37,8 +37,28 @@ class QuestController:
         else:
             print("[Quest]", msg)
 
+    # Kedalaman gua yang menyimpan fragmen prasasti. Angkanya BUKAN pilihan
+    # baru: `LORE_ITEMS[...]['found_at']` sudah menyebut dungeon_5, dungeon_10,
+    # dan dungeon_14 sejak lama. Yang tidak pernah ada cuma kode yang
+    # memberikannya — ketiga fragmen itu mustahil didapat, dan panel Catatan
+    # tidak akan pernah menampilkannya sebanyak apa pun pemain menggali.
+    FRAGMEN_GUA = {
+        5:  'fragmen_prasasti_1',
+        10: 'fragmen_prasasti_2',
+        14: 'fragmen_prasasti_3',
+    }
+
     def check_dungeon_lore(self, dungeon_level, player, panels=None):
         s = self.state
+
+        # Fragmen prasasti — masuk KOLEKSI, bukan cuma pesan sekilas.
+        lore_id = self.FRAGMEN_GUA.get(dungeon_level)
+        if lore_id and lore_id not in getattr(s, 'lore_collected', []):
+            self.add_lore(lore_id, player, panels)
+
+        # Tiga pesan kedalaman di bawah tetap dipertahankan sebagai suasana,
+        # tapi dulu ia satu-satunya cerita di gua DAN ia hilang begitu kotak
+        # pesannya habis. Sekarang ia pendamping fragmen, bukan penggantinya.
         lore_msg = None
         if dungeon_level == 3 and not s.lore_found.get('dungeon_3'):
             s.lore_found['dungeon_3'] = True
@@ -49,7 +69,7 @@ class QuestController:
         elif dungeon_level == 12 and not s.lore_found.get('dungeon_12'):
             s.lore_found['dungeon_12'] = True
             lore_msg = "Dinding bercahaya: 'Hanya hati yang murni yang bisa menenangkan sang Naga Bumi...'"
-        
+
         if lore_msg:
             if panels:
                 invoke(panels.flash_msg, lore_msg, 5.0, delay=1.0)

@@ -680,6 +680,49 @@ class UIManager:
                                   col=color.rgb(140, 130, 180))
         self._set_panel_visible(False)
 
+    # Entity yang membentuk HUD permainan. Didaftar sekali di sini supaya
+    # menyembunyikannya tidak perlu menebak-nebak isi camera.ui — dan supaya
+    # menambah elemen HUD baru cuma butuh satu nama di daftar ini.
+    _NAMA_HUD = (
+        '_tool_name', '_seed_txt', '_hp_bar', '_hp_val', '_en_bar', '_en_val',
+        '_time_txt', '_date_txt', '_weather_txt', '_scene_txt', '_gold_txt',
+        '_buff_txt', '_queue_txt', '_mood_bg', '_mood_fill', '_mood_lbl',
+        '_motive_panel_bg',
+    )
+    _DAFTAR_HUD = ('_need_bg_ents', '_need_fill_ents', '_need_lbl_ents')
+
+    def set_hud_visible(self, v: bool):
+        """Sembunyikan/tampilkan seluruh HUD permainan.
+
+        Dibuat untuk sinema: adegan bercerita yang masih menampilkan bar
+        energi dan panel suasana hati tidak terbaca sebagai adegan, ia
+        terbaca sebagai permainan yang macet dengan pita hitam di atasnya.
+        Terlihat jelas di tangkapan pertama — panel SUASANA HATI menabrak
+        baris narasinya sendiri.
+        """
+        for nama in self._NAMA_HUD:
+            e = getattr(self, nama, None)
+            if e is not None:
+                try:
+                    e.enabled = v
+                except Exception:
+                    pass
+        for nama in self._DAFTAR_HUD:
+            for e in getattr(self, nama, None) or []:
+                try:
+                    e.enabled = v
+                except Exception:
+                    pass
+        # Scrim kontras ikut: tanpa ini pita hitamnya bertumpuk dengan
+        # gradien gelap HUD dan tepinya terlihat sebagai dua lapis abu.
+        for nama in ('_scrim_kanan', '_scrim_kiri', '_scrim_bawah'):
+            e = getattr(self, nama, None)
+            if e is not None:
+                try:
+                    e.enabled = v
+                except Exception:
+                    pass
+
     def _set_panel_visible(self, v: bool):
         for e in (self._panel_bg, self._panel_title,
                   self._panel_body, self._panel_hint):

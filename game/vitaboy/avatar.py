@@ -45,6 +45,10 @@ class AvatarPart:
     mesh: VitaboyMesh
     texture_bytes: Optional[bytes] = None
     texture_name: str = ''
+    # True kalau .apr-nya kepala -> teksturnya dicat ulang jadi wajah chibi
+    wajah_chibi: bool = False
+    # True kalau .apr-nya mesh RAMBUT terpisah -> warnanya saja yang diganti
+    rambut_chibi: bool = False
     # Ursina runtime objects
     entity = None
     umesh = None
@@ -61,9 +65,13 @@ class VitaboyAvatar:
     _stagger_counter = 0
 
     def __init__(self, parent_entity, appearance_names: List[str],
-                 scale: float = 0.30, tint=None):
+                 scale: float = 0.30, tint=None, varian=None):
         from ursina import Entity, Vec3 as UVec3, color, Texture
         from PIL import Image
+        from ..wajah import (apr_kepala, apr_rambut, tekstur_kepala_chibi,
+                             tekstur_rambut_chibi, varian_wajah)
+        if varian is None:
+            varian = varian_wajah('')
 
         self.skeleton: Optional[Skeleton] = None
         self.parts: List[AvatarPart] = []
@@ -97,7 +105,12 @@ class VitaboyAvatar:
         # ── Load each appearance & build parts ────────────────────────────
         if tint is None:
             tint = color.white
-        self.root_entity = Entity(parent=parent_entity, scale=scale)
+        # Proporsi chibi + ganti rugi tingginya, sama persis dengan jalur
+        # native di `vitaboy_baked.py`. Dua jalur ini harus menghasilkan
+        # sosok yang sama; kalau tidak, mesin tanpa Character Panda3D akan
+        # diam-diam menampilkan warga desa berproporsi berbeda.
+        from ..wajah import SKALA_TINGGI
+        self.root_entity = Entity(parent=parent_entity, scale=scale * SKALA_TINGGI)
 
         for apr_name in appearance_names:
             if not apr_name:
@@ -130,6 +143,8 @@ class VitaboyAvatar:
                     tex_data = reg.read_by_id(bnd.texture_type_id, bnd.texture_file_id)
                     if tex_data:
                         part.texture_bytes = tex_data
+                        part.wajah_chibi = apr_kepala(apr_name)
+                        part.rambut_chibi = apr_rambut(apr_name)
                         part.texture_name = reg.filename_for_id(
                             bnd.texture_type_id, bnd.texture_file_id) or ''
 
@@ -158,7 +173,20 @@ class VitaboyAvatar:
                 texture = None
                 if part.texture_bytes:
                     try:
-                        img = Image.open(_io.BytesIO(part.texture_bytes))
+                        img = None
+                        vid = varian.get('id', '')
+                        if getattr(part, 'wajah_chibi', False):
+                            img = tekstur_kepala_chibi(
+                                part.texture_bytes, varian=varian,
+                                kunci=(bnd.texture_type_id, bnd.texture_file_id,
+                                       'chibi', vid))
+                        elif getattr(part, 'rambut_chibi', False):
+                            img = tekstur_rambut_chibi(
+                                part.texture_bytes, varian=varian,
+                                kunci=(bnd.texture_type_id, bnd.texture_file_id,
+                                       'rambut', vid))
+                        if img is None:
+                            img = Image.open(_io.BytesIO(part.texture_bytes))
                         texture = Texture(img)
                         texture.filtering = True
                     except Exception as e:
@@ -183,10 +211,16 @@ class VitaboyAvatar:
         normals = [None] * n_v
         identity = Mat4.identity()
 
+        from ..wajah import skala_vertex
         for i, v in enumerate(mesh.vertices):
             bone = part._bind_idx_to_bone.get(v.bone_index)
             bm = bone.absolute_matrix if bone else identity
-            p = bm.transform_point(v.position)
+            # Skala chibi terhadap titik asal tulang; lihat vitaboy_baked.py.
+            s = skala_vertex(bone.name if bone else '')
+            pos = v.position if s == 1.0 else Vec3(v.position.x * s,
+                                                   v.position.y * s,
+                                                   v.position.z * s)
+            p = bm.transform_point(pos)
             n = bm.transform_direction(v.normal)
             positions[i] = (p.x, p.y, p.z)
             normals[i] = (n.x, n.y, n.z)
@@ -290,7 +324,10 @@ DEFAULT_FEMALE_OUTFIT = [
     'fahl003_longhair02.apr',       # hair
 ]
 
+# `mahd000_proxy.apr` sengaja TIDAK dipakai di sini: teksturnya
+# (`c000madrk_proxy.jpg`) adalah petak biru bertaburan tanda tanya — kepala
+# placeholder Maxis, bukan wajah. Lihat game/vitaboy_npc.py.
 DEFAULT_MALE_OUTFIT = [
-    'mabd000_leathers.apr',
-    'mahd000_proxy.apr',
+    'mabd002_casual.apr',
+    'mahd001_ross.apr',
 ]

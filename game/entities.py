@@ -282,7 +282,15 @@ class EntitiesManager:
             if apr_list:
                 try:
                     from .vitaboy_npc import build_vitaboy_human_npc
+                    from .wajah import tinggi_varian
+                    # Tinggi badan ikut jadi ciri orang. Di patokan Story of
+                    # Seasons, Takakura yang pendek bungkuk di samping pemuda
+                    # yang tegak sudah bisa dibedakan dari siluetnya saja,
+                    # sebelum wajahnya kelihatan. Pengalinya 0,90-1,12 —
+                    # cukup untuk terbaca, tidak cukup untuk membuat pintu,
+                    # papan nama atau tinggi kamera meleset.
                     sc = 0.19 if actor_id in ('cici', 'bowo') else 0.32
+                    sc *= tinggi_varian(actor_id)
                     # Pabrik memilih backend sendiri: Character Panda3D (skinning
                     # C++, 0,288 ms/avatar) kalau bisa, jatuh ke skinning Python
                     # (6,387 ms/avatar) kalau tidak. Lihat vitaboy_npc.py.
@@ -322,6 +330,16 @@ class EntitiesManager:
                             import logging
                             logging.warning(f"human_paint gagal untuk '{actor_id}': {e}")
                             warnai = False
+                        # Proporsi chibi juga di jalur cadangan. Di mesin tanpa
+                        # instalasi TSO SEMUA warga lewat sini, dan kalau hanya
+                        # avatar TSO yang dibuat chibi maka mesin itu diam-diam
+                        # menampilkan desa berproporsi dewasa. Lihat wajah.py.
+                        try:
+                            from .wajah import chibikan_humanoid
+                            chibikan_humanoid(panda_model)
+                        except Exception as e:
+                            import logging
+                            logging.warning(f"chibikan_humanoid gagal '{actor_id}': {e}")
                     actor.model = panda_model
                     actor.scale = 1.0
                     if warnai:
@@ -389,8 +407,19 @@ class EntitiesManager:
                 actor.model = panda_model
                 actor.scale = sc
             else:
+                # Empat dari tujuh mob (`tikus_gua`, `banaspati`, `kuntilanak`,
+                # `leak`) tidak punya mesh sendiri dan jatuh ke humanoid.obj.
+                # Mereka HUMANOID, jadi mereka ikut aturan proporsi yang sama
+                # dengan warga desa; kalau tidak, satu dungeon berisi mob
+                # berkepala dewasa yang dipukul oleh pemain berkepala chibi.
                 panda_fallback = load_model_file('humanoid')
                 if panda_fallback:
+                    try:
+                        from .wajah import chibikan_humanoid
+                        chibikan_humanoid(panda_fallback)
+                    except Exception as e:
+                        import logging
+                        logging.warning(f"chibikan_humanoid gagal '{actor_id}': {e}")
                     actor.model = panda_fallback
                 else:
                     actor.model = 'cube'

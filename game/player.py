@@ -256,9 +256,14 @@ class Player3D(Entity):
             # Panda3D (skinning C++, 0,288 ms/avatar) kalau ada, dan jatuh ke
             # skinning Python (6,387 ms/avatar) kalau tidak. Pemain memakai
             # jalur yang sama dengan NPC supaya tidak ada dua kebenaran.
-            from .vitaboy_npc import build_vitaboy_avatar
-            apr_list = ['mabd000_leathers.apr', 'mahd000_proxy.apr']
-            self._va = build_vitaboy_avatar(self, apr_list, scale=0.32)
+            from .vitaboy_npc import build_vitaboy_avatar, PEMAIN_DEFAULT
+            from .wajah import varian_pemain
+            apr_list = list(PEMAIN_DEFAULT)
+            st = getattr(self, 'state', None)
+            varian = varian_pemain(getattr(st, 'char_skin', 0) or 0,
+                                   getattr(st, 'char_hair', 0) or 0)
+            self._va = build_vitaboy_avatar(self, apr_list, scale=0.32,
+                                            varian=varian)
             if self._va is None:
                 raise RuntimeError('kedua backend avatar gagal')
         except Exception as e:
@@ -358,8 +363,13 @@ class Player3D(Entity):
         self._shirt_col = color.rgb(*SHIRT_PRESETS[sh][1]) if sh < len(SHIRT_PRESETS) else color.white
 
         if getattr(self, '_is_vitaboy', False) and hasattr(self, '_va') and self._va:
-            body_apr = 'mabd000_leathers.apr' if sh == 0 else 'fabd000_sl__defaultpjs.apr'
-            head_apr = 'mahd000_proxy.apr' if sh == 0 else 'fahd001_alt.apr'
+            # `mahd000_proxy.apr` dibuang: itu placeholder Maxis — petak biru
+            # bertaburan tanda tanya, bukan kepala. Selama ia terpasang, tidak
+            # ada pengaturan kamera atau pencahayaan mana pun yang bisa membuat
+            # wajah pemain terbaca sebagai wajah. Lihat vitaboy_npc.py.
+            from .vitaboy_npc import PEMAIN_DEFAULT, PEMAIN_ALT
+            baju = PEMAIN_DEFAULT if sh == 0 else PEMAIN_ALT
+            body_apr, head_apr = baju[0], baju[1]
             hair_apr = 'fahl003_longhair02.apr' if hr > 0 else None
             try:
                 from .vitaboy_npc import build_vitaboy_avatar
@@ -376,8 +386,10 @@ class Player3D(Entity):
                     destroy(lama_va.root_entity)
                 apr_list = [x for x in [body_apr, head_apr, hair_apr] if x]
                 anim = "a2o-walking-loop" if getattr(self, '_was_moving', False) else "a2a-talk-idle-loop"
+                from .wajah import varian_pemain
                 baru_va = build_vitaboy_avatar(self, apr_list, scale=0.32,
-                                               idle_anim=anim)
+                                               idle_anim=anim,
+                                               varian=varian_pemain(sk, hr))
                 if baru_va is not None:
                     self._va = baru_va
             except Exception:

@@ -95,6 +95,14 @@
    "bar_image": "gerak_bicara",
    "goal": "Saat bercakap, tubuh ikut bicara: kepala, tangan, pergeseran berat badan. Dua orang saling menghadap. Bukan dua patung dengan kotak teks.",
    "judge_question": "Pada strip mana orang yang sedang bicara terlihat hidup, bukan patung dengan kotak teks?"
+  },
+  {
+   "id": "ALAT",
+   "title": "Alat diwakili ikon, bukan dibawa-bawa",
+   "kind": "tampilan",
+   "bar_image": "hud_default",
+   "goal": "Saat tidak dipakai, tangan pemain KOSONG dan alat yang sedang dipilih diwakili IKON di HUD — ikon yang menggambarkan bendanya, bukan teks namanya. Alat baru muncul di tangan pada saat aksinya berjalan, lalu hilang lagi.",
+   "judge_question": "Pada gambar mana alat yang sedang dipilih terbaca dari ikon di antarmuka, tanpa pemain terlihat menenteng alat ke mana-mana?"
   }
  ]
 }

@@ -51,7 +51,7 @@ tukar sumbu di mana pun. Itu yang membuat selisihnya nol.
 PEMAKAIAN
 =========
     from game.vitaboy_baked import build_native_avatar
-    av = build_native_avatar(npc_entity, ['mabd000_leathers.apr', 'mahd000_proxy.apr'])
+    av = build_native_avatar(npc_entity, ['mabd002_casual.apr', 'mahd001_ross.apr'])
     av.set_animation('a2o-walking-loop')
     av.update(dt)      # no-op; ada supaya API-nya sama dengan VitaboyAvatar
 
@@ -252,16 +252,35 @@ def _read_apr_parts(apr_name: str):
     return out
 
 
-def _texture_for(tex_key):
+def _texture_for(tex_key, wajah_chibi: bool = False,
+                 rambut_chibi: bool = False, varian=None):
     """Texture Panda3D dari entri registry TSO, di-cache per (type_id, file_id).
 
     Texture BOLEH dipakai bersama banyak Entity — ia bukan NodePath, jadi tidak
     kena bug satu-parent yang dua kali menghantam proyek ini.
+
+    `wajah_chibi=True` melewatkan tekstur lewat `wajah.lukis_wajah_chibi()`
+    dulu: mata besar beriris, hidung sekadar titik, mulut segaris. Dipakai
+    HANYA untuk .apr kepala — lihat `wajah.apr_kepala()` untuk kenapa mesh
+    rambut tidak boleh dapat wajah. `rambut_chibi=True` untuk mesh rambut
+    terpisah: warnanya saja yang diganti.
+
+    Kunci cache ikut membawa `varian['id']`. Tanpa itu dua warga yang memakai
+    .apr kepala yang sama akan berbagi satu tekstur, dan yang dibangun lebih
+    dulu mewariskan wajah DAN warna rambutnya ke yang kedua — persis kegagalan
+    "semua warga bermata sama" yang dicatat ronde 1.
     """
     if tex_key is None:
         return None
-    if tex_key in _TEX_CACHE:
-        return _TEX_CACHE[tex_key]
+    vid = (varian or {}).get('id', '') if isinstance(varian, dict) else ''
+    if wajah_chibi:
+        kunci = (tex_key, 'chibi', vid)
+    elif rambut_chibi:
+        kunci = (tex_key, 'rambut', vid)
+    else:
+        kunci = tex_key
+    if kunci in _TEX_CACHE:
+        return _TEX_CACHE[kunci]
     tex = None
     try:
         from PIL import Image
@@ -269,13 +288,21 @@ def _texture_for(tex_key):
         from .vitaboy import asset_registry
         data = asset_registry().read_by_id(*tex_key)
         if data:
-            img = Image.open(_io.BytesIO(data))
+            img = None
+            if wajah_chibi:
+                from .wajah import tekstur_kepala_chibi
+                img = tekstur_kepala_chibi(data, kunci=kunci, varian=varian)
+            elif rambut_chibi:
+                from .wajah import tekstur_rambut_chibi
+                img = tekstur_rambut_chibi(data, kunci=kunci, varian=varian)
+            if img is None:
+                img = Image.open(_io.BytesIO(data))
             tex = Texture(img)
             tex.filtering = True
     except Exception as e:
         logging.warning(f"vitaboy_baked: texture gagal {tex_key}: {e}")
         tex = None
-    _TEX_CACHE[tex_key] = tex
+    _TEX_CACHE[kunci] = tex
     return tex
 
 
@@ -336,11 +363,23 @@ def _build_geom(mesh, bind_abs, joints, name: str):
     bw = GeomVertexWriter(vdata, InternalName.getTransformBlend())
 
     from .vitaboy.skeleton import Mat4
+    from .vitaboy.mesh import Vec3 as VVec3
+    from .wajah import skala_vertex
     identity = Mat4.identity()
     for v in mesh.vertices:
         bone_name = idx_to_bone.get(v.bone_index)
         bm = bind_abs.get(bone_name, identity)
-        p = bm.transform_point(v.position)
+        # Proporsi chibi. Vertex TSO tersimpan dalam RUANG-TULANG, jadi
+        # mengalikannya di sini sama persis dengan menskalakan bagian itu
+        # terhadap titik asal tulangnya — di pose bind maupun di tiap frame
+        # animasi, karena posisi akhir selalu `v.position * net(tulang)`.
+        # Skalanya seragam, jadi arah normal tidak berubah dan tidak perlu
+        # matriks normal terpisah.
+        s = skala_vertex(bone_name)
+        pos = v.position if s == 1.0 else VVec3(v.position.x * s,
+                                                v.position.y * s,
+                                                v.position.z * s)
+        p = bm.transform_point(pos)
         n = bm.transform_direction(v.normal)
         vw.addData3(p.x, p.y, p.z)
         nw.addData3(n.x, n.y, n.z)
@@ -384,7 +423,8 @@ class NativeAvatar:
 
     def __init__(self, parent_entity, apr_list: List[str],
                  scale: float = 0.30, tint=None,
-                 anims: Tuple[str, ...] = DEFAULT_ANIMS):
+                 anims: Tuple[str, ...] = DEFAULT_ANIMS,
+                 varian=None):
         from panda3d.core import Character, CharacterJoint, NodePath
         from ursina import Entity, color
         from .vitaboy import asset_registry
@@ -401,7 +441,12 @@ class NativeAvatar:
         bind_abs = {b.name: Mat4([row[:] for row in b.absolute_matrix.m])
                     for b in skel.bones}
 
-        self.root_entity = Entity(parent=parent_entity, scale=scale)
+        # Ganti rugi tinggi untuk kepala chibi yang diperbesar: lihat
+        # `wajah.py`. Tanpa ini setiap warga desa jadi 11% lebih jangkung dan
+        # semua yang sudah disetel untuk tinggi lama (papan nama, tinggi
+        # pintu, sudut kamera) meleset — padahal yang diminta cuma proporsi.
+        from .wajah import SKALA_TINGGI
+        self.root_entity = Entity(parent=parent_entity, scale=scale * SKALA_TINGGI)
         char = Character('vitaboy')
         bundle = char.getBundle(0)
         joints: Dict[str, object] = {}
@@ -421,16 +466,22 @@ class NativeAvatar:
         if tint is not None and tint != color.white:
             self.char_np.setColor(tint.r, tint.g, tint.b, tint.a)
 
+        from .wajah import apr_kepala, apr_rambut, varian_wajah
+        if varian is None:
+            varian = varian_wajah('')
         self.parts = []
         for apr_name in apr_list:
             if not apr_name:
                 continue
+            kepala = apr_kepala(apr_name)
+            rambut = apr_rambut(apr_name)
             for k, (mesh, tex_key) in enumerate(_read_apr_parts(apr_name)):
                 gnode = _build_geom(mesh, bind_abs, joints, f'{apr_name}#{k}')
                 if gnode is None:
                     continue
                 np_ = self.char_np.attachNewNode(gnode)
-                tex = _texture_for(tex_key)
+                tex = _texture_for(tex_key, wajah_chibi=kepala,
+                                   rambut_chibi=rambut, varian=varian)
                 if tex is not None:
                     np_.setTexture(tex._texture if hasattr(tex, '_texture') else tex, 1)
                 self.parts.append((mesh, np_))
@@ -595,8 +646,8 @@ class NativeAvatar:
 
 def build_native_avatar(parent_entity, apr_list: List[str],
                         scale: float = 0.30, tint=None,
-                        anims: Tuple[str, ...] = DEFAULT_ANIMS
-                        ) -> Optional[NativeAvatar]:
+                        anims: Tuple[str, ...] = DEFAULT_ANIMS,
+                        varian=None) -> Optional[NativeAvatar]:
     """Bangun NativeAvatar; None kalau aset TSO tidak ada atau gagal.
 
     Gagal-lunak disengaja: pemanggil (vitaboy_npc.py) turun ke jalur berikutnya
@@ -607,7 +658,7 @@ def build_native_avatar(parent_entity, apr_list: List[str],
         return None
     try:
         return NativeAvatar(parent_entity, apr_list, scale=scale, tint=tint,
-                            anims=anims)
+                            anims=anims, varian=varian)
     except Exception as e:
         logging.warning(f"NativeAvatar gagal ({e}); turun ke jalur berikutnya.")
         return None

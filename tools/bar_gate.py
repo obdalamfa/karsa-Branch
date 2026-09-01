@@ -154,7 +154,12 @@ def perintah_check(_args):
         print('  meluluskan semuanya — kegagalan nomor satu gauntlet loop.')
         return 1
 
-    bocor = _periksa_kebocoran()
+    # Patokan ter-track TIDAK otomatis salah. Yang salah adalah patokan ter-track
+    # di repo PUBLIK. Sejak repo ini dipindahkan ke privat, pemilik memilih agar
+    # patokannya ikut ter-commit supaya tidak hilang lagi — dan keputusan itu
+    # dicatat di MANIFEST, bukan diingat. Kalau repo dikembalikan jadi publik,
+    # `repo_privat` harus disetel false dan gerbang ini akan menutup lagi.
+    bocor = [] if data.get('repo_privat') else _periksa_kebocoran()
     if bocor:
         print('GERBANG TERTUTUP — patokan bocor ke git\n')
         for b in bocor[:8]:
@@ -170,6 +175,11 @@ def perintah_check(_args):
         print('  sebagai data URI, jadi ia membawa frame patokan ikut serta.')
         return 1
 
+    if data.get('repo_privat'):
+        print('repo    : PRIVAT — patokan boleh ter-commit.')
+        print('          Kalau repo ini dikembalikan jadi publik: setel')
+        print('          repo_privat=false di MANIFEST DAN keluarkan patokannya')
+        print('          dari git (`git rm --cached`). Gerbang ini akan menutup lagi.')
     print(f"patokan : {data.get('bar', '(tidak disebut)')}")
     print(f"sumber  : {data.get('source', '(tidak disebut)')}\n")
     import textwrap
@@ -223,6 +233,10 @@ def perintah_pair(args):
 
     # Samakan tinggi supaya beda ukuran tidak jadi petunjuk mana yang mana.
     h = min(a_img.height, b_img.height, 720)
+    if args.tegak:
+        # Strip: tingginya satu ubin, bukan satu layar. Menjepitnya ke 720
+        # tidak masuk akal dan malah membuang resolusi.
+        h = min(a_img.height, b_img.height)
     def _skala(im):
         w = max(1, round(im.width * h / im.height))
         return im.resize((w, h), Image.LANCZOS)
@@ -235,9 +249,23 @@ def perintah_pair(args):
     kiri, kanan = (a_img, b_img) if kiri_kita else (b_img, a_img)
 
     JEDA = 24
-    lembar = Image.new('RGB', (kiri.width + JEDA + kanan.width, h), (18, 18, 20))
-    lembar.paste(kiri, (0, 0))
-    lembar.paste(kanan, (kiri.width + JEDA, 0))
+    if args.tegak:
+        # Strip gerak berdampingan jadi 15.000 px lebar; diperkecil agar muat,
+        # tiap frame-nya tinggal beberapa puluh piksel dan gerakan yang justru
+        # sedang dinilai hilang. Ditumpuk tegak, tiap strip tetap satu baris
+        # penuh. Lebar disamakan juga supaya beda ukuran tidak jadi petunjuk.
+        w = min(kiri.width, kanan.width)
+        def _lebar(im):
+            hh = max(1, round(im.height * w / im.width))
+            return im.resize((w, hh), Image.LANCZOS)
+        kiri, kanan = _lebar(kiri), _lebar(kanan)
+        lembar = Image.new('RGB', (w, kiri.height + JEDA + kanan.height), (18, 18, 20))
+        lembar.paste(kiri, (0, 0))
+        lembar.paste(kanan, (0, kiri.height + JEDA))
+    else:
+        lembar = Image.new('RGB', (kiri.width + JEDA + kanan.width, h), (18, 18, 20))
+        lembar.paste(kiri, (0, 0))
+        lembar.paste(kanan, (kiri.width + JEDA, 0))
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -245,6 +273,7 @@ def perintah_pair(args):
 
     kunci = {
         'lembar': str(out),
+        'susun': 'tegak' if args.tegak else 'datar',
         'ref_slug': args.ref,
         'A': 'kita' if kiri_kita else 'patokan',
         'B': 'patokan' if kiri_kita else 'kita',
@@ -255,7 +284,8 @@ def perintah_pair(args):
     kp.parent.mkdir(parents=True, exist_ok=True)
     kp.write_text(json.dumps(kunci, ensure_ascii=False, indent=2), encoding='utf-8')
 
-    print(f'lembar : {out}   (A = kiri, B = kanan)')
+    posisi = 'A = atas, B = bawah' if args.tegak else 'A = kiri, B = kanan'
+    print(f'lembar : {out}   ({posisi})')
     print(f'kunci  : {kp}')
     print('Berikan HANYA lembarnya ke kritikus. Kuncinya jangan.')
     return 0
@@ -291,6 +321,8 @@ def main():
     p.add_argument('--ref', required=True, help='slug patokan di _bench/refs/')
     p.add_argument('--out', default='_bench/sheet.png')
     p.add_argument('--key', default='_bench/key.json')
+    p.add_argument('--tegak', action='store_true',
+                   help='tumpuk A di atas B, bukan berdampingan — untuk strip gerak')
     p.add_argument('--seed', type=int, default=None,
                    help='hanya untuk uji — biarkan kosong saat dipakai sungguhan')
 

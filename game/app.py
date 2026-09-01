@@ -659,6 +659,14 @@ class Game3D:
                     self.panels.open_panel('crafting')
                 else:
                     self.panels.flash_msg("Pergi ke Bengkel Budi!")
+            elif key == 'tab':
+                # Ringkasan motif di sudut kiri-bawah adalah satu-satunya blok
+                # HUD yang tetap memakan tempat setelah pemain hafal isinya.
+                # TAB menyembunyikannya, bukan membuangnya.
+                nyala = self.panels.toggle_motive_panel()
+                self.panels.flash_msg(
+                    'Ringkasan kebutuhan: ON' if nyala else
+                    'Ringkasan kebutuhan: OFF  [TAB]', 1.2)
             elif key == 'f3':
                 self._debug_overlay = not getattr(self, '_debug_overlay', False)
                 _pasang_overlay_debug(self._debug_overlay)

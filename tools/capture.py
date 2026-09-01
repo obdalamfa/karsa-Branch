@@ -81,6 +81,31 @@ def main():
                          'punya geometri.')
     ap.add_argument('--width', type=int, default=1280)
     ap.add_argument('--height', type=int, default=720)
+    # --- mode STRIP: gerak tidak bisa dinilai dari gambar diam ---------------
+    # Kritikus yang cuma melihat satu frame tidak bisa membedakan animasi panen
+    # yang hidup dari pose panen yang beku. Strip mengambil N frame berjarak
+    # tetap lalu menyusunnya jadi SATU gambar, jadi kritikus melihat waktu.
+    ap.add_argument('--strip', type=int, default=0,
+                    help='ambil N frame berurutan dan susun jadi satu strip')
+    ap.add_argument('--strip-every', type=int, default=6,
+                    help='berapa langkah simulasi antar frame strip')
+    ap.add_argument('--strip-cols', type=int, default=0,
+                    help='kolom pada strip (0 = satu baris)')
+    ap.add_argument('--hold', default='',
+                    help='tombol yang DITAHAN selama strip, mis. w atau w,shift. '
+                         'Gerak jalan/berkuda butuh tombol ditahan, bukan diketuk.')
+    # --- aksi pie-menu -------------------------------------------------------
+    # `gosok` dan `bicara` bukan tombol; keduanya pilihan di pie menu, jadi dari
+    # baris perintah keduanya TIDAK BISA DIFOTO — dan BRIEF-nya sendiri bilang
+    # fitur yang tidak bisa difoto kritikus itu tidak ada. Ini memanggil jalur
+    # yang SAMA dengan yang dipanggil pie menu (`execute_pie_action`), bukan
+    # pintu belakang yang melewati logikanya.
+    ap.add_argument('--aksi', default=None,
+                    help='jalankan satu aksi pie-menu, mis. gosok / bicara')
+    ap.add_argument('--target', default=None,
+                    help='id sasaran aksi (npc atau hewan), mis. kuda_pegasus')
+    ap.add_argument('--gif', default=None,
+                    help='tulis juga GIF dari frame strip (untuk halaman progres)')
     args = ap.parse_args()
 
     # Ursina derives asset_folder from sys.argv[0]; force it to the repo root
@@ -164,6 +189,21 @@ def main():
     if args.toolrack:
         _build_toolrack(g, base)
 
+    if args.aksi:
+        if not args.target:
+            print('CAPTURE_FAIL: --aksi butuh --target', file=sys.stderr)
+            sys.exit(2)
+        try:
+            g.player.execute_pie_action(args.target, args.aksi, g.entities, g.panels)
+        except Exception:
+            # Berisik dengan sengaja: aksi yang diam-diam gagal menghasilkan
+            # strip beku, dan strip beku terbaca sebagai "animasinya belum ada".
+            traceback.print_exc()
+            print(f'CAPTURE_FAIL: aksi {args.aksi} pada {args.target} melempar',
+                  file=sys.stderr)
+            sys.exit(2)
+        print(f'CAPTURE_AKSI {args.aksi} -> {args.target}')
+
     for _ in range(args.frames):
         base.taskMgr.step()
 
@@ -198,6 +238,55 @@ def main():
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     from panda3d.core import Filename
+
+    if args.strip > 0:
+        # Tombol ditahan lewat held_keys Ursina — jalur yang SAMA dengan yang
+        # dibaca player.py (baris 512-518), bukan jalur uji terpisah. Kalau
+        # gerakan hanya jalan di harness dan tidak di tangan pemain, harness
+        # ini berbohong.
+        from ursina import held_keys
+        tahan = [k.strip() for k in args.hold.split(',') if k.strip()]
+        for k in tahan:
+            held_keys[k] = 1
+
+        frames_dir = out.parent / (out.stem + '_frames')
+        frames_dir.mkdir(parents=True, exist_ok=True)
+        paths = []
+        for i in range(args.strip):
+            for _ in range(max(1, args.strip_every)):
+                base.taskMgr.step()
+            im = base.win.getScreenshot()
+            if im is None:
+                print('CAPTURE_FAIL: no screenshot in strip', file=sys.stderr)
+                sys.exit(2)
+            fp = frames_dir / f'f{i:02d}.png'
+            im.write(Filename.fromOsSpecific(str(fp.resolve())))
+            paths.append(fp)
+
+        for k in tahan:
+            held_keys[k] = 0
+
+        from PIL import Image
+        ims = [Image.open(fp).convert('RGB') for fp in paths]
+        cols = args.strip_cols if args.strip_cols > 0 else len(ims)
+        rows = (len(ims) + cols - 1) // cols
+        tw, th = ims[0].size
+        sheet = Image.new('RGB', (cols * tw, rows * th), (0, 0, 0))
+        for i, im in enumerate(ims):
+            sheet.paste(im, ((i % cols) * tw, (i // cols) * th))
+        sheet.save(out)
+
+        if args.gif:
+            gp = Path(args.gif)
+            gp.parent.mkdir(parents=True, exist_ok=True)
+            small = [im.resize((tw // 2, th // 2), Image.LANCZOS) for im in ims]
+            small[0].save(gp, save_all=True, append_images=small[1:],
+                          duration=90, loop=0, optimize=True)
+
+        print(f'CAPTURE_OK {out.resolve()} strip={len(ims)} tile={tw}x{th}')
+        sys.stdout.flush()
+        os._exit(0)
+
     img = base.win.getScreenshot()
     if img is None:
         print('CAPTURE_FAIL: no screenshot', file=sys.stderr)

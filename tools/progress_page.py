@@ -26,6 +26,10 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 BENCH = ROOT / '_bench'
 THUMB_W = 760
+# Disetel dari baris perintah lewat --tanpa-patokan. Global karena build_model()
+# sudah dipanggil tanpa argumen dari render(), dan menambah parameter di sana
+# berarti mengubah tiga pemanggil yang tidak ada urusannya dengan ini.
+TANPA_PATOKAN = False
 THUMB_Q = 70
 
 
@@ -184,6 +188,14 @@ def build_model():
         won = bool(rounds) and rounds[-1]['won']
         sheet = newest(f'sheets/{sid}*.png') or newest(f'sheets/{sid}*.jpg')
         shot = newest(f'shots/{sid}*.png')
+        if TANPA_PATOKAN:
+            # Lembar A/B memuat frame Story of Seasons. Halaman yang dibagikan
+            # ke luar mesin ini tidak boleh membawanya: itu redistribusi karya
+            # orang lain, aturan yang ditulis MANIFEST-nya sendiri dan dijaga
+            # `bar_gate.py check`. Yang dibagikan cuma tangkapan layar KITA,
+            # putusan, dan celah yang disebut kritikus — dan itu justru yang
+            # ingin ditonton pemilik proyek.
+            sheet = None
         rows.append({
             'id': sid,
             'title': s.get('title') or sid,
@@ -593,6 +605,8 @@ def render() -> str:
 
 
 if __name__ == '__main__':
-    dest = Path(sys.argv[1]) if len(sys.argv) > 1 else BENCH / 'progress.html'
+    argv = [a for a in sys.argv[1:] if a != '--tanpa-patokan']
+    TANPA_PATOKAN = '--tanpa-patokan' in sys.argv
+    dest = Path(argv[0]) if argv else BENCH / 'progress.html'
     dest.write_text(render(), encoding='utf-8')
     print(f'WROTE {dest} ({dest.stat().st_size/1024:.0f} KB)')

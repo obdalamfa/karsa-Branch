@@ -1,43 +1,100 @@
 {
-  "slices": [
-    {"id": "TANAH", "title": "Permukaan tanah dan rumput", "kind": "tampilan",
-     "bar_image": "farm_wide",
-     "goal": "Ladang dari jarak main biasa harus terbaca sebagai tanah yang ditanami, bukan sebagai kisi.",
-     "judge_question": "Mana yang lebih terbaca sebagai tanah pertanian sungguhan?"},
-
-    {"id": "DEKAT", "title": "Tanah dan tanaman dari dekat", "kind": "tampilan",
-     "bar_image": "farm_closeup",
-     "goal": "Pada jarak dekat, tekstur ubin paling mudah ketahuan mengulang. Di sinilah permukaan biasanya runtuh.",
-     "judge_question": "Mana yang teksturnya tidak ketahuan mengulang?"},
-
-    {"id": "HUD", "title": "Antarmuka dalam permainan", "kind": "tampilan",
-     "bar_image": "hud_default",
-     "goal": "HUD harus terbaca sekilas tanpa memakan layar, dan tidak boleh ada yang terpotong di tepi mana pun.",
-     "judge_question": "Mana yang lebih mudah dibaca sekilas tanpa memakan layar?"},
-
-    {"id": "WAJAH", "title": "Warga desa dari jarak percakapan", "kind": "tampilan",
-     "bar_image": "character_closeup",
-     "goal": "Proporsi, warna kulit dan pakaian, dan seberapa jauh wajah dibaca sebagai wajah.",
-     "judge_question": "Mana yang lebih terbaca sebagai orang, bukan sebagai boneka?"},
-
-    {"id": "WARGA", "title": "Warga desa dari jarak main", "kind": "tampilan",
-     "bar_image": "character_midshot",
-     "goal": "Jarak inilah yang menentukan apakah orang terbaca sebagai orang, dan di jarak inilah avatar kita paling sering gagal.",
-     "judge_question": "Pada jarak main biasa, mana yang sosoknya lebih jelas?"},
-
-    {"id": "DESA", "title": "Pemandangan desa", "kind": "tata letak",
-     "bar_image": "village_wide",
-     "goal": "Kepadatan, jarak antar-bangunan, dan bagaimana banyak benda tetap terbaca dalam satu frame.",
-     "judge_question": "Mana yang lebih terbaca sebagai tempat yang dihuni orang?"},
-
-    {"id": "KANDANG", "title": "Pencahayaan dalam ruangan", "kind": "tampilan",
-     "bar_image": "barn_interior",
-     "goal": "Lantai, cahaya dalam ruang, dan skala isi ruangan terhadap pemain.",
-     "judge_question": "Mana yang ruangannya lebih meyakinkan sebagai ruangan?"},
-
-    {"id": "SENJA", "title": "Pergantian waktu", "kind": "tampilan",
-     "bar_image": "evening_light",
-     "goal": "Warna langit, arah bayangan, dan seberapa jauh warna dunia bergeser mengikuti waktu.",
-     "judge_question": "Mana yang pergantian waktunya lebih terasa?"}
-  ]
+ "slices": [
+  {
+   "id": "TANAH",
+   "title": "Permukaan tanah dan rumput",
+   "kind": "tampilan",
+   "bar_image": "farm_wide",
+   "goal": "Ladang dari jarak main biasa harus terbaca sebagai tanah yang ditanami, bukan sebagai kisi.",
+   "judge_question": "Mana yang lebih terbaca sebagai tanah pertanian sungguhan?"
+  },
+  {
+   "id": "DEKAT",
+   "title": "Tanah dan tanaman dari dekat",
+   "kind": "tampilan",
+   "bar_image": "farm_closeup",
+   "goal": "Pada jarak dekat, tekstur ubin paling mudah ketahuan mengulang. Di sinilah permukaan biasanya runtuh.",
+   "judge_question": "Mana yang teksturnya tidak ketahuan mengulang?"
+  },
+  {
+   "id": "HUD",
+   "title": "Antarmuka dalam permainan",
+   "kind": "tampilan",
+   "bar_image": "hud_default",
+   "goal": "HUD harus terbaca sekilas tanpa memakan layar, dan tidak boleh ada yang terpotong di tepi mana pun.",
+   "judge_question": "Mana yang lebih mudah dibaca sekilas tanpa memakan layar?"
+  },
+  {
+   "id": "WAJAH",
+   "title": "Warga desa dari jarak percakapan",
+   "kind": "tampilan",
+   "bar_image": "character_closeup",
+   "goal": "Proporsi, warna kulit dan pakaian, dan seberapa jauh wajah dibaca sebagai wajah.",
+   "judge_question": "Mana yang lebih terbaca sebagai orang, bukan sebagai boneka?"
+  },
+  {
+   "id": "WARGA",
+   "title": "Warga desa dari jarak main",
+   "kind": "tampilan",
+   "bar_image": "character_midshot",
+   "goal": "Jarak inilah yang menentukan apakah orang terbaca sebagai orang, dan di jarak inilah avatar kita paling sering gagal.",
+   "judge_question": "Pada jarak main biasa, mana yang sosoknya lebih jelas?"
+  },
+  {
+   "id": "DESA",
+   "title": "Pemandangan desa",
+   "kind": "tata letak",
+   "bar_image": "village_wide",
+   "goal": "Kepadatan, jarak antar-bangunan, dan bagaimana banyak benda tetap terbaca dalam satu frame.",
+   "judge_question": "Mana yang lebih terbaca sebagai tempat yang dihuni orang?"
+  },
+  {
+   "id": "KANDANG",
+   "title": "Pencahayaan dalam ruangan",
+   "kind": "tampilan",
+   "bar_image": "barn_interior",
+   "goal": "Lantai, cahaya dalam ruang, dan skala isi ruangan terhadap pemain.",
+   "judge_question": "Mana yang ruangannya lebih meyakinkan sebagai ruangan?"
+  },
+  {
+   "id": "SENJA",
+   "title": "Pergantian waktu",
+   "kind": "tampilan",
+   "bar_image": "evening_light",
+   "goal": "Warna langit, arah bayangan, dan seberapa jauh warna dunia bergeser mengikuti waktu.",
+   "judge_question": "Mana yang pergantian waktunya lebih terasa?"
+  },
+  {
+   "id": "BERKUDA",
+   "title": "Menaiki kuda dan bergerak",
+   "kind": "gerak",
+   "bar_image": "gerak_berkuda",
+   "goal": "Pemain naik ke punggung kuda lalu BERGERAK: kaki kuda mengayun, pemain duduk di pelana dengan badan ikut bergoyang, kamera mengikuti. Bukan pemain yang menempel kaku di atas model kuda.",
+   "judge_question": "Pada strip mana penunggang dan kuda benar-benar bergerak bersama, bukan satu model menempel di model lain?"
+  },
+  {
+   "id": "PANEN",
+   "title": "Animasi panen",
+   "kind": "gerak",
+   "bar_image": "gerak_panen",
+   "goal": "Memanen terbaca sebagai gerakan bertenaga dengan awalan, sentuhan, dan pemulihan — bukan satu pose beku lalu barang muncul di tas.",
+   "judge_question": "Pada strip mana memanen terbaca sebagai gerakan badan yang utuh, bukan pose diam?"
+  },
+  {
+   "id": "GOSOK",
+   "title": "Animasi menggosok ternak",
+   "kind": "gerak",
+   "bar_image": "gerak_gosok",
+   "goal": "Menggosok terbaca sebagai gerak tangan berulang pada badan hewan, dengan pemain berdiri pada jarak yang masuk akal dan hewan bereaksi.",
+   "judge_question": "Pada strip mana menggosok terbaca sebagai tangan yang benar-benar menggosok hewan?"
+  },
+  {
+   "id": "BICARA",
+   "title": "Animasi berbicara",
+   "kind": "gerak",
+   "bar_image": "gerak_bicara",
+   "goal": "Saat bercakap, tubuh ikut bicara: kepala, tangan, pergeseran berat badan. Dua orang saling menghadap. Bukan dua patung dengan kotak teks.",
+   "judge_question": "Pada strip mana orang yang sedang bicara terlihat hidup, bukan patung dengan kotak teks?"
+  }
+ ]
 }

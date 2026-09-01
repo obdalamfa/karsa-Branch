@@ -36,5 +36,26 @@
       "catatan": "Adegan luar ruang saat senja. Patokan untuk warna langit, arah bayangan, dan seberapa jauh warna dunia bergeser mengikuti waktu."
     }
   ],
-  "jangan_di_commit": "Repo ini PUBLIK. Frame patokan boleh ada di disk untuk pembandingan internal, tapi tidak boleh ter-commit — itu redistribusi karya orang lain. `_bench/.gitignore` menjaganya, dan `bar_gate.py check` menolak jalan kalau ada yang bocor. Akibat yang diterima dengan sadar: berkasnya hilang tiap container ditarik, jadi loop ini hanya bisa dijalankan di mesin yang menyimpan berkasnya, bukan di sesi web."
+  "jangan_di_commit": "Repo ini PUBLIK. Frame patokan boleh ada di disk untuk pembandingan internal, tapi tidak boleh ter-commit — itu redistribusi karya orang lain. `_bench/.gitignore` menjaganya, dan `bar_gate.py check` menolak jalan kalau ada yang bocor. Akibat yang diterima dengan sadar: berkasnya hilang tiap container ditarik, jadi loop ini hanya bisa dijalankan di mesin yang menyimpan berkasnya, bukan di sesi web.",
+  "klip_sumber": "Klip gameplay, bukan trailer dan bukan cutscene. Gerak tidak bisa dinilai dari gambar diam: animasi yang hidup dan pose yang BEKU menghasilkan tangkapan layar yang sama. Tiap klip disimpan sebagai STRIP — 6 ubin 960x540 berjarak tetap — dibuat `tools/klip.py ambil`. Strip kita dibuat `tools/capture.py --strip 6 --strip-every N`. Jumlah dan ukuran ubin HARUS sama di kedua sisi, kalau tidak kritikus bisa menebak mana yang mana dari bentuknya.",
+  "klip": [
+    {
+      "slug": "gerak_berkuda",
+      "catatan": "Pemain menaiki kuda dan BERGERAK. Patokan untuk tinggi duduk, sikap badan di atas pelana, ayunan kaki kuda, dan bagaimana kamera mengikuti saat berkuda — bukan sekadar pemain menempel di punggung kuda."
+    },
+    {
+      "slug": "gerak_panen",
+      "catatan": "Memanen atau mengerjakan petak ladang dengan alat. Patokan untuk ayunan badan, jeda antar ayunan, dan apakah alatnya benar-benar menyentuh tanah pada frame yang tepat."
+    },
+    {
+      "slug": "gerak_gosok",
+      "catatan": "Menggosok/menyikat ternak. Patokan untuk gerak tangan berulang, jarak pemain ke hewan, dan reaksi hewannya."
+    },
+    {
+      "slug": "gerak_bicara",
+      "catatan": "Berbicara dengan penduduk desa. Patokan untuk gerak tubuh saat bicara — kepala, tangan, pergeseran berat badan — dan untuk bagaimana kotak dialog duduk di layar."
+    }
+  ],
+  "repo_privat": true,
+  "repo_privat_catatan": "Repo dipindahkan ke PRIVAT supaya frame patokan tidak perlu dihapus tiap kali. Selama ini benar, delapan frame diam dan empat strip gerak boleh ter-commit. Kalau repo dikembalikan jadi publik, setel ini ke false DAN keluarkan patokannya dari git (`git rm --cached`) — meng-commit tangkapan layar Story of Seasons ke repo publik adalah redistribusi karya orang lain. Rekaman sumber di refs/_video/ tidak pernah ikut: 2,9 GB, di atas batas GitHub."
 }

@@ -108,10 +108,38 @@ class UIManager:
 
     # ─── PUBLIC: HUD ─────────────────────────────────────
     def _build_hud(self):
-        """HUD minimalis gaya Harvest Moon AWL."""
+        """HUD tipis yang MENEMPEL di tepi layar (patokan: AWL).
+
+        Bentuk lama memakan seperempat layar dengan empat panel pejal: kotak
+        alat 390x280 di kiri-atas, kotak waktu 660x280 di kanan-atas, panel
+        SUASANA HATI 285x400 yang mengambang jauh dari tepi, dan pita tombol
+        SELEBAR LAYAR di bawah. Diukur dari tangkapan layar 1920x1080: ~27%
+        layar tertutup HUD.
+
+        Patokannya justru kebalikannya — bilah stamina TIPIS menempel di
+        kiri-atas, tanggal/musim/jam kecil di kanan-atas, petunjuk tombol
+        kecil di kanan-bawah, dan latar panel nyaris tidak ada: teks duduk
+        langsung di atas dunia dengan alas gelap setipis mungkin.
+
+        Tiga aturan tata letak, dan tidak ada yang keempat:
+
+        1. Semua dijangkar ke SUDUT lewat satu margin yang sama (`M`), jadi
+           tidak ada blok yang "hampir" di tepi.
+        2. Satu baris menampung sebanyak mungkin. Waktu/tanggal/cuaca dulu
+           empat baris bertumpuk; sekarang satu baris rata kanan yang
+           lebarnya dihitung dari teksnya sendiri (`_tata_kanan_atas`).
+        3. Alas gelap dipas ke isinya tiap kali teksnya berubah, bukan
+           dipatok ke kotak tetap. Pita bawah selebar layar mati karena
+           alasan ini: ia dibuat selebar layar supaya prompt sepanjang apa
+           pun tetap berlatar — padahal yang perlu melar cuma alasnya.
+
+        Informasi tidak dibuang, cuma dikecilkan dan dipindahkan. Delapan
+        motif tetap tampil lengkap dengan namanya di sudut kiri-bawah, dan
+        TAB menyembunyikan/menampilkannya kalau pemain mau layar bersih.
+        """
         TIME_C   = color.rgb(255, 255, 255)
         GOLD_C   = color.rgb(255, 215,  60)
-        
+
         # ── Tepi layar yang sebenarnya ──
         # camera.ui membentang -aspect/2..+aspect/2 mendatar, BUKAN -0.5..0.5.
         # Angka mati 0.70 lahir dari menebak layar 16:9 lalu menjangkar teks di
@@ -120,63 +148,135 @@ class UIManager:
         # Yang duduk di kanan dijangkar di KANAN (origin x = +0.5) supaya
         # tumbuhnya ke dalam layar, berapa pun panjang teksnya.
         self._edge_x = window.aspect_ratio / 2
-        X_R = self._edge_x - 0.028
-        X_L = -self._edge_x + 0.038
-        self._RA = (0.5, 0.5)       # rata kanan, jangkar atas
+        M = 0.013                       # jarak ke tepi: 14 px di layar 1080
+        self._M   = M
+        self._X_L = X_L = -self._edge_x + M
+        self._X_R = X_R =  self._edge_x - M
+        self._Y_T = Y_T =  0.5 - M
+        self._Y_B = Y_B = -0.5 + M
+        self._GAP = 0.014               # jarak antar potongan dalam satu baris
+        self._RA  = (0.5, 0.0)          # rata kanan, jangkar tengah menegak
 
-        # ── Kanan Atas: Jam & Tanggal (rata kanan) ──
-        self._time_txt    = _txt('06:00',         pos=(X_R, 0.45), scale=1.3, col=TIME_C, origin=self._RA)
-        self._date_txt    = _txt('Hari 1 | Semi', pos=(X_R, 0.40), scale=0.8, col=color.rgb(170, 200, 255), origin=self._RA)
-        self._weather_txt = _txt('^ Cerah',       pos=(X_R, 0.36), scale=0.8, col=color.rgb(255, 240, 130), origin=self._RA)
-        self._scene_txt   = _txt('> Kebun',       pos=(X_R, 0.32), scale=0.8, col=color.rgb(140, 255, 160), origin=self._RA)
-        self._gold_txt    = _txt('§ 0G',          pos=(X_R, 0.28), scale=1.0, col=GOLD_C, origin=self._RA)
+        # Tinggi satu baris teks di ruang camera.ui = Text.size * skala entity.
+        # Dipakai untuk menumpuk baris tanpa menebak; skala di sini adalah
+        # argumen `_txt`, yang dikalikan 1.2 di dalamnya.
+        def _tinggi(s):
+            return 0.025 * s * 1.2
 
-        # ── Kiri Atas: Tool & Stamina ──
-        self._tool_name = _txt('Cangkul', pos=(X_L, 0.45), scale=1.1, col=color.rgb(255, 240, 100))
-        self._seed_txt  = _txt('',        pos=(X_L, 0.41), scale=0.8, col=color.rgb(155, 255, 155))
-        
-        self._BAR_W       = 0.22
-        self._BAR_X_LEFT  = X_L
-        
-        hy = 0.36
-        self._hp_bar = _ui(scale=(self._BAR_W, 0.015), position=(X_L + self._BAR_W/2, hy), color=color.rgb(55, 210, 80))
-        self._hp_val = _txt('HP', pos=(X_L, hy + 0.015), scale=0.7, col=color.white)
+        S_JAM   = 0.92                  # jam: satu-satunya teks yang boleh besar
+        S_KECIL = 0.66
+        h_jam   = _tinggi(S_JAM)
+        h_kecil = _tinggi(S_KECIL)
 
-        ey = 0.32
-        self._en_bar = _ui(scale=(self._BAR_W, 0.015), position=(X_L + self._BAR_W/2, ey), color=color.rgb(55, 205, 75))
-        self._en_val = _txt('EN', pos=(X_L, ey + 0.015), scale=0.7, col=color.white)
+        # ── Kanan Atas: satu baris jam/cuaca/tanggal + satu baris tipis ──
+        # Empat baris jadi dua. Posisi mendatar dihitung ulang dari lebar
+        # teksnya di `_tata_kanan_atas`, jadi teks sepanjang apa pun tetap
+        # rata kanan dan tidak pernah menabrak yang di sebelahnya.
+        r1 = Y_T - h_jam / 2
+        r2 = r1 - h_jam / 2 - 0.004 - h_kecil / 2
+        self._ROW1_Y, self._ROW2_Y = r1, r2
+        self._time_txt    = _txt('06:00',         pos=(X_R, r1), scale=S_JAM,   col=TIME_C, origin=self._RA)
+        self._weather_txt = _txt('^ Cerah',       pos=(X_R, r1), scale=S_KECIL, col=color.rgb(255, 240, 130), origin=self._RA)
+        self._date_txt    = _txt('Hari 1 | Semi', pos=(X_R, r1), scale=S_KECIL, col=color.rgb(180, 205, 255), origin=self._RA)
+        self._gold_txt    = _txt('§ 0G',          pos=(X_R, r2), scale=S_KECIL, col=GOLD_C, origin=self._RA)
+        self._scene_txt   = _txt('> Kebun',       pos=(X_R, r2), scale=S_KECIL, col=color.rgb(150, 250, 170), origin=self._RA)
 
-        self._buff_txt = _txt('', pos=(X_L, 0.28), scale=0.75, col=color.rgb(120, 255, 180))
-        self._queue_txt = _txt('', pos=(X_L, 0.24), scale=0.75, col=color.rgb(255, 210, 80))
+        # ── Kiri Atas: nama alat + dua bilah stamina TIPIS ──
+        # Patokan menaruh satu bilah setebal 16 px menempel di sudut. Dua
+        # bilah kita 14 px, bertumpuk, dengan angkanya di ujung kanan bilah —
+        # bukan di ATAS bilah, tempat angka "100/100" dulu tertimpa dan
+        # terbaca separuh.
+        S_ALAT   = 0.74
+        S_ANGKA  = 0.52
+        h_alat   = _tinggi(S_ALAT)
+        LA       = (-0.5, 0.0)          # rata kiri, jangkar tengah menegak
+        self._LA = LA
 
-        # ── Kiri Bawah: Panel Motif (termometer ala The Sims 1) ──
-        # Delapan motif ditumpuk vertikal dengan Mood di puncaknya. Tanpa panel
-        # ini seluruh mesin motif tidak terlihat oleh pemain, dan need yang tak
-        # terlihat sama saja dengan tidak ada.
+        y_alat = Y_T - h_alat / 2
+        self._tool_name = _txt('Cangkul', pos=(X_L, y_alat), scale=S_ALAT,
+                               col=color.rgb(255, 240, 100), origin=LA)
+        self._seed_txt  = _txt('', pos=(X_L, y_alat), scale=S_ANGKA + 0.06,
+                               col=color.rgb(155, 255, 155), origin=LA)
+
+        self._BAR_W      = 0.235
+        self._BAR_H      = 0.013
+        self._BAR_X_LEFT = X_L
+        BH = self._BAR_H
+
+        hy = y_alat - h_alat / 2 - 0.005 - BH / 2
+        ey = hy - BH - 0.005
+        self._hy, self._ey = hy, ey
+
+        # Alas bilah: tanpa ini bilah yang menyusut jadi tidak terbaca sebagai
+        # "sisa dari sekian", cuma sebagai garis pendek yang berubah panjang.
+        trek = color.rgb(18, 26, 30, 200)
+        self._hp_trek = _ui(scale=(self._BAR_W, BH), z=0.06,
+                            position=(X_L + self._BAR_W / 2, hy), color=trek)
+        self._en_trek = _ui(scale=(self._BAR_W, BH), z=0.06,
+                            position=(X_L + self._BAR_W / 2, ey), color=trek)
+        self._hp_bar = _ui(scale=(self._BAR_W, BH), z=0.03,
+                           position=(X_L + self._BAR_W / 2, hy),
+                           color=color.rgb(55, 210, 80))
+        self._en_bar = _ui(scale=(self._BAR_W, BH), z=0.03,
+                           position=(X_L + self._BAR_W / 2, ey),
+                           color=color.rgb(55, 205, 75))
+        self._hp_val = _txt('HP', pos=(X_L + self._BAR_W + 0.010, hy),
+                            scale=S_ANGKA, col=color.rgb(230, 240, 245), origin=LA)
+        self._en_val = _txt('EN', pos=(X_L + self._BAR_W + 0.010, ey),
+                            scale=S_ANGKA, col=color.rgb(230, 240, 245), origin=LA)
+
+        # Buff dan antrian aksi: dua baris yang HAMPIR SELALU kosong, jadi
+        # ongkos layarnya nol kecuali saat memang ada yang perlu dibaca.
+        self._buff_txt  = _txt('', pos=(X_L, ey - BH / 2 - 0.005 - h_kecil / 2),
+                               scale=S_KECIL, col=color.rgb(120, 255, 180), origin=LA)
+        self._queue_txt = _txt('', pos=(X_L, ey - BH / 2 - 0.007 - h_kecil * 1.5),
+                               scale=S_KECIL, col=color.rgb(255, 210, 80), origin=LA)
+
+        # ── Kiri Bawah: ringkasan motif, menempel di SUDUT ──
+        # Delapan motif ditumpuk vertikal dengan Suasana di puncaknya. Tanpa
+        # ini seluruh mesin motif tidak terlihat oleh pemain, dan need yang
+        # tak terlihat sama saja dengan tidak ada.
+        #
+        # Yang berubah cuma ukuran dan jangkarnya: lebar bilah 0.20 -> 0.10,
+        # jarak baris 0.038 -> 0.0195, judul satu baris sendiri dilebur jadi
+        # label kolom, dan blok yang tadinya mengambang 60 px dari tepi kiri
+        # dan berhenti 100 px di atas dasar sekarang duduk di sudut. Tinggi
+        # blok 400 px -> 195 px.
         from .motives import MOTIVES, LABELS
         self._motive_keys = MOTIVES
-        self._NBAR_W = 0.20
-        self._NBAR_X = -self._edge_x + 0.030
-        self._NBAR_H = 0.018
-        self._NBAR_GAP = 0.038      # cukup renggang agar label tidak tertimpa bar
-        top_y = -0.06
+        S_MOTIF        = 0.50
+        self._NBAR_W   = 0.100
+        self._NBAR_H   = 0.013
+        self._NROW     = 0.0195
+        NBH            = self._NBAR_H
 
-        # Panel latar gelap: tanpa ini termometer hilang di atas lantai terang.
-        #
-        # Tingginya DIHITUNG dari isi, tidak lagi ditebak. Rumus lama
-        # (0.052 + GAP*n + 0.03) dijangkar di tengah panel lewat offset 0.046
-        # yang tidak berhubungan dengan apa pun, dan tepi atasnya jatuh di
-        # -0.014 sementara judul "SUASANA HATI" duduk di -0.008 — judulnya
-        # menyembul keluar dan terbaca terpotong. Sekarang tepi panel diturunkan
-        # dari puncak judul dan dasar bar terakhir, jadi menambah atau
-        # mengurangi motif tidak bisa lagi membuatnya meleset.
-        PAD       = 0.016
-        title_top = top_y + 0.052                    # Text origin (-0.5, 0.5): pos.y = tepi ATAS
-        last_y    = top_y - 0.020 - self._NBAR_GAP * (len(self._motive_keys) - 1)
-        panel_top = title_top + PAD
-        panel_bot = last_y - self._NBAR_H / 2 - PAD
-        panel_h   = panel_top - panel_bot
-        panel_w   = self._NBAR_W + 0.050
+        n = len(self._motive_keys)
+        y_need0 = Y_B + NBH / 2 + 0.002          # motif terakhir, paling bawah
+        y_mood  = y_need0 + (n - 1) * self._NROW + 0.026
+        MOOD_H  = 0.016
+
+        # Label dibuat DULU, lalu kolomnya diukur dari label terpanjang.
+        # Lebar kolom yang ditebak (0.098) membuat 'Kamar Kecil' menabrak
+        # bilahnya sendiri di tangkapan pertama; angka tebakan tidak tahu
+        # font apa yang benar-benar dimuat, `getTightBounds` tahu.
+        self._mood_lbl = _txt('Suasana', pos=(X_L, y_mood), scale=S_MOTIF,
+                              col=color.rgb(240, 224, 176), origin=LA, z=-0.02)
+        self._need_lbl_ents = [
+            _txt(LABELS[key], pos=(X_L, y_need0 + (n - 1 - i) * self._NROW),
+                 scale=S_MOTIF, col=color.rgb(214, 224, 230), origin=LA, z=-0.02)
+            for i, key in enumerate(self._motive_keys)]
+        w_lbl = max([self._lebar(e)
+                     for e in [self._mood_lbl] + self._need_lbl_ents] + [0.06])
+        self._NLBL_W = min(w_lbl, 0.16) + 0.010
+        self._NBAR_X = X_L + self._NLBL_W
+
+        # Alas panel: tipis, bukan kotak 93% opak lagi. Tugasnya cuma menjamin
+        # label putih tetap terbaca di atas lantai terang; selebihnya biar
+        # dunia yang kelihatan.
+        PAD       = 0.007
+        panel_top = y_mood + MOOD_H / 2 + PAD
+        panel_bot = y_need0 - NBH / 2 - PAD
+        panel_w   = self._NLBL_W + self._NBAR_W + PAD * 2
         # z eksplisit, dan ini bukan hiasan.
         #
         # Semua elemen camera.ui duduk di z=0, jadi Panda menyortir bin
@@ -187,37 +287,31 @@ class UIManager:
         # sebabnya panel motif terbaca mati sejak awal. Yang di belakang diberi
         # z lebih besar, yang di depan lebih kecil.
         self._motive_panel_bg = _ui(
-            scale=(panel_w, panel_h),
-            position=(self._NBAR_X + panel_w / 2 - 0.014,
-                      (panel_top + panel_bot) / 2),
+            scale=(panel_w, panel_top - panel_bot),
+            position=(X_L - PAD + panel_w / 2, (panel_top + panel_bot) / 2),
             z=0.10,
-            color=color.rgb(12, 20, 24, 236))
+            color=color.rgb(12, 20, 24, 128))
 
-        self._mood_lbl = _txt('SUASANA HATI', pos=(self._NBAR_X, title_top),
-                              scale=0.62, col=color.rgb(226, 206, 168), z=-0.02)
-        self._mood_bg = _ui(scale=(self._NBAR_W, 0.026), z=0.06,
-                            position=(self._NBAR_X + self._NBAR_W / 2, top_y + 0.032),
+        self._mood_bg = _ui(scale=(self._NBAR_W, MOOD_H), z=0.06,
+                            position=(self._NBAR_X + self._NBAR_W / 2, y_mood),
                             color=color.rgb(28, 34, 40, 210))
-        self._mood_fill = _ui(scale=(self._NBAR_W, 0.026), z=0.03,
-                              position=(self._NBAR_X + self._NBAR_W / 2, top_y + 0.032),
+        self._mood_fill = _ui(scale=(self._NBAR_W, MOOD_H), z=0.03,
+                              position=(self._NBAR_X + self._NBAR_W / 2, y_mood),
                               color=color.rgb(120, 210, 140))
 
-        self._need_lbl_ents  = []
         self._need_bg_ents   = []
         self._need_fill_ents = []
         for i, key in enumerate(self._motive_keys):
-            y = top_y - 0.020 - i * self._NBAR_GAP
-            self._need_lbl_ents.append(
-                _txt(LABELS[key], pos=(self._NBAR_X, y + 0.019), scale=0.55,
-                     col=color.rgb(208, 218, 224), z=-0.02))
+            y = y_need0 + (n - 1 - i) * self._NROW
             self._need_bg_ents.append(
-                _ui(scale=(self._NBAR_W, self._NBAR_H), z=0.06,
+                _ui(scale=(self._NBAR_W, NBH), z=0.06,
                     position=(self._NBAR_X + self._NBAR_W / 2, y),
                     color=color.rgb(28, 34, 40, 200)))
             self._need_fill_ents.append(
-                _ui(scale=(self._NBAR_W, self._NBAR_H), z=0.03,
+                _ui(scale=(self._NBAR_W, NBH), z=0.03,
                     position=(self._NBAR_X + self._NBAR_W / 2, y),
                     color=color.rgb(120, 200, 130)))
+        self._motif_tampil = True
 
         # ── Flash message tengah ───────────────────────────────
         self._flash_ent = _txt('', pos=(0, 0.108), scale=1.1,
@@ -228,7 +322,7 @@ class UIManager:
         #
         # Teks HUD putih tanpa apa pun di belakangnya menghilang total di atas
         # latar terang. Terukur di scene farm jam 10: kotak jam berisi 2.528
-        # piksel dan 95% di antaranya nyaris putih — teksnya AD, warnanya
+        # piksel dan 95% di antaranya nyaris putih — teksnya ADA, warnanya
         # benar, dan tidak satu pun huruf bisa dibaca karena bangunan di
         # belakangnya sama putihnya.
         #
@@ -236,43 +330,204 @@ class UIManager:
         # sepanjang hari dan antar-scene, jadi warna teks apa pun akan kalah di
         # suatu tempat. Yang dijamin harus latarnya sendiri.
         #
+        # Yang berubah sekarang: ukurannya tidak lagi dipatok. Scrim kiri dulu
+        # 0.30 x 0.27 dan scrim bawah SELEBAR LAYAR, keduanya dipilih supaya
+        # muat untuk teks terpanjang yang mungkin. Sekarang ketiganya dipas
+        # ulang ke isinya di `_pas_scrim`, jadi alasnya persis sebesar yang
+        # dibutuhkan dan tidak sepiksel pun lebih.
+        #
         # z lebih besar = di belakang. Pelajaran yang sudah dibayar sekali di
         # panel motif: semua elemen camera.ui duduk di z=0 dan Panda menyortir
         # bin transparannya tanpa urutan yang bisa diandalkan.
-        def _scrim(kiri, kanan, atas, bawah, pad=0.018):
-            w = (kanan - kiri) + pad * 2
-            h = (atas - bawah) + pad * 2
-            return _ui(scale=(w, h), z=0.20,
-                       position=((kiri + kanan) / 2, (atas + bawah) / 2),
-                       color=color.rgb(10, 16, 20, 128))
+        SCRIM_C = color.rgb(10, 16, 20, 112)
+        self._scrim_kanan = _ui(scale=(0.001, 0.001), z=0.20,
+                                position=(X_R, r1), color=SCRIM_C)
+        self._scrim_kiri  = _ui(scale=(0.001, 0.001), z=0.20,
+                                position=(X_L, y_alat), color=SCRIM_C)
+        self._scrim_bawah = _ui(scale=(0.001, 0.001), z=0.20,
+                                position=(X_R, Y_B), color=SCRIM_C)
 
-        # Kanan atas: dari puncak jam sampai dasar emas.
-        self._scrim_kanan = _scrim(X_R - 0.30, X_R, 0.462, 0.262)
-        # Kiri atas: dari puncak nama alat sampai dasar baris antrian.
-        self._scrim_kiri = _scrim(X_L, X_L + 0.30, 0.462, 0.228)
-
-        # ── Bawah Kanan: Action Prompts dinamis ───────
+        # ── Bawah Kanan: petunjuk tombol ──────────────────────
         # Dipusatkan di 0.60 berarti separuh barisnya tumbuh melewati tepi
-        # 0.889 dan "[I] Inv" hilang. Dijangkar di kanan, jadi seberapa pun
-        # panjang prompt aksinya, ekornya tetap di dalam layar.
-        # Pita bawah selebar layar, bukan scrim selebar teksnya.
-        #
-        # Isi baris ini berubah: prompt aksi kontekstual bisa pendek, daftar
-        # tombol lengkap panjang. Scrim yang dipas ke satu panjang akan meleset
-        # pada panjang yang lain, dan yang meleset justru tidak terlihat sampai
-        # ada yang menangkap layarnya di scene yang tepat. Pemeriksaan
-        # hud_kontras menangkap ini di `swarga` dan satu scene lain — dua
-        # scene, dari empat belas, dengan lantai yang kebetulan seterang
-        # teksnya.
-        self._scrim_bawah = _ui(
-            scale=(self._edge_x * 2, 0.072), z=0.20,
-            position=(0, -0.452),
-            color=color.rgb(10, 16, 20, 118))
-
+        # 0.889 dan "[I] Inv" hilang. Dijangkar di sudut kanan-bawah
+        # (origin 0.5, -0.5), jadi seberapa pun panjang prompt aksinya,
+        # ekornya tetap di dalam layar dan alasnya ikut mengecil.
         self._control_hint = _txt(
-            '', pos=(X_R, -0.45), scale=0.8,
-            col=color.rgb(220, 235, 255), origin=(0.5, 0)
+            '', pos=(X_R, Y_B), scale=0.60,
+            col=color.rgb(225, 238, 255), origin=(0.5, -0.5)
         )
+
+        # Kotak yang dijangkar ke tepi KIRI, disimpan bersama JARAKNYA ke
+        # tepi — bukan cuma daftar entity yang nanti digeser `+= dx`.
+        #
+        # Alasannya terukur: `position=` di konstruktor Entity meleset
+        # setengah dari perubahan aspek yang terjadi SESUDAHNYA (0.0088 satuan
+        # ui saat aspek pindah 1.81 -> 1.778), dan menggeser relatif dari
+        # angka yang sudah meleset cuma menambah melesetnya — nama alat
+        # berakhir 17 px dari tempatnya sementara bilah di bawahnya benar,
+        # karena bilah memang ditulis ulang dari `_BAR_X_LEFT` tiap frame.
+        # Menyimpan jaraknya membuat tiap penataan ulang mutlak, bukan
+        # bertumpuk.
+        bar_off = self._BAR_W / 2
+        need_off = self._NLBL_W + self._NBAR_W / 2
+        self._geser_kotak = [
+            (self._hp_trek, bar_off), (self._en_trek, bar_off),
+            (self._motive_panel_bg, -PAD + panel_w / 2),
+            (self._mood_bg, need_off),
+        ] + [(e, need_off) for e in self._need_bg_ents]
+
+        # Teks tidak dijangkar lewat angka sama sekali; letaknya diukur dari
+        # TINTA-nya di `_tata_ulang_hud`.
+        self._teks_kiri = [
+            self._tool_name, self._hp_val, self._en_val,
+            self._buff_txt, self._queue_txt, self._mood_lbl,
+        ] + self._need_lbl_ents
+
+    # ── Tata letak yang dihitung ulang saat teksnya berubah ──────────
+    #
+    # Dihitung ulang HANYA saat teks berubah, bukan tiap frame: `Text.width`
+    # membuat TextNode baru dan mengukur ulang fontnya tiap kali dipanggil,
+    # dan ada tujuh teks yang perlu diukur. Frame rate di proyek ini sudah
+    # 18-64 ms/frame; mengukur font 420 kali sedetik untuk hasil yang sama
+    # persis adalah ongkos yang tidak dibayar siapa pun.
+
+    @staticmethod
+    def _lebar(e):
+        """Lebar teks yang BENAR-BENAR tergambar, di ruang camera.ui.
+
+        Bukan `Text.width * scale_x`. Rumus itu mengukur ulang fontnya lewat
+        TextNode sementara dan hasilnya meleset ~10% ke bawah dari yang
+        tergambar — terlihat langsung di tangkapan pertama sebagai
+        'Cangkul[1-8] pilih alat' yang menempel tanpa jarak, padahal jaraknya
+        diberi 15 px. `getTightBounds` membaca simpul yang sama dengan yang
+        dirender, jadi tidak bisa meleset dari apa yang dilihat pemain.
+        """
+        try:
+            if not str(e.text).strip():
+                return 0.0
+        except Exception:
+            pass
+        try:
+            tb = e.getTightBounds(camera.ui)
+            if tb is not None:
+                return float(tb[1].x - tb[0].x)
+        except Exception:
+            pass
+        try:
+            return e.width * e.scale_x
+        except Exception:
+            return 0.0
+
+    def _pas_scrim(self, scrim, kiri, kanan, atas, bawah, pad=0.008):
+        if kanan <= kiri or atas <= bawah:
+            scrim.enabled = False
+            return
+        scrim.enabled = True
+        w = (kanan - kiri) + pad * 2
+        h = (atas - bawah) + pad * 2
+        scrim.scale = (w, h)
+        scrim.position = ((kiri + kanan) / 2, (atas + bawah) / 2)
+
+    def _pasang_tepi(self):
+        """Ikuti tepi layar yang SEKARANG, bukan yang saat HUD dibangun.
+
+        `window.aspect_ratio` masih berubah SESUDAH UIManager dibangun —
+        tools/capture.py mencatatnya sendiri: 'changed aspect ratio: 1.81 ->
+        1.778'. HUD yang dijangkar ke angka lama meleset 0.016 satuan ui,
+        dan itu 17 px: jam kanan-atas terpotong di sisi kanan sementara nama
+        alat menggantung 3 px di luar sisi kiri. Terlihat di tangkapan
+        pertama sesudah perubahan ini, bukan diduga-duga.
+
+        Mengembalikan True kalau tepinya bergeser, supaya pemanggilnya tahu
+        harus menata ulang.
+        """
+        ex = window.aspect_ratio / 2
+        if abs(ex - self._edge_x) < 1e-6:
+            return False
+        x_l = -ex + self._M
+        dx = x_l - self._X_L
+        self._edge_x = ex
+        self._X_L = x_l
+        self._X_R = ex - self._M
+        self._BAR_X_LEFT = x_l
+        self._NBAR_X = x_l + self._NLBL_W
+        for e in getattr(self, '_jangkar_kiri', ()):
+            try:
+                e.x += dx
+            except Exception:
+                pass
+        self._control_hint.x = self._X_R
+        return True
+
+    def _tata_ulang_hud(self):
+        """Susun ulang baris kanan-atas, kiri-atas, dan alas gelapnya."""
+        X_L, X_R = self._X_L, self._X_R
+        Y_T, Y_B = self._Y_T, self._Y_B
+        G = self._GAP
+
+        # Kanan atas, baris 1: jam paling kanan, lalu cuaca, lalu tanggal.
+        x = X_R
+        for e in (self._time_txt, self._weather_txt, self._date_txt):
+            e.x = x
+            if str(e.text).strip():
+                x -= self._lebar(e) + G
+        kiri1 = x + G if x < X_R else X_R
+
+        # Kanan atas, baris 2: emas paling kanan, lalu nama scene.
+        x = X_R
+        for e in (self._gold_txt, self._scene_txt):
+            e.x = x
+            if str(e.text).strip():
+                x -= self._lebar(e) + G
+        kiri2 = x + G if x < X_R else X_R
+
+        h1 = self._time_txt.height * self._time_txt.scale_y
+        h2 = self._gold_txt.height * self._gold_txt.scale_y
+        self._pas_scrim(self._scrim_kanan, min(kiri1, kiri2), X_R,
+                        Y_T, self._ROW2_Y - h2 / 2, pad=0.008)
+
+        # Kiri atas: hint benih menempel di kanan nama alat.
+        w_alat = self._lebar(self._tool_name)
+        self._seed_txt.x = X_L + w_alat + G
+        kanan = max(
+            X_L + w_alat,
+            self._seed_txt.x + self._lebar(self._seed_txt),
+            self._BAR_X_LEFT + self._BAR_W + 0.010 + self._lebar(self._hp_val),
+            self._BAR_X_LEFT + self._BAR_W + 0.010 + self._lebar(self._en_val),
+        )
+        bawah = self._ey - self._BAR_H / 2
+        for e in (self._buff_txt, self._queue_txt):
+            if str(e.text).strip():
+                kanan = max(kanan, X_L + self._lebar(e))
+                bawah = min(bawah, e.y - (e.height * e.scale_y) / 2)
+        self._pas_scrim(self._scrim_kiri, X_L, kanan, Y_T, bawah, pad=0.008)
+
+        # Kanan bawah: alas dipas ke petunjuk tombol, bukan selebar layar.
+        ch = self._control_hint
+        if str(ch.text).strip():
+            self._pas_scrim(self._scrim_bawah,
+                            X_R - self._lebar(ch), X_R,
+                            Y_B + ch.height * ch.scale_y, Y_B, pad=0.007)
+        else:
+            self._scrim_bawah.enabled = False
+
+    def toggle_motive_panel(self):
+        """TAB: sembunyikan/tampilkan ringkasan motif di sudut kiri-bawah.
+
+        Delapan motif adalah informasi yang berguna, tapi ia juga satu-satunya
+        blok HUD yang tetap memakan tempat walau pemain sudah hafal isinya.
+        Disembunyikan, bukan dibuang.
+        """
+        self._motif_tampil = not getattr(self, '_motif_tampil', True)
+        v = self._motif_tampil
+        for e in (self._motive_panel_bg, self._mood_lbl,
+                  self._mood_bg, self._mood_fill):
+            if e is not None:
+                e.enabled = v
+        for nama in self._DAFTAR_HUD:
+            for e in getattr(self, nama, None) or []:
+                e.enabled = v
+        return v
 
     # Warna termometer: hijau aman, kuning waspada, merah mendesak. Pemain harus
     # bisa membaca "yang mana yang gawat" tanpa membaca satu kata pun.
@@ -385,11 +640,28 @@ class UIManager:
                      type('o', (object,), {'display': s.scene_name})()).display
         self._scene_txt.text = f'> {sc_display}'
         
-        # Action prompt dynamic
+        # Petunjuk tombol: dua baris pendek di sudut kanan-bawah, bukan satu
+        # baris sepanjang layar. Origin (0.5, -0.5) membuat TIAP baris rata
+        # kanan sendiri-sendiri, jadi dua baris yang panjangnya beda tetap
+        # rapi menempel di tepi.
         if hasattr(s, 'action_prompt'):
             self._control_hint.text = s.action_prompt
         else:
-            self._control_hint.text = '[WASD] Jalan  ·  [SPACE] Pakai  ·  [E] Aksi  ·  [F1] Panduan  ·  [J] Jurnal  ·  [I] Inv'
+            self._control_hint.text = (
+                '[WASD] Jalan  ·  [SPACE] Pakai  ·  [E] Aksi\n'
+                '[I] Tas  ·  [J] Jurnal  ·  [TAB] Motif  ·  [F1] Panduan')
+
+        # Susun ulang hanya kalau ada teks yang benar-benar berubah.
+        tanda = (self._time_txt.text, self._date_txt.text,
+                 self._weather_txt.text, self._scene_txt.text,
+                 self._gold_txt.text, self._tool_name.text,
+                 self._seed_txt.text, self._hp_val.text, self._en_val.text,
+                 self._buff_txt.text, self._queue_txt.text,
+                 self._control_hint.text)
+        geser = self._pasang_tepi()
+        if geser or tanda != getattr(self, '_tanda_hud', None):
+            self._tanda_hud = tanda
+            self._tata_ulang_hud()
 
     # ─── PUBLIC: FLASH MESSAGE ───────────────────────────
     def flash_msg(self, text: str, duration: float = 1.2):
@@ -685,6 +957,7 @@ class UIManager:
     # menambah elemen HUD baru cuma butuh satu nama di daftar ini.
     _NAMA_HUD = (
         '_tool_name', '_seed_txt', '_hp_bar', '_hp_val', '_en_bar', '_en_val',
+        '_hp_trek', '_en_trek',
         '_time_txt', '_date_txt', '_weather_txt', '_scene_txt', '_gold_txt',
         '_buff_txt', '_queue_txt', '_mood_bg', '_mood_fill', '_mood_lbl',
         '_motive_panel_bg',
@@ -722,6 +995,12 @@ class UIManager:
                     e.enabled = v
                 except Exception:
                     pass
+        # Pilihan pemain menang atas "tampilkan lagi": kalau ringkasan motif
+        # sengaja disembunyikan lewat TAB, keluar dari sinema tidak boleh
+        # diam-diam menyalakannya kembali.
+        if v and not getattr(self, '_motif_tampil', True):
+            self._motif_tampil = True       # toggle akan membalikkannya
+            self.toggle_motive_panel()
 
     def _set_panel_visible(self, v: bool):
         for e in (self._panel_bg, self._panel_title,

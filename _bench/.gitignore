@@ -7,6 +7,34 @@
 !refs/
 !refs/MANIFEST.json
 
+# RESEP.md: resep tangkap tiap potongan. Karya sendiri, dan pembangun
+# bergantung padanya — kalau ia tidak ikut, ronde berikutnya memotret
+# hal yang berbeda dan "membaik" jadi tidak bisa dibedakan dari
+# "mencari sudut yang lebih ramah".
+!RESEP.md
+
+# ── Patokan IKUT ter-commit, dan itu keputusan sadar ──────────────────
+#
+# Pemilik memindahkan repo ini ke PRIVAT justru supaya frame patokan tidak
+# perlu dihapus. Alasan lama di bawah masih benar untuk repo publik; yang
+# berubah bukan alasannya, tapi faktanya.
+#
+# Yang ikut: delapan frame diam + empat strip gerak + gif-nya. 27 MB.
+# Yang TIDAK ikut, dan ini bukan kebijakan tapi batas GitHub: `refs/_video/`
+# berisi 2,9 GB rekaman sumber. Berkas >100 MB ditolak GitHub, dan repo
+# sebesar itu menyusahkan siapa pun yang meng-clone-nya. Rekaman sumber bisa
+# diunduh ulang; hasil potongannya yang penting, dan hasil potongannya ikut.
+#
+# `refs/_kandidat/`, `refs/_pindai/`, `refs/_sb/` juga tidak ikut: itu bahan
+# kerja untuk MEMILIH patokan, bukan patokannya.
+#
+# KALAU REPO INI DIKEMBALIKAN JADI PUBLIK, keputusan ini harus dibatalkan —
+# `tools/bar_gate.py` menolak jalan kalau `repo_privat` di MANIFEST tidak
+# lagi benar, supaya ini tidak bisa terlewat diam-diam.
+!refs/*.png
+!refs/*.jpg
+!refs/*.gif
+
 # Kenapa refs/ diabaikan lagi, padahal sempat dibuka.
 #
 # Dibuka supaya patokan tidak hilang tiap container ditarik. Itu memang

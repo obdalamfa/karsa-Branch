@@ -85,14 +85,57 @@ Sistem yang dibutuhkan:
 - **naga_cave** — Gua naga + portal dungeon.
 - **dungeon** — Procedurally generated dungeon dengan mob + boss Naga.
 
+## Mengurus Ternak
+
+Berdiri dekat hewan dan tekan **E** untuk membuka menunya. Tiap pilihan
+menyebutkan keadaan hewan itu sekarang, jadi kamu tidak perlu menebak apa
+yang kurang:
+
+| Pilihan | Isi |
+|---|---|
+| **Belai** | +8 Senang |
+| **Ambil Hasil — <alasan>** | Aktif hanya kalau hasilnya benar-benar siap. Kalau tidak, labelnya menyebut apa yang menghalangi. |
+| **Beri Makan (<pakan>)** | −2 EN, kenyang +60%. Pakan diambil otomatis dari tas; label memberi tahu kalau yang dipakai boros. |
+| **Beri Minum — <keadaan palung>** | −3 EN, air kandang jadi 100%. |
+
+### Palung minum
+
+Kandang kebun punya **satu palung** di dekat sudut baratnya, dan palung itu
+milik seluruh kandang — satu ember mengisi semua ternak sekaligus. Tinggi
+airnya benar-benar naik-turun mengikuti takaran, jadi "sapiku kehausan" bisa
+dilihat dari seberang kandang tanpa membuka panel apa pun. Yang ditampilkan
+palung adalah takaran **terendah** di kandang, bukan rata-ratanya.
+
+Kamu harus berada dalam **2,6 tile** dari palung untuk mengisinya — ember
+diisi di palung, bukan dilempar dari seberang kandang. Kalau terlalu jauh,
+menunya mengatakannya. Setelah dituang, ternak sekandang akan menghampiri
+palung dan menunduk minum.
+
+### Ritme hariannya
+
+Tiap pagi takaran turun sendiri:
+
+| Takaran | Turun per hari | Artinya |
+|---|---|---|
+| Kenyang | −45 | beri makan tiap hari |
+| Air | −55 | isi palung tiap hari |
+| Kandang | −30 | bersihkan tiap tiga hari |
+
+Hewan hanya menghasilkan kalau **kenyang ≥ 40%, air ≥ 30%, kandang ≥ 25%**,
+dan tidak sakit. Kalau satu saja kurang, hitungan panennya **berhenti** —
+tidak mundur, tapi juga tidak maju. Kenyang atau air menyentuh 0% dihitung
+satu hari lalai; **tiga hari lalai = sakit**, dan hewan sakit tidak
+menghasilkan apa pun sambil hatinya turun tiap hari.
+
 ## Tips Awal
 
 1. **Mulai pagi di rumah** — jam 6, energi penuh.
 2. **Datang ke Warung Bu Sari (K)** — beli bibit jagung/lobak (~30G).
 3. **Pergi ke farm** — pakai Cangkul (1+SPACE) untuk tanah, Tanam (3+SPACE), Siram (2+SPACE).
 4. **Bicara dengan NPC** (E) untuk naik hearts → buka dialog cerita.
-5. **Tidur jam 22** (T di rumah) — tanaman bertumbuh saat hari berikutnya.
-6. **Save sering** (F5) — terutama sebelum masuk dungeon.
+5. **Isi palung tiap pagi** (E di dekat ternak → Beri Minum) — air turun 55% per hari, paling cepat di antara semua takaran.
+6. **Tidur jam 22** (T di rumah) — tanaman bertumbuh saat hari berikutnya.
+7. **Save sering** (F5) — terutama sebelum masuk dungeon.
 
 ## Quests Awal
 

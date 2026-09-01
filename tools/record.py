@@ -31,6 +31,7 @@ Bahasa skrip (dipisah '|'), dijalankan berurutan; tiap langkah merekam frame:
     face:NPC_ID             putar pemain menghadap NPC (juga mengunci kamera)
     pie:NPC_ID:AKSI         jalankan aksi pie menu langsung (tanpa navigasi)
     hour:H                  set jam dalam game
+    care:ID|*:TAKARAN:NILAI setel takaran perawatan ternak (air/kenyang/bersih)
     cam:DIST,PITCH,YAW      setel kamera
     lift:H                  naikkan titik fokus kamera (bingkai dada, bukan kaki)
     mark:NAMA               tandai frame ini di jejak (dipakai untuk mengukur)
@@ -163,6 +164,22 @@ def run_step(g, base, step: str, frames: list, marks: dict, shoot) -> None:
         import game.app as _app
         _app.CAM_TARGET_LIFT = float(arg)
         g._snap_camera_to_player()
+        shoot()
+    elif op == 'care':
+        # care:<id|*>:<takaran>:<nilai> — siapkan keadaan ternak sebelum
+        # merekam. Aksi perawatan menolak jalan kalau tidak ada yang perlu
+        # dikerjakan (palung penuh, hewan kenyang), jadi tanpa penyiapan ini
+        # rekaman aksi perawatan selalu berisi penolakan, bukan aksi.
+        siapa, takaran, nilai = arg.split(':')
+        from game.data import ANIMAL_NPCS
+        from game.husbandry import care_of, is_livestock
+        ids = [a for a in ANIMAL_NPCS if is_livestock(a)] if siapa == '*' else [siapa]
+        for aid in ids:
+            care_of(g.state, aid)[takaran] = float(nilai)
+        try:
+            g.player.interaction_controller.sync_trough()
+        except Exception:
+            pass
         shoot()
     elif op == 'mark':
         marks[arg] = len(frames)

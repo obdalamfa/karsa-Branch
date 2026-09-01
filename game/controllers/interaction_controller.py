@@ -615,18 +615,47 @@ class InteractionController:
             # dan labelnya MENGATAKAN keadaan itu, supaya pemain tahu apa yang
             # kurang tanpa menebak.
             from ..economy import (animal_status, pick_feed, item_name,
-                                   produce_for, EN_FEED, EN_COLLECT,
-                                   FEED_DAY_VALUE, sell_price)
+                                   produce_for, care_rec, EN_FEED, EN_COLLECT,
+                                   EN_WATER, FEED_DAY_VALUE, sell_price)
+            from ..husbandry import ISI_PAKAN, MIN_AIR_PRODUKSI
             species = npc.get('type', '')
             siap, alasan = animal_status(s, npc_id, species)
+            rec  = care_rec(s, npc_id)
             feed = pick_feed(s.inventory)
             if feed:
                 boros = '' if feed in ('pakan', 'jerami') else ' (boros!)'
                 feed_lbl = f'Beri Makan ({item_name(feed)}){boros}'
-                feed_fx  = f'-{EN_FEED} EN, hewan produktif 1 hari'
+                feed_fx  = f'-{EN_FEED} EN, kenyang +{ISI_PAKAN}%'
             else:
                 feed_lbl = 'Beri Makan (tak ada pakan)'
                 feed_fx  = f'Beli Jerami {FEED_DAY_VALUE}G di Warung'
+
+            # Label minum MENGATAKAN isi palungnya. Aturan yang tidak bisa
+            # dilihat pemain bukan aturan — prinsip yang sudah dipegang
+            # husbandry.py, dan angka persennya yang membuat "kenapa sapiku
+            # berhenti kasih susu" bisa dijawab tanpa menebak.
+            air = int(rec.get('air', 0))
+            penuh = air >= 95
+            jarak = self._jarak_palung()
+            jauh = jarak is not None and jarak > self.JANGKAU_PALUNG
+            if penuh:
+                minum_lbl = 'Beri Minum - palung masih penuh'
+                minum_fx  = f'Air {air}%'
+            elif jauh:
+                # Ember diisi DI palung, bukan dari seberang kandang. Tanpa
+                # syarat ini pemain menuang ke arah sesuatu yang berjarak lima
+                # meter dan airnya melintas seperti garis lurus di udara —
+                # aturan yang benar, gambar yang bohong.
+                minum_lbl = f'Beri Minum - terlalu jauh dari palung ({jarak:.0f} tile)'
+                minum_fx  = 'Dekati palung di kandang'
+            elif air <= 0:
+                minum_lbl = 'Beri Minum - palung KERING'
+                minum_fx  = f'-{EN_WATER} EN, air {air}% -> 100%'
+            else:
+                kurang = ' (produksi terhenti)' if air < MIN_AIR_PRODUKSI else ''
+                minum_lbl = f'Beri Minum - air {air}%{kurang}'
+                minum_fx  = f'-{EN_WATER} EN, air {air}% -> 100%'
+
             prod = produce_for(species)
             ambil_fx = (f'-{EN_COLLECT} EN, +{sell_price(prod["item"])}G nilai'
                         if prod else 'Hewan ini tidak menghasilkan')
@@ -634,6 +663,7 @@ class InteractionController:
                 ('belai',       'Belai',                    True,          '+8 Senang'),
                 ('ambil_hasil', f'Ambil Hasil - {alasan}',  siap,          ambil_fx),
                 ('beri_makan',  feed_lbl,                   bool(feed),    feed_fx),
+                ('beri_minum',  minum_lbl,             not penuh and not jauh, minum_fx),
             ]
 
     def execute_pie_action(self, npc_id: str, action: str, entities_mgr, panels):
@@ -716,6 +746,8 @@ class InteractionController:
                 ekor = f" | {hint}" if hint else ""
                 panels.flash_msg(
                     f"+1 {item_name(item)} (nilai {sell_price(item)}G){ekor}", 1.6)
+        elif action == 'beri_minum':
+            self._beri_minum(npc_id, npc, entities_mgr, panels)
         elif action == 'beri_makan':
             # Memberi makan mengisi 'kenyang'. Hewan yang kenyang maju satu
             # langkah menuju hasil tiap pagi; yang lapar berhenti. Itu seluruh
@@ -735,15 +767,209 @@ class InteractionController:
                 if s.inventory[feed] <= 0:
                     del s.inventory[feed]
                 self.player._spend_energy(EN_FEED)
+                # Kenyang ditulis ke husbandry — satu-satunya pemilik takaran
+                # perawatan sejak buku ganda dibereskan. economy hanya memegang
+                # siklus hasil.
+                from ..husbandry import ISI_PAKAN
+                from ..economy import care_rec
+                crec = care_rec(s, npc_id)
+                crec['kenyang'] = min(100, crec.get('kenyang', 0) + ISI_PAKAN)
+                crec['hari_makan'] = s.day
                 rec = animal_record(s, npc_id)
-                rec['kenyang'] = max(rec.get('kenyang', 0), 0) + FEED_DAYS
                 s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1)
                 sound_play('gift', 0.7)
                 prod = produce_for(npc.get('type', ''))
                 janji = (f" {item_name(prod['item'])} besok pagi."
                          if prod and rec.get('siap', 0) + 1 >= prod['cycle'] else '')
                 panels.flash_msg(
-                    f"{npc.get('name', npc_id)} diberi {item_name(feed)}.{janji}", 1.6)
+                    f"{npc.get('name', npc_id)} diberi {item_name(feed)}. "
+                    f"Kenyang {crec['kenyang']}%.{janji}", 1.6)
+
+
+    # ─── BERI MINUM ─────────────────────────────────────────────────────────
+    def _pen_livestock(self) -> list:
+        """Ternak yang berbagi palung yang sama: semua ternak di scene ini.
+
+        Palung itu milik KANDANG, bukan milik satu ekor. Mengisinya untuk satu
+        sapi lalu membiarkan kambing di sebelahnya kehausan bukan cuma aneh —
+        itu memaksa pemain mengulang aksi yang sama lima kali untuk satu ember.
+        """
+        from ..data import ANIMAL_NPCS
+        from ..husbandry import is_livestock
+        s = self.player.state
+        out = []
+        for aid in ANIMAL_NPCS:
+            if not is_livestock(aid):
+                continue
+            pos = s.npc_positions.get(aid) or {}
+            if pos.get('scene') == s.scene_name:
+                out.append(aid)
+        return out
+
+    def _trough_level(self) -> int:
+        """Isi palung = takaran air TERENDAH di kandang.
+
+        Yang terendah, bukan rata-rata: palung yang terlihat setengah penuh
+        sementara satu ekor sudah 0% akan berbohong tentang hal yang justru
+        harus dilihat pemain.
+        """
+        from ..economy import care_rec
+        s = self.player.state
+        kawanan = self._pen_livestock()
+        if not kawanan:
+            return 0
+        return int(min(care_rec(s, aid).get('air', 0) for aid in kawanan))
+
+    JANGKAU_PALUNG = 2.6      # tile
+
+    def _jarak_palung(self) -> float | None:
+        """Jarak pemain ke palung dalam tile. None kalau kandang tak berpalung."""
+        t = getattr(self.world, 'trough', None)
+        if not t:
+            return None
+        tx, ty = t['tile']
+        px, py = self.player.x / TS, self.player.z / TS
+        return ((tx - px) ** 2 + (ty - py) ** 2) ** 0.5
+
+    def sync_trough(self) -> None:
+        """Samakan tinggi air palung dengan keadaan sekarang."""
+        try:
+            from ..scenes.props import set_trough_level
+            set_trough_level(self.world, self._trough_level())
+        except Exception:
+            pass
+
+    def _beri_minum(self, npc_id, npc, entities_mgr, panels):
+        from ..economy import EN_WATER, care_rec
+        from ..husbandry import water as husb_water, is_livestock
+        from ..scenes.props import trough_pour_point, set_trough_level
+        from .. import care_anim
+
+        s = self.player.state
+        if not is_livestock(npc_id):
+            panels.flash_msg("Hewan ini tidak diurus.", 1.2)
+            return
+        if self._trough_level() >= 95:
+            sound_play('blocked', 0.5)
+            panels.flash_msg("Palungnya masih penuh.", 1.2)
+            return
+        jarak = self._jarak_palung()
+        if jarak is not None and jarak > self.JANGKAU_PALUNG:
+            sound_play('blocked', 0.5)
+            panels.flash_msg(
+                f"Terlalu jauh dari palung ({jarak:.0f} tile). Dekati dulu.", 1.6)
+            return
+        if s.energy < EN_WATER:
+            sound_play('blocked', 0.5)
+            panels.flash_msg("Terlalu lelah untuk mengangkat ember.", 1.2)
+            return
+
+        kawanan = self._pen_livestock() or [npc_id]
+        sebelum = self._trough_level()
+        self.player._spend_energy(EN_WATER)
+
+        titik = trough_pour_point(self.world)
+        if titik is None:
+            # Kandang tanpa palung (scene lain): tuang di depan kaki pemain,
+            # supaya aksinya tetap punya sasaran yang terlihat.
+            titik = (self.player.x, 0.15, self.player.z + 0.6)
+        else:
+            # Bidik BIBIR palung yang paling dekat, bukan titik tengahnya.
+            # Membidik tengah membuat kolom airnya melintas separuh panjang
+            # palung secara mendatar; membidik bibir terdekat membuatnya jatuh.
+            tx, ty, tz = titik
+            titik = (tx + max(-1.0, min(1.0, self.player.x - tx)),
+                     ty,
+                     tz + max(-0.35, min(0.35, self.player.z - tz)))
+            # Pemain menghadap palung sebelum menuang. Menuang ke samping
+            # sambil menghadap ke arah lain adalah hal pertama yang terlihat
+            # salah di filmstrip.
+            import math as _m
+            self.player.rotation_y = _m.degrees(
+                _m.atan2(titik[0] - self.player.x, titik[2] - self.player.z))
+            self.player.target_rotation_y = self.player.rotation_y
+
+        aliran = care_anim.AliranAir(titik)
+
+        # Melangkah ke bibir palung. Ubin bersebelahan berjarak 2 m, jadi
+        # pemain yang berdiri di ubin sebelah menuang air melintasi jarak
+        # satu setengah meter — angkanya benar, gambarnya bohong. Satu langkah
+        # kecil selama fase ancang-ancang menutup jarak itu; ini pola yang
+        # sama dipakai game bertani lain saat interaksi dimulai.
+        pal = getattr(self.world, 'trough', None)
+        maju_ke = None
+        if pal is not None:
+            cx, _cy, cz = pal['pos']
+            dx, dz = self.player.x - cx, self.player.z - cz
+            jarak_w = max(1e-3, (dx * dx + dz * dz) ** 0.5)
+            maju_ke = (cx + dx / jarak_w * 1.02, cz + dz / jarak_w * 1.02)
+        dari = (self.player.x, self.player.z)
+
+        def _mulai_tuang(aksi):
+            aliran.nyala(True)
+            sound_play('water', 0.85)
+
+        def _isi(aksi):
+            """Air benar-benar masuk saat air TERLIHAT jatuh, bukan saat menu
+            diklik. Akibat yang mendahului sebabnya di layar terbaca sebagai
+            bug, bahkan kalau angkanya benar."""
+            for aid in kawanan:
+                husb_water(s, aid)
+            s.stats['trough_filled'] = s.stats.get('trough_filled', 0) + 1
+            for aid in kawanan:
+                s.npc_hearts[aid] = min(10, s.npc_hearts.get(aid, 0) + 0.5)
+
+        def _selesai_tuang(aksi):
+            aliran.nyala(False)
+
+        def _frame(aksi, dt):
+            # Langkah masuk diselesaikan sebelum ember mulai miring, supaya
+            # yang terlihat adalah "mendekat lalu menuang", bukan "menuang
+            # sambil melayang".
+            if maju_ke is not None:
+                u = min(1.0, aksi.t * 1000.0 / 620.0)
+                e = 1.0 - (1.0 - u) ** 3
+                self.player.x = dari[0] + (maju_ke[0] - dari[0]) * e
+                self.player.z = dari[1] + (maju_ke[1] - dari[1]) * e
+            prop = getattr(self.player, '_care_prop', None)
+            if prop is not None and aliran.aktif:
+                try:
+                    wp = prop.world_position
+                    aliran.perbarui((wp[0], wp[1] - 0.10, wp[2]))
+                except Exception:
+                    pass
+            # Palung terisi BERTAHAP selama fase tuang — melompat dari kering
+            # ke penuh dalam satu frame membuang satu-satunya bagian yang
+            # benar-benar memuaskan untuk ditonton.
+            if aksi.fase in ('tuang', 'tegak'):
+                mulai_ms, panjang_ms = 1030.0, 700.0
+                u = min(1.0, max(0.0, (aksi.t * 1000.0 - mulai_ms) / panjang_ms))
+                set_trough_level(self.world, sebelum + (100 - sebelum) * u)
+
+        def _usai(aksi):
+            aliran.hapus()
+            self.sync_trough()
+
+        care_anim.mulai(
+            self.player, 'minum',
+            pemicu=[(1030.0, _mulai_tuang), (1240.0, _isi), (1760.0, _selesai_tuang)],
+            saat_frame=_frame, saat_usai=_usai,
+        )
+
+        # Ternak menghampiri palung dan menunduk. Diberi jeda supaya mereka
+        # bergerak SESUDAH air terlihat jatuh, bukan sebelum.
+        tile = getattr(self.world, 'trough', None)
+        if tile:
+            tx, ty = tile['tile']
+            for aid in kawanan:
+                actor = entities_mgr.actors.get(aid)
+                if actor is not None and hasattr(actor, 'panggil_minum'):
+                    actor.panggil_minum(tx, ty, tunda=1.4)
+
+        nama = npc.get('name', npc_id)
+        ekor = '' if len(kawanan) <= 1 else f" ({len(kawanan)} ekor ikut minum)"
+        panels.flash_msg(
+            f"Palung diisi untuk {nama}. Air {sebelum}% -> 100%.{ekor}", 1.8)
 
     def queue_toggle(self, panels):
         tx, ty = self.player._facing_tile()

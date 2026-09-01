@@ -49,6 +49,7 @@ KADO       = color.rgb(168,  82,  80)
 PITA       = color.rgb(226, 198, 124)
 PELAMPUNG  = color.rgb(206,  78,  62)
 SENAR      = color.rgb(232, 230, 214)
+AIR        = color.rgb(118, 176, 206)   # air di ember/palung
 
 
 # ─── GEOMETRI DASAR ─────────────────────────────────────────────────────────
@@ -172,6 +173,28 @@ def _build_penyiram(r):
     _rod(r, (0, -0.075, 0.318), SENG_TUA, 10, 0.058, 0.050, 0.028, rot=(64, 0, 0))
 
 
+def _build_ember(r):
+    """Ember seng untuk mengisi palung minum ternak.
+
+    Sengaja BUKAN gembor: gembor punya corong panjang dan kepala percik, jadi
+    di filmstrip 30 fps keduanya harus bisa dipisah sekilas. Ember dibaca dari
+    siluetnya — badan mengerucut ke bawah, bibir lebar, satu busur pegangan
+    yang menyeberang di atas mulut. Titik genggam (0,0,0) duduk di busur itu,
+    supaya memiringkan ember memutar mulutnya, bukan pangkalnya.
+    """
+    # Badan mengerucut: mulut lebar di atas, dasar lebih sempit.
+    _rod(r, (0, -0.185, 0), SENG,     12, 0.098, 0.132, 0.215)
+    _rod(r, (0, -0.296, 0), SENG_TUA, 12, 0.100, 0.100, 0.016)   # dasar
+    _rod(r, (0, -0.076, 0), SENG_TUA, 12, 0.136, 0.136, 0.020)   # bibir mulut
+    # Air di dalamnya — sedikit di bawah bibir, jadi saat ember dimiringkan
+    # 100° penonton melihat bidang biru itu memang berada di mulut ember.
+    _rod(r, (0, -0.098, 0), AIR,      12, 0.124, 0.124, 0.012)
+    # Busur pegangan menyeberang di atas mulut; inilah yang digenggam.
+    _box(r, (-0.128, -0.038, 0), (0.018, 0.088, 0.020), BESI_TUA, rot=(0, 0, 22))
+    _box(r, ( 0.128, -0.038, 0), (0.018, 0.088, 0.020), BESI_TUA, rot=(0, 0, -22))
+    _box(r, ( 0.000,  0.004, 0), (0.268, 0.018, 0.020), BESI)
+
+
 def _build_kapak(r):
     """Kapak kayu bakar: gagang 0,70 m, kepala baji dengan bibir terang."""
     _rod(r, (0, -0.170, 0), KAYU, 8, 0.024, 0.020, 0.700)
@@ -274,6 +297,7 @@ _BUILDERS = {
     'pedang':   _build_pedang,
     'pancing':  _build_pancing,
     'bawaan':   _build_bawaan,
+    'ember':    _build_ember,
 }
 
 # Urutan persis config.TOOLS:
@@ -301,6 +325,7 @@ CARRY_POSE = {
     'pedang':   ( -6.0,  0.0,  -6.0),
     'pancing':  (-152.0, 0.0,  10.0),
     'bawaan':   (  0.0,  0.0,   0.0),
+    'ember':    (  0.0,  0.0,   0.0),
 }
 
 # Geseran kecil supaya gagang duduk di tengah kepalan, bukan di titik tulang.
@@ -315,6 +340,7 @@ GRIP_OFFSET = {
     'pedang':   (0.0, 0.0, 0.0),
     'pancing':  (0.0, 0.0, 0.0),
     'bawaan':   (0.0, -0.02, 0.0),
+    'ember':    (0.0, -0.03, 0.0),
 }
 
 

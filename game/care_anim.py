@@ -739,6 +739,109 @@ def _resep_cukur() -> list:
     ]
 
 
+
+# ── BICARA ───────────────────────────────────────────────────────────────────
+# Selama kotak dialog terbuka, seluruh dunia game ini BERHENTI: app.py hanya
+# memanggil player.tick() dan entities.update() saat mode == 'hud'. Jadi
+# bercakap-cakap secara harfiah adalah dua patung dan sebuah kotak teks.
+#
+# Yang dibangun di sini bukan "animasi bicara" dalam arti mulut bergerak —
+# rig ini tidak punya mulut. Yang membuat orang terbaca sedang berbicara
+# adalah ISYARAT: tangan naik pada ketukan kalimat, kepala mengangguk sedikit
+# di akhir frasa, berat badan berpindah di antara kalimat. Tiga ketukan
+# dengan jarak tidak sama, karena kalimat manusia juga tidak berjarak sama.
+#
+# Loop, bukan sekali jalan: percakapan berlangsung selama pemain membaca, dan
+# panjangnya tidak bisa diketahui di depan.
+_FASE_BICARA = [('angkat', 380), ('ketukan', 2020), ('turun', 420), ('jeda', 380)]
+
+
+def _resep_bicara() -> list:
+    # Tangan kanan memberi isyarat; kiri hampir diam (satu tangan yang
+    # berbicara terbaca sebagai orang, dua tangan simetris sebagai boneka).
+    kanan = [
+        (0,     0.0, 'halus'),
+        (140,   7.0, 'keluar'),        # antisipasi kecil sebelum tangan naik
+        (380, -38.0, 'masuk'),         # tangan naik ke depan dada
+        (700, -26.0, 'halus'),         # ketukan 1
+        (1010, -44.0, 'halus'),
+        (1380, -28.0, 'halus'),        # ketukan 2 (jaraknya beda)
+        (1700, -46.0, 'halus'),
+        (2120, -30.0, 'halus'),        # ketukan 3
+        (2400, -41.0, 'halus'),
+        (2820,   6.0, 'halus'),        # tangan turun, lewat sedikit
+        (3200,   0.0, 'redam'),
+    ]
+    # Kepala mengangguk di AKHIR frasa, bukan bersamaan dengan tangan —
+    # anggukan yang jatuh tepat di ketukan tangan terlihat seperti boneka
+    # tali yang digerakkan satu benang.
+    angguk = [
+        (0,    0.0, 'halus'),
+        (140, -2.5, 'keluar'),
+        (860,  9.0, 'masuk'),
+        (1100, 1.0, 'halus'),
+        (1560, 8.0, 'halus'),
+        (1820, 0.5, 'halus'),
+        (2280, 7.0, 'halus'),
+        (2560, 0.5, 'halus'),
+        (2820, -2.0, 'halus'),
+        (3200, 0.0, 'redam'),
+    ]
+    # Berat badan berpindah di antara kalimat: pelan, periodenya lebih panjang
+    # daripada ketukan tangan, jadi keduanya tidak pernah sinkron.
+    berat = [
+        (0,    0.0, 'halus'), (600, 2.6, 'halus'), (1500, -2.2, 'halus'),
+        (2400, 2.0, 'halus'), (3200, 0.0, 'redam'),
+    ]
+    return [
+        Jalur('bahu_r', 'rotation_x', kanan),
+        Jalur('siku_r', 'rotation_x', [(t, v * 0.62, k) for t, v, k in kanan], jeda_ms=80),
+        Jalur('bahu_l', 'rotation_x', [(t, v * 0.16, k) for t, v, k in kanan], jeda_ms=190),
+        Jalur('leher', 'rotation_x', angguk, jeda_ms=0),
+        Jalur('leher', 'rotation_y', [(t, v * 0.55, k) for t, v, k in berat], jeda_ms=120),
+        Jalur('badan', 'rotation_z', berat, jeda_ms=90),
+        Jalur('badan', 'rotation_x', [(t, v * 0.30, k) for t, v, k in angguk], jeda_ms=150),
+        Jalur('badan', 'y', [
+            (0, 0.0, 'halus'), (600, 0.014, 'halus'), (1500, -0.012, 'halus'),
+            (2400, 0.011, 'halus'), (3200, 0.0, 'redam'),
+        ], jeda_ms=90, dasar='awal'),
+        Jalur('leher', 'y', [
+            (0, 0.0, 'halus'), (600, 0.014, 'halus'), (1500, -0.012, 'halus'),
+            (2400, 0.011, 'halus'), (3200, 0.0, 'redam'),
+        ], jeda_ms=120, dasar='awal'),
+    ]
+
+
+# Mendengarkan: tidak diam, tapi jauh lebih kecil. Pendengar yang benar-benar
+# beku sama merusaknya dengan pembicara yang beku.
+_FASE_DENGAR = [('dengar', 2600), ('jeda', 600)]
+
+
+def _resep_dengar() -> list:
+    return [
+        Jalur('leher', 'rotation_x', [
+            (0, 0.0, 'halus'), (900, 5.0, 'masuk'), (1150, 0.5, 'halus'),
+            (2100, 4.0, 'halus'), (2400, 0.5, 'halus'), (3200, 0.0, 'redam'),
+        ]),
+        Jalur('leher', 'rotation_y', [
+            (0, 0.0, 'halus'), (1300, -3.0, 'halus'), (2500, 2.4, 'halus'),
+            (3200, 0.0, 'redam'),
+        ], jeda_ms=140),
+        Jalur('badan', 'rotation_z', [
+            (0, 0.0, 'halus'), (1100, 1.6, 'halus'), (2300, -1.4, 'halus'),
+            (3200, 0.0, 'redam'),
+        ], jeda_ms=110),
+        Jalur('bahu_r', 'rotation_x', [
+            (0, 0.0, 'halus'), (1100, -5.0, 'halus'), (2300, -1.5, 'halus'),
+            (3200, 0.0, 'redam'),
+        ], jeda_ms=170),
+        Jalur('badan', 'y', [
+            (0, 0.0, 'halus'), (1100, 0.010, 'halus'), (2300, -0.008, 'halus'),
+            (3200, 0.0, 'redam'),
+        ], jeda_ms=110, dasar='awal'),
+    ]
+
+
 RESEP = {
     'minum': {'fase': _FASE_MINUM, 'jalur': _resep_minum,
               'alat': 'ember', 'aliran': True},
@@ -747,6 +850,8 @@ RESEP = {
     'perah': {'fase': _FASE_PERAH, 'jalur': _resep_perah, 'alat': 'ember'},
     'telur': {'fase': _FASE_TELUR, 'jalur': _resep_telur, 'alat': None},
     'cukur': {'fase': _FASE_CUKUR, 'jalur': _resep_cukur, 'alat': 'gunting'},
+    'bicara': {'fase': _FASE_BICARA, 'jalur': _resep_bicara, 'alat': None},
+    'dengar': {'fase': _FASE_DENGAR, 'jalur': _resep_dengar, 'alat': None},
 }
 
 
@@ -770,6 +875,11 @@ def mulai(player, jenis: str, titik_tuang=None, pemicu=None,
     aksi = AksiRawat(jenis, resep['fase'], resep['jalur'](),
                      pemicu=pemicu, saat_frame=saat_frame, saat_usai=saat_usai)
 
+    # Alat HUD disembunyikan untuk SETIAP aksi perawatan, bukan hanya yang
+    # punya properti sendiri. Tanpa ini pemain memberi isyarat sambil
+    # mengacungkan cangkul saat bercakap-cakap, dan merogoh sarang ayam
+    # dengan kapak masih tergenggam.
+    _sembunyikan_alat_hud(player)
     alat = resep.get('alat')
     if alat:
         _pasang_properti(player, alat)
@@ -779,10 +889,22 @@ def mulai(player, jenis: str, titik_tuang=None, pemicu=None,
     return aksi
 
 
-def _pasang_properti(player, kind: str) -> None:
-    """Taruh benda kerja di tangan kanan, dan sembunyikan alat yang digenggam.
+def _sembunyikan_alat_hud(player) -> None:
+    alat_hud = getattr(player, '_held_tool', None)
+    if alat_hud is not None:
+        alat_hud.enabled = False
 
-    Alat HUD (cangkul/sabit) tetap ada di tangan kalau tidak disembunyikan, jadi
+
+def _kembalikan_alat_hud(player) -> None:
+    alat_hud = getattr(player, '_held_tool', None)
+    if alat_hud is not None:
+        alat_hud.enabled = True
+
+
+def _pasang_properti(player, kind: str) -> None:
+    """Taruh benda kerja di tangan kanan.
+
+    Alat HUD (cangkul/sabit) sudah disembunyikan oleh mulai(); tanpa itu
     pemain akan terlihat menuang air dari sebuah cangkul.
     """
     from ursina import Vec3
@@ -799,10 +921,6 @@ def _pasang_properti(player, kind: str) -> None:
         import logging
         logging.warning(f'[RAWAT] gagal membangun properti {kind!r}', exc_info=True)
         player._care_prop = None
-
-    alat_hud = getattr(player, '_held_tool', None)
-    if alat_hud is not None:
-        alat_hud.enabled = False
 
 
 def pasang_hasil(player) -> None:
@@ -849,9 +967,7 @@ def _lepas_properti(player) -> None:
         except Exception:
             pass
     player._care_prop = None
-    alat_hud = getattr(player, '_held_tool', None)
-    if alat_hud is not None:
-        alat_hud.enabled = True
+    _kembalikan_alat_hud(player)
 
 
 def bereskan(player) -> None:

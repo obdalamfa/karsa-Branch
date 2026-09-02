@@ -67,3 +67,39 @@ class NPC(BaseActor):
         elif dist > 0:
             self.logical_x += (dx / dist) * move
             self.logical_y += (dy / dist) * move
+
+    # ── PERCAKAPAN ──────────────────────────────────────────────────────────
+    # Pendengar yang benar-benar beku sama merusaknya dengan pembicara yang
+    # beku. Rig NPC di sini satu mesh tanpa pivot, jadi yang bisa digerakkan
+    # cuma seluruh badannya — dan ternyata itu cukup: menghadap lawan bicara,
+    # anggukan kecil, dan perpindahan berat yang periodenya tidak sinkron
+    # dengan anggukan sudah membuat orang terbaca sedang mendengarkan.
+    ANGGUK_DERAJAT = 5.0
+    SWAY_DERAJAT   = 2.2
+
+    def mulai_percakapan(self, px: float, pz: float) -> None:
+        from .config import TILE_SIZE as _TS
+        self._bicara_t = 0.0
+        self._bicara_rot0 = self.rotation_y
+        dx = px / _TS - self.logical_x
+        dz = pz / _TS - self.logical_y
+        if abs(dx) > 1e-6 or abs(dz) > 1e-6:
+            self.rotation_y = math.degrees(math.atan2(dx, dz))
+
+    def tick_percakapan(self, dt: float, px: float, pz: float) -> None:
+        if getattr(self, '_bicara_t', None) is None:
+            self.mulai_percakapan(px, pz)
+        self._bicara_t += dt
+        t = self._bicara_t
+        # Dua periode yang tidak berkelipatan (1,15 Hz dan 0,41 Hz) supaya
+        # anggukan dan goyangan tidak pernah jatuh bersamaan; kalau sinkron,
+        # yang terlihat adalah satu getaran, bukan dua kebiasaan tubuh.
+        self.rotation_x = self.ANGGUK_DERAJAT * max(0.0, math.sin(t * 1.15))
+        self.rotation_z = self.SWAY_DERAJAT * math.sin(t * 0.41)
+
+    def akhiri_percakapan(self) -> None:
+        if getattr(self, '_bicara_t', None) is None:
+            return
+        self._bicara_t = None
+        self.rotation_x = 0.0
+        self.rotation_z = 0.0

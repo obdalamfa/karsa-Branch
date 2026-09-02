@@ -764,16 +764,7 @@ class InteractionController:
                 sound_play('blocked', 0.5)
                 panels.flash_msg("Terlalu lelah untuk mengurus kandang.", 1.2)
             else:
-                item = prod['item']
-                s.inventory[item] = s.inventory.get(item, 0) + 1
-                animal_record(s, npc_id)['siap'] = 0
-                self.player._spend_energy(EN_COLLECT)
-                s.stats['produce_collected'] = s.stats.get('produce_collected', 0) + 1
-                sound_play('harvest', 0.8)
-                hint = best_process_hint(item)
-                ekor = f" | {hint}" if hint else ""
-                panels.flash_msg(
-                    f"+1 {item_name(item)} (nilai {sell_price(item)}G){ekor}", 1.6)
+                self._panen(npc_id, npc, prod, entities_mgr, panels)
         elif action == 'gosok':
             self._gosok(npc_id, npc, entities_mgr, panels)
         elif action == 'beri_minum':
@@ -817,6 +808,70 @@ class InteractionController:
 
 
 
+
+
+    # ─── PANEN HASIL TERNAK ─────────────────────────────────────────────────
+    # Cara mengambil hasil ditentukan PRODUKNYA, bukan spesiesnya: apa pun yang
+    # menghasilkan susu diperah, apa pun yang bertelur dirogoh sarangnya. Kalau
+    # nanti ada spesies baru, ia otomatis memakai postur yang benar.
+    CARA_PANEN = {
+        'susu':        ('perah', 'Memerah'),
+        'susu_kambing': ('perah', 'Memerah'),
+        'telur':       ('telur', 'Mengambil telur'),
+        'telur_bebek': ('telur', 'Mengambil telur'),
+        'wol':         ('cukur', 'Mencukur'),
+    }
+    # Kapan hasilnya berpindah ke tangan, per resep. Angkanya jatuh di fase
+    # ANGKAT, bukan di awal: barang yang masuk tas sebelum tangannya bergerak
+    # membuat animasinya jadi hiasan yang bisa diabaikan.
+    SAAT_HASIL = {'perah': 1900.0, 'telur': 1760.0, 'cukur': 2180.0}
+
+    def _panen(self, npc_id, npc, prod, entities_mgr, panels):
+        from ..economy import (animal_record, item_name, sell_price,
+                               best_process_hint, EN_COLLECT)
+        from .. import care_anim
+
+        s = self.player.state
+        item = prod['item']
+        jenis, kata = self.CARA_PANEN.get(item, ('telur', 'Mengambil hasil'))
+
+        self.player._spend_energy(EN_COLLECT)
+
+        pos = s.npc_positions.get(npc_id) or {}
+        hx, hy = pos.get('x'), pos.get('y')
+        dari, maju_ke = (self.player.x, self.player.z), None
+        if hx is not None:
+            import math as _m
+            self.player.rotation_y = _m.degrees(
+                _m.atan2(hx - self.player.x / TS, hy - self.player.z / TS))
+            self.player.target_rotation_y = self.player.rotation_y
+            dari, maju_ke = self._langkah_masuk(hx * TS, hy * TS, 1.15)
+
+        def _frame(aksi, dt):
+            self._maju(self.player, dari, maju_ke, aksi.t, 520.0)
+
+        def _ambil(aksi):
+            s.inventory[item] = s.inventory.get(item, 0) + 1
+            animal_record(s, npc_id)['siap'] = 0
+            s.stats['produce_collected'] = s.stats.get('produce_collected', 0) + 1
+            care_anim.pasang_hasil(self.player)
+            sound_play('harvest', 0.8)
+            hint = best_process_hint(item)
+            ekor = f" | {hint}" if hint else ""
+            panels.flash_msg(
+                f"+1 {item_name(item)} (nilai {sell_price(item)}G){ekor}", 1.6)
+
+        aksi = care_anim.mulai(
+            self.player, jenis,
+            pemicu=[(self.SAAT_HASIL.get(jenis, 1800.0), _ambil)],
+            saat_frame=_frame,
+        )
+        if aksi is None:
+            # Resep hilang: jangan menelan hasilnya. Lebih baik tanpa animasi
+            # daripada pemain kehilangan energi tanpa mendapat apa pun.
+            _ambil(None)
+            return
+        panels.flash_msg(f"{kata} {npc.get('name', npc_id)}...", 1.0)
 
     def _langkah_masuk(self, cx: float, cz: float, jarak: float):
         """Hitung langkah pendek dari posisi sekarang ke `jarak` unit dari (cx,cz).

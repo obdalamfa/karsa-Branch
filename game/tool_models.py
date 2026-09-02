@@ -212,6 +212,28 @@ def _build_sikat(r):
         _box(r, (0, -0.120, dz), (0.066, 0.020, 0.040), BULU_SIKAT_TUA)
 
 
+def _build_gunting(r):
+    """Gunting cukur domba: dua bilah panjang dari satu pegas U.
+
+    Bukan gunting jahit — gunting domba tradisional adalah sepasang bilah
+    yang disatukan pegas, jadi siluetnya sempit dan panjang. Itu yang membuat
+    aksi mencukur bisa dibedakan dari menyikat sekilas.
+    """
+    _rod(r, (0, 0.035, 0), BESI_TUA, 8, 0.020, 0.020, 0.075)      # pegas U
+    for sx in (-1, 1):
+        _box(r, (sx * 0.020, -0.120, 0), (0.016, 0.235, 0.030), BESI,
+             rot=(0, 0, sx * 3.5))
+        _box(r, (sx * 0.026, -0.255, 0), (0.012, 0.090, 0.024), BESI_KILAP,
+             rot=(0, 0, sx * 5.0))
+
+
+def _build_hasil(r):
+    """Wadah hasil di tangan: bakul kecil tempat telur/wol/susu ditaruh."""
+    _rod(r, (0, -0.090, 0), ANYAM, 10, 0.090, 0.105, 0.115)
+    _rod(r, (0, -0.036, 0), ANYAM_TUA, 10, 0.108, 0.108, 0.016)
+    _box(r, (0, 0.002, 0), (0.190, 0.014, 0.016), ANYAM_TUA)
+
+
 def _build_kapak(r):
     """Kapak kayu bakar: gagang 0,70 m, kepala baji dengan bibir terang."""
     _rod(r, (0, -0.170, 0), KAYU, 8, 0.024, 0.020, 0.700)
@@ -316,6 +338,8 @@ _BUILDERS = {
     'bawaan':   _build_bawaan,
     'ember':    _build_ember,
     'sikat':    _build_sikat,
+    'gunting':  _build_gunting,
+    'hasil':    _build_hasil,
 }
 
 # Urutan persis config.TOOLS:
@@ -345,6 +369,8 @@ CARRY_POSE = {
     'bawaan':   (  0.0,  0.0,   0.0),
     'ember':    (  0.0,  0.0,   0.0),
     'sikat':    (  0.0,  0.0,   0.0),
+    'gunting':  (  0.0,  0.0,   0.0),
+    'hasil':    (  0.0,  0.0,   0.0),
 }
 
 # Geseran kecil supaya gagang duduk di tengah kepalan, bukan di titik tulang.
@@ -361,6 +387,8 @@ GRIP_OFFSET = {
     'bawaan':   (0.0, -0.02, 0.0),
     'ember':    (0.0, -0.03, 0.0),
     'sikat':    (0.0, -0.02, 0.0),
+    'gunting':  (0.0, -0.02, 0.0),
+    'hasil':    (0.0, -0.03, 0.0),
 }
 
 

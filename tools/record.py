@@ -179,9 +179,15 @@ def run_step(g, base, step: str, frames: list, marks: dict, shoot) -> None:
         siapa, takaran, nilai = arg.split(':')
         from game.data import ANIMAL_NPCS
         from game.husbandry import care_of, is_livestock
+        from game.economy import animal_record
         ids = [a for a in ANIMAL_NPCS if is_livestock(a)] if siapa == '*' else [siapa]
         for aid in ids:
-            care_of(g.state, aid)[takaran] = float(nilai)
+            if takaran == 'siap':
+                # Siklus hasil tinggal di economy.animal_record, bukan di
+                # takaran perawatan husbandry — dua buku yang berbeda isinya.
+                animal_record(g.state, aid)['siap'] = int(float(nilai))
+            else:
+                care_of(g.state, aid)[takaran] = float(nilai)
         try:
             g.player.interaction_controller.sync_trough()
         except Exception:

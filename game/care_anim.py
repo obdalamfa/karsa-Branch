@@ -554,11 +554,199 @@ def _resep_gosok() -> list:
     ]
 
 
+
+# ── PANEN ────────────────────────────────────────────────────────────────────
+# Tiga hasil ternak diambil dengan tiga cara yang sama sekali berbeda, dan
+# perbedaan itu POSTUR, bukan ikon. Memakai satu animasi "ambil" untuk
+# ketiganya adalah cara tercepat membuat sapi, ayam, dan domba terasa seperti
+# tiga peti yang berbeda warna:
+#
+#   perah   jongkok DALAM di samping sapi, dua tangan di bawah badannya,
+#           tarikan berirama bergantian kiri-kanan, lalu bangkit membawa ember
+#   telur   jongkok sedang, SATU tangan masuk ke sarang, ditahan lama (meraba),
+#           lalu ditarik keluar pelan — yang ditahan adalah ketidakpastiannya
+#   cukur   berdiri membungkuk, sapuan gunting PANJANG menyusuri punggung,
+#           badan ikut berputar mengikuti sapuan
+#
+# Yang menyatukan ketiganya: hasilnya harus TERLIHAT berpindah ke tangan di
+# akhir. Barang yang muncul di inventori tanpa pernah melewati layar adalah
+# alasan utama "ambil hasil" terasa seperti mengklik tombol.
+
+_FASE_PERAH = [('turun', 620), ('perah', 1560), ('bangkit', 520), ('redam', 300)]
+_FASE_TELUR = [('turun', 520), ('raba', 900), ('angkat', 560), ('redam', 300)]
+_FASE_CUKUR = [('bungkuk', 480), ('cukur', 1740), ('tegak', 520), ('redam', 300)]
+
+
+def _turun_badan(dalam: float, t_turun: int, t_tahan: int, t_naik: int,
+                 t_akhir: int, jeda: int = 0):
+    """Kanal .y untuk jongkok/membungkuk. `dalam` dalam meter, negatif = turun."""
+    return [
+        (0, 0.0, 'halus'),
+        (t_turun // 3, -dalam * 0.12, 'keluar'),      # antisipasi: sedikit naik
+        (t_turun, dalam, 'masuk'),
+        (t_tahan, dalam * 1.06, 'halus'),
+        (t_naik, dalam * 0.9, 'halus'),
+        (t_akhir - 300, -dalam * 0.10, 'halus'),      # ikutan saat bangkit
+        (t_akhir, 0.0, 'redam'),
+    ]
+
+
+def _resep_perah() -> list:
+    # Tarikan bergantian: kanan pada 780/1180/1580, kiri pada 980/1380/1780.
+    # Dua tangan yang menarik bersamaan terlihat seperti meremas, bukan memerah.
+    kanan = [
+        (0,     0.0, 'halus'), (200,  11.0, 'keluar'), (620, -74.0, 'masuk'),
+        (780, -86.0, 'halus'), (980, -70.0, 'halus'), (1180, -87.0, 'halus'),
+        (1380, -71.0, 'halus'), (1580, -85.0, 'halus'), (1780, -72.0, 'halus'),
+        (2180,   8.0, 'halus'), (2500,  0.0, 'redam'),
+    ]
+    kiri = [
+        (0,     0.0, 'halus'), (200,   9.0, 'keluar'), (620, -70.0, 'masuk'),
+        (780, -68.0, 'halus'), (980, -84.0, 'halus'), (1180, -69.0, 'halus'),
+        (1380, -85.0, 'halus'), (1580, -70.0, 'halus'), (1780, -84.0, 'halus'),
+        (2180,   7.0, 'halus'), (2500,  0.0, 'redam'),
+    ]
+    turun = _turun_badan(-0.46, 620, 1780, 2180, 2500)
+    lutut = [
+        (0, 0.0, 'halus'), (200, -4.0, 'keluar'), (620, 62.0, 'masuk'),
+        (1780, 58.0, 'halus'), (2180, -5.0, 'halus'), (2500, 0.0, 'redam'),
+    ]
+    return [
+        Jalur('bahu_r', 'rotation_x', kanan),
+        Jalur('bahu_l', 'rotation_x', kiri, jeda_ms=60),
+        Jalur('siku_r', 'rotation_x', [(t, v * 0.46, k) for t, v, k in kanan], jeda_ms=70),
+        Jalur('siku_l', 'rotation_x', [(t, v * 0.46, k) for t, v, k in kiri], jeda_ms=90),
+        Jalur('lutut_r', 'rotation_x', lutut, jeda_ms=40),
+        Jalur('lutut_l', 'rotation_x', lutut, jeda_ms=85),
+        Jalur('pinggul_r', 'rotation_x', [(t, -v * 0.55, k) for t, v, k in lutut], jeda_ms=40),
+        Jalur('pinggul_l', 'rotation_x', [(t, -v * 0.55, k) for t, v, k in lutut], jeda_ms=85),
+        Jalur('badan', 'rotation_x', [
+            (0, 0.0, 'halus'), (200, -4.0, 'keluar'), (620, 26.0, 'masuk'),
+            (1780, 24.0, 'halus'), (2180, -4.0, 'halus'), (2500, 0.0, 'redam'),
+        ], jeda_ms=110),
+        Jalur('leher', 'rotation_x', [
+            (0, 0.0, 'halus'), (200, -5.0, 'keluar'), (620, 30.0, 'masuk'),
+            (1780, 27.0, 'halus'), (2180, -5.0, 'halus'), (2500, 0.0, 'redam'),
+        ], jeda_ms=155),
+        Jalur('badan', 'y', turun, jeda_ms=0, dasar='awal'),
+        Jalur('bahu_r', 'y', turun, jeda_ms=25, dasar='awal'),
+        Jalur('bahu_l', 'y', turun, jeda_ms=55, dasar='awal'),
+        Jalur('leher', 'y', turun, jeda_ms=80, dasar='awal'),
+        Jalur('alat', 'rotation_x', [
+            (0, 0.0, 'halus'), (200, -6.0, 'keluar'), (620, 16.0, 'masuk'),
+            (1780, 14.0, 'halus'), (2180, -5.0, 'halus'), (2500, 0.0, 'redam'),
+        ], jeda_ms=50),
+    ]
+
+
+def _resep_telur() -> list:
+    # Satu tangan masuk ke sarang dan DITAHAN 900 ms. Tahanan itu isinya
+    # meraba — bagian yang membuat mengambil telur terasa seperti mencari,
+    # bukan seperti memungut.
+    kanan = [
+        (0,     0.0, 'halus'), (170,  14.0, 'keluar'), (520, -78.0, 'masuk'),
+        (760, -84.0, 'halus'),                          # tangan masuk sarang
+        (960, -80.0, 'halus'), (1180, -85.0, 'halus'),  # meraba, gerak kecil
+        (1420, -79.0, 'halus'),
+        (1720, -34.0, 'keluar'),                        # ditarik keluar pelan
+        (1980,   9.0, 'halus'), (2280,  0.0, 'redam'),
+    ]
+    turun = _turun_badan(-0.30, 520, 1420, 1980, 2280)
+    return [
+        Jalur('bahu_r', 'rotation_x', kanan),
+        Jalur('siku_r', 'rotation_x', [(t, v * 0.55, k) for t, v, k in kanan], jeda_ms=65),
+        # Tangan kiri menahan tepi sarang — diam, bukan ikut meraba.
+        Jalur('bahu_l', 'rotation_x', [
+            (0, 0.0, 'halus'), (170, 7.0, 'keluar'), (520, -40.0, 'masuk'),
+            (1720, -37.0, 'halus'), (1980, 6.0, 'halus'), (2280, 0.0, 'redam'),
+        ], jeda_ms=120),
+        Jalur('lutut_r', 'rotation_x', [
+            (0, 0.0, 'halus'), (170, -3.0, 'keluar'), (520, 40.0, 'masuk'),
+            (1420, 38.0, 'halus'), (1980, -4.0, 'halus'), (2280, 0.0, 'redam'),
+        ], jeda_ms=45),
+        Jalur('lutut_l', 'rotation_x', [
+            (0, 0.0, 'halus'), (170, -3.0, 'keluar'), (520, 40.0, 'masuk'),
+            (1420, 38.0, 'halus'), (1980, -4.0, 'halus'), (2280, 0.0, 'redam'),
+        ], jeda_ms=90),
+        Jalur('badan', 'rotation_x', [
+            (0, 0.0, 'halus'), (170, -5.0, 'keluar'), (520, 34.0, 'masuk'),
+            (1420, 31.0, 'halus'), (1980, -5.0, 'halus'), (2280, 0.0, 'redam'),
+        ], jeda_ms=105),
+        Jalur('leher', 'rotation_x', [
+            (0, 0.0, 'halus'), (170, -6.0, 'keluar'), (520, 38.0, 'masuk'),
+            (1420, 35.0, 'halus'), (1980, -6.0, 'halus'), (2280, 0.0, 'redam'),
+        ], jeda_ms=150),
+        Jalur('badan', 'y', turun, dasar='awal'),
+        Jalur('bahu_r', 'y', turun, jeda_ms=25, dasar='awal'),
+        Jalur('bahu_l', 'y', turun, jeda_ms=55, dasar='awal'),
+        Jalur('leher', 'y', turun, jeda_ms=80, dasar='awal'),
+    ]
+
+
+def _resep_cukur() -> list:
+    # Sapuan PANJANG menyusuri punggung: rentang rotation_z besar, jumlah
+    # sapuan sedikit. Kebalikan dari menggosok, yang pendek dan banyak —
+    # itulah yang membedakan keduanya sekilas.
+    kanan = [
+        (0,     0.0, 'halus'), (190,  15.0, 'keluar'), (480, -62.0, 'masuk'),
+        (960, -38.0, 'halus'), (1320, -64.0, 'halus'),
+        (1760, -36.0, 'halus'), (2100, -60.0, 'halus'),
+        (2420,  10.0, 'halus'), (2740,   0.0, 'redam'),
+    ]
+    sapu_z = [
+        (0,    0.0, 'halus'), (190, -6.0, 'keluar'), (480,  30.0, 'masuk'),
+        (960, -18.0, 'halus'), (1320, 32.0, 'halus'),
+        (1760, -16.0, 'halus'), (2100, 28.0, 'halus'),
+        (2420, -5.0, 'halus'), (2740, 0.0, 'redam'),
+    ]
+    return [
+        Jalur('bahu_r', 'rotation_x', kanan),
+        Jalur('bahu_r', 'rotation_z', sapu_z),
+        Jalur('siku_r', 'rotation_x', [(t, v * 0.5, k) for t, v, k in kanan], jeda_ms=75),
+        Jalur('bahu_l', 'rotation_x', [
+            (0, 0.0, 'halus'), (190, 8.0, 'keluar'), (560, -44.0, 'masuk'),
+            (2100, -41.0, 'halus'), (2420, 7.0, 'halus'), (2740, 0.0, 'redam'),
+        ], jeda_ms=115),
+        # Badan BERPUTAR mengikuti sapuan panjang — inilah yang membuat sapuan
+        # terasa panjang. Tanpa putaran badan, lengan sepanjang apa pun tetap
+        # terlihat menyapu tempat yang sama.
+        Jalur('badan', 'rotation_y', [(t, v * 0.42, k) for t, v, k in sapu_z], jeda_ms=140),
+        Jalur('badan', 'rotation_x', [
+            (0, 0.0, 'halus'), (190, -5.0, 'keluar'), (480, 30.0, 'masuk'),
+            (2100, 27.0, 'halus'), (2420, -5.0, 'halus'), (2740, 0.0, 'redam'),
+        ], jeda_ms=120),
+        Jalur('leher', 'rotation_x', [
+            (0, 0.0, 'halus'), (190, -6.0, 'keluar'), (480, 26.0, 'masuk'),
+            (2100, 23.0, 'halus'), (2420, -5.0, 'halus'), (2740, 0.0, 'redam'),
+        ], jeda_ms=165),
+        Jalur('leher', 'rotation_y', [(t, v * 0.5, k) for t, v, k in sapu_z], jeda_ms=195),
+        Jalur('lutut_r', 'rotation_x', [
+            (0, 0.0, 'halus'), (190, -3.0, 'keluar'), (480, 20.0, 'masuk'),
+            (2100, 18.0, 'halus'), (2420, -3.0, 'halus'), (2740, 0.0, 'redam'),
+        ], jeda_ms=130),
+        Jalur('lutut_l', 'rotation_x', [
+            (0, 0.0, 'halus'), (190, -3.0, 'keluar'), (480, 20.0, 'masuk'),
+            (2100, 18.0, 'halus'), (2420, -3.0, 'halus'), (2740, 0.0, 'redam'),
+        ], jeda_ms=175),
+        Jalur('badan', 'y', _turun_badan(-0.20, 480, 2100, 2420, 2740), dasar='awal'),
+        Jalur('bahu_r', 'y', _turun_badan(-0.20, 480, 2100, 2420, 2740), jeda_ms=25, dasar='awal'),
+        Jalur('leher', 'y', _turun_badan(-0.20, 480, 2100, 2420, 2740), jeda_ms=70, dasar='awal'),
+        Jalur('alat', 'rotation_x', [
+            (0, 0.0, 'halus'), (190, -9.0, 'keluar'), (480, 34.0, 'masuk'),
+            (960, 16.0, 'halus'), (1320, 36.0, 'halus'), (1760, 15.0, 'halus'),
+            (2100, 32.0, 'halus'), (2420, -7.0, 'halus'), (2740, 0.0, 'redam'),
+        ], jeda_ms=55),
+    ]
+
+
 RESEP = {
     'minum': {'fase': _FASE_MINUM, 'jalur': _resep_minum,
               'alat': 'ember', 'aliran': True},
     'gosok': {'fase': _FASE_GOSOK, 'jalur': _resep_gosok,
               'alat': 'sikat', 'aliran': False},
+    'perah': {'fase': _FASE_PERAH, 'jalur': _resep_perah, 'alat': 'ember'},
+    'telur': {'fase': _FASE_TELUR, 'jalur': _resep_telur, 'alat': None},
+    'cukur': {'fase': _FASE_CUKUR, 'jalur': _resep_cukur, 'alat': 'gunting'},
 }
 
 
@@ -617,8 +805,43 @@ def _pasang_properti(player, kind: str) -> None:
         alat_hud.enabled = False
 
 
+def pasang_hasil(player) -> None:
+    """Munculkan wadah hasil di tangan KIRI, di akhir aksi panen.
+
+    Barang yang muncul di inventori tanpa pernah melewati layar adalah alasan
+    utama "ambil hasil" terasa seperti mengklik tombol. Wadah ini hidup selama
+    sisa animasi saja — cukup untuk mata melihat hasilnya berpindah tangan.
+    """
+    from ursina import Vec3
+    lepas_hasil(player)
+    try:
+        from .tool_models import build_tool
+        induk = getattr(player, '_pivot_elbow_l', None) or \
+            getattr(player, '_pivot_shoulder_l', None) or player
+        h = build_tool('hasil', parent=induk)
+        if h is not None:
+            h.position = Vec3(-0.015, -0.330, 0.050)
+        player._care_hasil = h
+    except Exception:
+        import logging
+        logging.warning('[RAWAT] gagal membangun wadah hasil', exc_info=True)
+        player._care_hasil = None
+
+
+def lepas_hasil(player) -> None:
+    from ursina import destroy
+    h = getattr(player, '_care_hasil', None)
+    if h is not None:
+        try:
+            destroy(h)
+        except Exception:
+            pass
+    player._care_hasil = None
+
+
 def _lepas_properti(player) -> None:
     from ursina import destroy
+    lepas_hasil(player)
     prop = getattr(player, '_care_prop', None)
     if prop is not None:
         try:

@@ -261,12 +261,19 @@ class AksiRawat:
 
     def terapkan(self, player) -> None:
         """Tulis pose frame ini ke rig. Dipanggil SESUDAH blok animasi lain di
-        player.tick(), supaya aksi perawatan menang atas lerp-ke-nol idle."""
+        player.tick(), supaya aksi perawatan menang atas lerp-ke-nol idle.
+
+        Jalur yang menulis ke kanal yang SAMA dijumlahkan, bukan saling
+        menimpa. Itu yang membuat kedalaman jongkok bisa ditambahkan sebagai
+        lapisan di atas resep apa pun tanpa menulis ulang resepnya — dan tanpa
+        lapisan terakhir diam-diam menghapus yang sebelumnya.
+        """
         t_ms = self.t * 1000.0
         keluar_u = None
         if self._batal_t is not None:
             keluar_u = min(1.0, self._batal_t * 1000.0 / self._KELUAR_MS)
 
+        akum: dict = {}
         for j in self._jalur:
             ent = self._entitas(player, j.sendi)
             if ent is None:
@@ -276,8 +283,16 @@ class AksiRawat:
             else:
                 asal = self._batal_dari.get(id(j), j._dasar_nilai)
                 nilai = asal + (j._dasar_nilai - asal) * _keluar(keluar_u)
+            kunci = (j.sendi, j.sifat)
+            simpul = akum.get(kunci)
+            if simpul is None:
+                akum[kunci] = [ent, j._dasar_nilai, nilai - j._dasar_nilai]
+            else:
+                simpul[2] += nilai - j._dasar_nilai
+
+        for (_sendi, sifat), (ent, dasar, delta) in akum.items():
             try:
-                setattr(ent, j.sifat, nilai)
+                setattr(ent, sifat, dasar + delta)
             except Exception:
                 pass
 
@@ -855,9 +870,50 @@ RESEP = {
 }
 
 
+
+
+# ─── LAPISAN JONGKOK ─────────────────────────────────────────────────────────
+def _lapisan_turun(jalur: list, turun: float) -> list:
+    """Tambahkan `turun` meter kedalaman jongkok di atas resep apa pun.
+
+    Bentuk waktunya DIPINJAM dari kanal `.y` yang sudah ada di resep, jadi
+    lapisan ini masuk dan keluar bersamaan dengan gerakan aslinya — tidak ada
+    jongkok yang muncul sebelum tangannya bergerak atau tertinggal sesudahnya.
+
+    Kenapa perlu: satu resep menyikat yang benar untuk sapi (punggung 1,37 m)
+    akan menyapu 70 cm di atas kepala ayam (punggung 0,44 m). Resep terpisah
+    per spesies berarti sembilan resep yang harus dijaga tetap sinkron; satu
+    lapisan kedalaman berarti satu.
+    """
+    if turun <= 0.005:
+        return jalur
+    contoh = next((j for j in jalur if j.sifat == 'y'), None)
+    if contoh is None:
+        return jalur
+    puncak = min(v for _t, v, _k in contoh.kunci) or -1.0
+    bentuk = [(t, v / puncak, k) for t, v, k in contoh.kunci]      # 0..1
+
+    tambahan = []
+    for sendi in ('badan', 'bahu_r', 'bahu_l', 'leher'):
+        tambahan.append(Jalur(sendi, 'y',
+                              [(t, -turun * u, k) for t, u, k in bentuk],
+                              jeda_ms=contoh.jeda_ms))
+    # Lutut dan pinggul ikut menekuk. Tanpa ini badan turun sementara kaki
+    # tetap lurus — yang terlihat bukan jongkok, tapi tenggelam ke tanah.
+    for sendi, kali in (('lutut_r', 118.0), ('lutut_l', 118.0),
+                        ('pinggul_r', -52.0), ('pinggul_l', -52.0)):
+        tambahan.append(Jalur(sendi, 'rotation_x',
+                              [(t, turun * kali * u, k) for t, u, k in bentuk],
+                              jeda_ms=contoh.jeda_ms + 20))
+    tambahan.append(Jalur('badan', 'rotation_x',
+                          [(t, turun * 26.0 * u, k) for t, u, k in bentuk],
+                          jeda_ms=contoh.jeda_ms + 40))
+    return jalur + tambahan
+
+
 # ─── PABRIK ──────────────────────────────────────────────────────────────────
 def mulai(player, jenis: str, titik_tuang=None, pemicu=None,
-          saat_frame=None, saat_usai=None) -> AksiRawat | None:
+          saat_frame=None, saat_usai=None, turun: float = 0.0) -> AksiRawat | None:
     """Pasang aksi perawatan `jenis` ke `player`. Return aksinya, atau None.
 
     Aksi yang sedang berjalan DIBATALKAN dulu, bukan ditumpuk: dua pose yang
@@ -872,7 +928,8 @@ def mulai(player, jenis: str, titik_tuang=None, pemicu=None,
         lama.usai(player)
     _lepas_properti(player)
 
-    aksi = AksiRawat(jenis, resep['fase'], resep['jalur'](),
+    aksi = AksiRawat(jenis, resep['fase'],
+                     _lapisan_turun(resep['jalur'](), turun),
                      pemicu=pemicu, saat_frame=saat_frame, saat_usai=saat_usai)
 
     # Alat HUD disembunyikan untuk SETIAP aksi perawatan, bukan hanya yang

@@ -839,13 +839,16 @@ class InteractionController:
 
         pos = s.npc_positions.get(npc_id) or {}
         hx, hy = pos.get('x'), pos.get('y')
-        dari, maju_ke = (self.player.x, self.player.z), None
+        dari, maju_ke, turun = (self.player.x, self.player.z), None, 0.0
         if hx is not None:
             import math as _m
             self.player.rotation_y = _m.degrees(
                 _m.atan2(hx - self.player.x / TS, hy - self.player.z / TS))
             self.player.target_rotation_y = self.player.rotation_y
-            dari, maju_ke = self._langkah_masuk(hx * TS, hy * TS, 1.15)
+            geo = self._geometri_hewan(npc_id, npc)
+            if geo is not None:
+                cx, cz, jarak, turun = geo
+                dari, maju_ke = self._langkah_masuk(cx, cz, jarak)
 
         def _frame(aksi, dt):
             self._maju(self.player, dari, maju_ke, aksi.t, 520.0)
@@ -864,7 +867,7 @@ class InteractionController:
         aksi = care_anim.mulai(
             self.player, jenis,
             pemicu=[(self.SAAT_HASIL.get(jenis, 1800.0), _ambil)],
-            saat_frame=_frame,
+            saat_frame=_frame, turun=turun,
         )
         if aksi is None:
             # Resep hilang: jangan menelan hasilnya. Lebih baik tanpa animasi
@@ -872,6 +875,36 @@ class InteractionController:
             _ambil(None)
             return
         panels.flash_msg(f"{kata} {npc.get('name', npc_id)}...", 1.0)
+
+
+    # Tinggi punggung sapi adalah patokan resep aslinya: semua resep perawatan
+    # ditulis untuk tangan yang bekerja di ketinggian itu. Hewan yang lebih
+    # pendek butuh pemainnya menunduk selisihnya.
+    TINGGI_PATOKAN = 1.37
+    JANGKAU_TANGAN = 0.62      # dari sisi badan hewan ke telapak saat menjulur
+
+    def _geometri_hewan(self, npc_id: str, npc: dict):
+        """(x_dunia, z_dunia, jarak_berdiri, kedalaman_jongkok) untuk hewan ini.
+
+        Jarak berdiri dihitung dari jari-jari badan KE ARAH pemain — badan
+        hewan berkaki empat itu elips, bukan lingkaran, jadi mendekat dari
+        samping dan dari depan bukan jarak yang sama.
+        """
+        from ..animal_models import jari_jari_arah, ukuran
+        s = self.player.state
+        pos = s.npc_positions.get(npc_id) or {}
+        hx, hy = pos.get('x'), pos.get('y')
+        if hx is None:
+            return None
+        cx, cz = hx * TS, hy * TS
+        dx, dz = self.player.x - cx, self.player.z - cz
+        if abs(dx) < 1e-3 and abs(dz) < 1e-3:
+            dx = 1.0
+        spesies = npc.get('type', '')
+        r = jari_jari_arah(spesies, dx, dz)
+        _hw, _hl, tinggi = ukuran(spesies)
+        turun = max(0.0, min(0.52, (self.TINGGI_PATOKAN - tinggi) * 0.62))
+        return cx, cz, r + self.JANGKAU_TANGAN, turun
 
     def _langkah_masuk(self, cx: float, cz: float, jarak: float):
         """Hitung langkah pendek dari posisi sekarang ke `jarak` unit dari (cx,cz).
@@ -942,10 +975,13 @@ class InteractionController:
 
         actor = entities_mgr.actors.get(npc_id)
 
-        # Melangkah ke sisi badan hewan supaya sikatnya benar-benar menyentuh.
-        dari, maju_ke = (self.player.x, self.player.z), None
-        if hx is not None:
-            dari, maju_ke = self._langkah_masuk(hx * TS, hy * TS, 1.15)
+        # Melangkah ke sisi badan hewan supaya sikatnya benar-benar menyentuh,
+        # dan menunduk sedalam selisih tinggi punggungnya terhadap sapi.
+        dari, maju_ke, turun = (self.player.x, self.player.z), None, 0.0
+        geo = self._geometri_hewan(npc_id, npc)
+        if geo is not None:
+            cx, cz, jarak, turun = geo
+            dari, maju_ke = self._langkah_masuk(cx, cz, jarak)
 
         def _frame(aksi, dt):
             self._maju(self.player, dari, maju_ke, aksi.t, 420.0)
@@ -974,7 +1010,7 @@ class InteractionController:
             pemicu=[(560, _sapuan), (870, _sapuan), (1190, _sapuan),
                     (1500, _sapuan), (1830, _sapuan), (2160, _sapuan),
                     (2320, _terapkan)],
-            saat_frame=_frame, saat_usai=_usai,
+            saat_frame=_frame, saat_usai=_usai, turun=turun,
         )
         nama = npc.get('name', npc_id)
         panels.flash_msg(f"Menyikat {nama}. Bersih {sebelum}% -> 100%, +1 hati.", 1.8)

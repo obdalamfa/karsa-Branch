@@ -335,3 +335,47 @@ def build_animal(parent, species: str) -> float:
     """
     fn = _BUILDERS.get(species, _kambing)
     return fn(parent)
+
+# ─── UKURAN BADAN ────────────────────────────────────────────────────────────
+# (setengah_lebar, setengah_panjang, tinggi_punggung) dalam meter, dibaca dari
+# kotak `badan` tiap rig di atas. Dipakai aksi perawatan untuk memutuskan
+# SEBERAPA DEKAT pemain harus berdiri dan SEBERAPA RENDAH ia harus menunduk.
+#
+# Kenapa ini perlu ada: jarak berdiri tetap 1,15 m dari titik tengah hewan
+# terbaca benar pada sapi (setengah-lebar 0,36 — tangan sampai ke lambungnya)
+# dan salah total pada ayam (setengah-lebar 0,11 — sikat berhenti 73 cm dari
+# burungnya, menyapu udara). Diukur, bukan ditebak: probe jarak ujung-alat ke
+# kotak badan memberi min 0,04 m untuk sapi dan 0,73 m untuk ayam pada kode
+# yang sama.
+UKURAN = {
+    'ayam':    (0.11, 0.15, 0.44),
+    'bebek':   (0.12, 0.18, 0.42),
+    'kucing':  (0.10, 0.22, 0.38),
+    'kelinci': (0.10, 0.16, 0.30),
+    'rubah':   (0.12, 0.25, 0.42),
+    'kambing': (0.16, 0.36, 0.74),
+    'domba':   (0.23, 0.39, 0.85),
+    'sapi':    (0.36, 0.68, 1.37),
+    'kuda':    (0.29, 0.65, 1.56),
+}
+UKURAN_BAKU = (0.20, 0.35, 0.80)
+
+
+def ukuran(species: str) -> tuple[float, float, float]:
+    return UKURAN.get(species, UKURAN_BAKU)
+
+
+def jari_jari_arah(species: str, dx: float, dz: float) -> float:
+    """Jari-jari badan hewan ke arah (dx,dz) — elips, bukan lingkaran.
+
+    Hewan berkaki empat jauh lebih panjang daripada lebar. Memakai satu
+    jari-jari bulat membuat pemain berdiri terlalu jauh saat mendekat dari
+    samping, dan menembus badannya saat mendekat dari depan.
+    """
+    import math
+    hw, hl, _ = ukuran(species)
+    d = math.hypot(dx, dz) or 1.0
+    ux, uz = dx / d, dz / d
+    denom = (ux / hw) ** 2 + (uz / hl) ** 2
+    return (1.0 / denom) ** 0.5 if denom > 0 else hw
+

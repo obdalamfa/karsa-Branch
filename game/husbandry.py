@@ -284,9 +284,24 @@ def water(state, animal_id: str) -> tuple[bool, str]:
 
 
 def clean(state, animal_id: str) -> tuple[bool, str]:
+    """Sikat hewan. Selalu boleh, bahkan saat ia sudah bersih.
+
+    Dulu ini MENOLAK kalau `bersih >= 95`, dan penolakan itu punya dua akibat.
+    Yang pertama soal patokan: di Story of Seasons menyikat ternak adalah aksi
+    afeksi harian yang selalu tersedia, bukan cuma perkakas kebersihan — hewan
+    yang sudah bersih tetap senang disikat. Yang kedua lebih buruk: karena
+    setiap hewan MULAI pada bersih=100, aksi ini ditolak pada hari pertama,
+    sehingga animasi menggosok tidak pernah bisa dijalankan sama sekali — dan
+    apa yang tidak bisa dijalankan tidak bisa difoto, tidak bisa dinilai, dan
+    praktis tidak ada.
+
+    Kebersihan tetap punya arti: menyikat hewan yang sudah bersih tidak
+    menaikkan apa pun selain hatinya, dan pesannya mengatakan begitu.
+    """
     rec = care_of(state, animal_id)
     if rec['bersih'] >= 95:
-        return False, "Kandangnya masih bersih."
+        state.npc_hearts[animal_id] = min(10, state.npc_hearts.get(animal_id, 0) + 0.25)
+        return True, "Disikat sampai mengkilap. Ia menyandarkan kepalanya."
     rec['bersih'] = ISI_BERSIH
     rec['hari_bersih'] = state.day
     state.npc_hearts[animal_id] = min(10, state.npc_hearts.get(animal_id, 0) + 0.5)

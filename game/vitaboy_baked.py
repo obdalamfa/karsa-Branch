@@ -73,6 +73,14 @@ DEFAULT_ANIMS: Tuple[str, ...] = (
     'a2o-walking-loop',
     'a2o-slide-normal',
     'a2o-broom-fly-leftside',
+    # Klip kerja. Tanpa ini avatar TSO tidak punya gerak apa pun untuk aksi
+    # alat: `_play_tool_anim` memutar `_pivot_shoulder_r`, dan pivot itu milik
+    # humanoid prosedural — pada avatar TSO ia tidak menggerakkan satu vertex
+    # pun. Diukur pada strip enam ubin: gerak antar-ubin 0,0% untuk GOSOK dan
+    # PANEN, melawan 46,1% dan 40,5% pada strip patokan. Enam ubin identik.
+    'a2o-fso-outsideshower-scrub',   # menggosok — sapuan tangan bolak-balik
+    'a2o-lever-pull-start',          # menarik/mengayun — dipakai kerja alat
+    'a2o-kart-ride',                 # duduk menunggang
 )
 
 # ─── CACHE MODUL ─────────────────────────────────────────────────────────────

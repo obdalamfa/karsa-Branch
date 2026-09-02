@@ -45,7 +45,7 @@ mana yang mana dari bentuknya saja dan "buta" batal.
 |---|---|---|
 | BERKUDA | `gerak_berkuda` | `python tools/capture.py --scene farm --at 20,6 --out _bench/shots/BERKUDA.png --strip 6 --strip-every 7 --hold w --frames 60 --width 960 --height 540 --gif _bench/shots/BERKUDA.gif --aksi naik --target kuda_pegasus` |
 | PANEN | `gerak_panen` | `python tools/capture.py --scene farm --at <petak ladang> --dist 6 --pitch 18 --yaw 200 --out _bench/shots/PANEN.png --strip 6 --strip-every 3 --frames 50 --width 960 --height 540 --gif _bench/shots/PANEN.gif --keys space` |
-| GOSOK | `gerak_gosok` | `python tools/capture.py --scene farm --at 20,6 --dist 7 --pitch 16 --yaw 200 --out _bench/shots/GOSOK.png --strip 6 --strip-every 4 --frames 50 --width 960 --height 540 --gif _bench/shots/GOSOK.gif --aksi gosok --target kuda_pegasus` |
+| GOSOK | `gerak_gosok` | `python tools/capture.py --scene farm --at 20,6 --dist 4.5 --pitch 11 --yaw 150 --out _bench/shots/GOSOK.png --strip 6 --strip-every 3 --frames 50 --width 960 --height 540 --gif _bench/shots/GOSOK.gif --aksi gosok --target kuda_pegasus` |
 | BICARA | `gerak_bicara` | `python tools/capture.py --scene town --at <dekat NPC> --dist 6 --pitch 14 --yaw 200 --out _bench/shots/BICARA.png --strip 6 --strip-every 5 --frames 50 --width 960 --height 540 --gif _bench/shots/BICARA.gif --aksi bicara --target <npc_id>` |
 
 Ubin 960x540 supaya sama dengan `tools/klip.py` (`UBIN_W/UBIN_H`).
@@ -107,3 +107,23 @@ penunggang duduk di pelana dengan badan ikut naik-turun mengikuti langkah kuda,
 kaki kuda mengayun, dan dunia mengalir lewat dengan mantap. Yang akan langsung
 ketahuan kalau salah: penunggang yang MENEMPEL kaku di punggung kuda, dan kuda
 yang meluncur tanpa kakinya bergerak.
+
+## Aksi yang DITOLAK terlihat persis seperti animasi yang belum dibuat
+
+`execute_pie_action` tidak melempar saat aksinya ditolak — ia menampilkan
+pesan lalu return biasa. Selama beberapa ronde harness memotret penolakan itu
+dan menghasilkan strip enam-ubin-identik, yang lalu terbaca sebagai "animasi
+menggosok belum ada". Diukur: GOSOK 0,0% gerak sementara `CAPTURE_AKSI`
+melaporkan sukses.
+
+`capture.py` sekarang memeriksa EFEKNYA, bukan kembalinya fungsi: kalau
+`player._attack_anim` tidak menjadi > 0 sesudah aksi dipanggil, ia keluar
+dengan CAPTURE_FAIL dan kode 2.
+
+Kalau kamu melihat strip beku, urutan memeriksanya:
+1. Apakah `CAPTURE_FAIL` muncul? Berarti aksinya ditolak, bukan hilang.
+2. Apakah avatarnya TSO? Pivot prosedural (`_pivot_shoulder_r`) TIDAK
+   menggerakkan avatar TSO sama sekali — petakan modenya ke klip TSO di
+   `_KLIP_TSO` (game/player.py).
+3. Apakah kameranya masih membingkai yang dinilai? Tata letak scene berubah
+   seiring pekerjaan; resep yang basi memotret pagar, bukan hewan.

@@ -117,6 +117,18 @@ def _part(model, pos, scale, tex_name, tint=color.white, parent=None):
 
 
 
+# Mode aksi -> klip animasi TSO. Hanya mode yang PUNYA klip yang masuk;
+# sisanya tetap mengandalkan pivot prosedural dan tidak dipaksa memakai klip
+# yang artinya lain.
+_KLIP_TSO = {
+    'gosok': 'a2o-fso-outsideshower-scrub',
+    'swing': 'a2o-lever-pull-start',
+    'mine':  'a2o-lever-pull-start',
+    'down':  'a2o-lever-pull-start',
+    'bend':  'a2o-lever-pull-start',
+}
+
+
 def _menuju(sekarang, tujuan, k, dt):
     """Bergerak menuju `tujuan` dengan laju k per detik, aman di frame rate mana pun.
 
@@ -1195,6 +1207,18 @@ class Player3D(Entity):
         self._attack_anim = float(ms)
         self._anim_dur    = float(ms)
         self._anim_mode   = mode
+
+        # Avatar TSO tidak digerakkan oleh pivot di bawah — pivot itu milik
+        # humanoid prosedural. Untuk avatar TSO satu-satunya cara membuat aksi
+        # TERLIHAT adalah memutar klip animasinya sendiri.
+        va = getattr(self, '_va', None)
+        if va is not None and getattr(self, '_is_vitaboy', False):
+            klip = _KLIP_TSO.get(mode)
+            if klip:
+                try:
+                    va.set_animation(klip)
+                except Exception:
+                    pass
 
     def _fx_burst(self, wx, wy, wz, col, n=5, spread=0.45, dur=0.38):
         """Partikel ledakan singkat di posisi world — efek visual alat/serangan."""

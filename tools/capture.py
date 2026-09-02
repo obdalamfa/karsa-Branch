@@ -189,20 +189,6 @@ def main():
     if args.toolrack:
         _build_toolrack(g, base)
 
-    if args.aksi:
-        if not args.target:
-            print('CAPTURE_FAIL: --aksi butuh --target', file=sys.stderr)
-            sys.exit(2)
-        try:
-            g.player.execute_pie_action(args.target, args.aksi, g.entities, g.panels)
-        except Exception:
-            # Berisik dengan sengaja: aksi yang diam-diam gagal menghasilkan
-            # strip beku, dan strip beku terbaca sebagai "animasinya belum ada".
-            traceback.print_exc()
-            print(f'CAPTURE_FAIL: aksi {args.aksi} pada {args.target} melempar',
-                  file=sys.stderr)
-            sys.exit(2)
-        print(f'CAPTURE_AKSI {args.aksi} -> {args.target}')
 
     for _ in range(args.frames):
         base.taskMgr.step()
@@ -238,6 +224,45 @@ def main():
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     from panda3d.core import Filename
+
+    # Aksi dipicu DI SINI, tepat sebelum strip mulai merekam — bukan sebelum
+    # frame pemanasan.
+    #
+    # Sebelumnya ia dipanggil di awal, lalu `--frames 50` berjalan, lalu strip
+    # baru diambil. Animasi `gosok` hidup 900 ms dan `swing` 350 ms; keduanya
+    # sudah SELESAI sebelum ubin pertama direkam. Hasilnya strip berisi enam
+    # ubin identik — dan strip beku terbaca sebagai "animasinya belum ada",
+    # padahal yang salah urutan pemicunya. Diukur: gerak antar-ubin 0,0%
+    # untuk GOSOK dan PANEN, melawan 46,1% dan 40,5% pada strip patokan.
+    if args.aksi:
+        if not args.target:
+            print('CAPTURE_FAIL: --aksi butuh --target', file=sys.stderr)
+            sys.exit(2)
+        try:
+            g.player.execute_pie_action(args.target, args.aksi, g.entities, g.panels)
+        except Exception:
+            # Berisik dengan sengaja: aksi yang diam-diam gagal menghasilkan
+            # strip beku, dan strip beku terbaca sebagai "animasinya belum ada".
+            traceback.print_exc()
+            print(f'CAPTURE_FAIL: aksi {args.aksi} pada {args.target} melempar',
+                  file=sys.stderr)
+            sys.exit(2)
+        # Aksi yang DITOLAK tidak melempar apa pun: `execute_pie_action`
+        # menampilkan pesan lalu return biasa. Selama ini harness memotret
+        # penolakan itu dan menghasilkan strip enam-ubin-identik, yang lalu
+        # terbaca sebagai "animasinya belum dibuat". Diukur: GOSOK 0,0% gerak
+        # sementara aksinya dilaporkan sukses.
+        #
+        # Karena itu keberhasilan diperiksa dari EFEKNYA, bukan dari
+        # kembalinya fungsi: kalau tidak ada animasi yang mulai berjalan,
+        # aksinya tidak terjadi.
+        if float(getattr(g.player, '_attack_anim', 0) or 0) <= 0:
+            print(f'CAPTURE_FAIL: aksi {args.aksi} pada {args.target} tidak '
+                  f'menjalankan animasi apa pun — kemungkinan besar ia DITOLAK '
+                  f'(syarat tidak terpenuhi), bukan belum dibuat.',
+                  file=sys.stderr)
+            sys.exit(2)
+        print(f'CAPTURE_AKSI {args.aksi} -> {args.target}')
 
     if args.strip > 0:
         # Tombol ditahan lewat held_keys Ursina — jalur yang SAMA dengan yang

@@ -32,6 +32,8 @@ Bahasa skrip (dipisah '|'), dijalankan berurutan; tiap langkah merekam frame:
     pie:NPC_ID:AKSI         jalankan aksi pie menu langsung (tanpa navigasi)
     hour:H                  set jam dalam game
     care:ID|*:TAKARAN:NILAI setel takaran perawatan ternak (air/kenyang/bersih)
+    pos:NPC_ID:X,Y          tempatkan hewan/NPC di ubin (menata panggung)
+    sepi:ID,ID              sembunyikan hewan lain supaya tidak menutupi
     cam:DIST,PITCH,YAW      setel kamera
     lift:H                  naikkan titik fokus kamera (bingkai dada, bukan kaki)
     mark:NAMA               tandai frame ini di jejak (dipakai untuk mengukur)
@@ -150,7 +152,11 @@ def run_step(g, base, step: str, frames: list, marks: dict, shoot) -> None:
         g.player.execute_pie_action(npc_id, aksi, g.entities, g.panels)
         shoot()
     elif op == 'hour':
-        g.state.hour = float(arg)
+        # Jam permainan disimpan sebagai time_minutes; `state.hour` bukan
+        # atribut yang dibaca siapa pun. Menulis ke sana diam-diam tidak
+        # melakukan apa-apa — dan itu yang membuat semua rekaman terjebak di
+        # jam 7 pagi, saat matahari terbit membakar seluruh bingkai jadi putih.
+        g.state.time_minutes = float(arg) * 60.0
         shoot()
     elif op == 'cam':
         d, p, y = (float(v) for v in arg.split(','))
@@ -180,6 +186,35 @@ def run_step(g, base, step: str, frames: list, marks: dict, shoot) -> None:
             g.player.interaction_controller.sync_trough()
         except Exception:
             pass
+        shoot()
+    elif op == 'pos':
+        # pos:<npc_id>:<x>,<y> — tempatkan hewan/NPC di ubin tertentu.
+        # Kandang kebun berisi enam ekor di petak 9x5; pada kamera sedekat
+        # yang dibutuhkan untuk MELIHAT animasi, selalu ada satu ekor yang
+        # menutupi pemain. Ini menata panggung untuk pengambilan gambar,
+        # bukan mengubah permainan.
+        who, xy = arg.split(':', 1)
+        x, y = (float(v) for v in xy.split(','))
+        pos = g.state.npc_positions.setdefault(who, {})
+        pos.update(scene=g.state.scene_name, x=x, y=y, target_x=x, target_y=y)
+        act = g.entities.actors.get(who)
+        if act is not None:
+            from game.config import TILE_SIZE as _TS
+            act.logical_x, act.logical_y = x, y
+            act.target_x, act.target_y = x, y
+            act.x, act.z = x * _TS, y * _TS
+        shoot()
+    elif op == 'sepi':
+        # sepi:<id,id,...> — singkirkan hewan lain jauh dari panggung.
+        buang = {a.strip() for a in arg.split(',') if a.strip()}
+        from game.data import ANIMAL_NPCS
+        for aid in ANIMAL_NPCS:
+            if aid in buang:
+                continue
+            act = g.entities.actors.get(aid)
+            if act is None:
+                continue
+            act.enabled = False
         shoot()
     elif op == 'mark':
         marks[arg] = len(frames)

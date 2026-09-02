@@ -50,6 +50,8 @@ PITA       = color.rgb(226, 198, 124)
 PELAMPUNG  = color.rgb(206,  78,  62)
 SENAR      = color.rgb(232, 230, 214)
 AIR        = color.rgb(118, 176, 206)   # air di ember/palung
+BULU_SIKAT = color.rgb( 78,  62,  46)   # bulu sikat ternak
+BULU_SIKAT_TUA = color.rgb( 54,  42,  32)
 
 
 # ─── GEOMETRI DASAR ─────────────────────────────────────────────────────────
@@ -195,6 +197,21 @@ def _build_ember(r):
     _box(r, ( 0.000,  0.004, 0), (0.268, 0.018, 0.020), BESI)
 
 
+def _build_sikat(r):
+    """Sikat ternak: balok kayu segenggam dengan bulu kaku di sisi bawah.
+
+    Kecil, jadi siluetnya harus keras: papan terang di atas, pita bulu gelap
+    rapat di bawah, dan busur pegangan yang jelas. Tanpa pita gelap itu sikat
+    terbaca sebagai potongan kayu tak berarti saat tangan bergerak cepat.
+    """
+    _box(r, (0, -0.055, 0), (0.075, 0.055, 0.185), KAYU)          # punggung sikat
+    _box(r, (0, -0.028, 0), (0.062, 0.030, 0.150), KAYU_TUA)      # pegangan cekung
+    # Bulu: satu pita gelap + tiga baris gigi supaya ujungnya tidak rata mati.
+    _box(r, (0, -0.098, 0), (0.072, 0.038, 0.178), BULU_SIKAT)
+    for dz in (-0.058, 0.0, 0.058):
+        _box(r, (0, -0.120, dz), (0.066, 0.020, 0.040), BULU_SIKAT_TUA)
+
+
 def _build_kapak(r):
     """Kapak kayu bakar: gagang 0,70 m, kepala baji dengan bibir terang."""
     _rod(r, (0, -0.170, 0), KAYU, 8, 0.024, 0.020, 0.700)
@@ -298,6 +315,7 @@ _BUILDERS = {
     'pancing':  _build_pancing,
     'bawaan':   _build_bawaan,
     'ember':    _build_ember,
+    'sikat':    _build_sikat,
 }
 
 # Urutan persis config.TOOLS:
@@ -326,6 +344,7 @@ CARRY_POSE = {
     'pancing':  (-152.0, 0.0,  10.0),
     'bawaan':   (  0.0,  0.0,   0.0),
     'ember':    (  0.0,  0.0,   0.0),
+    'sikat':    (  0.0,  0.0,   0.0),
 }
 
 # Geseran kecil supaya gagang duduk di tengah kepalan, bukan di titik tulang.
@@ -341,6 +360,7 @@ GRIP_OFFSET = {
     'pancing':  (0.0, 0.0, 0.0),
     'bawaan':   (0.0, -0.02, 0.0),
     'ember':    (0.0, -0.03, 0.0),
+    'sikat':    (0.0, -0.02, 0.0),
 }
 
 

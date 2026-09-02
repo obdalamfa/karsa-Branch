@@ -296,6 +296,9 @@ EN_COLLECT = 2
 # pakan karena memang lebih berat — dan supaya "isi palung tiap hari" terasa
 # sebagai pekerjaan pagi, bukan sebagai klik gratis.
 EN_WATER   = 3
+# Menyikat: lebih murah daripada mengangkat air, tapi bukan gratis — ia aksi
+# harian yang paling sering diulang, jadi kalau gratis ia berhenti jadi pilihan.
+EN_BRUSH   = 2
 
 # Berapa hari satu kali pemberian makan bertahan.
 FEED_DAYS = 1

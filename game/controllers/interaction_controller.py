@@ -616,8 +616,9 @@ class InteractionController:
             # kurang tanpa menebak.
             from ..economy import (animal_status, pick_feed, item_name,
                                    produce_for, care_rec, EN_FEED, EN_COLLECT,
-                                   EN_WATER, FEED_DAY_VALUE, sell_price)
-            from ..husbandry import ISI_PAKAN, MIN_AIR_PRODUKSI
+                                   EN_WATER, EN_BRUSH, FEED_DAY_VALUE, sell_price)
+            from ..husbandry import (ISI_PAKAN, MIN_AIR_PRODUKSI,
+                                    MIN_BERSIH_PRODUKSI)
             species = npc.get('type', '')
             siap, alasan = animal_status(s, npc_id, species)
             rec  = care_rec(s, npc_id)
@@ -669,8 +670,22 @@ class InteractionController:
             prod = produce_for(species)
             ambil_fx = (f'-{EN_COLLECT} EN, +{sell_price(prod["item"])}G nilai'
                         if prod else 'Hewan ini tidak menghasilkan')
+            # Label gosok menyebut kebersihan SEKARANG. Angka yang menghentikan
+            # produksi harus terbaca di tempat pemain memutuskan, bukan di
+            # panel terpisah yang harus dicari dulu.
+            bersih = int(rec.get('bersih', 0))
+            sudah_bersih = bersih >= 95
+            if sudah_bersih:
+                gosok_lbl = 'Gosok - bulunya masih bersih'
+                gosok_fx  = f'Bersih {bersih}%'
+            else:
+                mampet = ' (produksi terhenti)' if bersih < MIN_BERSIH_PRODUKSI else ''
+                gosok_lbl = f'Gosok - bersih {bersih}%{mampet}'
+                gosok_fx  = f'-{EN_BRUSH} EN, bersih -> 100%, +1 hati'
+
             opsi = [
                 ('belai',       'Belai',                    True,          '+8 Senang'),
+                ('gosok',       gosok_lbl,          not sudah_bersih,      gosok_fx),
                 ('ambil_hasil', f'Ambil Hasil - {alasan}',  siap,          ambil_fx),
                 ('beri_makan',  feed_lbl,                   bool(feed),    feed_fx),
             ]
@@ -759,6 +774,8 @@ class InteractionController:
                 ekor = f" | {hint}" if hint else ""
                 panels.flash_msg(
                     f"+1 {item_name(item)} (nilai {sell_price(item)}G){ekor}", 1.6)
+        elif action == 'gosok':
+            self._gosok(npc_id, npc, entities_mgr, panels)
         elif action == 'beri_minum':
             self._beri_minum(npc_id, npc, entities_mgr, panels)
         elif action == 'beri_makan':
@@ -798,6 +815,114 @@ class InteractionController:
                     f"{npc.get('name', npc_id)} diberi {item_name(feed)}. "
                     f"Kenyang {crec['kenyang']}%.{janji}", 1.6)
 
+
+
+
+    def _langkah_masuk(self, cx: float, cz: float, jarak: float):
+        """Hitung langkah pendek dari posisi sekarang ke `jarak` unit dari (cx,cz).
+
+        Ubin bersebelahan berjarak 2 m. Aksi perawatan yang dimulai dari ubin
+        sebelah selalu terlihat seperti menyentuh udara: sikat berhenti satu
+        setengah meter dari badan hewan, ember menuang ke rumput. Satu langkah
+        kecil di fase pembuka menutup jarak itu — pola yang sama dipakai game
+        bertani lain saat interaksi dimulai. Return (dari, tujuan); tujuan
+        None kalau tidak ada yang perlu didekati.
+        """
+        dx, dz = self.player.x - cx, self.player.z - cz
+        d = (dx * dx + dz * dz) ** 0.5
+        dari = (self.player.x, self.player.z)
+        if d < 1e-3:
+            return dari, None
+        return dari, (cx + dx / d * jarak, cz + dz / d * jarak)
+
+    @staticmethod
+    def _maju(player, dari, tujuan, t_detik: float, panjang_ms: float) -> None:
+        """Terapkan langkah masuk untuk frame ini (ease-out kubik)."""
+        if tujuan is None:
+            return
+        u = min(1.0, t_detik * 1000.0 / panjang_ms)
+        e = 1.0 - (1.0 - u) ** 3
+        player.x = dari[0] + (tujuan[0] - dari[0]) * e
+        player.z = dari[1] + (tujuan[1] - dari[1]) * e
+
+    # ─── GOSOK ──────────────────────────────────────────────────────────────
+    def _gosok(self, npc_id, npc, entities_mgr, panels):
+        """Sikat badan hewan: lima sapuan, hewan mencondong ke arah sikat.
+
+        Menggosok adalah aksi perawatan yang paling sering diulang, jadi ia
+        yang paling cepat terasa murah kalau cuma satu kedutan lalu pesan.
+        Yang membuatnya berharga bukan angkanya — angkanya cuma `bersih` naik
+        — tapi hewan yang bereaksi terhadapnya.
+        """
+        from ..economy import EN_BRUSH, care_rec
+        from ..husbandry import clean as husb_clean, is_livestock
+        from .. import care_anim
+
+        s = self.player.state
+        if not is_livestock(npc_id):
+            panels.flash_msg(f"{npc.get('name', npc_id)} tidak mau disikat.", 1.4)
+            return
+        rec = care_rec(s, npc_id)
+        if rec.get('bersih', 0) >= 95:
+            sound_play('blocked', 0.5)
+            panels.flash_msg("Bulunya masih bersih.", 1.2)
+            return
+        if s.energy < EN_BRUSH:
+            sound_play('blocked', 0.5)
+            panels.flash_msg("Terlalu lelah untuk menyikat.", 1.2)
+            return
+
+        self.player._spend_energy(EN_BRUSH)
+        sebelum = int(rec.get('bersih', 0))
+
+        # Menghadap hewannya. Menyikat sambil membelakanginya adalah hal
+        # pertama yang terlihat salah di filmstrip.
+        pos = s.npc_positions.get(npc_id) or {}
+        hx, hy = pos.get('x'), pos.get('y')
+        if hx is not None:
+            import math as _m
+            self.player.rotation_y = _m.degrees(
+                _m.atan2(hx - self.player.x / TS, hy - self.player.z / TS))
+            self.player.target_rotation_y = self.player.rotation_y
+
+        actor = entities_mgr.actors.get(npc_id)
+
+        # Melangkah ke sisi badan hewan supaya sikatnya benar-benar menyentuh.
+        dari, maju_ke = (self.player.x, self.player.z), None
+        if hx is not None:
+            dari, maju_ke = self._langkah_masuk(hx * TS, hy * TS, 1.15)
+
+        def _frame(aksi, dt):
+            self._maju(self.player, dari, maju_ke, aksi.t, 420.0)
+
+        def _sapuan(aksi):
+            """Satu sapuan mendarat: bunyi + hewan mencondong ke sikat."""
+            sound_play('menu_select', 0.35)
+            if actor is not None and hasattr(actor, 'disikat'):
+                actor.disikat(self.player.x, self.player.z)
+
+        def _terapkan(aksi):
+            ok, pesan = husb_clean(s, npc_id)
+            if ok:
+                s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1)
+                s.stats['brushed'] = s.stats.get('brushed', 0) + 1
+
+        def _usai(aksi):
+            if actor is not None and hasattr(actor, 'selesai_disikat'):
+                actor.selesai_disikat()
+
+        care_anim.mulai(
+            self.player, 'gosok',
+            # Satu pemicu per sapuan, di titik TENGAH tiap sapuan — bunyi yang
+            # jatuh di titik balik terdengar seperti klik, bukan seperti bulu
+            # yang menyapu.
+            pemicu=[(560, _sapuan), (870, _sapuan), (1190, _sapuan),
+                    (1500, _sapuan), (1830, _sapuan), (2160, _sapuan),
+                    (2320, _terapkan)],
+            saat_frame=_frame, saat_usai=_usai,
+        )
+        nama = npc.get('name', npc_id)
+        panels.flash_msg(f"Menyikat {nama}. Bersih {sebelum}% -> 100%, +1 hati.", 1.8)
 
     # ─── BERI MINUM ─────────────────────────────────────────────────────────
     def _pen_livestock(self) -> list:
@@ -915,13 +1040,10 @@ class InteractionController:
         # kecil selama fase ancang-ancang menutup jarak itu; ini pola yang
         # sama dipakai game bertani lain saat interaksi dimulai.
         pal = getattr(self.world, 'trough', None)
-        maju_ke = None
+        dari, maju_ke = (self.player.x, self.player.z), None
         if pal is not None:
             cx, _cy, cz = pal['pos']
-            dx, dz = self.player.x - cx, self.player.z - cz
-            jarak_w = max(1e-3, (dx * dx + dz * dz) ** 0.5)
-            maju_ke = (cx + dx / jarak_w * 1.02, cz + dz / jarak_w * 1.02)
-        dari = (self.player.x, self.player.z)
+            dari, maju_ke = self._langkah_masuk(cx, cz, 1.02)
 
         def _mulai_tuang(aksi):
             aliran.nyala(True)
@@ -944,11 +1066,7 @@ class InteractionController:
             # Langkah masuk diselesaikan sebelum ember mulai miring, supaya
             # yang terlihat adalah "mendekat lalu menuang", bukan "menuang
             # sambil melayang".
-            if maju_ke is not None:
-                u = min(1.0, aksi.t * 1000.0 / 620.0)
-                e = 1.0 - (1.0 - u) ** 3
-                self.player.x = dari[0] + (maju_ke[0] - dari[0]) * e
-                self.player.z = dari[1] + (maju_ke[1] - dari[1]) * e
+            self._maju(self.player, dari, maju_ke, aksi.t, 620.0)
             prop = getattr(self.player, '_care_prop', None)
             if prop is not None and aliran.aktif:
                 try:

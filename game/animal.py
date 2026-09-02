@@ -9,6 +9,7 @@ class AnimalState(Enum):
     WANDER = auto()
     SLEEPING = auto()
     MINUM = auto()
+    DISIKAT = auto()
 
 class FarmAnimal(BaseActor):
     """
@@ -23,6 +24,10 @@ class FarmAnimal(BaseActor):
         self._minum_tunda = 0.0
         self._minum_tile = None
         self._minum_t = None
+        # Reaksi disikat: hewan mencondong KE ARAH sikat lalu mengendur.
+        self._sikat_t = None
+        self._sikat_arah = 0.0
+        self._sikat_kuat = 0.0
 
     def set_bounds(self, bounds):
         self.animal_pen = bounds
@@ -104,11 +109,61 @@ class FarmAnimal(BaseActor):
         self.rotation_x = sudut
         return True
 
+    # ── DISIKAT ─────────────────────────────────────────────────────────────
+    # Kenapa hewan harus bereaksi: menyikat tidak mengubah apa pun yang bisa
+    # dilihat pada hewannya sendiri — bulunya tidak berubah warna, badannya
+    # tidak berpindah. Kalau hewan berdiri diam sementara pemain menyapu udara
+    # di sebelahnya, yang terlihat cuma pemain berkedut. Condongan kecil ke
+    # ARAH sikat adalah satu-satunya tanda bahwa sikat itu menyentuh sesuatu.
+    SIKAT_CONDONG = 7.5      # derajat maksimum
+    SIKAT_LURUH   = 2.4      # per detik
+
+    def disikat(self, px: float, pz: float) -> None:
+        """Satu sapuan mendarat dari arah (px,pz) dalam koordinat dunia."""
+        from .config import TILE_SIZE as _TS
+        dx = px / _TS - self.logical_x
+        dz = pz / _TS - self.logical_y
+        # Condong KE arah penyikat, bukan menjauh: hewan yang nyaman
+        # menyandarkan badannya ke sikat.
+        self._sikat_arah = math.degrees(math.atan2(dx, dz))
+        self._sikat_kuat = 1.0
+        self._sikat_t = 0.0
+        self.ai_state = AnimalState.DISIKAT
+
+    def selesai_disikat(self) -> None:
+        self._sikat_kuat = 0.0
+        if self.ai_state == AnimalState.DISIKAT:
+            self.ai_state = AnimalState.IDLE
+
+    def _tick_sikat(self, dt: float) -> None:
+        """Peluruhan condongan. Tiap sapuan baru mengisinya kembali, jadi
+        selama disikat badannya bergoyang pelan, bukan miring tetap."""
+        if self._sikat_kuat <= 0.0:
+            if abs(self.rotation_z) > 0.05:
+                self.rotation_z *= 0.86
+            else:
+                self.rotation_z = 0.0
+            return
+        self._sikat_kuat = max(0.0, self._sikat_kuat - self.SIKAT_LURUH * dt)
+        self._sikat_t = (self._sikat_t or 0.0) + dt
+        # Sedikit denyut supaya condongannya bernapas, bukan turun rata.
+        denyut = 1.0 + math.sin(self._sikat_t * 11.0) * 0.14
+        arah = math.radians(self._sikat_arah - self.rotation_y)
+        besar = self.SIKAT_CONDONG * self._sikat_kuat * denyut
+        self.rotation_z = besar * math.sin(arah)
+        self.rotation_x = besar * math.cos(arah) * 0.45
+
     def update_ai(self, dt: float, can_walk_fn):
         # Minum menang atas jadwal tidur dan atas jalan-jalan: hewan yang
         # dipanggil ke palung harus sampai ke palung.
         if self._tick_minum(dt, can_walk_fn):
             self._gerak_lerp(dt)
+            return
+
+        self._tick_sikat(dt)
+        if self.ai_state == AnimalState.DISIKAT and self._sikat_kuat > 0.0:
+            # Hewan yang sedang disikat tidak berjalan pergi.
+            self.target_x, self.target_y = self.logical_x, self.logical_y
             return
 
         if self.state.is_night():

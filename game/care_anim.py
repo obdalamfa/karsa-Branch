@@ -434,9 +434,131 @@ def _resep_minum() -> list:
     ]
 
 
+
+# ── GOSOK ────────────────────────────────────────────────────────────────────
+# Menyikat bukan satu ayunan, ia lima sapuan. Yang membuatnya terbaca sebagai
+# menyikat dan bukan sebagai lengan berkedut ada tiga:
+#
+#   1. JUMLAH   minimal empat pembalikan arah. Dua sapuan terbaca sebagai
+#               ragu-ragu, bukan sebagai pekerjaan.
+#   2. IRAMA    jarak antar sapuan sengaja TIDAK sama (300/300/340/290/360/310
+#               ms). Metronom sempurna adalah tanda mesin; tangan manusia
+#               selalu meleset sedikit. anim_trace mengukurnya sbg irama_sd_ms.
+#   3. SAPUAN   lengan tidak cuma maju-mundur; ia juga menyapu ke SAMPING
+#               (rotation_z) dengan fase yang digeser, jadi ujung sikat
+#               menggambar bentuk lonjong di badan hewan, bukan garis lurus.
+#
+# Amplitudo tiap sapuan sengaja mengecil ke belakang: sapuan pertama paling
+# dalam, yang terakhir paling ringan. Lima sapuan seragam terbaca sebagai
+# perulangan; yang meredup terbaca sebagai satu pekerjaan yang selesai.
+_FASE_GOSOK = [('dekat', 420), ('sapu', 1900), ('tarik', 380), ('redam', 300)]
+
+
+def _resep_gosok() -> list:
+    # (ms, derajat) sapuan utama pada bahu kanan
+    bahu = [
+        (0,      0.0, 'halus'),
+        (160,   13.0, 'keluar'),      # antisipasi: tarik bahu ke belakang
+        (420,  -58.0, 'masuk'),       # sikat menempel di badan hewan
+        (720,  -30.0, 'halus'),       # sapuan 1 kembali
+        (1020, -60.0, 'halus'),
+        (1360, -33.0, 'halus'),
+        (1650, -57.0, 'halus'),
+        (2010, -31.0, 'halus'),
+        (2320, -52.0, 'halus'),       # sapuan terakhir paling ringan
+        (2600,   9.0, 'halus'),       # ikutan: lewat dari pose diam
+        (2900,   0.0, 'redam'),
+    ]
+
+    def geser(kunci, skala, tambah=0.0, ms=0):
+        """Salin jalur bahu dengan amplitudo lain dan waktu digeser.
+
+        Dipakai untuk sendi pengikut. Menulis ulang delapan deret kunci dengan
+        tangan adalah cara termurah membuat dua sendi diam-diam tidak sinkron.
+        """
+        return [(t + ms, v * skala + tambah, k) for t, v, k in kunci]
+
+    return [
+        Jalur('bahu_r', 'rotation_x', bahu),
+        # Sapuan ke samping: fasenya DIGESER setengah sapuan terhadap gerak
+        # maju-mundur, jadi ujung sikat menggambar lonjong, bukan garis.
+        Jalur('bahu_r', 'rotation_z', [
+            (0,     0.0, 'halus'),
+            (160,  -4.0, 'keluar'),
+            (420,   6.0, 'masuk'),
+            (870,  20.0, 'halus'),
+            (1190,  4.0, 'halus'),
+            (1500, 19.0, 'halus'),
+            (1830,  5.0, 'halus'),
+            (2160, 17.0, 'halus'),
+            (2460,  3.0, 'halus'),
+            (2600, -3.0, 'halus'),
+            (2900,  0.0, 'redam'),
+        ]),
+        Jalur('siku_r', 'rotation_x', geser(bahu, 0.52), jeda_ms=70),
+        # Tangan kiri menahan badan hewan — diam di satu pose, bukan ikut
+        # menyapu. Dua tangan yang menyikat bersamaan terlihat seperti orang
+        # menepuk-nepuk, bukan menyikat.
+        Jalur('bahu_l', 'rotation_x', [
+            (0,     0.0, 'halus'),
+            (160,   8.0, 'keluar'),
+            (520, -34.0, 'masuk'),
+            (2320, -31.0, 'halus'),     # ditahan hampir dua detik penuh
+            (2600,   6.0, 'halus'),
+            (2900,   0.0, 'redam'),
+        ], jeda_ms=110),
+        Jalur('siku_l', 'rotation_x', [
+            (0,     0.0, 'halus'),
+            (160,   4.0, 'keluar'),
+            (520, -22.0, 'masuk'),
+            (2320, -20.0, 'halus'),
+            (2600,   4.0, 'halus'),
+            (2900,   0.0, 'redam'),
+        ], jeda_ms=160),
+        # Badan ikut mengayun pelan mengikuti sapuan, TELAT 130 ms. Inilah
+        # gerak sekunder yang membedakan badan bermassa dari boneka kayu.
+        Jalur('badan', 'rotation_x', geser(bahu, -0.16), jeda_ms=130),
+        Jalur('badan', 'rotation_z', geser(bahu, 0.075), jeda_ms=175),
+        Jalur('leher', 'rotation_x', geser(bahu, -0.21, tambah=0.0), jeda_ms=150),
+        Jalur('leher', 'rotation_y', geser(bahu, 0.10), jeda_ms=195),
+        Jalur('lutut_r', 'rotation_x', geser(bahu, -0.11), jeda_ms=140),
+        Jalur('lutut_l', 'rotation_x', geser(bahu, -0.11), jeda_ms=185),
+        Jalur('badan', 'y', [
+            (0, 0.0, 'halus'), (160, 0.022, 'keluar'), (420, -0.062, 'masuk'),
+            (1020, -0.070, 'halus'), (2320, -0.052, 'halus'),
+            (2600, 0.016, 'halus'), (2900, 0.0, 'redam'),
+        ], jeda_ms=130, dasar='awal'),
+        Jalur('bahu_r', 'y', [
+            (0, 0.0, 'halus'), (160, 0.022, 'keluar'), (420, -0.062, 'masuk'),
+            (1020, -0.070, 'halus'), (2320, -0.052, 'halus'),
+            (2600, 0.016, 'halus'), (2900, 0.0, 'redam'),
+        ], jeda_ms=130, dasar='awal'),
+        Jalur('bahu_l', 'y', [
+            (0, 0.0, 'halus'), (160, 0.022, 'keluar'), (420, -0.062, 'masuk'),
+            (1020, -0.070, 'halus'), (2320, -0.052, 'halus'),
+            (2600, 0.016, 'halus'), (2900, 0.0, 'redam'),
+        ], jeda_ms=155, dasar='awal'),
+        Jalur('leher', 'y', [
+            (0, 0.0, 'halus'), (160, 0.022, 'keluar'), (420, -0.062, 'masuk'),
+            (1020, -0.070, 'halus'), (2320, -0.052, 'halus'),
+            (2600, 0.016, 'halus'), (2900, 0.0, 'redam'),
+        ], jeda_ms=150, dasar='awal'),
+        # Sikat itu sendiri berputar sedikit tiap sapuan — bulu menekan badan
+        # hewan lalu lepas. Rentangnya kecil supaya tidak terlihat berputar.
+        Jalur('alat', 'rotation_x', [
+            (0,    0.0, 'halus'), (160, -8.0, 'keluar'), (420, 26.0, 'masuk'),
+            (720, 12.0, 'halus'), (1020, 28.0, 'halus'), (1360, 13.0, 'halus'),
+            (1650, 27.0, 'halus'), (2010, 12.0, 'halus'), (2320, 24.0, 'halus'),
+            (2600, -6.0, 'halus'), (2900, 0.0, 'redam'),
+        ], jeda_ms=45),
+    ]
+
+
 RESEP = {
     'minum': {'fase': _FASE_MINUM, 'jalur': _resep_minum,
               'alat': 'ember', 'aliran': True},
+    'gosok': {'fase': _FASE_GOSOK, 'jalur': _resep_gosok,
+              'alat': 'sikat', 'aliran': False},
 }
 
 

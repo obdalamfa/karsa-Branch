@@ -49,18 +49,39 @@ class FarmAnimal(BaseActor):
         self._minum_t = None
         self.ai_state = AnimalState.MINUM
 
-    def _petak_minum(self):
-        """Ubin tepat di sisi palung, dipilih dari sisi terdekat hewan ini.
+    # Setengah ukuran palung dalam UBIN (palung 2,2 m x 0,8 m, ubin 2 m), plus
+    # jarak moncong yang masuk akal. Dipakai untuk berhenti di BIBIR palung,
+    # bukan di pusat ubin sebelah.
+    PALUNG_SETENGAH_X = 0.55
+    PALUNG_SETENGAH_Y = 0.20
+    MONCONG = 0.30
 
-        Semua hewan menuju ubin yang SAMA akan menumpuk jadi satu tumpukan
-        kotak; memilih sisi terdekat membuat kawanan berbaris di keliling
-        palung seperti kawanan sungguhan.
+    def _petak_minum(self):
+        """Titik di BIBIR palung, dari sisi terdekat hewan ini.
+
+        Versi pertama mengembalikan pusat ubin sebelah. Ubin berjarak 2 m, jadi
+        hewan berhenti 1,60 m dari bibir palung — terukur, dan pada jarak itu
+        tidak ada yang sedang minum, mereka cuma berdiri berbaris menghadapnya.
+        Kesalahan granularitas ubin yang sama persis dengan yang sudah
+        diperbaiki untuk pemain.
+
+        Sisi terdekat, bukan satu titik tetap: kawanan yang menuju titik sama
+        menumpuk jadi satu tumpukan kotak.
         """
         tx, ty = self._minum_tile
-        kandidat = [(tx - 1, ty), (tx + 1, ty), (tx, ty - 1), (tx, ty + 1),
-                    (tx - 1, ty + 1), (tx + 1, ty + 1)]
-        return min(kandidat, key=lambda c: (c[0] - self.logical_x) ** 2
-                   + (c[1] - self.logical_y) ** 2)
+        dx = self.logical_x - tx
+        dy = self.logical_y - ty
+        if abs(dx) * self.PALUNG_SETENGAH_Y >= abs(dy) * self.PALUNG_SETENGAH_X:
+            # Mendekat dari ujung timur/barat.
+            sx = 1.0 if dx >= 0 else -1.0
+            gx = tx + sx * (self.PALUNG_SETENGAH_X + self.MONCONG)
+            gy = ty + max(-0.35, min(0.35, dy))
+        else:
+            # Mendekat dari sisi panjangnya — di sinilah kawanan berbaris.
+            sy = 1.0 if dy >= 0 else -1.0
+            gx = tx + max(-0.55, min(0.55, dx))
+            gy = ty + sy * (self.PALUNG_SETENGAH_Y + self.MONCONG)
+        return gx, gy
 
     def _tick_minum(self, dt: float, can_walk_fn) -> bool:
         """Return True kalau keadaan minum sedang memegang kendali."""
@@ -73,7 +94,9 @@ class FarmAnimal(BaseActor):
 
         if self._minum_t is None:
             gx, gy = self._petak_minum()
-            if can_walk_fn(gx, gy):
+            # can_walk_fn bekerja per ubin; titik tujuan sengaja pecahan, jadi
+            # yang diperiksa ubin yang memuatnya.
+            if can_walk_fn(int(round(gx)), int(round(gy))):
                 self.target_x, self.target_y = float(gx), float(gy)
             sampai = (abs(self.logical_x - self.target_x) < 0.06
                       and abs(self.logical_y - self.target_y) < 0.06)

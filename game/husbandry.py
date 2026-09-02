@@ -133,6 +133,20 @@ def is_livestock(animal_id: str) -> bool:
     return bool(r) and not r.get('liar')
 
 
+# Scene yang airnya terbuka. Hewan yang tinggal di sini tidak pernah kehausan:
+# bebek di danau berenang di air minumnya. Tanpa pengecualian ini, air yang
+# sekarang menggerbangi produksi menghukum bebek karena tinggal di tempat yang
+# memang tempatnya — palung hanya ada di kandang kebun, jadi takarannya meluruh
+# sampai nol dan ia PASTI jatuh sakit, tanpa satu pun cara bagi pemain untuk
+# mencegahnya. Aturan yang tidak bisa dipatuhi bukan aturan, itu jebakan.
+SCENE_BERAIR = {'lake', 'beach'}
+
+
+def di_air_terbuka(state, animal_id: str) -> bool:
+    pos = getattr(state, 'npc_positions', {}).get(animal_id) or {}
+    return pos.get('scene') in SCENE_BERAIR
+
+
 def is_penned(animal_id: str) -> bool:
     """Hewan yang tinggal di KANDANG, jadi berbagi palung minum yang sama.
 
@@ -189,7 +203,10 @@ def daily_tick(state) -> dict:
         mult = PENGALI_SUSUT.get(meta.get('type', ''), 1.0)
 
         rec['kenyang'] = _clamp(rec['kenyang'] - SUSUT_KENYANG * mult)
-        rec['air']     = _clamp(rec['air']     - SUSUT_AIR     * mult)
+        if di_air_terbuka(state, aid):
+            rec['air'] = 100        # berenang di air minumnya sendiri
+        else:
+            rec['air'] = _clamp(rec['air'] - SUSUT_AIR * mult)
         rec['bersih']  = _clamp(rec['bersih']  - SUSUT_BERSIH  * mult)
 
         # ── Kelalaian. Yang dihitung adalah takaran yang MENYENTUH nol, bukan

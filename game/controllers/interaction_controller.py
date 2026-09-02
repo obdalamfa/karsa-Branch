@@ -570,6 +570,10 @@ class InteractionController:
         else:
             panels.flash_msg('Antrian penuh')
 
+    # Spesies yang boleh ditunggangi. Daftar, bukan pemeriksaan `== 'kuda'`,
+    # supaya menambah tunggangan lain nanti tidak perlu menyentuh logika.
+    TUNGGANGAN = ('kuda',)
+
     def build_pie_options(self, npc_id: str) -> list:
         from ..data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS
         all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
@@ -667,7 +671,19 @@ class InteractionController:
                 ambil_fx = (f'berhenti: {", ".join(kurang)} terlalu rendah'
                             if kurang else 'terus maju tiap pagi')
 
-            return [
+            # Hewan tunggangan dapat dua pilihan tambahan. Digantung di jalur
+            # pie yang SAMA dengan aksi perawatan lain — bukan tombol baru —
+            # supaya apa yang diuji harness adalah apa yang ditempuh pemain.
+            from ..husbandry import species_of
+            opts_naik = []
+            if species_of(npc_id) in TUNGGANGAN:
+                if getattr(s, 'menunggangi', None) == npc_id:
+                    opts_naik.append(('turun', 'Turun', True, 'berhenti menunggang'))
+                else:
+                    opts_naik.append(('naik', 'Naik', not getattr(s, 'menunggangi', None),
+                                      'tunggangi, jalan jadi lebih cepat'))
+
+            return opts_naik + [
                 ('belai',       'Belai',                                True,  '+8 Senang'),
                 ('beri_makan',  feed_lbl,                        bool(feed),  feed_fx),
                 ('beri_minum',  f'Beri Minum - air {rec["air"]}%',      haus,
@@ -693,6 +709,25 @@ class InteractionController:
                       'arya_tanya', 'sari_gossip', 'budi_riddle',
                       'naga_riddle', 'maya_quest'):
             self.player._play_tool_anim('bicara', 700)
+
+        if action == 'naik':
+            hewan = entities_mgr.actors.get(npc_id) if entities_mgr else None
+            if hewan is None:
+                sound_play('blocked', 0.5)
+                panels.flash_msg("Hewannya tidak ada di sini.", 1.2)
+                return
+            s.menunggangi = npc_id
+            self.player.mulai_menunggang(hewan)
+            sound_play('menu_select', 0.7)
+            panels.flash_msg(f"Menunggangi {npc.get('name', npc_id)}.", 1.4)
+            return
+
+        if action == 'turun':
+            s.menunggangi = None
+            self.player.berhenti_menunggang()
+            sound_play('menu_select', 0.6)
+            panels.flash_msg("Turun dari tunggangan.", 1.2)
+            return
 
         if action == 'sapa':
             s.sosial = min(NEED_MAX, s.sosial + 5)

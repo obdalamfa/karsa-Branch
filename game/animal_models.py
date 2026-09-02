@@ -92,7 +92,21 @@ def _legs(parent, col, x, z, top_y, h, thick):
     out = []
     for sx in (-x, x):
         for sz in (-z, z):
-            out.append(_box(parent, (sx, top_y - h * 0.5, sz), (thick, h, thick), col))
+            kaki = _box(parent, (sx, top_y - h * 0.5, sz), (thick, h, thick), col)
+            # Sumbu putar kaki ada di PANGKALnya, bukan di tengah. Tanpa ini
+            # mengayunkan kaki memutarnya di titik tengah dan telapaknya
+            # menembus tanah setengah langkah sekali.
+            kaki.origin_y = 0.5
+            kaki.y = top_y
+            out.append(kaki)
+    # Kaki disimpan di akar hewan supaya ada yang bisa mengayunkannya.
+    # `_walk_t` sudah dihitung BaseActor sejak lama dan tidak pernah dibaca
+    # siapa pun: hewan berjalan dengan keempat kakinya kaku, meluncur di atas
+    # tanah. Patokan menuntut kaki kuda mengayun, dan itu tidak mungkin selama
+    # kakinya bahkan tidak bisa ditemukan dari luar.
+    if not hasattr(parent, '_kaki'):
+        parent._kaki = []
+    parent._kaki.extend(out)
     return out
 
 

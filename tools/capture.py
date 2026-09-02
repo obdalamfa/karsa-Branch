@@ -256,7 +256,14 @@ def main():
         # Karena itu keberhasilan diperiksa dari EFEKNYA, bukan dari
         # kembalinya fungsi: kalau tidak ada animasi yang mulai berjalan,
         # aksinya tidak terjadi.
-        if float(getattr(g.player, '_attack_anim', 0) or 0) <= 0:
+        # Dua bentuk "aksinya terjadi", dan keduanya harus dihitung:
+        # aksi bertimer (memicu `_attack_anim`) dan aksi yang memasuki
+        # KEADAAN (menunggang tidak punya timer — ia berlangsung sampai
+        # pemain turun). Memeriksa timer saja menolak yang kedua sebagai
+        # kegagalan, padahal ia berhasil.
+        beraksi = (float(getattr(g.player, '_attack_anim', 0) or 0) > 0
+                   or getattr(g.player, '_tunggangan', None) is not None)
+        if not beraksi:
             print(f'CAPTURE_FAIL: aksi {args.aksi} pada {args.target} tidak '
                   f'menjalankan animasi apa pun — kemungkinan besar ia DITOLAK '
                   f'(syarat tidak terpenuhi), bukan belum dibuat.',

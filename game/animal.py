@@ -22,6 +22,24 @@ class FarmAnimal(BaseActor):
     def set_bounds(self, bounds):
         self.animal_pen = bounds
 
+    def ayun_kaki(self, dt: float, laju: float = 1.0):
+        """Ayunkan keempat kaki mengikuti `_walk_t`.
+
+        Kaki depan-kiri sefase dengan belakang-kanan, dan sebaliknya — itu
+        pola langkah berkaki empat, bukan empat kaki yang berayun serempak.
+        Urutan `_kaki` dari `_legs()`: (-x,-z), (-x,+z), (+x,-z), (+x,+z).
+        """
+        kaki = getattr(self, '_kaki', None)
+        if not kaki:
+            return
+        amp = 26.0 * laju
+        for i, k in enumerate(kaki):
+            fase = 0.0 if (i in (0, 3)) else math.pi
+            try:
+                k.rotation_x = math.sin(self._walk_t + fase) * amp
+            except Exception:
+                pass
+
     def update_ai(self, dt: float, can_walk_fn):
         if self.state.is_night():
             self.target_x = self.logical_x

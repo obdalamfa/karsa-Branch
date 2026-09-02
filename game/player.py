@@ -162,6 +162,7 @@ class Player3D(Entity):
         self._attack_anim      = 0.0
         self._anim_mode        = 'swing' # swing|down|water|bend
         self.target_rotation_y = 0.0
+        self._tunggangan       = None
         self.velocity_x        = 0.0
         self.velocity_y        = 0.0
         self.velocity_z        = 0.0
@@ -543,7 +544,11 @@ class Player3D(Entity):
         
         # Sapoe Terbang flying speed boost!
         fly_boost = 2.2 if getattr(self, '_is_flying', False) else 1.0
-        spd_factor = (PLAYER_RUN_MULTIPLIER if run else 1.0) * fly_boost
+        # Menunggang HARUS terasa lebih cepat, kalau tidak ia cuma pose duduk.
+        # 1,75x dipilih supaya berlari (1,6x) masih lebih lambat daripada
+        # menunggang santai — kalau tidak, kuda jadi hiasan.
+        kuda_boost = 1.75 if getattr(self, '_tunggangan', None) is not None else 1.0
+        spd_factor = (PLAYER_RUN_MULTIPLIER if run else 1.0) * fly_boost * kuda_boost
         max_speed = self.speed * spd_factor
         if getattr(self, '_slide_active_ms', 0) > 0:
             max_speed = max(max_speed, 38.0)
@@ -1030,8 +1035,76 @@ class Player3D(Entity):
             spark_col = _rng_mod.choice([color.rgb(0, 255, 255), color.rgb(255, 0, 255), color.rgb(255, 255, 0)])
             self._fx_burst(tail_x, tail_y, tail_z, spark_col, n=1, spread=0.1)
 
+        # Menunggang disamakan SESUDAH gerak dihitung dan SEBELUM portal
+        # diperiksa: hewannya harus mendarat di petak yang sama dengan pemain
+        # pada frame yang sama, kalau tidak ia tertinggal satu frame dan
+        # terlihat menyeret di belakang penunggangnya.
+        self._tick_tunggangan(dt)
+
         # Check portals every tick unconditionally so cooldowns don't block standing players
         self._check_portals(tx_i, ty_i)
+
+    # ── Menunggang ────────────────────────────────────────────────────────
+    # Tinggi duduk di pelana, dalam satuan dunia. Diambil dari tinggi badan
+    # kuda di animal_models (_kuda: badan pada y 1,22, punggung ~1,55).
+    Y_PELANA = 0.86
+
+    def mulai_menunggang(self, hewan):
+        """Naikkan pemain ke punggung `hewan`.
+
+        Hewannya TIDAK di-parent ke pemain dan pemain tidak di-parent ke
+        hewan. Keduanya tetap entity terpisah yang posisinya disamakan tiap
+        frame — karena AI hewan, collider pemain, dan kamera semuanya sudah
+        membaca posisi masing-masing, dan mem-parent salah satunya membuat
+        ketiganya harus diubah.
+        """
+        self._tunggangan = hewan
+        try:
+            hewan.ai_state = getattr(hewan, 'ai_state', None)
+            hewan._ditunggangi = True
+        except Exception:
+            pass
+        va = getattr(self, '_va', None)
+        if va is not None and getattr(self, '_is_vitaboy', False):
+            try:
+                va.set_animation('a2o-kart-ride')
+            except Exception:
+                pass
+
+    def berhenti_menunggang(self):
+        hewan = getattr(self, '_tunggangan', None)
+        if hewan is not None:
+            try:
+                hewan._ditunggangi = False
+                # Diturunkan satu petak ke samping supaya pemain tidak berdiri
+                # di dalam hewannya sendiri.
+                hewan.x = self.x + TS * 0.9
+            except Exception:
+                pass
+        self._tunggangan = None
+        va = getattr(self, '_va', None)
+        if va is not None and getattr(self, '_is_vitaboy', False):
+            try:
+                va.set_animation('a2a-talk-idle-loop')
+            except Exception:
+                pass
+
+    def _tick_tunggangan(self, dt: float):
+        """Samakan posisi hewan dengan pemain, dan ayunkan kakinya."""
+        hewan = getattr(self, '_tunggangan', None)
+        if hewan is None:
+            return
+        hewan.x = self.x
+        hewan.z = self.z
+        hewan.rotation_y = self.rotation_y
+        # Pemain duduk di pelana. `y` dipakai langsung, bukan lewat
+        # set_tile_pos, karena set_tile_pos memaksa y = 0.
+        self.y = GROUND_H + self.Y_PELANA
+        laju = math.hypot(getattr(self, 'velocity_x', 0.0), getattr(self, 'velocity_z', 0.0))
+        if hasattr(hewan, '_walk_t'):
+            hewan._walk_t += dt * (4.0 + laju * 1.6)
+        if hasattr(hewan, 'ayun_kaki'):
+            hewan.ayun_kaki(dt, laju=min(1.6, 0.5 + laju * 0.25))
 
     def _reset_anim(self):
         for piv in (self._pivot_hip_l, self._pivot_hip_r,

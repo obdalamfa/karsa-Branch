@@ -418,8 +418,13 @@ class NativeAvatar:
     karakter yang benar-benar terlihat.
     """
 
+    # `_ujung` WAJIB ada di sini. Kelas ini pakai __slots__, jadi menulis
+    # atribut yang tidak terdaftar melempar AttributeError — dan pemanggilnya
+    # menangkap SEMUA exception lalu turun diam-diam ke jalur avatar berikutnya.
+    # Akibatnya bukan "tutup tangan tidak muncul", tapi "seluruh avatar TSO
+    # diganti sosok lain" tanpa satu pun pesan yang menyebut penyebabnya.
     __slots__ = ('root_entity', 'char_np', 'parts', '_controls', '_current',
-                 '_speed', '_char', '_head_np', '_head_ctrl')
+                 '_speed', '_char', '_head_np', '_head_ctrl', '_ujung')
 
     def __init__(self, parent_entity, apr_list: List[str],
                  scale: float = 0.30, tint=None,
@@ -505,6 +510,83 @@ class NativeAvatar:
         # memandang apa pun tidak membayar sepeser pun.
         self._head_np = None
         self._head_ctrl = None
+
+        # Tangan dan kaki dipasang di sini, dan alasannya bukan gaya.
+        #
+        # Kritikus buta ronde 3 mengukurnya di crop 6x: kedua lengan meruncing
+        # lalu BERHENTI di pinggul tanpa kepalan dan tanpa jari, dan kedua pipa
+        # celana terpotong rata sebagai TABUNG BERONGGA yang bagian dalam
+        # gelapnya terlihat, melayang di atas rumput tanpa sepatu. Badan TSO
+        # `mabd002_casual.apr` memang tidak membawa mesh tangan maupun sepatu —
+        # keduanya aset terpisah yang tidak pernah ikut dimuat.
+        #
+        # Menutupnya di ujung tulang, bukan dengan menambal mesh badannya,
+        # supaya ia ikut animasi apa pun tanpa perlu di-bake ulang: joint
+        # di-expose sekali, lalu bentuknya menempel sebagai anak node itu.
+        self._ujung = []
+        self._pasang_ujung()
+
+    # Mitten dan bot. Radius dalam satuan tulang; nilainya dipilih supaya
+    # lebarnya kira-kira sama dengan lengan/pipa celana yang ditutupinya,
+    # bukan gumpalan yang menempel di ujungnya.
+    # (nama joint, radius, geser lokal, warna). Warna DIPASANG di sini dan
+    # tidak diwariskan: tanpa itu tutupnya keluar putih polos dan terbaca
+    # sebagai titik terang yang menempel, bukan sebagai tangan.
+    # Hanya TANGAN. Tutup kaki sudah dicoba dan sengaja TIDAK dipasang.
+    #
+    # Diukur, bukan disimpulkan: tutup kaki dibesarkan sampai radius 0,34
+    # (dua kali lebih besar dari yang wajar) dan diwarnai merah menyala supaya
+    # tidak mungkin terlewat. Yang sampai ke layar 14 piksel; digeser +0,55 di
+    # sumbu ketiga, tinggal 8. Joint R_FOOT/L_FOOT pada kerangka ini duduk di
+    # atau di bawah bidang tanah, jadi apa pun yang digantung di sana terkubur.
+    #
+    # Celah yang disebut kritikus buta — "pipa celana terpotong rata sebagai
+    # tabung berongga tanpa sepatu" — karena itu MASIH TERBUKA. Perbaikannya
+    # bukan di sini: mesh celananya sendiri yang harus dipendekkan lalu bot
+    # dipasang di atas mata kaki, dan itu perubahan di ruang bind, bukan
+    # penambahan node di ujung tulang.
+    UJUNG = (
+        ('R_HAND', 0.115, (0.0, 0.0, 0.0), (196, 148, 108)),
+        ('L_HAND', 0.115, (0.0, 0.0, 0.0), (196, 148, 108)),
+    )
+
+    def _pasang_ujung(self):
+        """Tutup ujung lengan dan kaki yang menganga dengan bentuk membulat.
+
+        Diam-diam tidak melakukan apa pun kalau joint-nya tidak ada: kerangka
+        yang berbeda tidak boleh membuat avatar gagal dimuat sama sekali.
+        """
+        try:
+            from panda3d.core import NodePath
+            from ursina import color
+            from .meshes import soft_cube_mesh
+        except Exception:
+            return
+        bundle = self._char.getBundle(0)
+        for nama, r, geser, warna in self.UJUNG:
+            try:
+                sendi = self.char_np.attachNewNode(nama + '_ujung')
+                # `exposeJoint` itu milik direct.actor.Actor, bukan Character
+                # mentah — dan avatar ini dibangun tanpa Actor. Jalur yang ada
+                # di Panda mentah: temukan CharacterJoint-nya, lalu minta ia
+                # menyalin transform net-nya ke node kita tiap frame.
+                joint = bundle.findChild(nama)
+                if joint is None or not hasattr(joint, 'addNetTransform'):
+                    sendi.removeNode()
+                    continue
+                joint.addNetTransform(sendi.node())
+                bentuk = NodePath(soft_cube_mesh()._instance()
+                                  if hasattr(soft_cube_mesh(), '_instance')
+                                  else soft_cube_mesh())
+                bentuk.reparentTo(sendi)
+                bentuk.setScale(r * 2.0, r * 2.6 if 'FOOT' in nama else r * 2.0,
+                                r * 2.0)
+                bentuk.setPos(*geser)
+                bentuk.setColorScale(warna[0] / 255.0, warna[1] / 255.0,
+                                     warna[2] / 255.0, 1.0)
+                self._ujung.append(sendi)
+            except Exception:
+                continue
 
     # ── API yang sama dengan VitaboyAvatar ──
     def set_animation(self, name: str) -> bool:

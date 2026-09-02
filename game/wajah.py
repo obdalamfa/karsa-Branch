@@ -432,7 +432,7 @@ def lukis_wajah_chibi(img, varian=None):
     # Geseran per-orang di atasnya yang mengembalikan perbedaannya — dan ia
     # ditambahkan SESUDAH, jadi jarak antar warga tidak ikut termampatkan.
     kulit_asli = _cuplik_kulit(src, W, H)
-    kulit = _geser_rgb(_campur(kulit_asli, (255, 216, 172), 0.26), v['kulit_geser'])
+    kulit = _geser_rgb(_campur(kulit_asli, (255, 219, 178), 0.38), v['kulit_geser'])
 
     # ── 0. Rambut: warna per-orang, bayangan aslinya dijaga ──────────────────
     lum_kulit = kulit_asli[0] * 0.299 + kulit_asli[1] * 0.587 + kulit_asli[2] * 0.114
@@ -494,7 +494,7 @@ def lukis_wajah_chibi(img, varian=None):
     d.arc([(WAJAH_CX - lm) * W, (MULUT_Y - 0.026) * H,
            (WAJAH_CX + lm) * W, (MULUT_Y + 0.026) * H],
           start=busur[0], end=busur[1], fill=mulut + (255,),
-          width=max(2, int(W * 0.009)))
+          width=max(3, int(W * 0.013)))
 
     # ── 5. Mata ──────────────────────────────────────────────────────────────
     # Bentuk patokan: bola besar, iris berwarna yang mengisi hampir seluruh
@@ -502,7 +502,13 @@ def lukis_wajah_chibi(img, varian=None):
     # di kiri-atas dan satu kilau kecil di kanan-bawah.
     putih = (250, 248, 244)
     iris = tuple(v['iris'])
-    pupil = tuple(max(0, c - 46) for c in iris)
+    # Pupil dulu `iris - 46`. Pada 512 piksel kanvas selisih itu terlihat; di
+    # layar, tempat wajah cuma ~60 piksel, iris dan pupil melebur jadi SATU
+    # tempelan warna datar — kritikus buta menyebutnya persis begitu: "dua
+    # tempelan hijau-teal datar". Yang membuat mata terbaca sebagai mata dari
+    # jarak percakapan adalah kontras gelap-terang di dalam bola matanya,
+    # bukan gradasi halus di dalam satu rona.
+    pupil = _campur(iris, (16, 12, 20), 0.78)
     ms = v['mata_skala']
     rx, ry = MATA_RX * ms, MATA_RY * ms
     for fx in (MATA_X_KIRI, MATA_X_KANAN):
@@ -512,8 +518,8 @@ def lukis_wajah_chibi(img, varian=None):
         d.ellipse([x0 - W * 0.006, y0 - H * 0.004, x1 + W * 0.006, y1 + H * 0.004],
                   fill=putih + (255,))
         d.ellipse([x0, y0, x1, y1], fill=iris + (255,))
-        d.ellipse([(fx - rx * 0.50) * W, (MATA_Y - ry * 0.52) * H,
-                   (fx + rx * 0.50) * W, (MATA_Y + ry * 0.52) * H],
+        d.ellipse([(fx - rx * 0.62) * W, (MATA_Y - ry * 0.64) * H,
+                   (fx + rx * 0.62) * W, (MATA_Y + ry * 0.64) * H],
                   fill=pupil + (255,))
         # kilau besar kiri-atas
         kx, ky = fx - rx * 0.38, MATA_Y - ry * 0.40
@@ -534,7 +540,11 @@ def lukis_wajah_chibi(img, varian=None):
     # Tebalnya sampai 2,5x, dan sudutnya boleh menukik ke dalam. Ini ciri
     # tunggal yang paling banyak menceritakan watak pada patokan: alis Takakura
     # sendiri hampir sebesar matanya.
-    alis = _campur(v['rambut'], (0, 0, 0), 0.30)
+    # Dulu `campur(rambut, hitam, 0.30)`. Untuk warga berambut hitam itu berarti
+    # alis hitam di atas dahi cokelat gelap: kritikus buta melaporkan "tanpa
+    # alis" karena memang tidak ada yang bisa dilihat. Sekarang alis selalu
+    # dibawa jauh ke gelap, jadi kontrasnya datang dari NILAI, bukan dari rona.
+    alis = _campur(v['rambut'], (14, 10, 12), 0.62)
     tebal = v['alis_tebal']
     sud = v['alis_sudut']
     for sisi, fx in ((-1, MATA_X_KIRI), (1, MATA_X_KANAN)):
@@ -542,7 +552,7 @@ def lukis_wajah_chibi(img, varian=None):
         d.arc([(fx - 0.052) * W, (ALIS_Y - 0.030) * H,
                (fx + 0.052) * W, (ALIS_Y + 0.046) * H],
               start=200 + miring, end=340 + miring, fill=alis + (255,),
-              width=max(3, int(W * 0.014 * tebal)))
+              width=max(4, int(W * 0.019 * tebal)))
 
     # ── 7. Lembutkan ─────────────────────────────────────────────────────────
     # "Lebih halus" pada patokan bukan cuma bentuk, tapi juga tidak adanya

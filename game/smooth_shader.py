@@ -77,6 +77,31 @@ vec3 lift_saturation(vec3 c, float s) {
     return mix(vec3(luma), c, s);
 }
 
+// Bahu sorot. Tanpa ini permukaan terang DIPOTONG di 1,0 dan kehilangan
+// seluruh isinya.
+//
+// Angkanya: siang hari sm_ambient = (95,90,78)/255 dan sm_sun_color =
+// (255,248,215)/255, jadi pengali di sisi yang kena matahari mencapai
+// (1,373 / 1,326 / 1,149) — di atas satu di KETIGA kanal. Tembok rumah
+// (tekstur house_wall rata-rata 234,220,191 dikali tint 248,235,200) keluar
+// di (1,23 / 1,06 / 0,68): dua kanal terpotong penuh dan yang tersisa di layar
+// adalah putih hangus tanpa tekstur, tanpa bayangan sudut, tanpa beda antara
+// satu rumah dan rumah sebelahnya. Itu persis yang terlihat di
+// `_bench/shots/WAJAH_variasi.png`.
+//
+// Memotong pencahayaan sampai aman akan menggelapkan SELURUH dunia untuk
+// menyelamatkan segelintir permukaan pucat. Bahu ini bekerja sebaliknya:
+// di bawah `lutut` sama sekali tidak mengubah apa pun, di atasnya mendekat ke
+// 1,0 secara asimtotik sehingga selisih 1,05 dan 1,25 tetap jadi dua nilai
+// yang berbeda di layar. Karena tiap kanal dikompres sendiri-sendiri,
+// warnanya justru kembali: kanal biru yang tadinya satu-satunya yang tidak
+// terpotong tidak lagi bersaing dengan dua kanal yang mentok.
+vec3 bahu_sorot(vec3 c, float lutut) {
+    vec3 k = vec3(lutut);
+    vec3 atas = vec3(1.0) - (vec3(1.0) - k) * exp(-(c - k) / max(1e-4, 1.0 - lutut));
+    return mix(c, atas, step(k, c));
+}
+
 void main() {
     // Base color dari p3d_ColorScale — Ursina menyimpan entity.color di sini via setColorScale()
     vec4 base = p3d_ColorScale * v_color;
@@ -87,20 +112,60 @@ void main() {
 
     vec3 N = normalize(v_world_normal);
     vec3 L = normalize(-sm_sun_dir);  // dari permukaan ke sumber cahaya
+    vec3 cam_pos = p3d_ViewMatrixInverse[3].xyz;
+    vec3 V = normalize(cam_pos - v_world_pos);
+
+    // Normal DIBALIK kalau ia membelakangi kamera. Ini perbaikan bug, bukan
+    // penyesuaian selera.
+    //
+    // Atap rumah dibangun dari `ursina.models.procedural.cone.Cone`, dan
+    // normal mesh itu menghadap KE DALAM. Untuk permukaan yang terlihat itu
+    // berarti dot(N,V) negatif, jadi `edge` di bawah selalu 1 dan
+    // `outline_darken` menjatuhkannya ke 45%, sementara dot(N,L) juga negatif
+    // sehingga diffuse jatuh ke pita paling gelap. Dua faktor itu dikalikan:
+    // atap bergenteng emas (215,177,123) keluar di layar sebagai (42,29,9).
+    // Diukur di `_bench/shots/_smoke_env2.png` — SETIAP atap rumah di desa
+    // adalah bidang cokelat-hitam, dan itu sudah begitu jauh sebelum
+    // pekerjaan ini dimulai.
+    //
+    // Membalik normal di sisi yang membelakangi kamera adalah pencahayaan
+    // dua-sisi biasa. Ia sekaligus mengurus geometri `double_sided` yang
+    // memang punya dua muka nyata — helai rumput di mesh sebaran adalah
+    // bidang tanpa tebal, dan separuhnya menghadap menjauh dari kamera pada
+    // sudut orbit mana pun.
+    if (dot(N, V) < 0.0) {
+        N = -N;
+    }
 
     // Toon / Cel-Shading (Cartoon effect)
     float ndl = dot(N, L);
     float diff;
+    // Pita bayangan DIANGKAT dari 0,6/0,3 ke 0,70/0,46.
+    //
+    // Dengan 0,3 sisi yang membelakangi matahari cuma menerima
+    // ambient + 0,3 x matahari = 0,66 dari pengali sisi terang 1,37, yaitu
+    // kurang dari separuh. Untuk permukaan yang warnanya sudah tua — atap
+    // genteng gelap, badan rumah kayu jati, sisi bawah tajuk pohon —
+    // hasilnya HITAM PEKAT tanpa isi: di `_bench/shots/_smoke_env2.png`
+    // seluruh atap rumah desa keluar sebagai satu bidang hitam.
+    //
+    // Angka barunya dipilih setelah bahu sorot ada, bukan sebelumnya: dulu
+    // menaikkan pita bayangan berarti menaikkan juga sisi terang yang sudah
+    // terpotong. Sekarang sisi terang punya bahu, jadi jarak antar pita bisa
+    // dipersempit tanpa kehilangan bentuk.
     if (ndl > 0.3) {
         diff = 1.0;          // Bagian yang kena sinar matahari (Terang)
     } else if (ndl > -0.1) {
-        diff = 0.6;          // Batas bayangan (Sedang)
+        diff = 0.70;         // Batas bayangan (Sedang)
     } else {
-        diff = 0.3;          // Bagian yang tidak kena cahaya (Gelap)
+        diff = 0.46;         // Bagian yang tidak kena cahaya (Gelap)
     }
 
-    vec3 cam_pos = p3d_ViewMatrixInverse[3].xyz;
-    vec3 V = normalize(cam_pos - v_world_pos);
+    // cam_pos dan V sudah dihitung di atas, sebelum normal dibalik — dan harus
+    // di sana, karena pembalikan normal itu sendiri bergantung pada V. Dua baris
+    // yang dulu berdiri di sini adalah deklarasi ULANG: GLSL menolaknya, seluruh
+    // fragment shader gagal dikompilasi, dan Panda diam-diam merender dunia tanpa
+    // shader — itulah kenapa scene town keluar sebagai bidang cyan kosong.
     float ndv = max(0.0, dot(N, V));
     // Outline subtract: tepi gelap tapi tidak memakan warna terang
     float edge = 1.0 - smoothstep(0.0, 0.18, ndv);  // 1 di tepi, 0 di tengah
@@ -114,6 +179,7 @@ void main() {
 
     lit *= outline_darken; // Tepi sedikit gelap, tidak full hitam
     lit = lift_saturation(lit, sm_saturation * 1.08); // Saturasi ringan — tidak neon
+    lit = bahu_sorot(lit, 0.68);   // sorot dikompres, bukan dipotong
 
     fragColor = vec4(lit, base.a);
 }

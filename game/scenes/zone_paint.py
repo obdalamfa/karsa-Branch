@@ -49,25 +49,55 @@ TS = TILE_SIZE
 # Tinggi lapisan zona. Lihat tabel di docstring — angka ini tidak boleh naik ke
 # 0,224 atau jalan akan tertimbun, dan tidak boleh turun ke 0,200 atau ia akan
 # ber-z-fight dengan permukaan ubin di bawahnya.
-ZONE_Y = GROUND_H + 0.006
+# Naik dari 0,006 ke 0,016. Tabel di docstring di atas menyebut permukaan slab
+# jalan ada di 0,224 — itu SUDAH TIDAK BENAR: world.py sekarang menggambar
+# ubin `P` sebagai satu kubus setinggi GROUND_H saja, slab jalannya dicabut
+# bersama tileset aspal FreeSO. Yang tersisa di atas lapisan ini cuma tutup
+# rumput (0,240) dan alas petak cangkulan (dasar 0,210, puncak 0,310).
+#
+# Jarak 6 mm terlalu tipis untuk buffer kedalaman pada jarak pandang peta ini:
+# di `_bench/shots/HUD.png` lantai kandang tampil sebagai pita bergaris karena
+# lapisan zona dan ubin di bawahnya bergantian menang piksel per piksel.
+ZONE_Y = GROUND_H + 0.016
 
 _ASSET_DIR = Path(__file__).resolve().parent.parent.parent / 'assets' / 'textures'
 _TEX_CACHE: dict = {}
 
 
-def _checker_texture(base_name, light, dark, parity):
-    """Tekstur 2x2 ubin: tekstur dasar dikali dua warna berselang.
+# Berapa banyak ubin yang boleh dibakar ke dalam SATU tekstur zona sebelum ia
+# diulang. 16 ubin = 1024 px pada tekstur dasar 64 px: cukup untuk memuat
+# seluruh ladang kebun (16x8) tanpa pengulangan sama sekali, dan cukup besar
+# supaya zona yang lebih besar dari itu pun tidak terbaca berulang.
+_MAKS_UBIN = 16
 
-    `parity` = (x0 + y0) % 2 dari ubin pojok zona, supaya papan catur lapisan
-    ini SEJAJAR dengan papan catur rumput di sekitarnya. Kalau tidak sejajar,
-    tepi zona akan terlihat seperti kesalahan setengah ubin.
+
+def _petak_texture(base_name, light, dark, x0, y0, nx, ny):
+    """Tekstur zona: satu petak per UBIN, warnanya dari noise, bukan paritas.
+
+    Yang lama 2x2 ubin dengan dua warna berselang — papan catur berperiode DUA,
+    pola paling teratur yang bisa dibuat, dan persis yang dilarang cek
+    `rumput_catur` untuk rumput. Di ladang kebun 16x8 hasilnya satu bidang
+    kuning-cokelat dengan kisi teratur di atasnya: dari jarak main ia terbaca
+    sebagai satu warna datar, karena dua nilai yang berselang rapat saling
+    meniadakan di mata.
+
+    Sekarang tiap ubin mengambil nilainya dari `world.tint_mix()` — fungsi yang
+    sama yang dipakai rumput, dievaluasi di KOORDINAT UBIN SEBENARNYA — plus
+    sumbu kelembapan dari `world.kekeringan()`. Petaknya tetap bisa dihitung
+    satu per satu (itu syaratnya, pemain mencangkul per ubin), tapi tidak ada
+    lagi periode pendek untuk dikunci mata.
+
+    Sebuah petak selang-seling tipis ±3% tetap dipertahankan di atas noise:
+    itu yang menjaga garis batas antar ubin tetap terbaca saat noise kebetulan
+    memberi dua tetangga nilai yang sama.
     """
-    key = (base_name, light, dark, parity)
+    key = (base_name, light, dark, x0, y0, nx, ny)
     if key in _TEX_CACHE:
         return _TEX_CACHE[key]
 
     from PIL import Image, ImageChops
     from ursina import Texture
+    from game.world import tint_mix, kekeringan
 
     p = _ASSET_DIR / f'{base_name}.png'
     if not p.exists():
@@ -75,22 +105,32 @@ def _checker_texture(base_name, light, dark, parity):
     base = Image.open(p).convert('RGB')
     n = base.size[0]
 
-    def tinted(rgb):
-        return ImageChops.multiply(base, Image.new('RGB', base.size, tuple(rgb)))
+    ux = min(nx, _MAKS_UBIN)
+    uy = min(ny, _MAKS_UBIN)
+    img = Image.new('RGB', (n * ux, n * uy))
 
-    a, b = tinted(light), tinted(dark)
-    if parity:
-        a, b = b, a
+    # Warna "kering" satu langkah lebih pucat dan lebih kuning dari `light`.
+    kering = tuple(min(255, int(light[i] * (1.10 if i < 2 else 0.92)))
+                   for i in range(3))
 
-    # Susunan kuadran dalam ruang PIL (baris 0 = ATAS). Texture() membalik
-    # gambar saat unggah, jadi baris BAWAH PIL yang jadi v=0 — yaitu ubin
-    # (x0, y0). Paritas ubin (x0+i, y0+j) = (x0+y0+i+j) % 2, jadi diagonalnya
-    # sewarna: kiri-bawah & kanan-atas dapat `a`, dua sisanya `b`.
-    img = Image.new('RGB', (n * 2, n * 2))
-    img.paste(a, (0, n))          # (i=0, j=0)
-    img.paste(b, (n, n))          # (i=1, j=0)
-    img.paste(b, (0, 0))          # (i=0, j=1)
-    img.paste(a, (n, 0))          # (i=1, j=1)
+    for j in range(uy):
+        for i in range(ux):
+            tx, ty = x0 + i, y0 + j
+            t = tint_mix(tx, ty)
+            ker = kekeringan(tx, ty)
+            rgb = []
+            for c in range(3):
+                v = dark[c] + (light[c] - dark[c]) * t
+                if ker > 0.0:
+                    v += (kering[c] - v) * min(1.0, ker * 0.55)
+                # Selang-seling tipis: cukup untuk memberi tepi, tidak cukup
+                # untuk menjadi pola.
+                v *= 1.03 if (tx + ty) % 2 else 0.97
+                rgb.append(max(0, min(255, int(round(v)))))
+            ubin = ImageChops.multiply(base, Image.new('RGB', base.size, tuple(rgb)))
+            # Baris 0 PIL = atas, dan Texture() membalik gambar saat unggah,
+            # jadi ubin (x0+i, y0+j) harus dipasang di baris (uy-1-j).
+            img.paste(ubin, (i * n, (uy - 1 - j) * n))
 
     t = Texture(img)
     t.filtering = False           # ubin harus bertepi tajam supaya bisa dihitung
@@ -108,11 +148,11 @@ def paint_zone(world, x0, y0, x1, y1, base_name='sand_ground',
     from ursina import Mesh, Vec2, Vec3, color
     from game.world import _e
 
-    tex = _checker_texture(base_name, light, dark, (x0 + y0) % 2)
+    nx, ny = x1 - x0 + 1, y1 - y0 + 1
+    tex = _petak_texture(base_name, light, dark, x0, y0, nx, ny)
     if tex is None:
         return None
-
-    nx, ny = x1 - x0 + 1, y1 - y0 + 1
+    ux, uy = min(nx, _MAKS_UBIN), min(ny, _MAKS_UBIN)
     wx0, wx1 = (x0 - 0.5) * TS, (x1 + 0.5) * TS
     wz0, wz1 = (y0 - 0.5) * TS, (y1 + 0.5) * TS
     yy = ZONE_Y if y is None else y
@@ -124,8 +164,8 @@ def paint_zone(world, x0, y0, x1, y1, base_name='sand_ground',
         vertices=[Vec3(wx0, yy, wz0), Vec3(wx1, yy, wz0),
                   Vec3(wx1, yy, wz1), Vec3(wx0, yy, wz1)],
         triangles=[(0, 1, 2), (0, 2, 3)],
-        uvs=[Vec2(0, 0), Vec2(nx / 2.0, 0),
-             Vec2(nx / 2.0, ny / 2.0), Vec2(0, ny / 2.0)],
+        uvs=[Vec2(0, 0), Vec2(nx / float(ux), 0),
+             Vec2(nx / float(ux), ny / float(uy)), Vec2(0, ny / float(uy))],
         normals=[Vec3(0, 1, 0)] * 4,
         mode='triangle',
     )
@@ -140,7 +180,7 @@ def paint_zone(world, x0, y0, x1, y1, base_name='sand_ground',
     return e
 
 
-def patch_tile(world, tx, ty, base_name='grass_tso', tint=None):
+def patch_tile(world, tx, ty, base_name=None, tint=None):
     """Tambal SATU ubin yang berada di luar zona apa pun.
 
     Kenapa perlu: `_make_tile()` memberi ubin penghalang (pohon, tunggul,
@@ -156,8 +196,10 @@ def patch_tile(world, tx, ty, base_name='grass_tso', tint=None):
     dihapus beserta pemanggilnya di props.py.
     """
     from ursina import color
-    from game.world import _e, _cb
+    from game.world import _e, _cb, TEX_RUMPUT
 
+    if base_name is None:
+        base_name = TEX_RUMPUT
     if tint is None:
         tint = _cb(tx, ty)
     # Tinggi & skala disamakan PERSIS dengan tutup rumput tetangga di
@@ -192,8 +234,13 @@ class Zone:
 # Palet zona baku. Semua diambil dari satu keluarga tanah supaya peta tidak
 # berubah jadi tambal sulam warna; yang membedakan zona adalah NILAI (terang
 # gelap) dan tekstur dasarnya, bukan corak warna yang berbeda-beda.
-TANAH_LADANG  = dict(base='sand_ground', light=(148, 120, 90),  dark=(126, 100, 74))
-TANAH_HALAMAN = dict(base='sand_ground', light=(170, 150, 122), dark=(148, 128, 102))
-JERAMI        = dict(base='straw',       light=(210, 195, 150), dark=(186, 170, 126))
-PASIR_PANTAI  = dict(base='sand_ground', light=(232, 214, 176), dark=(212, 194, 156))
-BATU_ALUN     = dict(base='rock_ground', light=(198, 194, 186), dark=(176, 172, 164))
+# Jarak light-dark SENGAJA dilebarkan (dulu cuma ~15% dan itu tidak cukup).
+# Sebuah zona diwarnai per ubin dari noise; kalau kedua ujung skalanya
+# berdekatan, noise-nya tidak menghasilkan apa-apa dan zona kembali jadi satu
+# bidang datar — persis keluhan yang sedang dikerjakan. Sekarang ~1,6x, kira-
+# kira sebesar sebaran nilai tanah ladang di `_bench/refs/farm_closeup.jpg`.
+TANAH_LADANG  = dict(base='tanah_garap', light=(232, 220, 204), dark=(140, 130, 120))
+TANAH_HALAMAN = dict(base='tanah_garap', light=(248, 240, 228), dark=(172, 162, 150))
+JERAMI        = dict(base='jerami_lantai', light=(238, 232, 218), dark=(158, 152, 142))
+PASIR_PANTAI  = dict(base='sand_ground', light=(246, 230, 198), dark=(192, 176, 148))
+BATU_ALUN     = dict(base='rock_ground', light=(214, 210, 202), dark=(158, 154, 146))

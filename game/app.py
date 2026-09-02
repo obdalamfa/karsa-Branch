@@ -222,7 +222,11 @@ class Game3D:
             self.player.apply_appearance(self.state)
 
         # Grass shader — terapkan ke entity rumput yang sudah dibangun
-        _grass.apply_to_entities(self.world._grass_ents)
+        # Mesh sebaran ikut dapat grass_shader: vertex shader-nya menggeser
+        # vertex berdasarkan tingginya, jadi PANGKAL rumpun diam dan UJUNGnya
+        # ikut melambai. Kerikil ada di bawah ambang 0,15 m, jadi diam.
+        _grass.apply_to_entities(self.world._grass_ents +
+                                 self.world._sebaran_ents)
         self._grass_time = 0.0
 
         # Cache fog: dipakai untuk melewati setter Ursina yang mahal.
@@ -358,7 +362,8 @@ class Game3D:
                 # Reset portal cooldown supaya tidak ada lock dari portal sebelumnya
                 self.player._portal_cd = 0.5  # cukup buat hindari portal-ping-pong tapi tidak block movement
                 self._init_env()
-                _grass.apply_to_entities(self.world._grass_ents,
+                _grass.apply_to_entities(self.world._grass_ents +
+                                         self.world._sebaran_ents,
                                          self._grass_time, 0.06)
                 logging.info(f"[SCENE_T] DONE total: {_time.time()-t_start:.3f}s now at {current_scene}({s.player_x},{s.player_y})")
                 # Swap ambient loop sesuai scene baru

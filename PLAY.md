@@ -60,6 +60,14 @@ Sistem yang dibutuhkan:
 | **F9** | Muat dari save terakhir |
 | **ESC** | Tutup panel aktif |
 
+## Bercakap-cakap
+
+Tekan **E** di dekat warga lalu pilih **Ngobrol**. Selama kotak dialog
+terbuka, waktu permainan berhenti — tapi orangnya tidak: kamu memberi isyarat
+tangan mengikuti ketukan kalimat dan mengangguk di akhir frasa, sementara
+lawan bicara berputar menghadapmu, ikut mengangguk, dan memindahkan berat
+badannya. Tekan **ESC** atau habiskan dialognya untuk kembali.
+
 ## Jadwal Hari
 
 - 1 hari nyata ≈ 15 menit real (900 detik)
@@ -94,6 +102,7 @@ yang kurang:
 | Pilihan | Isi |
 |---|---|
 | **Belai** | +8 Senang |
+| **Gosok — <kebersihan>** | −2 EN, bersih → 100%, +1 hati. Lima sapuan sikat; hewannya mencondong ke arah sikat. |
 | **Ambil Hasil — <alasan>** | Aktif hanya kalau hasilnya benar-benar siap. Kalau tidak, labelnya menyebut apa yang menghalangi. |
 | **Beri Makan (<pakan>)** | −2 EN, kenyang +60%. Pakan diambil otomatis dari tas; label memberi tahu kalau yang dipakai boros. |
 | **Beri Minum — <keadaan palung>** | −3 EN, air kandang jadi 100%. |
@@ -110,6 +119,20 @@ Kamu harus berada dalam **2,6 tile** dari palung untuk mengisinya — ember
 diisi di palung, bukan dilempar dari seberang kandang. Kalau terlalu jauh,
 menunya mengatakannya. Setelah dituang, ternak sekandang akan menghampiri
 palung dan menunduk minum.
+
+### Mengambil hasil
+
+Tiap hasil diambil dengan cara yang berbeda, dan bedanya terlihat:
+
+| Hasil | Caranya |
+|---|---|
+| Susu / susu kambing | **Perah** — jongkok di samping hewan, tarikan bergantian kiri-kanan |
+| Telur / telur bebek | **Ambil telur** — jongkok, satu tangan masuk ke sarang, meraba sebentar |
+| Wol | **Cukur** — membungkuk, sapuan gunting panjang menyusuri punggung |
+
+Hasilnya muncul di tangan sebelum masuk ke tas. Semua aksi perawatan bisa
+dibatalkan kapan saja: cukup tekan tombol jalan, dan posenya kembali dengan
+halus tanpa memotong di tengah.
 
 ### Ritme hariannya
 

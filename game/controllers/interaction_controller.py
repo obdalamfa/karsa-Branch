@@ -634,7 +634,17 @@ class InteractionController:
             # dilihat pemain bukan aturan — prinsip yang sudah dipegang
             # husbandry.py, dan angka persennya yang membuat "kenapa sapiku
             # berhenti kasih susu" bisa dijawab tanpa menebak.
-            air = int(rec.get('air', 0))
+            # Palung hanya ada di kandang, dan hanya hewan kandang berbagi
+            # palung. Kucing dan kelinci diurus tapi tidak dikandangkan;
+            # rubah liar tidak diurus sama sekali. Menawarkan "Beri Minum"
+            # kepada mereka berarti menawarkan aksi terhadap benda yang tidak
+            # ada — dan labelnya terpaksa mengarang keadaan palung yang tidak
+            # pernah dibangun.
+            from ..husbandry import is_penned
+            ada_palung = getattr(self.world, 'trough', None) is not None
+            tawarkan_minum = is_penned(npc_id) and ada_palung
+
+            air = self._trough_level() if tawarkan_minum else 0
             penuh = air >= 95
             jarak = self._jarak_palung()
             jauh = jarak is not None and jarak > self.JANGKAU_PALUNG
@@ -659,12 +669,15 @@ class InteractionController:
             prod = produce_for(species)
             ambil_fx = (f'-{EN_COLLECT} EN, +{sell_price(prod["item"])}G nilai'
                         if prod else 'Hewan ini tidak menghasilkan')
-            return [
+            opsi = [
                 ('belai',       'Belai',                    True,          '+8 Senang'),
                 ('ambil_hasil', f'Ambil Hasil - {alasan}',  siap,          ambil_fx),
                 ('beri_makan',  feed_lbl,                   bool(feed),    feed_fx),
-                ('beri_minum',  minum_lbl,             not penuh and not jauh, minum_fx),
             ]
+            if tawarkan_minum:
+                opsi.append(
+                    ('beri_minum', minum_lbl, not penuh and not jauh, minum_fx))
+            return opsi
 
     def execute_pie_action(self, npc_id: str, action: str, entities_mgr, panels):
         from ..data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS
@@ -795,11 +808,11 @@ class InteractionController:
         itu memaksa pemain mengulang aksi yang sama lima kali untuk satu ember.
         """
         from ..data import ANIMAL_NPCS
-        from ..husbandry import is_livestock
+        from ..husbandry import is_penned
         s = self.player.state
         out = []
         for aid in ANIMAL_NPCS:
-            if not is_livestock(aid):
+            if not is_penned(aid):
                 continue
             pos = s.npc_positions.get(aid) or {}
             if pos.get('scene') == s.scene_name:
@@ -841,13 +854,18 @@ class InteractionController:
 
     def _beri_minum(self, npc_id, npc, entities_mgr, panels):
         from ..economy import EN_WATER, care_rec
-        from ..husbandry import water as husb_water, is_livestock
+        from ..husbandry import water as husb_water, is_penned
         from ..scenes.props import trough_pour_point, set_trough_level
         from .. import care_anim
 
         s = self.player.state
-        if not is_livestock(npc_id):
-            panels.flash_msg("Hewan ini tidak diurus.", 1.2)
+        if not is_penned(npc_id):
+            panels.flash_msg(
+                f"{npc.get('name', npc_id)} tidak dikandangkan — tidak minum "
+                "dari palung ternak.", 1.6)
+            return
+        if getattr(self.world, 'trough', None) is None:
+            panels.flash_msg("Tidak ada palung minum di sini.", 1.4)
             return
         if self._trough_level() >= 95:
             sound_play('blocked', 0.5)

@@ -245,10 +245,10 @@ def _trough_state_level(world) -> int:
     """
     try:
         from game.data import ANIMAL_NPCS
-        from game.husbandry import is_livestock, care_of
+        from game.husbandry import is_penned, care_of
         st = world.state
         nilai = [care_of(st, aid).get('air', 0) for aid in ANIMAL_NPCS
-                 if is_livestock(aid)
+                 if is_penned(aid)
                  and (st.npc_positions.get(aid) or {}).get('scene') == world.scene_name]
         return int(min(nilai)) if nilai else 0
     except Exception:

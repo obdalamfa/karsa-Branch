@@ -91,6 +91,30 @@ def _e(model, pos, scale, tex_name, tint=color.white, smooth=True, soft=True,
             model = soft_capsule_mesh()
     elif model == 'cylinder':
         model = Cylinder()
+
+    # Mesh prosedural Ursina bisa datang TANPA normal sama sekali, dan mesh
+    # tanpa normal tidak bisa dicahayai.
+    #
+    # `ursina.models.procedural.cone.Cone` adalah contohnya: diukur, ia punya
+    # 24 vertex dan `normals is None`. smooth_shader memulai dengan
+    # `normalize(v_world_normal)`, jadi untuk atap rumah — yang dibangun dari
+    # Cone — seluruh perhitungan cahaya berangkat dari nilai yang tidak
+    # ditentukan. Hasilnya: dot(N,L) jatuh ke pita paling gelap DAN dot(N,V)
+    # membuat `edge` menyala penuh, dua-duanya dikalikan, dan atap bergenteng
+    # emas keluar di layar sebagai (59,38,12) — praktis hitam.
+    #
+    # Ini juga sebabnya "balik normal kalau membelakangi kamera" tidak
+    # menolong sedikit pun: tidak ada normal untuk dibalik.
+    #
+    # Diperbaiki di sini, bukan di tempat atap dibuat, karena tiap mesh
+    # prosedural lain punya jebakan yang sama dan tidak ada yang melempar
+    # apa pun saat menginjaknya.
+    if hasattr(model, 'generate_normals') and not getattr(model, 'normals', None):
+        try:
+            model.generate_normals()
+        except Exception:
+            pass
+
     t = tex_obj if tex_obj is not None else _tex(tex_name)
     if t:
         e = Entity(model=model, position=pos, scale=scale,

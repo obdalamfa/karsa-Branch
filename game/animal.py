@@ -135,14 +135,38 @@ class FarmAnimal(BaseActor):
         if self.ai_state == AnimalState.DISIKAT:
             self.ai_state = AnimalState.IDLE
 
+    # Napas diam. Hewan yang tidak disikat sama sekali tidak menganimasikan
+    # apa pun — diukur, sesudah sapuan terakhir badannya berhenti PERSIS diam
+    # selama 1,30 detik sementara pemain masih menarik tangannya. Itu tanda
+    # patung yang sama seperti pendengar dialog yang membeku, cuma di ujung
+    # aksi. Napas 0,55 derajat terlalu kecil untuk diperhatikan sendiri dan
+    # cukup untuk menghapus keheningan mati itu.
+    NAPAS_DERAJAT = 0.55
+    NAPAS_PERIODE = 3.4
+
+    def _napas(self) -> float:
+        """Sudut napas untuk detik permainan sekarang, digeser per ekor.
+
+        Fase diambil dari id-nya: kawanan yang bernapas serempak terbaca
+        sebagai satu benda, bukan sebagai beberapa hewan.
+        """
+        self._napas_t = getattr(self, '_napas_t', 0.0)
+        geser = (hash(self.actor_id) % 997) / 997.0 * self.NAPAS_PERIODE
+        return self.NAPAS_DERAJAT * math.sin(
+            (self._napas_t + geser) * math.tau / self.NAPAS_PERIODE)
+
     def _tick_sikat(self, dt: float) -> None:
         """Peluruhan condongan. Tiap sapuan baru mengisinya kembali, jadi
-        selama disikat badannya bergoyang pelan, bukan miring tetap."""
+        selama disikat badannya bergoyang pelan, bukan miring tetap.
+
+        Sesudah sapuan habis, condongan tidak luruh ke NOL tapi ke napas —
+        supaya tidak ada satu frame pun dengan badan benar-benar diam.
+        """
+        self._napas_t = getattr(self, '_napas_t', 0.0) + dt
+        napas = self._napas()
         if self._sikat_kuat <= 0.0:
-            if abs(self.rotation_z) > 0.05:
-                self.rotation_z *= 0.86
-            else:
-                self.rotation_z = 0.0
+            self.rotation_z = self.rotation_z * 0.86 + napas * 0.14
+            self.rotation_x = self.rotation_x * 0.86 + napas * 0.14
             return
         self._sikat_kuat = max(0.0, self._sikat_kuat - self.SIKAT_LURUH * dt)
         self._sikat_t = (self._sikat_t or 0.0) + dt
@@ -150,8 +174,8 @@ class FarmAnimal(BaseActor):
         denyut = 1.0 + math.sin(self._sikat_t * 11.0) * 0.14
         arah = math.radians(self._sikat_arah - self.rotation_y)
         besar = self.SIKAT_CONDONG * self._sikat_kuat * denyut
-        self.rotation_z = besar * math.sin(arah)
-        self.rotation_x = besar * math.cos(arah) * 0.45
+        self.rotation_z = besar * math.sin(arah) + napas
+        self.rotation_x = besar * math.cos(arah) * 0.45 + napas * 0.6
 
     def update_ai(self, dt: float, can_walk_fn):
         # Minum menang atas jadwal tidur dan atas jalan-jalan: hewan yang
@@ -170,6 +194,9 @@ class FarmAnimal(BaseActor):
             self.target_x = self.logical_x
             self.target_y = self.logical_y
             self.ai_state = AnimalState.SLEEPING
+            # Hewan tidur pun bernapas — lebih pelan, tapi bukan patung.
+            self._napas_t = getattr(self, '_napas_t', 0.0) + dt * 0.55
+            self.rotation_z = self._napas() * 0.7
             return
             
         is_moving = abs(self.logical_x - self.target_x) > 0.02 or abs(self.logical_y - self.target_y) > 0.02

@@ -903,7 +903,13 @@ class InteractionController:
         spesies = npc.get('type', '')
         r = jari_jari_arah(spesies, dx, dz)
         _hw, _hl, tinggi = ukuran(spesies)
-        turun = max(0.0, min(0.52, (self.TINGGI_PATOKAN - tinggi) * 0.62))
+        # Batas 0,70 m, bukan 0,52: selisih tinggi punggung ayam (0,44 m) ke
+        # sapi menuntut 0,67 m, dan batas lama memotongnya tepat di situ —
+        # terukur, sapuan sikat pada ayam masih melayang di median 0,42 m
+        # sementara sapi dan kambing sudah 0,05-0,12 m. Jongkok 0,70 m pada
+        # karakter 1,76 m memang jongkok penuh; itu memang yang dilakukan
+        # orang saat mengurus ayam.
+        turun = max(0.0, min(0.70, (self.TINGGI_PATOKAN - tinggi) * 0.72))
         return cx, cz, r + self.JANGKAU_TANGAN, turun
 
     def _langkah_masuk(self, cx: float, cz: float, jarak: float):

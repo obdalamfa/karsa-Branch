@@ -74,12 +74,19 @@ class NPC(BaseActor):
     # cuma seluruh badannya — dan ternyata itu cukup: menghadap lawan bicara,
     # anggukan kecil, dan perpindahan berat yang periodenya tidak sinkron
     # dengan anggukan sudah membuat orang terbaca sedang mendengarkan.
-    ANGGUK_DERAJAT = 5.0
-    SWAY_DERAJAT   = 2.2
+    ANGGUK_DERAJAT  = 5.2      # dalamnya satu anggukan
+    ANGGUK_PERIODE  = 2.35     # detik antar anggukan
+    ANGGUK_LEBAR    = 0.34     # bagian periode yang dipakai anggukan itu sendiri
+    SWAY_DERAJAT    = 2.4
+    SWAY_PERIODE    = 4.6      # detik satu ayunan berat penuh
+    NAPAS_DERAJAT   = 0.6      # selalu ada, bahkan di antara anggukan
+    NAPAS_PERIODE   = 3.1
 
     def mulai_percakapan(self, px: float, pz: float) -> None:
         from .config import TILE_SIZE as _TS
-        self._bicara_t = 0.0
+        # Fase awal diambil dari id-nya, bukan nol: kalau dua NPC memakai fase
+        # yang sama, mereka mengangguk serempak seperti pasukan.
+        self._bicara_t = (hash(self.actor_id) % 1000) / 1000.0 * self.ANGGUK_PERIODE
         self._bicara_rot0 = self.rotation_y
         dx = px / _TS - self.logical_x
         dz = pz / _TS - self.logical_y
@@ -87,15 +94,39 @@ class NPC(BaseActor):
             self.rotation_y = math.degrees(math.atan2(dx, dz))
 
     def tick_percakapan(self, dt: float, px: float, pz: float) -> None:
+        """Anggukan berdenyut + napas yang tidak pernah berhenti.
+
+        Versi pertama memakai `max(0, sin(t * 1,15))`. Setengah gelombang yang
+        dipotong itu berarti kepala DIAM PERSIS NOL selama 2,7 detik penuh tiap
+        siklus — diukur dari jejak: delapan sampel berturut-turut n_rx = 0,00.
+        Pendengar yang membeku hampir tiga detik adalah persis pembekuan yang
+        mau dihilangkan potongan ini; ia cuma pindah tempat.
+
+        Sekarang anggukan jadi DENYUT pendek (34% dari 2,35 detik) dan sisanya
+        diisi napas kecil yang selalu jalan, jadi tidak pernah ada frame dengan
+        kepala benar-benar diam.
+        """
         if getattr(self, '_bicara_t', None) is None:
             self.mulai_percakapan(px, pz)
         self._bicara_t += dt
         t = self._bicara_t
-        # Dua periode yang tidak berkelipatan (1,15 Hz dan 0,41 Hz) supaya
-        # anggukan dan goyangan tidak pernah jatuh bersamaan; kalau sinkron,
-        # yang terlihat adalah satu getaran, bukan dua kebiasaan tubuh.
-        self.rotation_x = self.ANGGUK_DERAJAT * max(0.0, math.sin(t * 1.15))
-        self.rotation_z = self.SWAY_DERAJAT * math.sin(t * 0.41)
+
+        napas = self.NAPAS_DERAJAT * math.sin(t * math.tau / self.NAPAS_PERIODE)
+
+        u = (t % self.ANGGUK_PERIODE) / self.ANGGUK_PERIODE
+        if u < self.ANGGUK_LEBAR:
+            # Kosinus terangkat: turun cepat, naik lebih pelan, tanpa sudut
+            # tajam di kedua ujungnya.
+            v = u / self.ANGGUK_LEBAR
+            angguk = self.ANGGUK_DERAJAT * (0.5 - 0.5 * math.cos(math.tau * v))
+        else:
+            angguk = 0.0
+
+        self.rotation_x = napas + angguk
+        # Periodenya tidak berkelipatan periode anggukan, jadi keduanya tidak
+        # pernah jatuh bersamaan — kalau sinkron, yang terlihat satu getaran,
+        # bukan dua kebiasaan tubuh.
+        self.rotation_z = self.SWAY_DERAJAT * math.sin(t * math.tau / self.SWAY_PERIODE)
 
     def akhiri_percakapan(self) -> None:
         if getattr(self, '_bicara_t', None) is None:

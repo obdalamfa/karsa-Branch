@@ -4,58 +4,57 @@ import math
 
 TS = TILE_SIZE
 
-# Roof texture variants
-ROOF_TEXTURES = [
-    ('roof/terracotta',      color.rgb(215,  88,  68)),
-    ('roof/adobetile',       color.rgb(198, 145,  95)),
-    ('roof/adobetile_red',   color.rgb(195,  72,  55)),
-    ('roof/adobetile_green', color.rgb( 72, 155,  88)),
-    ('roof/adobetile_blue',  color.rgb( 72, 105, 188)),
-    ('roof/adobetile_gold',  color.rgb(215, 178,  65)),
-    ('roof/slate_h',         color.rgb(118, 128, 148)),
-    ('roof/composite_green', color.rgb( 78, 128,  88)),
-    ('roof/composite_red',   color.rgb(188,  75,  65)),
-    ('roof/composite_light', color.rgb(195, 185, 165)),
-    ('roof/composite_tan',   color.rgb(188, 155, 108)),
-    ('roof/composite_sea',   color.rgb( 85, 155, 155)),
-    ('roof/asphaltshingle1', color.rgb(135, 128, 120)),
-    ('roof/asphaltshingle3', color.rgb(158, 148, 136)),
-    ('roof/conetile_red',    color.rgb(205,  85,  68)),
-    ('roof/conetile_green',  color.rgb( 68, 148,  88)),
-    ('roof/conetile_blue',   color.rgb( 68,  98, 195)),
-    ('roof/metal_h',         color.rgb(148, 158, 165)),
-    # Dinaikkan dari (55,52,58). Genteng hitam dikali tekstur gelap lalu dikali
-    # pita bayangan menghasilkan bidang HITAM tanpa isi di sisi yang
-    # membelakangi matahari — separuh atap tiap rumah yang kebetulan mendapat
-    # varian ini. Abu tua masih terbaca sebagai genteng gelap dan masih jadi
-    # nilai paling tua di deretan atap, tapi ia masih punya permukaan.
-    ('roof/blacktile1',      color.rgb( 96,  92, 100)),
-    ('roof/scalloped_h',     color.rgb(218, 108,  75)),
-]
-
-def tint_atap(c):
-    """Naikkan tint atap sampai ia hampir berhenti menggelapkan teksturnya.
-
-    Tabel di atas memasangkan tiap tekstur atap dengan warna yang KIRA-KIRA
-    sama dengan warna rata-rata tekstur itu sendiri — `composite_green`
-    (118,138,109) dengan tint (78,128,88), `adobetile` (180,115,83) dengan
-    tint (198,145,95), dan seterusnya. Ursina MENGALIKAN keduanya, jadi
-    coraknya masuk dua kali dan atap keluar di sekitar seperlima nilai
-    teksturnya. Diukur: piksel atap (38,26,8) di layar — praktis hitam — pada
-    rumah yang di tabel tercatat bergenteng cokelat terang.
-
-    Aturannya: TEKSTUR membawa corak, TINT membawa nilai. Skala di bawah
-    menaikkan tiap tint mendekati putih, tapi tidak sampai menyamakan
-    semuanya — varian yang di tabel memang dipilih gelap tetap keluar sebagai
-    atap paling tua di deretan.
-    """
-    m = max(c[0], c[1], c[2]) or 1.0
-    target = 0.91 * (0.72 + 0.28 * m)
-    k = target / m
-    # c[:3] TIDAK boleh dipakai: warna Ursina adalah Vec4 Panda3D dan tidak
-    # menerima slice — ia melempar TypeError saat scene dibangun.
-    return color.rgb(*[max(0, min(255, int(round(c[i] * k * 255))))
-                       for i in (0, 1, 2)])
+# ── Bahan atap ──────────────────────────────────────────────────────────────
+# DIHAPUS di sini: tabel `ROOF_TEXTURES` (20 entri) dan fungsi `tint_atap()`.
+# Keduanya hanya dipakai oleh build_house_block dan digantikan tabel di bawah.
+# Alasannya dua, dan keduanya terukur:
+#
+# 1. Dua puluh entri itu menghasilkan SATU bentuk — piramida dengan kemiringan
+#    yang sama persis. Pada jarak main tekstur 32 px sudah tidak terbaca lagi,
+#    jadi kedua puluh varian sampai ke mata sebagai "kerucut". Yang membedakan
+#    atap pada jarak itu adalah KEMIRINGAN dan TEPI-nya.
+#
+# 2. `tint_atap()` menaikkan tint sampai ~0,79 nilai penuh TANPA melihat
+#    teksturnya. Ursina mengalikan keduanya, jadi hasil layar ≈ tekstur × 0,79.
+#    Untuk tekstur cerah itu benar; untuk `terracotta2` (97,96,112) hasilnya
+#    (69,67,86) — dan itulah bidang HITAM di atas Balai Desa pada tangkapan
+#    percobaan ronde 2 ini. Sekarang tint dihitung dari rata-rata teksturnya
+#    (tint = 255 × warna_layar_yang_diinginkan / rata_rata_tekstur), jadi warna
+#    layarnya adalah angka yang ditulis, bukan hasil sampingan.
+#
+# Empat bahan, dan tiap bahan membawa siluetnya sendiri:
+#
+#   genteng   piramida sedang, tepi tipis           — rumah bata/plester
+#   sirap     piramida landai, tepi lebar menjorok  — papan kayu
+#   jerami    piramida curam, tepi tebal            — gubuk/lumbung
+#   tumpang   dua piramida bertingkat (joglo)       — bangunan umum desa
+#
+# Isi tuple: (curam, tebal_tepi, lebar_tepi, [(tekstur, tint), ...])
+# `curam` dikali HOUSE_H untuk tinggi puncak; `lebar_tepi` dikali ukuran badan.
+# Angka di komentar tiap varian = rata-rata tekstur → warna layar hasil kali.
+PROFIL_ATAP = {
+    'genteng': (0.60, 0.15, 1.20, [
+        ('roof/adobetile',   color.rgb(238, 236, 232)),  # 180,115,83 -> 168,107,76
+        ('roof/terracotta1', color.rgb(255, 255, 255)),  # 151, 79,48 -> 151, 79,48
+        ('roof/terracotta4', color.rgb(250, 248, 246)),  # 148,127,76 -> 145,123,73
+    ]),
+    'sirap': (0.42, 0.11, 1.28, [
+        ('roof/slate1',        color.rgb(250, 250, 250)),  # 155,145,141 -> 152,142,138
+        ('roof/scalloped',     color.rgb(240, 240, 240)),  # 171,157,149 -> 161,148,140
+        ('roof/composite_tan', color.rgb(250, 250, 250)),  # 150,134, 97 -> 147,131, 95
+    ]),
+    'jerami': (0.78, 0.26, 1.26, [
+        ('roof/thatch',  color.rgb(255, 255, 255)),   # 185,114,60 -> 185,114,60
+        ('roof/thatch3', color.rgb(248, 248, 248)),   # 192,124,58 -> 186,120,56
+    ]),
+    'tumpang': (0.55, 0.14, 1.22, [
+        # scalloped_grey (166,171,185) cukup terang untuk DIREDAM jadi batu tua
+        # tanpa pernah jatuh ke hitam — kebalikan dari terracotta2 yang gelap
+        # sejak awal dan tidak bisa diselamatkan tint apa pun.
+        ('roof/scalloped_grey',         color.rgb(200, 194, 182)),  # -> 130,130,132
+        ('roof/fiberglasshoroz_ltgrey', color.rgb(194, 194, 200)),  # -> 131,131,128
+    ]),
+}
 
 
 def build_tree(world, wx, wz):
@@ -133,11 +132,26 @@ def build_dead_tree(world, wx, wz):
     world._obj_ents.extend([trunk, cabang])
 
 def build_lantern(world, wx, wz):
-    pole = world._create_entity('cylinder', (wx, OBJ_H * 0.45, wz),
-              (TS * 0.08, OBJ_H * 0.90, TS * 0.08), 'wood_plank')
-    lamp = world._create_entity('cube', (wx, OBJ_H * 0.95, wz),
-              (TS * 0.38, 0.40, TS * 0.38), 'lamp_glow')
-    world._obj_ents.extend([pole, lamp])
+    """Tiang lampu jalan. Dulu setinggi 1,08 m — setinggi PINGGANG orang.
+
+    Diukur dari `_bench/shots/DESA.png`: lentera lama tenggelam di rumput dan
+    tidak menyumbang satu garis tegak pun ke frame. Di
+    `_bench/refs/village_wide.jpg` justru dua tiang lampu besi yang memberi
+    kedalaman pada latar depan — keduanya membelah frame secara vertikal dan
+    memberi mata skala untuk menilai tinggi orang di belakangnya.
+
+    Empat entity, dan tiga di antaranya membayar garis tegak setinggi 3,2 m.
+    """
+    besi = color.rgb(96, 96, 104)
+    alas = world._create_entity('cylinder', (wx, GROUND_H + 0.14, wz),
+              (TS * 0.24, 0.28, TS * 0.24), 'wall_stone', color.rgb(128, 122, 116))
+    tiang = world._create_entity('cylinder', (wx, GROUND_H + 1.62, wz),
+              (TS * 0.075, 3.24, TS * 0.075), 'metal_grey', besi)
+    kepala = world._create_entity('cube', (wx, GROUND_H + 3.42, wz),
+              (TS * 0.30, 0.44, TS * 0.30), 'lamp_glow')
+    topi = world._create_entity('cube', (wx, GROUND_H + 3.70, wz),
+              (TS * 0.38, 0.12, TS * 0.38), 'metal_grey', besi)
+    world._obj_ents.extend([alas, tiang, kepala, topi])
 
 def build_ore(world, wx, wz, tex_name='crystal'):
     base = world._create_entity('cube', (wx, WALL_H / 2 + GROUND_H, wz),
@@ -209,36 +223,155 @@ BAHAN_DINDING = (
 )
 
 
-def _jendela(world, cx, cy, cz, lebar, tinggi, arah, kusen):
-    """Satu jendela: bingkai gelap + kaca yang memantulkan langit.
+def _sisi_pintu(scene, x0, y0, x1, y1):
+    """Cari sisi mana yang punya ubin DR — itulah MUKA bangunan.
 
-    Dua entity, dan ia mengerjakan lebih banyak daripada dua entity mana pun
-    lain di bangunan ini: sebuah kotak tanpa lubang tidak punya SKALA. Begitu
-    ada jendela, mata tahu rumahnya setinggi berapa lantai dan sebesar apa
-    dibanding orang di depannya.
+    Kenapa dicari, bukan ditetapkan: sampai sekarang pintu, teras, tiang, dan
+    semua jendela digambar di sisi +z tanpa syarat. Kamera baku permainan
+    berdiri di -z dan melihat ke +z (`Game3D._camera_offset()` dengan yaw 0),
+    jadi SELURUH hiasan muka setiap bangunan di game ini menghadap menjauhi
+    kamera. Itu persis keluhan kritikus ronde 1 tentang potongan DESA — "atap
+    ... tidak punya jendela, pintu, atau ornamen" — dan ornamennya memang ada,
+    cuma di sisi yang tidak pernah difoto.
 
-    `arah` = +1 kalau muka jendela menghadap +z, -1 kalau -z.
+    Ubin DR adalah tempat portal berdiri, jadi ia satu-satunya sumber
+    kebenaran tentang di sisi mana pintunya: menaruh gambar pintu di sisi lain
+    berarti menggambar pintu yang tidak bisa dimasuki.
+
+    Balik ke +z kalau tidak ada DR sama sekali — itu perilaku lama, dan scene
+    `farm` bergantung padanya (rumah petani punya teras di selatan tanpa DR).
     """
-    frame = world._create_entity('cube', (cx, cy, cz),
-               (lebar, tinggi, 0.09), 'wood_plank', kusen)
-    kaca = world._create_entity('cube', (cx, cy, cz + arah * 0.055),
-              (lebar * 0.74, tinggi * 0.70, 0.05), None, color.rgb(108, 138, 152))
-    world._obj_ents.extend([frame, kaca])
+    for x in range(x0, x1 + 1):
+        if scene.tiles[y0][x] == DR:
+            return 'utara'
+        if scene.tiles[y1][x] == DR:
+            return 'selatan'
+    for y in range(y0, y1 + 1):
+        if scene.tiles[y][x0] == DR:
+            return 'barat'
+        if scene.tiles[y][x1] == DR:
+            return 'timur'
+    return 'selatan'
+
+
+# Vektor keluar tiap sisi, dalam (dx, dz).
+_ARAH = {'utara': (0, -1), 'selatan': (0, 1), 'barat': (-1, 0), 'timur': (1, 0)}
+
+
+def _jendela_sisi(world, cx, cz, sx, sz, sisi, jy, jw, jh, kusen, n, lewati_tengah):
+    """Sebaris jendela di satu sisi bangunan.
+
+    `n` jendela dibagi rata sepanjang sisi itu. `lewati_tengah` menyisakan
+    ruang untuk pintu — dipakai di sisi muka saja.
+    """
+    dx, dz = _ARAH[sisi]
+    if dx:                      # sisi barat/timur → jendela berjajar pada z
+        span, tebal = sz, sx
+    else:                       # sisi utara/selatan → berjajar pada x
+        span, tebal = sx, sz
+    pasang = []
+    for k in range(n):
+        off = (k - (n - 1) / 2.0) * (span / max(1, n)) * 0.98
+        if lewati_tengah and abs(off) < TS * 0.55:
+            continue
+        if dx:
+            px, pz = cx + dx * (tebal * 0.5 + 0.02), cz + off
+        else:
+            px, pz = cx + off, cz + dz * (tebal * 0.5 + 0.02)
+        pasang.append((px, pz))
+    for px, pz in pasang:
+        frame = world._create_entity('cube', (px, jy, pz),
+                   (jw if not dx else 0.09, jh, 0.09 if not dx else jw),
+                   'wood_plank', kusen)
+        kaca = world._create_entity('cube',
+                  (px + dx * 0.055, jy, pz + dz * 0.055),
+                  (jw * 0.74 if not dx else 0.05, jh * 0.70,
+                   0.05 if not dx else jw * 0.74),
+                  None, color.rgb(108, 138, 152))
+        world._obj_ents.extend([frame, kaca])
+
+
+def _bangun_atap(world, cx, cz, sx, sz, alas_y, jenis, tinggi, undian):
+    """Atap sebagai BAHAN, bukan sebagai satu bentuk dengan dua puluh corak.
+
+    Lihat PROFIL_ATAP: tiap bahan membawa kemiringan dan tebal tepinya sendiri,
+    jadi genteng, sirap, dan jerami masih bisa dibedakan pada jarak di mana
+    teksturnya sudah jadi bubur.
+
+    `tumpang` (joglo) menumpuk dua piramida — satu-satunya siluet di sini yang
+    tidak bisa disalahartikan sebagai salah satu dari tiga lainnya, jadi ia
+    dipakai untuk bangunan umum yang harus terbaca sebagai penanda.
+    """
+    from ursina.models.procedural.cone import Cone
+    curam, tebal, lebar = PROFIL_ATAP[jenis][0:3]
+    daftar = PROFIL_ATAP[jenis][3]
+    tex, col = daftar[undian % len(daftar)]
+    ents = []
+
+    # Tepi atap: pelat datar yang menjorok keluar dinding. Ia yang membuat
+    # "kotak dengan topi" berhenti terbaca sebagai kotak — bayangan garis di
+    # bawah tepi memberi bangunan satu batas mendatar yang tegas.
+    ents.append(world._create_entity(
+        'cube', (cx, alas_y + tebal * 0.5, cz),
+        (sx * lebar, tebal, sz * lebar), tex, col))
+
+    puncak = HOUSE_H * curam * (0.75 + 0.25 * tinggi)
+    y0 = alas_y + tebal
+    if jenis == 'tumpang':
+        # Tingkat bawah landai dan lebar, tingkat atas curam dan sempit.
+        h1 = puncak * 0.46
+        ents.append(world._create_entity(
+            Cone(resolution=4), (cx, y0 + h1 * 0.5, cz),
+            (sx * lebar * 0.99, h1, sz * lebar * 0.99), tex, col,
+            rotation=(0, 45, 0)))
+        h2 = puncak * 0.86
+        ents.append(world._create_entity(
+            'cube', (cx, y0 + h1 + 0.07, cz),
+            (sx * 0.70, 0.14, sz * 0.70), tex, col))
+        ents.append(world._create_entity(
+            Cone(resolution=4), (cx, y0 + h1 + 0.14 + h2 * 0.5, cz),
+            (sx * 0.72, h2, sz * 0.72), tex, col, rotation=(0, 45, 0)))
+    else:
+        ents.append(world._create_entity(
+            Cone(resolution=4), (cx, y0 + puncak * 0.5, cz),
+            (sx * lebar * 0.99, puncak, sz * lebar * 0.99), tex, col,
+            rotation=(0, 45, 0)))
+    world._obj_ents.extend(ents)
+    return tex, col
 
 
 def build_house_block(world, scene, tx, ty, wx, wz):
-    # Check if this is the top-left of an H block
-    left_is_H = tx > 0 and scene.tiles[ty][tx-1] == H
-    up_is_H = ty > 0 and scene.tiles[ty-1][tx] == H
-    if left_is_H or up_is_H:
+    """Satu bangunan dari satu blok ubin H.
+
+    Tiga hal bisa disetel per bangunan lewat `scene.rumah[(tx, ty)]` —
+    `atap` (genteng/sirap/jerami/tumpang), `tinggi` (kelipatan satu lantai),
+    dan `muka` (utara/selatan/barat/timur). Tanpa entri, semuanya diundi dari
+    posisi seperti dulu dan mukanya diambil dari ubin DR.
+
+    Kenapa boleh disetel per bangunan, bukan diundi saja: undian posisi bisa
+    memberi dua tetangga bahan yang sama, dan seluruh gunanya deretan rumah
+    adalah dua tetangga TIDAK boleh sama. Sebuah frame yang harus memuat empat
+    bangunan berbeda tidak boleh bergantung pada nasib.
+    """
+    # Ubin DR ikut dihitung sebagai bagian blok. Tanpa ini, pintu yang berdiri
+    # di tepi UTARA memotong pemindaian lebar di tengah jalan dan bangunan
+    # 4x3 dibangun sebagai kotak 1x3.
+    def _blok(x, y):
+        if not (0 <= y < scene.h and 0 <= x < scene.w):
+            return False
+        return scene.tiles[y][x] in (H, DR)
+
+    if _blok(tx - 1, ty) or _blok(tx, ty - 1):
         return
-    
+
     w_tiles = 1
-    while tx + w_tiles < scene.w and scene.tiles[ty][tx + w_tiles] == H:
+    while _blok(tx + w_tiles, ty):
         w_tiles += 1
     h_tiles = 1
-    while ty + h_tiles < scene.h and scene.tiles[ty + h_tiles][tx] == H:
+    while _blok(tx, ty + h_tiles):
         h_tiles += 1
+
+    setelan = (getattr(scene, 'rumah', None) or {}).get((tx, ty), {})
 
     center_x = wx + (w_tiles - 1) * TS / 2.0
     center_z = wz + (h_tiles - 1) * TS / 2.0
@@ -250,66 +383,98 @@ def build_house_block(world, scene, tx, ty, wx, wz):
     # rumah yang benar-benar berbeda tinggal lima.
     h1 = abs(math.sin(wx * 31.7 + wz * 47.3))
     h2 = abs(math.sin(wx * 12.9 - wz * 78.233 + 2.4))
-    ri = int(h1 * len(ROOF_TEXTURES)) % len(ROOF_TEXTURES)
-    r_tex, r_col = ROOF_TEXTURES[ri]
-    r_col = tint_atap(r_col)
-    b_tex, b_col, alas_col, kusen = BAHAN_DINDING[int(h2 * len(BAHAN_DINDING))
-                                                  % len(BAHAN_DINDING)]
+    jenis_atap = setelan.get('atap')
+    if jenis_atap not in PROFIL_ATAP:
+        jenis_atap = ('genteng', 'sirap', 'jerami')[int(h1 * 3) % 3]
+    tinggi = float(setelan.get('tinggi', 1.0))
+    muka = setelan.get('muka') or _sisi_pintu(scene, tx, ty,
+                                              tx + w_tiles - 1, ty + h_tiles - 1)
+    b_tex, b_col, alas_col, kusen = BAHAN_DINDING[
+        setelan.get('dinding', int(h2 * len(BAHAN_DINDING))) % len(BAHAN_DINDING)]
+
+    badan_h = HOUSE_H * 0.80 * tinggi
+    y_badan = badan_h * 0.5 + GROUND_H
+    dx, dz = _ARAH[muka]
+    # Jarak dari pusat ke permukaan sisi muka.
+    tepi = (scale_x if dx else scale_z) * 0.5
 
     foundation = world._create_entity('cube', (center_x, GROUND_H + 0.10, center_z),
                     (scale_x * 1.03, 0.20, scale_z * 1.03), 'wall_stone', alas_col)
-    body = world._create_entity('cube', (center_x, HOUSE_H * 0.40 + GROUND_H, center_z),
-              (scale_x, HOUSE_H * 0.80, scale_z), b_tex, b_col)
+    body = world._create_entity('cube', (center_x, y_badan, center_z),
+              (scale_x, badan_h, scale_z), b_tex, b_col)
+    world._obj_ents.extend([foundation, body])
 
-    door = world._create_entity('cube', (center_x, HOUSE_H * 0.35 + GROUND_H, center_z + scale_z * 0.5 + 0.02),
-              (TS * 0.8, HOUSE_H * 0.6, 0.1), 'wood_plank', color.rgb(100, 60, 30))
+    # ── Muka: pintu, teras, tiang teras ─────────────────────────────────────
+    pintu_h = min(HOUSE_H * 0.60, badan_h * 0.66)
+    px = center_x + dx * (tepi + 0.02)
+    pz = center_z + dz * (tepi + 0.02)
+    door = world._create_entity('cube', (px, pintu_h * 0.5 + GROUND_H, pz),
+              (TS * 0.8 if not dx else 0.1, pintu_h, 0.1 if not dx else TS * 0.8),
+              'wood_plank', color.rgb(100, 60, 30))
+    world._obj_ents.append(door)
 
-    porch = world._create_entity('cube', (center_x, HOUSE_H * 0.65 + GROUND_H, center_z + scale_z * 0.5 + TS * 0.4),
-               (TS * 1.2, 0.15, TS * 0.8), r_tex, r_col)
+    atap_y = badan_h + GROUND_H
+    r_tex, r_col = _bangun_atap(world, center_x, center_z, scale_x, scale_z,
+                                atap_y, jenis_atap, tinggi, int(h1 * 977))
 
-    pillar1 = world._create_entity('cylinder', (center_x - TS*0.5, HOUSE_H * 0.32 + GROUND_H, center_z + scale_z * 0.5 + TS * 0.7),
-                 (0.1, HOUSE_H * 0.64, 0.1), 'wood_plank', color.rgb(150, 110, 70))
-    pillar2 = world._create_entity('cylinder', (center_x + TS*0.5, HOUSE_H * 0.32 + GROUND_H, center_z + scale_z * 0.5 + TS * 0.7),
-                 (0.1, HOUSE_H * 0.64, 0.1), 'wood_plank', color.rgb(150, 110, 70))
+    porch = world._create_entity(
+        'cube', (center_x + dx * (tepi + TS * 0.4),
+                 min(pintu_h + 0.35, badan_h * 0.92) + GROUND_H,
+                 center_z + dz * (tepi + TS * 0.4)),
+        (TS * 1.2 if not dx else TS * 0.8, 0.15, TS * 0.8 if not dx else TS * 1.2),
+        r_tex, r_col)
+    world._obj_ents.append(porch)
+    for s in (-1, 1):
+        ox = -dz * s * TS * 0.5
+        oz = dx * s * TS * 0.5
+        world._obj_ents.append(world._create_entity(
+            'cylinder',
+            (center_x + dx * (tepi + TS * 0.7) + ox,
+             min(pintu_h + 0.35, badan_h * 0.92) * 0.5 + GROUND_H,
+             center_z + dz * (tepi + TS * 0.7) + oz),
+            (0.1, min(pintu_h + 0.35, badan_h * 0.92), 0.1),
+            'wood_plank', color.rgb(150, 110, 70)))
 
-    roof_y = HOUSE_H * 0.80 + GROUND_H
-    from ursina.models.procedural.cone import Cone
-    roof1 = world._create_entity(Cone(resolution=4), (center_x, roof_y + HOUSE_H * 0.45, center_z),
-               (scale_x * 1.45, HOUSE_H * 0.90, scale_z * 1.45), r_tex, r_col, rotation=(0, 45, 0))
-
-    chimney = world._create_entity('cube', (center_x + scale_x * 0.3, HOUSE_H * 1.14 + GROUND_H, center_z - scale_z * 0.2),
+    chimney = world._create_entity('cube', (center_x + scale_x * 0.3, atap_y + HOUSE_H * 0.34, center_z - scale_z * 0.2),
                  (TS * 0.2, HOUSE_H * 0.34, TS * 0.2), 'wall_stone', color.rgb(158, 142, 122))
-    chimney_cap = world._create_entity('cube', (center_x + scale_x * 0.3, HOUSE_H * 1.30 + GROUND_H, center_z - scale_z * 0.2),
+    chimney_cap = world._create_entity('cube', (center_x + scale_x * 0.3, atap_y + HOUSE_H * 0.50, center_z - scale_z * 0.2),
                      (TS * 0.26, 0.08, TS * 0.26), None, color.rgb(90, 80, 72))
-    world._obj_ents.extend([foundation, body, door, porch, pillar1, pillar2, roof1, chimney, chimney_cap])
+    world._obj_ents.extend([chimney, chimney_cap])
 
     # ── Yang membuat kotak berhenti jadi kotak ──────────────────────────────
     # Tiang sudut dan papan pinggang: dua garis gelap tegak di tiap sudut dan
     # satu pita mendatar setinggi pinggang. Ongkosnya lima entity dan ia
     # menghapus bidang datar terbesar yang tersisa di frame `town`.
-    y_badan = HOUSE_H * 0.40 + GROUND_H
     for sx in (-1, 1):
         for sz in (-1, 1):
             world._obj_ents.append(world._create_entity(
                 'cube',
                 (center_x + sx * scale_x * 0.5, y_badan, center_z + sz * scale_z * 0.5),
-                (0.13, HOUSE_H * 0.80, 0.13), 'wood_plank', kusen))
-    world._obj_ents.append(world._create_entity(
-        'cube', (center_x, GROUND_H + HOUSE_H * 0.33, center_z),
-        (scale_x * 1.012, 0.10, scale_z * 1.012), 'wood_plank', kusen))
+                (0.13, badan_h, 0.13), 'wood_plank', kusen))
+    # Papan pinggang. Untuk bangunan dua lantai ia jadi papan LANTAI — satu
+    # garis mendatar tepat di batas tingkat, dan itulah yang membuat mata
+    # menghitungnya sebagai dua lantai, bukan sebagai satu tembok tinggi.
+    for frac in ((0.41,) if tinggi < 1.35 else (0.34, 0.66)):
+        world._obj_ents.append(world._create_entity(
+            'cube', (center_x, GROUND_H + badan_h * frac, center_z),
+            (scale_x * 1.012, 0.10, scale_z * 1.012), 'wood_plank', kusen))
 
     # ── Jendela ─────────────────────────────────────────────────────────────
-    # Hanya di muka depan (+z) dan sisi kanan (+x): dua sisi itulah yang
-    # terlihat dari orbit kamera default, dan jendela di sisi yang tidak pernah
-    # terlihat cuma entity yang dibayar tanpa dilihat.
-    jw, jh = TS * 0.46, HOUSE_H * 0.30
-    jy = GROUND_H + HOUSE_H * 0.50
-    zf = center_z + scale_z * 0.5 + 0.02
-    for k in range(max(1, w_tiles - 1)):
-        jx = center_x + (k - (max(1, w_tiles - 1) - 1) / 2.0) * TS * 1.15
-        if abs(jx - center_x) < TS * 0.55:      # ruang pintu, jangan ditimpa
-            continue
-        _jendela(world, jx, jy, zf, jw, jh, +1, kusen)
+    # Sisi MUKA dan sisi UTARA. Utara selalu ikut karena kamera baku permainan
+    # berdiri di -z: sisi itu yang difoto, dan sebuah dinding tanpa lubang
+    # tidak punya skala — begitu ada jendela, mata tahu bangunannya setinggi
+    # berapa lantai dibanding orang yang berdiri di depannya.
+    jw, jh = TS * 0.46, min(HOUSE_H * 0.30, badan_h * 0.30)
+    n_muka = max(2, (w_tiles if not dx else h_tiles))
+    sisi_jendela = [(muka, True)]
+    if muka != 'utara':
+        sisi_jendela.append(('utara', False))
+    for sisi, sisakan in sisi_jendela:
+        for baris in ((0.52,) if tinggi < 1.35 else (0.24, 0.76)):
+            _jendela_sisi(world, center_x, center_z, scale_x, scale_z, sisi,
+                          GROUND_H + badan_h * baris, jw, jh, kusen,
+                          n_muka, sisakan and baris < 0.6)
+
 
 # Ubin penghalang yang ubinnya TIDAK diurus benar oleh world.py di luar ruang.
 # Cabang `_make_tile()` untuk penghalang memakai `default_tex` = 'grass', dan

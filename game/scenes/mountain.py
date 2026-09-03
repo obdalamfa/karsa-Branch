@@ -21,7 +21,7 @@ def build_mountain():
             if (x+y) % 2 == 0: m[y][x] = GR
     for y in range(20, 25): m[y][2] = P
     return Scene('mountain', 'Lereng Gunung', m, portals=[
-        (14, 24, 'town', 14, 1), (15, 24, 'town', 15, 1),
+        (14, 24, 'town', 6, 1), (15, 24, 'town', 7, 1),
         (14, 3, 'naga_cave', 7, 9), (15, 3, 'naga_cave', 7, 9),
         (2, 24, 'cemetery', 8, 1),
     ])

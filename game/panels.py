@@ -13,8 +13,11 @@ Layout layar (Ursina screen coords: -0.5 ke 0.5):
 Dialog box: muncul di bawah tengah.
 Panel (inventori, quest, dll.): overlay penuh semi-transparan.
 """
+import math
 from pathlib import Path as _Path
 from PIL import Image as _PILImg
+from PIL import ImageDraw as _PILDraw
+from PIL import ImageFont as _PILFont
 from ursina import (Entity, Text, Texture, color, camera, destroy,
                     Vec2, Vec4, invoke, window)
 
@@ -42,6 +45,392 @@ from .data import (HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS,
                    QUEST_STAGES, SWORD_RECIPES, PICKAXE_RECIPES, SHOP_ITEMS)
 
 _ALL_NPCS = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# IKON HUD — digambar PROSEDURAL dengan PIL, bukan berkas gambar baru
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Kenapa modul ikon hidup di sini dan bukan di assets/: satu-satunya hal yang
+# dibutuhkan HUD adalah bitmap RGBA kecil, dan menggambarnya saat start jauh
+# lebih murah daripada menambah 20 berkas PNG yang harus ikut dijaga, dinamai,
+# dan diberi lisensi. Ursina menerima PIL.Image langsung sebagai Texture
+# (lihat ursina/texture.py) dan membalik gambarnya sendiri, jadi gambar PIL
+# yang ditulis normal (y ke bawah) muncul tegak di layar.
+#
+# Texture BOLEH dibagi-pakai antar Entity — yang tidak boleh dibagi itu Mesh,
+# karena Mesh adalah NodePath Panda3D dan sebuah NodePath cuma punya satu
+# parent. Ikon di bawah sengaja di-cache; jangan meniru pola ini untuk mesh.
+#
+# Semua koordinat gambar dinormalkan 0..1 dengan (0,0) di KIRI-ATAS, jadi
+# ukuran piksel akhirnya bisa diubah tanpa menyentuh satu pun bentuk.
+
+_SS       = 4           # supersample sebelum diperkecil LANCZOS (anti-alias)
+_IKON_CACHE: dict = {}
+
+# Palet ikon = palet model 3D-nya (game/tool_models.py). Ikon cangkul dan
+# cangkul yang dipegang karakter harus terbaca sebagai BENDA YANG SAMA;
+# kalau warnanya beda, ikon jadi lambang, bukan gambar barangnya.
+_I_GELAP  = ( 20,  28,  34, 255)
+_I_KAYU   = (156, 116,  74, 255)
+_I_KAYUT  = (110,  80,  50, 255)
+_I_BAMBU  = (200, 178, 120, 255)
+_I_BESI   = (168, 176, 186, 255)
+_I_BESIT  = (104, 112, 122, 255)
+_I_SENG   = (152, 162, 160, 255)
+_I_ANYAM  = (198, 164, 106, 255)
+_I_DAUN   = (114, 166,  88, 255)
+_I_DAUNT  = ( 78, 122,  62, 255)
+_I_AIR    = ( 96, 172, 214, 255)
+_I_EMAS   = (232, 196,  96, 255)
+_I_MERAH  = (198,  88,  80, 255)
+_I_KRIM   = (240, 232, 206, 255)
+_I_KAIN   = (150, 114,  92, 255)
+_I_PUTIH  = (250, 250, 246, 255)
+
+
+def _pena(n):
+    img = _PILImg.new('RGBA', (n, n), (0, 0, 0, 0))
+    return img, _PILDraw.Draw(img)
+
+
+def _grs(d, n, p0, p1, w, isi, garis=_I_GELAP):
+    """Batang tebal dari p0 ke p1. Garis gelap digambar lebih lebar DULU,
+    lalu isinya menimpa — itu cara termurah mendapat outline yang rapi tanpa
+    menghitung poligon offset."""
+    a = (p0[0] * n, p0[1] * n)
+    b = (p1[0] * n, p1[1] * n)
+    if garis:
+        d.line([a, b], fill=garis, width=max(1, int((w + 0.055) * n)))
+    d.line([a, b], fill=isi, width=max(1, int(w * n)))
+
+
+def _plg(d, n, pts, isi, garis=_I_GELAP, tebal=0.05):
+    P = [(x * n, y * n) for x, y in pts]
+    if garis and tebal:
+        d.line(P + [P[0]], fill=garis, width=max(1, int(tebal * n)), joint='curve')
+    d.polygon(P, fill=isi)
+    if garis and tebal:
+        d.line(P + [P[0]], fill=garis,
+               width=max(1, int(tebal * n * 0.5)), joint='curve')
+
+
+def _lkr(d, n, cx, cy, r, isi, garis=_I_GELAP, tebal=0.05):
+    box = [(cx - r) * n, (cy - r) * n, (cx + r) * n, (cy + r) * n]
+    if garis:
+        d.ellipse(box, fill=isi, outline=garis, width=max(1, int(tebal * n)))
+    else:
+        d.ellipse(box, fill=isi)
+
+
+def _bintang(cx, cy, r1, r2, sudut=5):
+    pts = []
+    for i in range(sudut * 2):
+        r = r1 if i % 2 == 0 else r2
+        a = -math.pi / 2 + i * math.pi / sudut
+        pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r))
+    return pts
+
+
+def _tetes(cx, cy, r, tinggi):
+    """Tetesan air sebagai SATU poligon, bukan lingkaran + segitiga.
+    Gabungan dua bentuk tidak bisa dikelilingi satu outline — dan tanpa
+    outline ikon hilang di atas latar terang."""
+    pts = []
+    for i in range(33):
+        a = math.radians(-40 + i * (260.0 / 32.0))
+        pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r))
+    pts.append((cx, cy - tinggi))
+    return pts
+
+
+def _hati(cx, cy, s):
+    pts = []
+    for i in range(44):
+        t = i / 44.0 * 2 * math.pi
+        x = 16 * math.sin(t) ** 3
+        y = (13 * math.cos(t) - 5 * math.cos(2 * t)
+             - 2 * math.cos(3 * t) - math.cos(4 * t))
+        pts.append((cx + x / 17.0 * s, cy - y / 17.0 * s))
+    return pts
+
+
+def _orang(d, n, cx, cy, s, isi):
+    """Siluet kepala + bahu. Dipakai dua kali untuk ikon Sosial."""
+    _lkr(d, n, cx, cy - 0.20 * s, 0.15 * s, isi)
+    _plg(d, n, [(cx - 0.26 * s, cy + 0.42 * s), (cx - 0.24 * s, cy + 0.06 * s),
+                (cx - 0.12 * s, cy - 0.04 * s), (cx + 0.12 * s, cy - 0.04 * s),
+                (cx + 0.24 * s, cy + 0.06 * s), (cx + 0.26 * s, cy + 0.42 * s)],
+         isi)
+
+
+# ─── ALAT ────────────────────────────────────────────────────────────────
+def _ika_cangkul(d, n):
+    _grs(d, n, (0.78, 0.16), (0.42, 0.66), 0.10, _I_KAYU)
+    _plg(d, n, [(0.48, 0.56), (0.16, 0.68), (0.12, 0.86), (0.50, 0.72)], _I_BESI)
+
+
+def _ika_penyiram(d, n):
+    _plg(d, n, [(0.34, 0.40), (0.78, 0.40), (0.72, 0.86), (0.40, 0.86)], _I_SENG)
+    _grs(d, n, (0.36, 0.48), (0.12, 0.34), 0.09, _I_SENG)
+    _plg(d, n, [(0.16, 0.22), (0.04, 0.28), (0.08, 0.42), (0.20, 0.36)], _I_SENG)
+    _grs(d, n, (0.46, 0.40), (0.56, 0.24), 0.06, _I_BESIT)
+    _grs(d, n, (0.56, 0.24), (0.70, 0.40), 0.06, _I_BESIT)
+    _lkr(d, n, 0.12, 0.60, 0.055, _I_AIR)
+    _lkr(d, n, 0.24, 0.74, 0.045, _I_AIR)
+
+
+def _ika_benih(d, n):
+    _plg(d, n, [(0.16, 0.90), (0.84, 0.90), (0.74, 0.74), (0.26, 0.74)], _I_KAYUT)
+    _grs(d, n, (0.50, 0.80), (0.50, 0.40), 0.07, _I_DAUNT)
+    _plg(d, n, [(0.50, 0.52), (0.24, 0.44), (0.26, 0.26), (0.48, 0.38)], _I_DAUN)
+    _plg(d, n, [(0.50, 0.46), (0.76, 0.36), (0.78, 0.18), (0.52, 0.32)], _I_DAUN)
+
+
+def _ika_bakul(d, n):
+    _lkr(d, n, 0.36, 0.40, 0.13, _I_MERAH)
+    _lkr(d, n, 0.62, 0.42, 0.11, _I_DAUN)
+    _plg(d, n, [(0.12, 0.48), (0.88, 0.48), (0.74, 0.90), (0.26, 0.90)], _I_ANYAM)
+    w = max(1, int(0.035 * n))
+    for fy in (0.60, 0.72):
+        d.line([(0.16 * n, fy * n), (0.84 * n, fy * n)], fill=_I_KAYUT, width=w)
+
+
+def _ika_kapak(d, n):
+    # Mata kapak WAJIB punya tepi atas dan bawah yang cekung; wedge cembung
+    # penuh terbaca sebagai palu atau sekop pada 25 piksel — sudah diuji.
+    _grs(d, n, (0.28, 0.96), (0.66, 0.24), 0.085, _I_KAYU)
+    _plg(d, n, [(0.78, 0.34), (0.62, 0.20), (0.66, 0.02), (0.86, 0.02),
+                (0.96, 0.16), (0.92, 0.34), (0.86, 0.44)], _I_BESI)
+
+
+def _ika_kado(d, n):
+    _plg(d, n, [(0.14, 0.44), (0.86, 0.44), (0.86, 0.88), (0.14, 0.88)], _I_MERAH)
+    _plg(d, n, [(0.44, 0.44), (0.58, 0.44), (0.58, 0.88), (0.44, 0.88)],
+         _I_EMAS, tebal=0.03)
+    _plg(d, n, [(0.14, 0.56), (0.86, 0.56), (0.86, 0.66), (0.14, 0.66)],
+         _I_EMAS, tebal=0.03)
+    _plg(d, n, [(0.51, 0.42), (0.26, 0.22), (0.20, 0.36), (0.44, 0.44)], _I_EMAS)
+    _plg(d, n, [(0.51, 0.42), (0.76, 0.22), (0.82, 0.36), (0.58, 0.44)], _I_EMAS)
+
+
+def _ika_beliung(d, n):
+    _grs(d, n, (0.50, 0.92), (0.50, 0.28), 0.09, _I_KAYU)
+    _plg(d, n, [(0.06, 0.42), (0.30, 0.20), (0.70, 0.20), (0.94, 0.42),
+                (0.68, 0.32), (0.32, 0.32)], _I_BESI)
+
+
+def _ika_pedang(d, n):
+    _plg(d, n, [(0.50, 0.06), (0.60, 0.20), (0.60, 0.60), (0.40, 0.60),
+                (0.40, 0.20)], _I_BESI)
+    _plg(d, n, [(0.24, 0.60), (0.76, 0.60), (0.76, 0.70), (0.24, 0.70)], _I_EMAS)
+    _grs(d, n, (0.50, 0.70), (0.50, 0.88), 0.11, _I_KAYUT)
+    _lkr(d, n, 0.50, 0.92, 0.08, _I_EMAS)
+
+
+def _ika_pancing(d, n):
+    _grs(d, n, (0.12, 0.90), (0.80, 0.14), 0.07, _I_BAMBU)
+    d.line([(0.80 * n, 0.16 * n), (0.86 * n, 0.56 * n)],
+           fill=_I_KRIM, width=max(1, int(0.030 * n)))
+    _lkr(d, n, 0.86, 0.62, 0.09, _I_MERAH)
+    _lkr(d, n, 0.34, 0.62, 0.055, _I_AIR)
+
+
+def _ika_bawaan(d, n):
+    _lkr(d, n, 0.50, 0.50, 0.34, _I_BESIT)
+
+
+# ─── MOTIF ───────────────────────────────────────────────────────────────
+def _ikm_mood(d, n):
+    _lkr(d, n, 0.50, 0.50, 0.40, _I_EMAS)
+    _lkr(d, n, 0.37, 0.42, 0.065, _I_GELAP, None)
+    _lkr(d, n, 0.63, 0.42, 0.065, _I_GELAP, None)
+    d.arc([0.28 * n, 0.40 * n, 0.72 * n, 0.76 * n], 20, 160,
+          fill=_I_GELAP, width=max(1, int(0.075 * n)))
+
+
+def _ikm_lapar(d, n):
+    _grs(d, n, (0.30, 0.34), (0.30, 0.92), 0.10, _I_KRIM)
+    for fx in (0.19, 0.30, 0.41):
+        _grs(d, n, (fx, 0.10), (fx, 0.34), 0.055, _I_KRIM)
+    _plg(d, n, [(0.62, 0.10), (0.78, 0.20), (0.78, 0.54), (0.62, 0.54)], _I_KRIM)
+    _grs(d, n, (0.70, 0.52), (0.70, 0.92), 0.09, _I_KRIM)
+
+
+def _ikm_nyaman(d, n):
+    _plg(d, n, [(0.20, 0.22), (0.80, 0.22), (0.80, 0.58), (0.20, 0.58)], _I_KAIN)
+    _plg(d, n, [(0.10, 0.54), (0.90, 0.54), (0.90, 0.70), (0.10, 0.70)], _I_KAYU)
+    _plg(d, n, [(0.06, 0.42), (0.20, 0.42), (0.20, 0.70), (0.06, 0.70)], _I_KAYUT)
+    _plg(d, n, [(0.80, 0.42), (0.94, 0.42), (0.94, 0.70), (0.80, 0.70)], _I_KAYUT)
+    _grs(d, n, (0.20, 0.70), (0.20, 0.90), 0.07, _I_KAYUT)
+    _grs(d, n, (0.80, 0.70), (0.80, 0.90), 0.07, _I_KAYUT)
+
+
+def _ikm_higiene(d, n):
+    _plg(d, n, _tetes(0.50, 0.62, 0.30, 0.56), _I_AIR)
+
+
+def _ikm_kandung(d, n):
+    _plg(d, n, [(0.12, 0.16), (0.36, 0.16), (0.36, 0.54), (0.12, 0.54)], _I_KRIM)
+    _plg(d, n, [(0.34, 0.36), (0.88, 0.36), (0.76, 0.64), (0.44, 0.64)], _I_KRIM)
+    _plg(d, n, [(0.46, 0.62), (0.74, 0.62), (0.78, 0.90), (0.42, 0.90)], _I_KRIM)
+
+
+def _ikm_energi(d, n):
+    _plg(d, n, [(0.60, 0.06), (0.22, 0.54), (0.44, 0.54), (0.36, 0.94),
+                (0.78, 0.44), (0.54, 0.44)], _I_EMAS)
+
+
+def _ikm_senang(d, n):
+    _plg(d, n, _bintang(0.50, 0.52, 0.44, 0.19), _I_EMAS)
+
+
+def _ikm_sosial(d, n):
+    _orang(d, n, 0.66, 0.52, 0.86, _I_BAMBU)
+    _orang(d, n, 0.36, 0.58, 1.00, _I_AIR)
+
+
+def _ikm_ruang(d, n):
+    _plg(d, n, [(0.08, 0.18), (0.92, 0.18), (0.92, 0.82), (0.08, 0.82)], _I_KAYU)
+    _plg(d, n, [(0.20, 0.30), (0.80, 0.30), (0.80, 0.70), (0.20, 0.70)],
+         _I_KRIM, tebal=0.035)
+    _lkr(d, n, 0.66, 0.41, 0.075, _I_EMAS, None)
+    _plg(d, n, [(0.22, 0.68), (0.44, 0.40), (0.64, 0.68)], _I_DAUNT, None)
+
+
+def _ik_hp(d, n):
+    _plg(d, n, _hati(0.50, 0.52, 0.44), _I_MERAH)
+
+
+_GAMBAR_IKON = {
+    'cangkul': _ika_cangkul, 'penyiram': _ika_penyiram, 'benih': _ika_benih,
+    'bakul': _ika_bakul, 'kapak': _ika_kapak, 'kado': _ika_kado,
+    'beliung': _ika_beliung, 'pedang': _ika_pedang, 'pancing': _ika_pancing,
+    'bawaan': _ika_bawaan,
+    'mood': _ikm_mood, 'lapar': _ikm_lapar, 'nyaman': _ikm_nyaman,
+    'higiene': _ikm_higiene, 'kandung': _ikm_kandung, 'energi': _ikm_energi,
+    'senang': _ikm_senang, 'sosial': _ikm_sosial, 'ruang': _ikm_ruang,
+    'hp': _ik_hp,
+}
+
+
+def _font_ikon(px: int):
+    p = _Path(__file__).resolve().parent.parent / 'assets' / 'fonts' / _FONT_NAME
+    try:
+        return _PILFont.truetype(str(p), px)
+    except Exception:
+        try:
+            return _PILFont.load_default()
+        except Exception:
+            return None
+
+
+def _chip_angka(d, n, teks: str):
+    """Nomor pintasan di sudut kiri-bawah petak alat.
+
+    Ini satu-satunya HURUF yang tersisa di blok alat, dan ia ada supaya
+    pemain tahu petaknya bisa dipilih dengan angka tanpa ada satu baris
+    manual pun di layar. Digambar di atas kepingan gelap karena angka krem
+    telanjang hilang di atas bilah cangkul yang juga terang."""
+    r = 0.15
+    cx, cy = 0.17, 0.83
+    d.ellipse([(cx - r) * n, (cy - r) * n, (cx + r) * n, (cy + r) * n],
+              fill=(14, 20, 26, 225))
+    f = _font_ikon(max(6, int(0.26 * n)))
+    if f is None:
+        return
+    try:
+        kotak = d.textbbox((0, 0), teks, font=f)
+    except Exception:
+        return
+    w = kotak[2] - kotak[0]
+    h = kotak[3] - kotak[1]
+    d.text((cx * n - w / 2 - kotak[0], cy * n - h / 2 - kotak[1]),
+           teks, font=f, fill=_I_KRIM)
+
+
+def ikon_tex(nama: str, px: int = 64, angka: str = ''):
+    """Texture ikon, dibuat sekali lalu dipakai ulang."""
+    kunci = (nama, px, angka)
+    if kunci in _IKON_CACHE:
+        return _IKON_CACHE[kunci]
+    fn = _GAMBAR_IKON.get(nama)
+    tex = None
+    if fn is not None:
+        try:
+            n = px * _SS
+            img, d = _pena(n)
+            fn(d, n)
+            if angka:
+                _chip_angka(d, n, angka)
+            img = img.resize((px, px), _PILImg.LANCZOS)
+            tex = Texture(img)
+            tex.filtering = 'bilinear'
+        except Exception:
+            tex = None
+    _IKON_CACHE[kunci] = tex
+    return tex
+
+
+def petak_tex(px: int = 64):
+    """Petak bersudut tumpul, PUTIH, supaya bisa diwarnai lewat `color`
+    entity — satu tekstur melayani petak terpilih maupun yang redup."""
+    kunci = ('_petak', px, '')
+    if kunci in _IKON_CACHE:
+        return _IKON_CACHE[kunci]
+    tex = None
+    try:
+        n = px * _SS
+        img, d = _pena(n)
+        r = int(0.18 * n)
+        d.rounded_rectangle([int(0.03 * n), int(0.03 * n),
+                             int(0.97 * n), int(0.97 * n)],
+                            radius=r, fill=(255, 255, 255, 175),
+                            outline=(255, 255, 255, 255),
+                            width=max(2, int(0.045 * n)))
+        img = img.resize((px, px), _PILImg.LANCZOS)
+        tex = Texture(img)
+        tex.filtering = 'bilinear'
+    except Exception:
+        tex = None
+    _IKON_CACHE[kunci] = tex
+    return tex
+
+
+def tuts_tex(label: str, tinggi: int = 30):
+    """Kepingan tombol keyboard (SPACE, E, TAB) sebagai gambar.
+
+    Return (Texture, rasio_lebar_per_tinggi) supaya pemanggil bisa membuat
+    quad dengan proporsi yang benar; label 'SPACE' lima kali lebih lebar
+    daripada 'E' dan memaksanya ke kotak persegi membuat hurufnya gepeng."""
+    kunci = ('_tuts', tinggi, label)
+    if kunci in _IKON_CACHE:
+        return _IKON_CACHE[kunci]
+    hasil = (None, 1.0)
+    try:
+        h = tinggi * _SS
+        f = _font_ikon(int(h * 0.52))
+        tmp = _PILDraw.Draw(_PILImg.new('RGBA', (8, 8)))
+        kotak = tmp.textbbox((0, 0), label, font=f)
+        w_teks = kotak[2] - kotak[0]
+        w = int(max(h, w_teks + h * 0.60))
+        img = _PILImg.new('RGBA', (w, h), (0, 0, 0, 0))
+        d = _PILDraw.Draw(img)
+        d.rounded_rectangle([2, 2, w - 3, h - 3], radius=int(h * 0.26),
+                            fill=(18, 26, 32, 232),
+                            outline=(214, 228, 240, 245),
+                            width=max(2, int(h * 0.055)))
+        d.text(((w - w_teks) / 2 - kotak[0],
+                (h - (kotak[3] - kotak[1])) / 2 - kotak[1]),
+               label, font=f, fill=(238, 246, 252, 255))
+        img = img.resize((max(1, w // _SS), tinggi), _PILImg.LANCZOS)
+        tex = Texture(img)
+        tex.filtering = 'bilinear'
+        hasil = (tex, img.width / float(img.height))
+    except Exception:
+        hasil = (None, 1.0)
+    _IKON_CACHE[kunci] = hasil
+    return hasil
 
 
 def _ui(model='quad', **kw):
@@ -92,6 +481,11 @@ class UIManager:
     def update(self, state, dt: float = 0):
         self.state = state
         if self.mode == 'hud':
+            # Petunjuk tombol punya UMUR. Setelah 30 detik ia padam sendiri;
+            # pemain yang sudah tahu SPACE itu 'pakai' tidak perlu diberi
+            # tahu lagi setiap detik sisa permainannya.
+            if self._hint_umur < self._HINT_PADAM:
+                self._hint_umur += max(0.0, dt)
             self._refresh_hud()
             self._update_motive_panel()
             self._update_action_readout()
@@ -104,7 +498,16 @@ class UIManager:
                 if hasattr(self, '_flash_bg'):
                     self._flash_bg.enabled = False
 
-    _TOOL_NAMES = ['Cangkul','Siram','Tanam','Panen','Kapak','Hadiah','Pickaxe','Pedang']
+    # Urutan persis config.TOOLS dan tool_models.KIND_BY_TOOL_INDEX. Sembilan,
+    # bukan delapan: daftar lama berhenti di 'Pedang' sehingga alat ke-9
+    # (Pancing) selalu tampil dengan nama alat ke-8.
+    _KIND_ALAT = ('cangkul', 'penyiram', 'benih', 'bakul', 'kapak',
+                  'kado', 'beliung', 'pedang', 'pancing')
+
+    # Tiga pintasan, bukan tujuh. Sisanya hidup di F1, dan roda alat di
+    # kiri-atas sudah membawa nomornya sendiri di tiap petak.
+    _PINTASAN = (('SPACE', 'Pakai'), ('E', 'Aksi'), ('TAB', 'Motif'))
+    _HINT_PADAM = 30.0          # detik sebelum petunjuk memudar sendiri
 
     # ─── PUBLIC: HUD ─────────────────────────────────────
     def _build_hud(self):
@@ -134,8 +537,31 @@ class UIManager:
            pun tetap berlatar — padahal yang perlu melar cuma alasnya.
 
         Informasi tidak dibuang, cuma dikecilkan dan dipindahkan. Delapan
-        motif tetap tampil lengkap dengan namanya di sudut kiri-bawah, dan
-        TAB menyembunyikan/menampilkannya kalau pemain mau layar bersih.
+        motif tetap tampil lengkap di sudut kiri-bawah, dan TAB
+        menyembunyikan/menampilkannya kalau pemain mau layar bersih.
+
+        ── Putaran ALAT: gambar menggantikan kata ────────────────────────
+
+        Tiga keluhan yang diperbaiki di sini, semuanya soal yang sama:
+        layar ini menulis apa yang seharusnya ia GAMBARKAN.
+
+        1. Sembilan baris motif berlabel KATA tanpa satu pun ikon. Sekarang
+           tiap baris dipimpin ikon yang menggambarkan kebutuhannya —
+           garpu-pisau, tetesan air, petir, bintang — dan katanya hilang.
+           Panel menyusut dari 260 px jadi 173 px lebar sekaligus.
+        2. Nama alat ditulis sebagai teks sementara tangan karakter memegang
+           cangkul sepanjang permainan. Sekarang alatnya diwakili RODA
+           sembilan petak berikon di kiri-atas, yang terpilih membesar dan
+           menyala, dan cangkulnya cuma keluar ke tangan saat dipakai
+           (lihat Player3D.refresh_held_tool).
+        3. Angka '100/100' menempel di ujung bilah sehingga terbaca
+           menindihnya. Jaraknya dinaikkan 0.010 -> 0.020 dan ukurannya
+           diturunkan, dan tiap bilah kini dipimpin ikonnya sendiri (hati,
+           petir) supaya bisa dibedakan tanpa membaca angkanya sama sekali.
+
+        Dan yang keempat: baris motif terbawah dulu menempel ke tepi bawah
+        layar sehingga terbaca terpotong. Bantalan bawah panel 0.002 ->
+        0.010, jadi ada 28 px di bawah bilah terakhir.
         """
         TIME_C   = color.rgb(255, 255, 255)
         GOLD_C   = color.rgb(255, 215,  60)
@@ -181,55 +607,101 @@ class UIManager:
         self._gold_txt    = _txt('§ 0G',          pos=(X_R, r2), scale=S_KECIL, col=GOLD_C, origin=self._RA)
         self._scene_txt   = _txt('> Kebun',       pos=(X_R, r2), scale=S_KECIL, col=color.rgb(150, 250, 170), origin=self._RA)
 
-        # ── Kiri Atas: nama alat + dua bilah stamina TIPIS ──
+        # ── Kiri Atas: dua bilah stamina BERIKON + roda alat ──
         # Patokan menaruh satu bilah setebal 16 px menempel di sudut. Dua
-        # bilah kita 14 px, bertumpuk, dengan angkanya di ujung kanan bilah —
-        # bukan di ATAS bilah, tempat angka "100/100" dulu tertimpa dan
-        # terbaca separuh.
-        S_ALAT   = 0.74
-        S_ANGKA  = 0.52
-        h_alat   = _tinggi(S_ALAT)
+        # bilah kita 15 px, bertumpuk, masing-masing dipimpin ikonnya sendiri
+        # (hati untuk HP, petir untuk energi) supaya bisa dibedakan tanpa
+        # membaca satu huruf pun, dan angkanya duduk 22 px di kanan ujung
+        # bilah — bukan 11 px seperti dulu, di mana '100/100' terbaca
+        # menindih ujung bilahnya.
+        S_ANGKA  = 0.50
         LA       = (-0.5, 0.0)          # rata kiri, jangkar tengah menegak
         self._LA = LA
 
-        y_alat = Y_T - h_alat / 2
-        self._tool_name = _txt('Cangkul', pos=(X_L, y_alat), scale=S_ALAT,
-                               col=color.rgb(255, 240, 100), origin=LA)
-        self._seed_txt  = _txt('', pos=(X_L, y_alat), scale=S_ANGKA + 0.06,
-                               col=color.rgb(155, 255, 155), origin=LA)
+        self._IK_BAR     = IK_BAR = 0.017
+        self._BAR_W      = 0.185
+        self._BAR_H      = 0.014
+        self._BAR_GAP    = 0.006        # jarak ikon -> bilah
+        self._NUM_GAP    = 0.020        # jarak ujung bilah -> angka
+        self._BAR_X_LEFT = X_L + IK_BAR + self._BAR_GAP
+        BW, BH = self._BAR_W, self._BAR_H
+        BX = self._BAR_X_LEFT
 
-        self._BAR_W      = 0.235
-        self._BAR_H      = 0.013
-        self._BAR_X_LEFT = X_L
-        BH = self._BAR_H
-
-        hy = y_alat - h_alat / 2 - 0.005 - BH / 2
-        ey = hy - BH - 0.005
+        hy = Y_T - 0.004 - BH / 2
+        ey = hy - BH - 0.006
         self._hy, self._ey = hy, ey
+
+        self._hp_ikon = _ui(scale=(IK_BAR, IK_BAR), z=0.02,
+                            position=(X_L + IK_BAR / 2, hy),
+                            texture=ikon_tex('hp', 40), color=color.white)
+        self._en_ikon = _ui(scale=(IK_BAR, IK_BAR), z=0.02,
+                            position=(X_L + IK_BAR / 2, ey),
+                            texture=ikon_tex('energi', 40), color=color.white)
 
         # Alas bilah: tanpa ini bilah yang menyusut jadi tidak terbaca sebagai
         # "sisa dari sekian", cuma sebagai garis pendek yang berubah panjang.
         trek = color.rgb(18, 26, 30, 200)
-        self._hp_trek = _ui(scale=(self._BAR_W, BH), z=0.06,
-                            position=(X_L + self._BAR_W / 2, hy), color=trek)
-        self._en_trek = _ui(scale=(self._BAR_W, BH), z=0.06,
-                            position=(X_L + self._BAR_W / 2, ey), color=trek)
-        self._hp_bar = _ui(scale=(self._BAR_W, BH), z=0.03,
-                           position=(X_L + self._BAR_W / 2, hy),
+        self._hp_trek = _ui(scale=(BW, BH), z=0.06,
+                            position=(BX + BW / 2, hy), color=trek)
+        self._en_trek = _ui(scale=(BW, BH), z=0.06,
+                            position=(BX + BW / 2, ey), color=trek)
+        self._hp_bar = _ui(scale=(BW, BH), z=0.03,
+                           position=(BX + BW / 2, hy),
                            color=color.rgb(55, 210, 80))
-        self._en_bar = _ui(scale=(self._BAR_W, BH), z=0.03,
-                           position=(X_L + self._BAR_W / 2, ey),
+        self._en_bar = _ui(scale=(BW, BH), z=0.03,
+                           position=(BX + BW / 2, ey),
                            color=color.rgb(55, 205, 75))
-        self._hp_val = _txt('HP', pos=(X_L + self._BAR_W + 0.010, hy),
-                            scale=S_ANGKA, col=color.rgb(230, 240, 245), origin=LA)
-        self._en_val = _txt('EN', pos=(X_L + self._BAR_W + 0.010, ey),
-                            scale=S_ANGKA, col=color.rgb(230, 240, 245), origin=LA)
+        self._hp_val = _txt('', pos=(BX + BW + self._NUM_GAP, hy),
+                            scale=S_ANGKA, col=color.rgb(214, 228, 236), origin=LA)
+        self._en_val = _txt('', pos=(BX + BW + self._NUM_GAP, ey),
+                            scale=S_ANGKA, col=color.rgb(214, 228, 236), origin=LA)
+
+        # ── Roda alat: sembilan petak berikon, ala GTA/AWL ──
+        # Yang terpilih membesar dan menyala penuh; sisanya diredupkan lewat
+        # tint entity, bukan lewat tekstur kedua. Nomor pintasan dipanggang
+        # ke dalam gambar ikonnya, jadi tidak ada satu baris teks
+        # "[1-8] pilih alat" pun yang perlu berdiri di layar.
+        # Petak terpilih dibesarkan PERSIS sebesar dua kali jaraknya ke
+        # tetangga (0.033 + 2*0.005 = 0.043), jadi ia menyentuh tetangganya
+        # tanpa pernah menindihnya, berapa pun petak yang sedang dipilih.
+        self._SLOT   = SLOT   = 0.033
+        self._SLOT_S = SLOT_S = 0.043
+        self._SGAP   = SGAP   = 0.005
+        self._RODA_W = len(self._KIND_ALAT) * SLOT + (len(self._KIND_ALAT) - 1) * SGAP
+        y_roda = ey - BH / 2 - 0.009 - SLOT_S / 2
+        self._y_roda = y_roda
+
+        _petak = petak_tex(64)
+        self._alat_petak, self._alat_ikon = [], []
+        for i, kind in enumerate(self._KIND_ALAT):
+            cx = X_L + SLOT / 2 + i * (SLOT + SGAP)
+            self._alat_petak.append(
+                _ui(scale=(SLOT, SLOT), z=0.09, position=(cx, y_roda),
+                    texture=_petak, color=color.rgb(26, 34, 40, 200)))
+            self._alat_ikon.append(
+                _ui(scale=(SLOT * 0.80, SLOT * 0.80), z=0.04,
+                    position=(cx, y_roda),
+                    texture=ikon_tex(kind, 56, str(i + 1)),
+                    color=color.rgb(182, 192, 200)))
+
+        # Nama alat: satu kata, DI BAWAH petaknya, persis seperti 'Clippers'
+        # di patokan. Ia menamai gambar, bukan menggantikannya.
+        S_NAMA = 0.60
+        h_nama = _tinggi(S_NAMA)
+        self._h_nama = h_nama
+        y_nama = y_roda - SLOT_S / 2 - 0.004 - h_nama / 2
+        self._tool_name = _txt('Cangkul', pos=(X_L, y_nama), scale=S_NAMA,
+                               col=color.rgb(255, 238, 154), origin=(0, 0))
+
+        y_benih = y_nama - h_nama / 2 - 0.004 - h_kecil / 2
+        self._seed_txt  = _txt('', pos=(X_L, y_benih),
+                               scale=S_KECIL, col=color.rgb(155, 255, 155), origin=LA)
 
         # Buff dan antrian aksi: dua baris yang HAMPIR SELALU kosong, jadi
         # ongkos layarnya nol kecuali saat memang ada yang perlu dibaca.
-        self._buff_txt  = _txt('', pos=(X_L, ey - BH / 2 - 0.005 - h_kecil / 2),
+        self._buff_txt  = _txt('', pos=(X_L, y_benih - h_kecil - 0.003),
                                scale=S_KECIL, col=color.rgb(120, 255, 180), origin=LA)
-        self._queue_txt = _txt('', pos=(X_L, ey - BH / 2 - 0.007 - h_kecil * 1.5),
+        self._queue_txt = _txt('', pos=(X_L, y_benih - h_kecil * 2 - 0.006),
                                scale=S_KECIL, col=color.rgb(255, 210, 80), origin=LA)
 
         # ── Kiri Bawah: ringkasan motif, menempel di SUDUT ──
@@ -237,46 +709,53 @@ class UIManager:
         # ini seluruh mesin motif tidak terlihat oleh pemain, dan need yang
         # tak terlihat sama saja dengan tidak ada.
         #
-        # Yang berubah cuma ukuran dan jangkarnya: lebar bilah 0.20 -> 0.10,
-        # jarak baris 0.038 -> 0.0195, judul satu baris sendiri dilebur jadi
-        # label kolom, dan blok yang tadinya mengambang 60 px dari tepi kiri
-        # dan berhenti 100 px di atas dasar sekarang duduk di sudut. Tinggi
-        # blok 400 px -> 195 px.
-        from .motives import MOTIVES, LABELS
+        # Kolom NAMA dibuang seluruhnya dan diganti kolom IKON selebar 20 px:
+        # blok yang tadinya 260 px lebar (kolom 'Kamar Kecil' menentukan
+        # lebarnya) jadi 173 px, dan tidak ada satu kata pun tersisa di sana.
+        from .motives import MOTIVES
         self._motive_keys = MOTIVES
-        S_MOTIF        = 0.50
-        self._NBAR_W   = 0.100
-        self._NBAR_H   = 0.013
-        self._NROW     = 0.0195
+        self._IK_N     = IK_N = 0.0185   # ikon motif, satu per baris
+        self._NBAR_W   = 0.115
+        self._NBAR_H   = 0.0125
+        self._NROW     = 0.0215
+        self._NGAP     = 0.006           # jarak ikon -> bilah
         NBH            = self._NBAR_H
 
         n = len(self._motive_keys)
-        y_need0 = Y_B + NBH / 2 + 0.002          # motif terakhir, paling bawah
-        y_mood  = y_need0 + (n - 1) * self._NROW + 0.026
-        MOOD_H  = 0.016
+        # Bantalan bawah 0.010, bukan 0.002. Dengan 0.002 baris 'Ruangan'
+        # praktis menyentuh tepi alas dan terbaca sebagai baris yang
+        # TERPOTONG, bukan baris terakhir — keluhan yang diukur, bukan selera.
+        PAD     = 0.010
+        y_need0 = Y_B + NBH / 2 + PAD            # motif terakhir, paling bawah
+        y_mood  = y_need0 + (n - 1) * self._NROW + 0.028
+        MOOD_H  = 0.017
 
-        # Label dibuat DULU, lalu kolomnya diukur dari label terpanjang.
-        # Lebar kolom yang ditebak (0.098) membuat 'Kamar Kecil' menabrak
-        # bilahnya sendiri di tangkapan pertama; angka tebakan tidak tahu
-        # font apa yang benar-benar dimuat, `getTightBounds` tahu.
-        self._mood_lbl = _txt('Suasana', pos=(X_L, y_mood), scale=S_MOTIF,
-                              col=color.rgb(240, 224, 176), origin=LA, z=-0.02)
-        self._need_lbl_ents = [
-            _txt(LABELS[key], pos=(X_L, y_need0 + (n - 1 - i) * self._NROW),
-                 scale=S_MOTIF, col=color.rgb(214, 224, 230), origin=LA, z=-0.02)
-            for i, key in enumerate(self._motive_keys)]
-        w_lbl = max([self._lebar(e)
-                     for e in [self._mood_lbl] + self._need_lbl_ents] + [0.06])
-        self._NLBL_W = min(w_lbl, 0.16) + 0.010
+        # Kata-katanya HILANG; yang tersisa gambar + bilah. Sembilan nama
+        # motif berjejer tegak adalah blok teks terbesar di layar, dan
+        # patokan (AWL) tidak menuliskan satu pun namanya. Entity label tetap
+        # ada sebagai None supaya pemeriksa regresi yang mencarinya lewat
+        # nama atribut tidak meledak — ia melewati yang None.
+        self._mood_lbl = None
+        self._need_lbl_ents = []
+        self._NLBL_W = IK_N + self._NGAP
         self._NBAR_X = X_L + self._NLBL_W
 
+        self._mood_ikon = _ui(scale=(IK_N, IK_N), z=0.02,
+                              position=(X_L + IK_N / 2, y_mood),
+                              texture=ikon_tex('mood', 40), color=color.white)
+        self._need_ikon_ents = [
+            _ui(scale=(IK_N, IK_N), z=0.02,
+                position=(X_L + IK_N / 2, y_need0 + (n - 1 - i) * self._NROW),
+                texture=ikon_tex(key, 40), color=color.white)
+            for i, key in enumerate(self._motive_keys)]
+
         # Alas panel: tipis, bukan kotak 93% opak lagi. Tugasnya cuma menjamin
-        # label putih tetap terbaca di atas lantai terang; selebihnya biar
+        # ikon dan bilah tetap terbaca di atas lantai terang; selebihnya biar
         # dunia yang kelihatan.
-        PAD       = 0.007
         panel_top = y_mood + MOOD_H / 2 + PAD
         panel_bot = y_need0 - NBH / 2 - PAD
         panel_w   = self._NLBL_W + self._NBAR_W + PAD * 2
+        self._PAD_N, self._PANEL_W_N = PAD, panel_w
         # z eksplisit, dan ini bukan hiasan.
         #
         # Semua elemen camera.ui duduk di z=0, jadi Panda menyortir bin
@@ -343,45 +822,39 @@ class UIManager:
         self._scrim_kanan = _ui(scale=(0.001, 0.001), z=0.20,
                                 position=(X_R, r1), color=SCRIM_C)
         self._scrim_kiri  = _ui(scale=(0.001, 0.001), z=0.20,
-                                position=(X_L, y_alat), color=SCRIM_C)
+                                position=(X_L, hy), color=SCRIM_C)
         self._scrim_bawah = _ui(scale=(0.001, 0.001), z=0.20,
                                 position=(X_R, Y_B), color=SCRIM_C)
 
         # ── Bawah Kanan: petunjuk tombol ──────────────────────
-        # Dipusatkan di 0.60 berarti separuh barisnya tumbuh melewati tepi
-        # 0.889 dan "[I] Inv" hilang. Dijangkar di sudut kanan-bawah
-        # (origin 0.5, -0.5), jadi seberapa pun panjang prompt aksinya,
-        # ekornya tetap di dalam layar dan alasnya ikut mengecil.
+        # Dua baris manual selebar 640 px yang menuliskan tujuh pintasan
+        # LENGKAP dan tidak pernah pergi. Patokan menaruh empat prompt
+        # pendek, tiap-tiap satu GLIF tombol bundar plus satu kata kerja.
+        #
+        # Jadi: tiga baris, tiap baris satu kepingan tombol bergambar plus
+        # satu kata, dan seluruh bloknya padam sendiri setelah 30 detik —
+        # petunjuk yang tidak pernah selesai mengajar berhenti jadi petunjuk
+        # dan jadi perabot. F1 tetap membuka panduan penuh kapan saja.
         self._control_hint = _txt(
             '', pos=(X_R, Y_B), scale=0.60,
             col=color.rgb(225, 238, 255), origin=(0.5, -0.5)
         )
 
-        # Kotak yang dijangkar ke tepi KIRI, disimpan bersama JARAKNYA ke
-        # tepi — bukan cuma daftar entity yang nanti digeser `+= dx`.
-        #
-        # Alasannya terukur: `position=` di konstruktor Entity meleset
-        # setengah dari perubahan aspek yang terjadi SESUDAHNYA (0.0088 satuan
-        # ui saat aspek pindah 1.81 -> 1.778), dan menggeser relatif dari
-        # angka yang sudah meleset cuma menambah melesetnya — nama alat
-        # berakhir 17 px dari tempatnya sementara bilah di bawahnya benar,
-        # karena bilah memang ditulis ulang dari `_BAR_X_LEFT` tiap frame.
-        # Menyimpan jaraknya membuat tiap penataan ulang mutlak, bukan
-        # bertumpuk.
-        bar_off = self._BAR_W / 2
-        need_off = self._NLBL_W + self._NBAR_W / 2
-        self._geser_kotak = [
-            (self._hp_trek, bar_off), (self._en_trek, bar_off),
-            (self._motive_panel_bg, -PAD + panel_w / 2),
-            (self._mood_bg, need_off),
-        ] + [(e, need_off) for e in self._need_bg_ents]
-
-        # Teks tidak dijangkar lewat angka sama sekali; letaknya diukur dari
-        # TINTA-nya di `_tata_ulang_hud`.
-        self._teks_kiri = [
-            self._tool_name, self._hp_val, self._en_val,
-            self._buff_txt, self._queue_txt, self._mood_lbl,
-        ] + self._need_lbl_ents
+        S_TUTS   = 0.58
+        H_TUTS   = 0.0165
+        h_tuts   = _tinggi(S_TUTS)
+        self._H_HINT = H_ROW = max(h_tuts, H_TUTS) + 0.005
+        self._hint_baris = []
+        for i, (tuts, kata) in enumerate(reversed(self._PINTASAN)):
+            y = Y_B + H_ROW * (i + 0.5)
+            tex, rasio = tuts_tex(tuts, 26)
+            cap = _ui(scale=(H_TUTS * rasio, H_TUTS), z=0.02,
+                      position=(X_R, y), texture=tex, color=color.white)
+            txt = _txt(kata, pos=(X_R, y), scale=S_TUTS,
+                       col=color.rgb(228, 240, 252), origin=(0.5, 0.0))
+            self._hint_baris.append((cap, txt, H_TUTS * rasio))
+        self._hint_umur = 0.0
+        self._hint_tampil = True
 
     # ── Tata letak yang dihitung ulang saat teksnya berubah ──────────
     #
@@ -444,20 +917,58 @@ class UIManager:
         ex = window.aspect_ratio / 2
         if abs(ex - self._edge_x) < 1e-6:
             return False
-        x_l = -ex + self._M
-        dx = x_l - self._X_L
         self._edge_x = ex
-        self._X_L = x_l
+        self._X_L = -ex + self._M
         self._X_R = ex - self._M
-        self._BAR_X_LEFT = x_l
-        self._NBAR_X = x_l + self._NLBL_W
-        for e in getattr(self, '_jangkar_kiri', ()):
-            try:
-                e.x += dx
-            except Exception:
-                pass
+        self._tata_kiri()
         self._control_hint.x = self._X_R
+        for cap, txt, _w in getattr(self, '_hint_baris', ()):
+            txt.x = self._X_R
         return True
+
+    def _tata_kiri(self):
+        """Tempatkan ULANG seluruh isi sudut kiri dari X_L yang berlaku.
+
+        Mutlak, bukan `e.x += dx`. Yang lama menyimpan daftar entity lalu
+        menggesernya relatif, dan daftar itu (`_jangkar_kiri`) TIDAK PERNAH
+        diisi sekali pun — jadi saat aspek berubah 1.81 -> 1.778 sesudah HUD
+        dibangun, satu-satunya yang ikut pindah adalah bilah, karena bilah
+        memang ditulis ulang dari `_BAR_X_LEFT` tiap frame. Sisanya diam.
+        Menghitung ulang dari X_L membuat hasilnya sama berapa kali pun ini
+        dipanggil.
+        """
+        X_L = self._X_L
+        IK, BW, BH = self._IK_BAR, self._BAR_W, self._BAR_H
+        bx = X_L + IK + self._BAR_GAP
+        self._BAR_X_LEFT = bx
+        hy, ey = self._hy, self._ey
+
+        self._hp_ikon.position = (X_L + IK / 2, hy)
+        self._en_ikon.position = (X_L + IK / 2, ey)
+        for e, y in ((self._hp_trek, hy), (self._en_trek, ey)):
+            e.position = (bx + BW / 2, y)
+        self._hp_val.x = bx + BW + self._NUM_GAP
+        self._en_val.x = bx + BW + self._NUM_GAP
+
+        SLOT, SGAP = self._SLOT, self._SGAP
+        for i in range(len(self._alat_petak)):
+            cx = X_L + SLOT / 2 + i * (SLOT + SGAP)
+            self._alat_petak[i].x = cx
+            self._alat_ikon[i].x  = cx
+
+        for e in (self._seed_txt, self._buff_txt, self._queue_txt):
+            e.x = X_L
+
+        # Motif di sudut kiri-bawah.
+        IK_N = self._IK_N
+        self._NBAR_X = nbx = X_L + self._NLBL_W
+        self._mood_ikon.x = X_L + IK_N / 2
+        for e in self._need_ikon_ents:
+            e.x = X_L + IK_N / 2
+        self._mood_bg.x = nbx + self._NBAR_W / 2
+        for e in self._need_bg_ents:
+            e.x = nbx + self._NBAR_W / 2
+        self._motive_panel_bg.x = X_L - self._PAD_N + self._PANEL_W_N / 2
 
     def _tata_ulang_hud(self):
         """Susun ulang baris kanan-atas, kiri-atas, dan alas gelapnya."""
@@ -486,17 +997,24 @@ class UIManager:
         self._pas_scrim(self._scrim_kanan, min(kiri1, kiri2), X_R,
                         Y_T, self._ROW2_Y - h2 / 2, pad=0.008)
 
-        # Kiri atas: hint benih menempel di kanan nama alat.
-        w_alat = self._lebar(self._tool_name)
-        self._seed_txt.x = X_L + w_alat + G
+        # Kiri atas: nama alat dipusatkan DI BAWAH petak yang terpilih, lalu
+        # dijepit supaya tidak keluar dari lebar roda. Nama yang mengambang
+        # di kiri sementara petak yang menyala ada di kanan tidak menamai
+        # apa pun; yang menamai adalah yang berdiri tepat di bawahnya.
+        idx  = min(max(int(getattr(self.state, 'tool_index', 0)), 0),
+                   len(self._alat_petak) - 1)
+        w_nm = self._lebar(self._tool_name)
+        cx   = X_L + self._SLOT / 2 + idx * (self._SLOT + self._SGAP)
+        self._tool_name.x = min(max(cx, X_L + w_nm / 2),
+                                X_L + self._RODA_W - w_nm / 2)
+
         kanan = max(
-            X_L + w_alat,
-            self._seed_txt.x + self._lebar(self._seed_txt),
-            self._BAR_X_LEFT + self._BAR_W + 0.010 + self._lebar(self._hp_val),
-            self._BAR_X_LEFT + self._BAR_W + 0.010 + self._lebar(self._en_val),
+            X_L + self._RODA_W + 0.005,     # petak terpilih menyembul sedikit
+            self._BAR_X_LEFT + self._BAR_W + self._NUM_GAP + self._lebar(self._hp_val),
+            self._BAR_X_LEFT + self._BAR_W + self._NUM_GAP + self._lebar(self._en_val),
         )
-        bawah = self._ey - self._BAR_H / 2
-        for e in (self._buff_txt, self._queue_txt):
+        bawah = self._tool_name.y - self._h_nama / 2
+        for e in (self._seed_txt, self._buff_txt, self._queue_txt):
             if str(e.text).strip():
                 kanan = max(kanan, X_L + self._lebar(e))
                 bawah = min(bawah, e.y - (e.height * e.scale_y) / 2)
@@ -508,6 +1026,15 @@ class UIManager:
             self._pas_scrim(self._scrim_bawah,
                             X_R - self._lebar(ch), X_R,
                             Y_B + ch.height * ch.scale_y, Y_B, pad=0.007)
+        elif getattr(self, '_hint_tampil', False) and self._hint_baris:
+            kiri = X_R
+            for cap, txt, w_cap in self._hint_baris:
+                w_txt = self._lebar(txt)
+                txt.x = X_R
+                cap.x = X_R - w_txt - 0.006 - w_cap / 2
+                kiri = min(kiri, cap.x - w_cap / 2)
+            atas = self._hint_baris[-1][1].y + self._H_HINT / 2
+            self._pas_scrim(self._scrim_bawah, kiri, X_R, atas, Y_B, pad=0.007)
         else:
             self._scrim_bawah.enabled = False
 
@@ -520,14 +1047,41 @@ class UIManager:
         """
         self._motif_tampil = not getattr(self, '_motif_tampil', True)
         v = self._motif_tampil
-        for e in (self._motive_panel_bg, self._mood_lbl,
+        for e in (self._motive_panel_bg, self._mood_lbl, self._mood_ikon,
                   self._mood_bg, self._mood_fill):
             if e is not None:
                 e.enabled = v
-        for nama in self._DAFTAR_HUD:
+        for nama in self._DAFTAR_MOTIF:
             for e in getattr(self, nama, None) or []:
                 e.enabled = v
         return v
+
+    def _sorot_alat(self, idx: int):
+        """Petak terpilih membesar dan menyala; sisanya diredupkan.
+
+        Redupnya lewat tint entity, bukan lewat tekstur kedua: satu gambar
+        per alat sudah cukup, dan mengalikannya dengan abu-abu memberi versi
+        'tidak aktif' yang konsisten tanpa satu pun bitmap tambahan.
+        """
+        S, SB = self._SLOT, self._SLOT_S
+        for i, (petak, ikon) in enumerate(zip(self._alat_petak, self._alat_ikon)):
+            pilih = (i == idx)
+            u = SB if pilih else S
+            petak.scale = (u, u)
+            ikon.scale  = (u * 0.80, u * 0.80)
+            petak.color = (color.rgb(240, 216, 140, 240) if pilih
+                           else color.rgb(26, 34, 40, 200))
+            ikon.color  = (color.white if pilih
+                           else color.rgb(182, 192, 200))
+
+    def _pasang_hint(self, v: bool):
+        v = bool(v)
+        if v == getattr(self, '_hint_tampil', None):
+            return
+        self._hint_tampil = v
+        for cap, txt, _w in getattr(self, '_hint_baris', ()):
+            cap.enabled = v
+            txt.enabled = v
 
     # Warna termometer: hijau aman, kuning waspada, merah mendesak. Pemain harus
     # bisa membaca "yang mana yang gawat" tanpa membaca satu kata pun.
@@ -616,16 +1170,22 @@ class UIManager:
         self._gold_txt.text = f'§ {s.gold}G'
         self._buff_txt.text = '+'.join(b.upper() for b in s.buffs) if s.buffs else ''
 
-        # Active tool name
-        self._tool_name.text = self._TOOL_NAMES[min(s.tool_index, len(self._TOOL_NAMES) - 1)]
+        # Alat aktif: nama satu kata, dan petaknya yang menyala.
+        from .config import TOOLS
+        idx = min(max(int(s.tool_index), 0), len(self._alat_petak) - 1)
+        self._tool_name.text = TOOLS[idx] if idx < len(TOOLS) else ''
+        if idx != getattr(self, '_idx_alat_tampil', None):
+            self._idx_alat_tampil = idx
+            self._sorot_alat(idx)
 
-        # Seed hint (shown when Tanam/Panen active)
+        # Seed hint (hanya saat Tanam/Panen aktif). Baris '[1-8] pilih alat'
+        # dibuang: nomornya sudah tercetak di tiap petak roda alat.
         if s.tool_index in (2, 3):
             seed_name = CROPS.get(s.seed_key, {}).get('name', s.seed_key)
             seed_qty  = s.inventory.get(s.seed_key + '_seed', 0)
             self._seed_txt.text = f'Q/R: {seed_name} x{seed_qty}'
         else:
-            self._seed_txt.text = '[1-8] pilih alat'
+            self._seed_txt.text = ''
 
         # Time / weather
         self._time_txt.text = s.get_time_str()
@@ -640,16 +1200,12 @@ class UIManager:
                      type('o', (object,), {'display': s.scene_name})()).display
         self._scene_txt.text = f'> {sc_display}'
         
-        # Petunjuk tombol: dua baris pendek di sudut kanan-bawah, bukan satu
-        # baris sepanjang layar. Origin (0.5, -0.5) membuat TIAP baris rata
-        # kanan sendiri-sendiri, jadi dua baris yang panjangnya beda tetap
-        # rapi menempel di tepi.
-        if hasattr(s, 'action_prompt'):
-            self._control_hint.text = s.action_prompt
-        else:
-            self._control_hint.text = (
-                '[WASD] Jalan  ·  [SPACE] Pakai  ·  [E] Aksi\n'
-                '[I] Tas  ·  [J] Jurnal  ·  [TAB] Motif  ·  [F1] Panduan')
+        # Petunjuk tombol: prompt aksi kontekstual menang atas tiga kepingan
+        # tombol tetap. Kalau ada prompt, kepingannya minggir — dua blok teks
+        # di sudut yang sama akan saling menabrak.
+        prompt = str(getattr(s, 'action_prompt', '') or '')
+        self._control_hint.text = prompt
+        self._pasang_hint(not prompt and self._hint_umur < self._HINT_PADAM)
 
         # Susun ulang hanya kalau ada teks yang benar-benar berubah.
         tanda = (self._time_txt.text, self._date_txt.text,
@@ -657,7 +1213,7 @@ class UIManager:
                  self._gold_txt.text, self._tool_name.text,
                  self._seed_txt.text, self._hp_val.text, self._en_val.text,
                  self._buff_txt.text, self._queue_txt.text,
-                 self._control_hint.text)
+                 self._control_hint.text, self._hint_tampil)
         geser = self._pasang_tepi()
         if geser or tanda != getattr(self, '_tanda_hud', None):
             self._tanda_hud = tanda
@@ -957,12 +1513,17 @@ class UIManager:
     # menambah elemen HUD baru cuma butuh satu nama di daftar ini.
     _NAMA_HUD = (
         '_tool_name', '_seed_txt', '_hp_bar', '_hp_val', '_en_bar', '_en_val',
-        '_hp_trek', '_en_trek',
+        '_hp_trek', '_en_trek', '_hp_ikon', '_en_ikon',
         '_time_txt', '_date_txt', '_weather_txt', '_scene_txt', '_gold_txt',
         '_buff_txt', '_queue_txt', '_mood_bg', '_mood_fill', '_mood_lbl',
-        '_motive_panel_bg',
+        '_mood_ikon', '_motive_panel_bg', '_control_hint',
     )
-    _DAFTAR_HUD = ('_need_bg_ents', '_need_fill_ents', '_need_lbl_ents')
+    # Yang ikut disembunyikan TAB: hanya ringkasan motif. Roda alat tidak —
+    # ia jawaban atas "alat apa yang sedang kupegang", dan pertanyaan itu
+    # tidak hilang ketika pemain menutup panel kebutuhannya.
+    _DAFTAR_MOTIF = ('_need_bg_ents', '_need_fill_ents', '_need_lbl_ents',
+                     '_need_ikon_ents')
+    _DAFTAR_HUD = _DAFTAR_MOTIF + ('_alat_petak', '_alat_ikon')
 
     def set_hud_visible(self, v: bool):
         """Sembunyikan/tampilkan seluruh HUD permainan.
@@ -986,6 +1547,15 @@ class UIManager:
                     e.enabled = v
                 except Exception:
                     pass
+        # Kepingan petunjuk tombol ikut padam saat sinema; ia bukan bagian
+        # dari cerita, dan tiga kotak bertuliskan SPACE di sudut adegan
+        # membuat adegannya terbaca sebagai permainan yang macet.
+        for cap, txt, _w in getattr(self, '_hint_baris', ()):
+            try:
+                cap.enabled = v and self._hint_tampil
+                txt.enabled = v and self._hint_tampil
+            except Exception:
+                pass
         # Scrim kontras ikut: tanpa ini pita hitamnya bertumpuk dengan
         # gradien gelap HUD dan tepinya terlihat sebagai dua lapis abu.
         for nama in ('_scrim_kanan', '_scrim_kiri', '_scrim_bawah'):
@@ -1182,10 +1752,20 @@ class UIManager:
                 "  B      : Terbang (Sapoe Terbang)\n"
                 "  Y      : Meluncur / Dash Stunt (-15 EN)\n"
                 "  T      : Tidur (hanya di Rumah)\n\n"
-                "── ALAT (angka 1-8) ──\n"
-                "  1-CNG  2-SRM  3-TNM  4-PNS\n"
-                "  5-KPK  6-HDH  7-PCK  8-PDG\n"
+                "── ALAT (angka 1-9) ──\n"
+                "  Roda ikon di kiri-atas. Nomornya tercetak di tiap petak;\n"
+                "  yang menyala adalah yang sedang dipilih, dan namanya\n"
+                "  berdiri tepat di bawahnya. Alat baru keluar ke tangan\n"
+                "  saat SPACE ditekan, lalu disimpan lagi sendiri.\n"
+                "  1 Cangkul  2 Siram  3 Tanam  4 Panen  5 Kapak\n"
+                "  6 Hadiah   7 Pickaxe 8 Pedang 9 Pancing\n"
                 "  Q/R    : Ganti bibit\n\n"
+                "── IKON KEBUTUHAN (kiri-bawah) ──\n"
+                "  Wajah  Suasana hati (jumlah semua di bawahnya)\n"
+                "  Garpu  Lapar        Kursi  Nyaman\n"
+                "  Tetes  Higiene      Kloset Kamar Kecil\n"
+                "  Petir  Energi       Bintang Senang\n"
+                "  Orang  Sosial       Bingkai Ruangan\n\n"
                 "── MENU ──\n"
                 "  I: Inventori   M: Peta\n"
                 "  J: Quest       H: Relasi NPC\n"

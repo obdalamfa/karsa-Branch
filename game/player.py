@@ -161,6 +161,11 @@ class Player3D(Entity):
         self._anim_t           = 0.0
         self._attack_anim      = 0.0
         self._anim_mode        = 'swing' # swing|down|water|bend
+        # Alat di tangan: dibangun sekali, tapi baru TERLIHAT saat dipakai.
+        self._held_tool        = None
+        self._held_tool_idx    = None
+        self._alat_tampil      = False
+        self._alat_ekor        = 0.0
         self.target_rotation_y = 0.0
         self._tunggangan       = None
         self.velocity_x        = 0.0
@@ -445,13 +450,30 @@ class Player3D(Entity):
         return self.x / TS, self.z / TS
 
     # ─── TICK (dipanggil manual dari app.py saat mode='hud') ──
-    def refresh_held_tool(self, force: bool = False) -> None:
-        """Pasang model alat yang sedang dipilih ke tangan kanan.
 
-        game/tool_models.py sudah berisi model lengkap untuk cangkul, penyiram,
-        kapak, beliung, pedang, pancing, benih, bakul dan kado — tapi tidak ada
-        satu pun pemanggilnya, jadi alatnya tidak pernah muncul dan HUD cuma
-        menulis kata "Cangkul". Ini yang menyambungkannya.
+    # Ekor waktu (detik) alat tetap terlihat sesudah animasinya habis. Tanpa
+    # ini alat lenyap tepat di frame yang sama dengan pose terakhir ayunan,
+    # dan yang terlihat bukan "alat disimpan" melainkan "alat berkedip".
+    _ALAT_EKOR = 0.22
+
+    def refresh_held_tool(self, force: bool = False) -> None:
+        """Alat hanya ADA DI TANGAN selama aksinya berjalan.
+
+        Permintaan pemilik, persis: "alat dari pada terlihat dibawa bawa
+        seperti cangkul di gambar. lebih baik ditampilkan saja icon di salah
+        satu gui nya ... dan alat akan keluar hanya ketika digunakan."
+
+        Jadi modelnya tetap dibangun dan tetap tergenggam di pivot bahu kanan
+        — yang berubah cuma KAPAN ia terlihat. `_attack_anim` sudah menjadi
+        satu-satunya penanda "aksi sedang berjalan" di seluruh berkas ini
+        (`_play_tool_anim` mengisinya, `tick` menghabiskannya), jadi tidak ada
+        keadaan baru yang perlu dijaga sinkron: kalau aksinya jalan, alatnya
+        keluar; kalau tidak, tangan kosong. Identitas alat yang dipilih
+        sekarang dibawa oleh roda ikon di HUD (game/panels.py).
+
+        Perhatikan urutan di `tick()`: `_attack_anim` DIKURANGI sebelum
+        fungsi ini dipanggil, jadi frame terakhir animasi sudah bernilai 0 —
+        itulah gunanya `_ALAT_EKOR`.
 
         build_tool() sengaja membuat Entity + Mesh baru tiap kali, tanpa cache.
         Itu bukan pemborosan: Mesh Ursina adalah NodePath Panda3D yang hanya
@@ -459,31 +481,52 @@ class Player3D(Entity):
         entity kecuali yang terakhir kehilangan geometri. Bug itu sudah dua kali
         terjadi di proyek ini.
         """
+        # 1. Bangun ulang HANYA kalau alat yang dipilih berganti.
         idx = getattr(self.state, 'tool_index', 0)
-        if not force and idx == getattr(self, '_held_tool_idx', None):
-            return
-        self._held_tool_idx = idx
+        if force or idx != getattr(self, '_held_tool_idx', None):
+            self._held_tool_idx = idx
 
-        lama = getattr(self, '_held_tool', None)
-        if lama is not None:
-            from ursina import destroy as _destroy
-            _destroy(lama)
-            self._held_tool = None
+            lama = getattr(self, '_held_tool', None)
+            if lama is not None:
+                from ursina import destroy as _destroy
+                _destroy(lama)
+                self._held_tool = None
 
-        try:
-            from .tool_models import build_tool, kind_for_tool_index
-            kind = kind_for_tool_index(idx)
-            induk = getattr(self, '_pivot_shoulder_r', None) or self
-            alat = build_tool(kind, parent=induk)
+            try:
+                from .tool_models import build_tool, kind_for_tool_index
+                kind = kind_for_tool_index(idx)
+                induk = getattr(self, '_pivot_shoulder_r', None) or self
+                alat = build_tool(kind, parent=induk)
+                if alat is not None:
+                    # Digenggam sedikit di bawah dan di depan bahu kanan.
+                    alat.position = Vec3(0.06, -0.34, 0.14)
+                    alat.rotation = Vec3(-12, 0, 6)
+                    alat.enabled = bool(getattr(self, '_alat_tampil', False))
+                self._held_tool = alat
+            except Exception as e:
+                import logging
+                logging.warning(f"[ALAT] gagal memasang model alat: {e}")
+                self._held_tool = None
+
+        # 2. Nyalakan/padamkan sesuai aksi yang sedang berjalan.
+        pakai = self._attack_anim > 0.0
+        if pakai:
+            self._alat_ekor = self._ALAT_EKOR
+        elif getattr(self, '_alat_ekor', 0.0) > 0.0:
+            self._alat_ekor = max(0.0, self._alat_ekor - time.dt)
+        tampil = bool(pakai or getattr(self, '_alat_ekor', 0.0) > 0.0)
+
+        # Ditulis hanya saat BERUBAH: `Entity.enabled` menyalakan/mematikan
+        # NodePath lewat show()/hide() tiap kali di-set, dan memanggilnya 60
+        # kali sedetik untuk nilai yang sama adalah kerja Panda3D gratisan.
+        if tampil != getattr(self, '_alat_tampil', None):
+            self._alat_tampil = tampil
+            alat = getattr(self, '_held_tool', None)
             if alat is not None:
-                # Digenggam sedikit di bawah dan di depan bahu kanan.
-                alat.position = Vec3(0.06, -0.34, 0.14)
-                alat.rotation = Vec3(-12, 0, 6)
-            self._held_tool = alat
-        except Exception as e:
-            import logging
-            logging.warning(f"[ALAT] gagal memasang model alat: {e}")
-            self._held_tool = None
+                try:
+                    alat.enabled = tampil
+                except Exception:
+                    pass
 
     def _escape_to_walkable(self, tx: int, tz: int, max_r: int = 8) -> bool:
         """Pindahkan pemain ke tile terdekat yang bisa dijalani.

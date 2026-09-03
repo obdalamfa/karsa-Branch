@@ -324,6 +324,27 @@ def main():
         print('CAPTURE_FAIL: no screenshot', file=sys.stderr)
         sys.exit(2)
     img.write(Filename.fromOsSpecific(str(out.resolve())))
+
+    # Frame HITAM PEKAT lolos sebagai sukses sampai sekarang, dan itu bukan
+    # kemungkinan teoretis: dua dari empat tangkapan 1920x1080 berturut-turut
+    # keluar dengan mean (0,0,0) sementara `CAPTURE_OK` tetap tercetak. Lembar
+    # perbandingannya lalu berisi separuh bidang hitam, dan DUA kritikus buta
+    # menghabiskan gilirannya untuk melaporkan bahwa tidak ada yang bisa
+    # dinilai. Penilaian yang terbuang itu jauh lebih mahal daripada
+    # pemeriksaan ini.
+    try:
+        from PIL import Image as _Im, ImageStat as _St
+        _m = _St.Stat(_Im.open(out).convert('RGB')).mean
+        if sum(_m) < 6.0:
+            print(f'CAPTURE_FAIL: frame kosong (mean={[round(v,1) for v in _m]}). '
+                  f'Jendela kemungkinan tertutup atau konteks GL hilang.',
+                  file=sys.stderr)
+            sys.exit(2)
+    except SystemExit:
+        raise
+    except Exception:
+        pass
+
     print(f'CAPTURE_OK {out.resolve()}')
     sys.stdout.flush()
     os._exit(0)

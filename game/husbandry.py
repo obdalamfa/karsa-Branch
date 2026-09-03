@@ -147,6 +147,28 @@ def di_air_terbuka(state, animal_id: str) -> bool:
     return pos.get('scene') in SCENE_BERAIR
 
 
+def air_mandiri(state, animal_id: str) -> bool:
+    """Hewan yang mencari minumnya sendiri, jadi takaran air tidak berlaku.
+
+    Dua hal masuk ke sini, dan keduanya karena sebab yang sama: palung hanya
+    ada di KANDANG kebun, jadi hewan yang tidak berada di dalamnya tidak punya
+    satu pun cara untuk diberi minum oleh pemain.
+
+      air terbuka   bebek di danau berenang di air minumnya
+      tidak dikandangkan
+                    kucing dan kelinci berkeliaran; catatan spesiesnya sendiri
+                    sudah bilang "Beri makan, jangan dikandangkan". Mereka
+                    minum dari mana saja seperti kucing sungguhan.
+
+    Tanpa ini, air yang sekarang menggerbangi produksi menghukum mereka karena
+    hidup di tempat yang memang tempatnya: takarannya meluruh sampai nol, tiga
+    hari lalai, lalu SAKIT dan hati turun tiap hari — tanpa jalan keluar.
+    Aturan yang tidak bisa dipatuhi bukan aturan, itu jebakan. Bug yang sama
+    ditemukan dua kali: pertama pada bebek, lalu pada kucing dan kelinci.
+    """
+    return di_air_terbuka(state, animal_id) or not is_penned(animal_id)
+
+
 def is_penned(animal_id: str) -> bool:
     """Hewan yang tinggal di KANDANG, jadi berbagi palung minum yang sama.
 
@@ -203,8 +225,8 @@ def daily_tick(state) -> dict:
         mult = PENGALI_SUSUT.get(meta.get('type', ''), 1.0)
 
         rec['kenyang'] = _clamp(rec['kenyang'] - SUSUT_KENYANG * mult)
-        if di_air_terbuka(state, aid):
-            rec['air'] = 100        # berenang di air minumnya sendiri
+        if air_mandiri(state, aid):
+            rec['air'] = 100        # mencari minumnya sendiri
         else:
             rec['air'] = _clamp(rec['air'] - SUSUT_AIR * mult)
         rec['bersih']  = _clamp(rec['bersih']  - SUSUT_BERSIH  * mult)

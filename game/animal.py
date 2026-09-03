@@ -41,6 +41,16 @@ class FarmAnimal(BaseActor):
                 pass
 
     def update_ai(self, dt: float, can_walk_fn):
+        # Hewan yang sedang DITUNGGANGI tidak mengemudikan dirinya sendiri.
+        # Tanpa gerbang ini AI-nya tetap berjalan dan menimpa posisi yang baru
+        # saja disamakan dengan pemain — hasilnya kuda berjalan pulang ke
+        # kandangnya sementara penunggangnya melaju ke arah lain, dan dari
+        # kamera penunggang tampak melayang tanpa kuda sama sekali.
+        if getattr(self, '_ditunggangi', False):
+            self.target_x = self.logical_x
+            self.target_y = self.logical_y
+            return
+
         if self.state.is_night():
             self.target_x = self.logical_x
             self.target_y = self.logical_y

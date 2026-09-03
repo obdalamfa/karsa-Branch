@@ -770,7 +770,18 @@ class Player3D(Entity):
 
         # Animation Handling
         if getattr(self, '_is_vitaboy', False) and hasattr(self, '_va') and self._va:
-            if getattr(self, '_slide_active_ms', 0) > 0:
+            if getattr(self, '_tunggangan', None) is not None:
+                # Menunggang HARUS diperiksa lebih dulu daripada bergerak.
+                # Cabang `moving_now` di bawah menyetel `a2o-walking-loop`, dan
+                # ia berjalan tiap frame — jadi pose duduk yang dipasang saat
+                # naik langsung ditimpa pose BERJALAN pada frame berikutnya.
+                # Itulah kenapa penunggang kita berkaki lurus menggantung
+                # sementara penunggang di patokan berlutut menekuk: yang
+                # terlihat selama ini bukan pose berkuda sama sekali.
+                self._va.set_animation('a2o-kart-ride')
+                self._was_moving = False
+                self._va.speed = 1.0
+            elif getattr(self, '_slide_active_ms', 0) > 0:
                 self._va.set_animation('a2o-slide-normal')
                 self._was_moving = False
                 self._va.speed = 1.0
@@ -1047,7 +1058,13 @@ class Player3D(Entity):
     # ── Menunggang ────────────────────────────────────────────────────────
     # Tinggi duduk di pelana, dalam satuan dunia. Diambil dari tinggi badan
     # kuda di animal_models (_kuda: badan pada y 1,22, punggung ~1,55).
-    Y_PELANA = 0.86
+    # Diturunkan dari 0,86 setelah membandingkan dengan frame patokan pada
+    # perbesaran yang sama: di sana badan kuda MENUTUPI pinggul dan betis
+    # penunggang, dan yang terlihat cuma badan atas, paha atas, dan sepatu.
+    # Pada 0,86 penunggang kita bertengger di atas punggung dengan seluruh
+    # badan terekspos, dan itu yang membuatnya terbaca sebagai dua model yang
+    # ditumpuk, bukan satu orang yang menunggang.
+    Y_PELANA = 0.76
 
     def mulai_menunggang(self, hewan):
         """Naikkan pemain ke punggung `hewan`.
@@ -1094,6 +1111,13 @@ class Player3D(Entity):
         hewan = getattr(self, '_tunggangan', None)
         if hewan is None:
             return
+        # `logical_*` yang harus disamakan, BUKAN cuma x/z. `sync_visuals()`
+        # meng-lerp x/z menuju logical tiap frame, jadi menulis x/z langsung
+        # akan ditarik balik ke posisi logis lama pada frame berikutnya — dan
+        # yang terlihat adalah kuda yang tertinggal di belakang penunggangnya
+        # atau, kalau jaraknya jauh, penunggang tanpa kuda sama sekali.
+        hewan.logical_x = self.x / TS
+        hewan.logical_y = self.z / TS
         hewan.x = self.x
         hewan.z = self.z
         hewan.rotation_y = self.rotation_y

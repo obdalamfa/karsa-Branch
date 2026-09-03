@@ -43,7 +43,11 @@ mana yang mana dari bentuknya saja dan "buta" batal.
 
 | Potongan | Patokan | Perintah |
 |---|---|---|
-| BERKUDA | `gerak_berkuda` | `python tools/capture.py --scene farm --at 20,6 --out _bench/shots/BERKUDA.png --strip 6 --strip-every 7 --hold w --frames 60 --width 960 --height 540 --gif _bench/shots/BERKUDA.gif --aksi naik --target kuda_pegasus` |
+| BERKUDA | `gerak_berkuda` | `python tools/capture.py --scene farm --at 20,7 --dist 5.5 --pitch 17 --out _bench/shots/BERKUDA.png --strip 6 --strip-every 7 --hold w --frames 50 --width 960 --height 540 --gif _bench/shots/BERKUDA.gif --aksi naik --target kuda_pegasus` |
+
+BERKUDA TANPA `--yaw`: patokannya kamera dari BELAKANG penunggang, dan itu
+kebetulan sudut default permainan. Menambahkan `--yaw` memutar kamera ke depan
+sehingga yang terlihat wajah penunggang, bukan punggungnya seperti di patokan.
 | PANEN | `gerak_panen` | `python tools/capture.py --scene farm --at <petak ladang> --dist 6 --pitch 18 --yaw 200 --out _bench/shots/PANEN.png --strip 6 --strip-every 3 --frames 50 --width 960 --height 540 --gif _bench/shots/PANEN.gif --keys space` |
 | GOSOK | `gerak_gosok` | `python tools/capture.py --scene farm --at 20,6 --dist 4.5 --pitch 11 --yaw 150 --out _bench/shots/GOSOK.png --strip 6 --strip-every 3 --frames 50 --width 960 --height 540 --gif _bench/shots/GOSOK.gif --aksi gosok --target kuda_pegasus` |
 | BICARA | `gerak_bicara` | `python tools/capture.py --scene town --at <dekat NPC> --dist 6 --pitch 14 --yaw 200 --out _bench/shots/BICARA.png --strip 6 --strip-every 5 --frames 50 --width 960 --height 540 --gif _bench/shots/BICARA.gif --aksi bicara --target <npc_id>` |

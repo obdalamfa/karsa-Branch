@@ -127,7 +127,30 @@ def _petak_texture(base_name, light, dark, x0, y0, nx, ny):
                 # untuk menjadi pola.
                 v *= 1.03 if (tx + ty) % 2 else 0.97
                 rgb.append(max(0, min(255, int(round(v)))))
-            ubin = ImageChops.multiply(base, Image.new('RGB', base.size, tuple(rgb)))
+            # Tekstur dasar DIPUTAR/DICERMIN per ubin sebelum diwarnai.
+            #
+            # Tanpa ini tiap ubin memasang susunan batu yang IDENTIK, dan
+            # warnanya boleh se-acak apa pun — mata tetap mengunci pengulangan
+            # berperiode SATU UBIN dari bentuknya. Itu persis yang membuat
+            # patokan Story of Seasons KALAH melawan kita di potongan TANAH;
+            # kritikus buta di sana menulis "sekitar 5x3 kotak tanah identik
+            # dengan parit gelap di antaranya, periode persis 1 ubin, dan tidak
+            # ada satu pun kotak yang berbeda rona ATAU ARAH TEKSTURNYA — itu
+            # kisi, bukan tanah." Kita menang justru karena permukaan kita
+            # menerus; alun-alun batu yang baru mengulangi kesalahan itu.
+            #
+            # Delapan transformasi dihedral dipilih dari hash koordinat ubin,
+            # jadi dua ubin bersebelahan hampir tidak pernah sama arahnya. Untuk
+            # batu dan tanah yang tidak punya arah alami ini gratis: tidak ada
+            # entity baru, tidak ada tekstur baru, dan hasilnya di-cache sama
+            # seperti sebelumnya.
+            d = (tx * 73856093 ^ ty * 19349663) & 7
+            sisi = base
+            if d & 3:
+                sisi = sisi.rotate(90 * (d & 3))
+            if d & 4:
+                sisi = sisi.transpose(Image.FLIP_LEFT_RIGHT)
+            ubin = ImageChops.multiply(sisi, Image.new('RGB', base.size, tuple(rgb)))
             # Baris 0 PIL = atas, dan Texture() membalik gambar saat unggah,
             # jadi ubin (x0+i, y0+j) harus dipasang di baris (uy-1-j).
             img.paste(ubin, (i * n, (uy - 1 - j) * n))

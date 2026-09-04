@@ -432,7 +432,7 @@ class NativeAvatar:
     # Akibatnya bukan "tutup tangan tidak muncul", tapi "seluruh avatar TSO
     # diganti sosok lain" tanpa satu pun pesan yang menyebut penyebabnya.
     __slots__ = ('root_entity', 'char_np', 'parts', '_controls', '_current',
-                 '_speed', '_char', '_head_np', '_head_ctrl', '_ujung')
+                 '_speed', '_char', '_head_np', '_head_ctrl', '_ujung', '_sendi')
 
     def __init__(self, parent_entity, apr_list: List[str],
                  scale: float = 0.30, tint=None,
@@ -532,6 +532,7 @@ class NativeAvatar:
         # supaya ia ikut animasi apa pun tanpa perlu di-bake ulang: joint
         # di-expose sekali, lalu bentuknya menempel sebagai anak node itu.
         self._ujung = []
+        self._sendi = {}
         self._pasang_ujung()
 
     # Mitten dan bot. Radius dalam satuan tulang; nilainya dipilih supaya
@@ -557,6 +558,17 @@ class NativeAvatar:
         ('R_HAND', 0.115, (0.0, 0.0, 0.0), (196, 148, 108)),
         ('L_HAND', 0.115, (0.0, 0.0, 0.0), (196, 148, 108)),
     )
+
+    def node_tangan(self):
+        """NodePath yang mengikuti joint tangan kanan, atau None.
+
+        Dipakai untuk menggantungkan alat. Alat DULU di-parent ke
+        `_pivot_shoulder_r` milik humanoid prosedural — dan pada avatar TSO
+        pivot itu tidak berhubungan dengan mesh yang benar-benar dirender,
+        jadi alatnya tergantung di ruang kosong dan tidak pernah terlihat
+        walau logika "tampil saat dipakai" sudah benar sepenuhnya.
+        """
+        return self._sendi.get('R_HAND')
 
     def _pasang_ujung(self):
         """Tutup ujung lengan dan kaki yang menganga dengan bentuk membulat.
@@ -593,6 +605,7 @@ class NativeAvatar:
                 bentuk.setColorScale(warna[0] / 255.0, warna[1] / 255.0,
                                      warna[2] / 255.0, 1.0)
                 self._ujung.append(sendi)
+                self._sendi[nama] = sendi
             except Exception:
                 continue
 

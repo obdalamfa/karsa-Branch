@@ -495,12 +495,49 @@ class Player3D(Entity):
             try:
                 from .tool_models import build_tool, kind_for_tool_index
                 kind = kind_for_tool_index(idx)
-                induk = getattr(self, '_pivot_shoulder_r', None) or self
+                # Avatar TSO: gantungkan di joint tangan yang sudah di-expose,
+                # bukan di pivot humanoid prosedural. Pivot itu ada, tapi pada
+                # avatar TSO ia tidak menggerakkan satu vertex pun — alatnya
+                # akan tergantung di ruang kosong dan tidak pernah terlihat,
+                # walau logika "tampil saat dipakai" sudah benar sepenuhnya.
+                induk = None
+                va = getattr(self, '_va', None)
+                if va is not None and hasattr(va, 'node_tangan'):
+                    try:
+                        induk = va.node_tangan()
+                    except Exception:
+                        induk = None
+                di_tangan = induk is not None
+                if induk is None:
+                    induk = getattr(self, '_pivot_shoulder_r', None) or self
                 alat = build_tool(kind, parent=induk)
                 if alat is not None:
-                    # Digenggam sedikit di bawah dan di depan bahu kanan.
-                    alat.position = Vec3(0.06, -0.34, 0.14)
-                    alat.rotation = Vec3(-12, 0, 6)
+                    if di_tangan:
+                        # Digantung di joint TANGAN: titiknya sudah tepat di
+                        # telapak, jadi offset bahu yang lama (-0,34 pada Y)
+                        # justru menjatuhkan alat ke pinggang. Yang tersisa
+                        # cuma menggeser sedikit ke depan telapak dan memiringkan
+                        # gagangnya supaya tidak menembus lengan.
+                        # TIGA tebakan offset dicoba di joint tangan TSO dan
+                        # hanya SATU yang menghasilkan alat yang benar-benar
+                        # terlihat: nilai warisan bahu di bawah. Titik joint
+                        # apa adanya (0,0,0) dan rotasi -72 dua-duanya membuat
+                        # alat hilang dari pandangan — sumbu lokal joint TSO
+                        # bukan sumbu pivot prosedural, dan menebaknya tiga
+                        # kali sudah cukup.
+                        #
+                        # Yang dipakai karena TERUKUR terlihat, bukan karena
+                        # benar secara anatomi: alat masih menggantung terlalu
+                        # rendah, di pinggang alih-alih di telapak. Itu celah
+                        # yang MASIH TERBUKA, dan menutupnya butuh membaca
+                        # orientasi joint dari adult.skel, bukan tebakan
+                        # keempat.
+                        alat.position = Vec3(0.06, -0.34, 0.14)
+                        alat.rotation = Vec3(-12, 0, 6)
+                    else:
+                        # Digenggam sedikit di bawah dan di depan bahu kanan.
+                        alat.position = Vec3(0.06, -0.34, 0.14)
+                        alat.rotation = Vec3(-12, 0, 6)
                     alat.enabled = bool(getattr(self, '_alat_tampil', False))
                 self._held_tool = alat
             except Exception as e:

@@ -141,6 +141,18 @@ class FarmAnimal(BaseActor):
     SIKAT_CONDONG = 7.5      # derajat maksimum
     SIKAT_LURUH   = 2.4      # per detik
 
+    def tahan_diam(self, detik: float) -> None:
+        """Hewan berhenti berkeliaran selama `detik` — dipakai aksi perawatan.
+
+        Menyikat kebetulan sudah menahan hewannya lewat pemicu tiap sapuan.
+        Memanen tidak menahan apa pun, dan akibatnya terukur: domba MENYENTUH
+        gunting di awal (0,00 m) lalu berjalan pergi di tengah pencukuran
+        sampai median jaraknya 2,06 m. Tidak ada peternak yang bisa mencukur
+        domba yang berjalan pergi.
+        """
+        self._tahan_t = max(getattr(self, '_tahan_t', 0.0) or 0.0, float(detik))
+        self.target_x, self.target_y = self.logical_x, self.logical_y
+
     def disikat(self, px: float, pz: float) -> None:
         """Satu sapuan mendarat dari arah (px,pz) dalam koordinat dunia."""
         from .config import TILE_SIZE as _TS
@@ -205,6 +217,15 @@ class FarmAnimal(BaseActor):
         # dipanggil ke palung harus sampai ke palung.
         if self._tick_minum(dt, can_walk_fn):
             self._gerak_lerp(dt)
+            return
+
+        # Ditahan aksi perawatan: tidak berkeliaran, tapi tetap bernapas dan
+        # tetap bisa bereaksi terhadap sentuhan.
+        tahan = getattr(self, '_tahan_t', 0.0) or 0.0
+        if tahan > 0.0:
+            self._tahan_t = max(0.0, tahan - dt)
+            self.target_x, self.target_y = self.logical_x, self.logical_y
+            self._tick_sikat(dt)
             return
 
         self._tick_sikat(dt)

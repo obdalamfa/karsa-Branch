@@ -655,41 +655,52 @@ def _resep_perah() -> list:
 
 
 def _resep_telur() -> list:
-    # Satu tangan masuk ke sarang dan DITAHAN 900 ms. Tahanan itu isinya
+    # Satu tangan masuk ke sarang dan DITAHAN 1100 ms. Tahanan itu isinya
     # meraba — bagian yang membuat mengambil telur terasa seperti mencari,
     # bukan seperti memungut.
+    #
+    # Sudutnya diukur, bukan ditebak. Versi pertama menahan bahu di -84 derajat
+    # karena angka besar terbaca seperti "menjulur jauh". Yang sebenarnya
+    # terjadi: lengan menggantung dari bahu, jadi -84 mengangkatnya ke
+    # MENDATAR setinggi bahu. Sepanjang 900 ms meraba itu tangannya melayang
+    # 0,38-0,46 m DI ATAS ayamnya, dan baru menyentuh sarang selama 330 ms
+    # saat ditarik keluar. Jarak ke kotak badan ayam nol di rentang -52..-20
+    # derajat; seluruh rabaan sekarang ada di dalam rentang itu.
     kanan = [
-        (0,     0.0, 'halus'), (170,  14.0, 'keluar'), (520, -78.0, 'masuk'),
-        (760, -84.0, 'halus'),                          # tangan masuk sarang
-        (960, -80.0, 'halus'), (1180, -85.0, 'halus'),  # meraba, gerak kecil
-        (1420, -79.0, 'halus'),
-        (1720, -34.0, 'keluar'),                        # ditarik keluar pelan
-        (1980,   9.0, 'halus'), (2280,  0.0, 'redam'),
+        (0,     0.0, 'halus'), (170,  14.0, 'keluar'), (520, -46.0, 'masuk'),
+        (760, -38.0, 'halus'),                          # tangan masuk sarang
+        (960, -43.0, 'halus'), (1180, -33.0, 'halus'),  # meraba, gerak kecil
+        (1420, -41.0, 'halus'),
+        (1620, -30.0, 'halus'),                         # telurnya ketemu
+        (1860,  -8.0, 'keluar'),                        # ditarik keluar pelan
+        (2040,   9.0, 'halus'), (2280,  0.0, 'redam'),
     ]
-    turun = _turun_badan(-0.30, 520, 1420, 1980, 2280)
+    # Badan tetap rendah sampai tangannya benar-benar keluar: kalau ia mulai
+    # bangkit di tengah rabaan, tangannya ikut terangkat lepas dari sarang.
+    turun = _turun_badan(-0.30, 520, 1620, 1980, 2280)
     return [
         Jalur('bahu_r', 'rotation_x', kanan),
         Jalur('siku_r', 'rotation_x', [(t, v * 0.55, k) for t, v, k in kanan], jeda_ms=65),
         # Tangan kiri menahan tepi sarang — diam, bukan ikut meraba.
         Jalur('bahu_l', 'rotation_x', [
             (0, 0.0, 'halus'), (170, 7.0, 'keluar'), (520, -40.0, 'masuk'),
-            (1720, -37.0, 'halus'), (1980, 6.0, 'halus'), (2280, 0.0, 'redam'),
+            (1860, -37.0, 'halus'), (1980, 6.0, 'halus'), (2280, 0.0, 'redam'),
         ], jeda_ms=120),
         Jalur('lutut_r', 'rotation_x', [
             (0, 0.0, 'halus'), (170, -3.0, 'keluar'), (520, 40.0, 'masuk'),
-            (1420, 38.0, 'halus'), (1980, -4.0, 'halus'), (2280, 0.0, 'redam'),
+            (1620, 38.0, 'halus'), (1980, -4.0, 'halus'), (2280, 0.0, 'redam'),
         ], jeda_ms=45),
         Jalur('lutut_l', 'rotation_x', [
             (0, 0.0, 'halus'), (170, -3.0, 'keluar'), (520, 40.0, 'masuk'),
-            (1420, 38.0, 'halus'), (1980, -4.0, 'halus'), (2280, 0.0, 'redam'),
+            (1620, 38.0, 'halus'), (1980, -4.0, 'halus'), (2280, 0.0, 'redam'),
         ], jeda_ms=90),
         Jalur('badan', 'rotation_x', [
             (0, 0.0, 'halus'), (170, -5.0, 'keluar'), (520, 34.0, 'masuk'),
-            (1420, 31.0, 'halus'), (1980, -5.0, 'halus'), (2280, 0.0, 'redam'),
+            (1620, 31.0, 'halus'), (1980, -5.0, 'halus'), (2280, 0.0, 'redam'),
         ], jeda_ms=105),
         Jalur('leher', 'rotation_x', [
             (0, 0.0, 'halus'), (170, -6.0, 'keluar'), (520, 38.0, 'masuk'),
-            (1420, 35.0, 'halus'), (1980, -6.0, 'halus'), (2280, 0.0, 'redam'),
+            (1620, 35.0, 'halus'), (1980, -6.0, 'halus'), (2280, 0.0, 'redam'),
         ], jeda_ms=150),
         Jalur('badan', 'y', turun, dasar='awal'),
         Jalur('bahu_r', 'y', turun, jeda_ms=25, dasar='awal'),

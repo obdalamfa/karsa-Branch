@@ -166,9 +166,9 @@ kotak badan hewan tiap frame:
 |---|---|---|
 | gosok sapi | 0,04 m · 60/90 | 0,00 m · 64/90 |
 | gosok kambing | 0,35 m · **0**/90 | 0,00 m · 60/90 |
-| gosok ayam | 0,73 m · **0**/90 | 0,00 m · 42/90 |
+| gosok ayam | 0,73 m · **0**/90 | 0,00 m · 45/90 |
 | cukur domba | 0,14 m · 26/91 | 0,00 m · 56/91 |
-| telur ayam | 0,68 m · **0**/68 | 0,08 m · 12/68 |
+| telur ayam | 0,68 m · **0**/68 | 0,00 m · 40/68 |
 
 Empat dari enam aksi tidak pernah menyentuh hewannya. Semuanya lulus seluruh
 ambang animasi.
@@ -195,6 +195,51 @@ Perbaikannya dua lapis:
 **Pelajarannya**: kritikus harus mengukur hal LAIN dari yang diukur
 pembangunnya. Ambang animasi dan kebenaran ruang adalah dua pertanyaan
 terpisah, dan yang kedua tidak akan pernah ketahuan dari yang pertama.
+
+### 6a. Tiga sebab lagi, ditemukan setelah yang pertama ditutup
+
+Menutup sebab pertama tidak menutup pertanyaannya. Probe yang sama, dijalankan
+ulang dengan RNG berbenih dan hewan dikembalikan ke posisi jadwalnya supaya
+angkanya bisa dibandingkan antar-jalan, menemukan tiga sebab berikutnya —
+masing-masing lolos dari seluruh tabel ambang animasi.
+
+**Hewannya berjalan pergi.** Menyikat kebetulan menahan hewannya, lewat pemicu
+yang dipasang tiap sapuan. Memanen tidak menahan apa pun. Terukur: gunting
+MENYENTUH domba di frame awal (0,00 m) lalu jaraknya naik ke median 2,06 m —
+dombanya berjalan pergi di tengah pencukuran, dan sisa animasinya mencukur
+udara. `FarmAnimal.tahan_diam(detik)` menahannya; hewan yang ditahan tetap
+bernapas dan tetap bereaksi terhadap sentuhan, jadi ini bukan patung baru.
+Median 2,06 → 0,04 m, frame menyentuh 15/91 → 56/91.
+
+**Jangkauan dipilih per pemanggil, dan satu di antaranya salah.** Sikat
+menambah panjang tangan; telapak telanjang tidak. Angkanya ditulis tangan di
+tiap pemanggil, jadi mengambil telur — bertangan kosong — memakai jangkauan
+bertangkai dan berhenti 14 cm terlalu jauh. Sekarang `_jangkau()` membacanya
+dari `alat` di RESEP, dan nilai bawaan `_geometri_hewan()` dihapus supaya
+tidak ada pemanggil yang bisa diam-diam dapat angka yang salah lagi.
+
+**Yang diselaraskan dengan hewan adalah pusar pemain, bukan tangannya.** Semua
+alat menggantung di lengan kanan, jadi ujung kerjanya selalu ~0,30 m ke
+samping. Pada sapi sepanjang 2 m selisih itu ditelan badan; pada ayam
+setengah-panjang 0,22 m ia adalah SELURUH celahnya — terukur, tangan berhenti
+tepat 0,30 − 0,22 = 0,08 m dari kotak badan sepanjang aksi. `_langkah_masuk()`
+sekarang menggeser titik berdiri sebanyak pergeseran bahu kanan, dibaca dari
+rig, bukan ditulis sebagai angka tetap.
+
+**Dan sudut yang besar tidak berarti jangkauan yang jauh.** Resep telur menahan
+bahu di −84° karena angka besar terbaca seperti "menjulur jauh". Yang
+sebenarnya terjadi: lengan menggantung dari bahu, jadi −84° mengangkatnya ke
+MENDATAR setinggi bahu. Sepanjang 900 ms merabanya tangan itu melayang
+0,38–0,46 m **di atas** ayamnya, dan baru menyentuh sarang 330 ms saat ditarik
+keluar — pemainnya diberi telur di detik 1,76 sementara tangannya masih di
+udara. Jarak ke kotak badan nol di rentang −52°..−20°; seluruh rabaan
+dipindahkan ke dalam rentang itu dan badan ditahan rendah sampai tangannya
+benar-benar keluar. Kontak beruntun 0 → 1,13 detik; median 0,42 → 0,02 m.
+
+Pelajaran yang sama, dalam bentuk yang lebih tajam: **angka sudut adalah niat,
+bukan hasil.** Satu-satunya cara tahu ke mana tangan benar-benar pergi adalah
+menempelkan penanda di ujungnya dan mengukurnya.
+
 
 ---
 

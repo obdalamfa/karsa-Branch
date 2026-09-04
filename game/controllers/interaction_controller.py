@@ -822,7 +822,7 @@ class InteractionController:
     # Kapan hasilnya berpindah ke tangan, per resep. Angkanya jatuh di fase
     # ANGKAT, bukan di awal: barang yang masuk tas sebelum tangannya bergerak
     # membuat animasinya jadi hiasan yang bisa diabaikan.
-    SAAT_HASIL = {'perah': 1900.0, 'telur': 1760.0, 'cukur': 2180.0}
+    SAAT_HASIL = {'perah': 1900.0, 'telur': 1620.0, 'cukur': 2180.0}
 
     def _panen(self, npc_id, npc, prod, entities_mgr, panels):
         from ..economy import (animal_record, item_name, sell_price,
@@ -843,10 +843,17 @@ class InteractionController:
             self.player.rotation_y = _m.degrees(
                 _m.atan2(hx - self.player.x / TS, hy - self.player.z / TS))
             self.player.target_rotation_y = self.player.rotation_y
-            geo = self._geometri_hewan(npc_id, npc)
+            geo = self._geometri_hewan(npc_id, npc, self._jangkau(jenis))
             if geo is not None:
                 cx, cz, jarak, turun = geo
                 dari, maju_ke = self._langkah_masuk(cx, cz, jarak)
+
+        # Tahan hewannya selama aksi. Tanpa ini domba berjalan pergi di tengah
+        # pencukuran — terukur, jaraknya ke gunting naik dari 0,00 m ke median
+        # 2,06 m dalam satu aksi yang sama.
+        aktor = entities_mgr.actors.get(npc_id)
+        if aktor is not None and hasattr(aktor, 'tahan_diam'):
+            aktor.tahan_diam(3.2)
 
         def _frame(aksi, dt):
             self._maju(self.player, dari, maju_ke, aksi.t, 520.0)
@@ -879,9 +886,28 @@ class InteractionController:
     # ditulis untuk tangan yang bekerja di ketinggian itu. Hewan yang lebih
     # pendek butuh pemainnya menunduk selisihnya.
     TINGGI_PATOKAN = 1.37
-    JANGKAU_TANGAN = 0.62      # dari sisi badan hewan ke telapak saat menjulur
+    # Jangkauan dari sisi badan hewan ke ujung yang bekerja. Sikat menambah
+    # panjang; telapak telanjang tidak. Memakai satu angka untuk keduanya
+    # membuat aksi bertangan kosong berhenti sependek selisih itu — terukur,
+    # telapak saat membelai ayam berhenti 0,11 m dari badannya, persis
+    # selisih 0,62 dan 0,48.
+    JANGKAU_TANGAN = 0.62      # tangan memegang alat (sikat, ember, gunting)
+    JANGKAU_TELAPAK = 0.48     # tangan telanjang
 
-    def _geometri_hewan(self, npc_id: str, npc: dict):
+    def _jangkau(self, jenis: str) -> float:
+        """Jangkauan yang benar untuk resep `jenis`, dibaca dari resepnya.
+
+        Dulu tiap pemanggil memilih angkanya sendiri, dan satu di antaranya
+        salah: mengambil telur dikerjakan bertangan kosong tapi memakai
+        jangkauan bertangkai, jadi pemainnya berhenti 14 cm terlalu jauh.
+        Membaca `alat` dari RESEP berarti resep baru ikut benar tanpa ada
+        yang perlu ingat memperbaruinya di sini.
+        """
+        from .. import care_anim
+        resep = care_anim.RESEP.get(jenis) or {}
+        return self.JANGKAU_TANGAN if resep.get('alat') else self.JANGKAU_TELAPAK
+
+    def _geometri_hewan(self, npc_id: str, npc: dict, jangkau: float):
         """(x_dunia, z_dunia, jarak_berdiri, kedalaman_jongkok) untuk hewan ini.
 
         Jarak berdiri dihitung dari jari-jari badan KE ARAH pemain — badan
@@ -908,7 +934,7 @@ class InteractionController:
         # karakter 1,76 m memang jongkok penuh; itu memang yang dilakukan
         # orang saat mengurus ayam.
         turun = max(0.0, min(0.70, (self.TINGGI_PATOKAN - tinggi) * 0.72))
-        return cx, cz, r + self.JANGKAU_TANGAN, turun
+        return cx, cz, r + jangkau, turun
 
     def _langkah_masuk(self, cx: float, cz: float, jarak: float):
         """Hitung langkah pendek dari posisi sekarang ke `jarak` unit dari (cx,cz).
@@ -925,7 +951,32 @@ class InteractionController:
         dari = (self.player.x, self.player.z)
         if d < 1e-3:
             return dari, None
-        return dari, (cx + dx / d * jarak, cz + dz / d * jarak)
+        # Yang harus lurus dengan hewan adalah TANGAN YANG BEKERJA, bukan
+        # pusar pemain. Semua alat perawatan menggantung di lengan kanan, jadi
+        # ujung kerjanya selalu sekitar 0,30 m ke samping. Pada sapi selisih
+        # itu ditelan badan yang panjangnya 2 m; pada ayam selebar 0,44 m ia
+        # adalah SELURUH celahnya — terukur, tangan berhenti 0,08 m dari kotak
+        # badan ayam sepanjang aksi, persis 0,30 dikurangi setengah-panjang
+        # ayam 0,22. Berdirinya digeser sebanyak itu ke kiri.
+        gx, gz = self._geser_tangan()
+        return dari, (cx + dx / d * jarak - gx, cz + dz / d * jarak - gz)
+
+    def _geser_tangan(self) -> tuple:
+        """Pergeseran (dx,dz) dunia dari pusat pemain ke bahu kanannya.
+
+        Dibaca dari rig, bukan ditulis sebagai angka tetap: kalau bahunya
+        digeser suatu saat, penyelarasan ini ikut benar tanpa ada yang perlu
+        ingat memperbaruinya. Pemain sudah diputar menghadap hewan sebelum ini
+        dipanggil, jadi arahnya sudah benar tanpa perlu dihitung ulang.
+        """
+        bahu = getattr(self.player, '_pivot_shoulder_r', None)
+        if bahu is None:
+            return 0.0, 0.0
+        try:
+            w = bahu.world_position
+        except Exception:
+            return 0.0, 0.0
+        return float(w[0]) - float(self.player.x), float(w[2]) - float(self.player.z)
 
     @staticmethod
     def _maju(player, dari, tujuan, t_detik: float, panjang_ms: float) -> None:
@@ -963,12 +1014,14 @@ class InteractionController:
             self.player.rotation_y = _m.degrees(
                 _m.atan2(hx - self.player.x / TS, hy - self.player.z / TS))
             self.player.target_rotation_y = self.player.rotation_y
-            geo = self._geometri_hewan(npc_id, npc)
+            geo = self._geometri_hewan(npc_id, npc, self._jangkau('belai'))
             if geo is not None:
                 cx, cz, jarak, turun = geo
                 dari, maju_ke = self._langkah_masuk(cx, cz, jarak)
 
         actor = entities_mgr.actors.get(npc_id)
+        if actor is not None and hasattr(actor, 'tahan_diam'):
+            actor.tahan_diam(2.0)
 
         def _frame(aksi, dt):
             self._maju(self.player, dari, maju_ke, aksi.t, 300.0)
@@ -1031,11 +1084,13 @@ class InteractionController:
             self.player.target_rotation_y = self.player.rotation_y
 
         actor = entities_mgr.actors.get(npc_id)
+        if actor is not None and hasattr(actor, 'tahan_diam'):
+            actor.tahan_diam(3.4)
 
         # Melangkah ke sisi badan hewan supaya sikatnya benar-benar menyentuh,
         # dan menunduk sedalam selisih tinggi punggungnya terhadap sapi.
         dari, maju_ke, turun = (self.player.x, self.player.z), None, 0.0
-        geo = self._geometri_hewan(npc_id, npc)
+        geo = self._geometri_hewan(npc_id, npc, self._jangkau('gosok'))
         if geo is not None:
             cx, cz, jarak, turun = geo
             dari, maju_ke = self._langkah_masuk(cx, cz, jarak)

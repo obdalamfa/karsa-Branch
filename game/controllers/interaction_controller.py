@@ -837,7 +837,7 @@ class InteractionController:
 
         pos = s.npc_positions.get(npc_id) or {}
         hx, hy = pos.get('x'), pos.get('y')
-        dari, maju_ke, turun = (self.player.x, self.player.z), None, 0.0
+        dari, maju_ke, turun, skala = (self.player.x, self.player.z), None, 0.0, 1.0
         if hx is not None:
             import math as _m
             self.player.rotation_y = _m.degrees(
@@ -845,7 +845,7 @@ class InteractionController:
             self.player.target_rotation_y = self.player.rotation_y
             geo = self._geometri_hewan(npc_id, npc, self._jangkau(jenis))
             if geo is not None:
-                cx, cz, jarak, turun = geo
+                cx, cz, jarak, turun, skala = geo
                 dari, maju_ke = self._langkah_masuk(cx, cz, jarak)
 
         # Tahan hewannya selama aksi. Tanpa ini domba berjalan pergi di tengah
@@ -872,7 +872,7 @@ class InteractionController:
         aksi = care_anim.mulai(
             self.player, jenis,
             pemicu=[(self.SAAT_HASIL.get(jenis, 1800.0), _ambil)],
-            saat_frame=_frame, turun=turun,
+            saat_frame=_frame, turun=turun, skala=skala,
         )
         if aksi is None:
             # Resep hilang: jangan menelan hasilnya. Lebih baik tanpa animasi
@@ -934,7 +934,16 @@ class InteractionController:
         # karakter 1,76 m memang jongkok penuh; itu memang yang dilakukan
         # orang saat mengurus ayam.
         turun = max(0.0, min(0.70, (self.TINGGI_PATOKAN - tinggi) * 0.72))
-        return cx, cz, r + jangkau, turun
+        # Jongkok mentok di 0,70 m, jadi hewan yang jauh lebih pendek dari sapi
+        # tidak bisa diselesaikan dengan menunduk saja: ayunannya juga harus
+        # mengecil. Batas bawah 0,50 supaya rentang sendi tetap lewat ambang
+        # 25 derajat — menggosok 73 derajat jadi 40, membelai 53 jadi 29.
+        skala = max(0.50, min(1.0, tinggi / self.TINGGI_PATOKAN))
+        # Jangkauan ikut mengecil bersama ayunannya. Lengan yang berayun lebih
+        # pendek juga MENJULUR lebih pendek: terukur, memperkecil ayunan saja
+        # menurunkan sikat ke ketinggian punggung ayam tapi menariknya 0,07-0,27 m
+        # ke belakang, jadi ia lewat di atas ayam alih-alih menyentuhnya.
+        return cx, cz, r + jangkau * skala, turun, skala
 
     def _langkah_masuk(self, cx: float, cz: float, jarak: float):
         """Hitung langkah pendek dari posisi sekarang ke `jarak` unit dari (cx,cz).
@@ -1008,7 +1017,7 @@ class InteractionController:
 
         pos = s.npc_positions.get(npc_id) or {}
         hx, hy = pos.get('x'), pos.get('y')
-        dari, maju_ke, turun = (self.player.x, self.player.z), None, 0.0
+        dari, maju_ke, turun, skala = (self.player.x, self.player.z), None, 0.0, 1.0
         if hx is not None:
             import math as _m
             self.player.rotation_y = _m.degrees(
@@ -1016,7 +1025,7 @@ class InteractionController:
             self.player.target_rotation_y = self.player.rotation_y
             geo = self._geometri_hewan(npc_id, npc, self._jangkau('belai'))
             if geo is not None:
-                cx, cz, jarak, turun = geo
+                cx, cz, jarak, turun, skala = geo
                 dari, maju_ke = self._langkah_masuk(cx, cz, jarak)
 
         actor = entities_mgr.actors.get(npc_id)
@@ -1039,7 +1048,7 @@ class InteractionController:
         care_anim.mulai(
             self.player, 'belai',
             pemicu=[(430, _usap), (860, _usap)],
-            saat_frame=_frame, saat_usai=_usai, turun=turun,
+            saat_frame=_frame, saat_usai=_usai, turun=turun, skala=skala,
         )
         panels.flash_msg(f"Kamu membelai {npc.get('name', npc_id)}.", 1.0)
 
@@ -1089,10 +1098,10 @@ class InteractionController:
 
         # Melangkah ke sisi badan hewan supaya sikatnya benar-benar menyentuh,
         # dan menunduk sedalam selisih tinggi punggungnya terhadap sapi.
-        dari, maju_ke, turun = (self.player.x, self.player.z), None, 0.0
+        dari, maju_ke, turun, skala = (self.player.x, self.player.z), None, 0.0, 1.0
         geo = self._geometri_hewan(npc_id, npc, self._jangkau('gosok'))
         if geo is not None:
-            cx, cz, jarak, turun = geo
+            cx, cz, jarak, turun, skala = geo
             dari, maju_ke = self._langkah_masuk(cx, cz, jarak)
 
         def _frame(aksi, dt):
@@ -1122,7 +1131,7 @@ class InteractionController:
             pemicu=[(560, _sapuan), (870, _sapuan), (1190, _sapuan),
                     (1500, _sapuan), (1830, _sapuan), (2160, _sapuan),
                     (2320, _terapkan)],
-            saat_frame=_frame, saat_usai=_usai, turun=turun,
+            saat_frame=_frame, saat_usai=_usai, turun=turun, skala=skala,
         )
         nama = npc.get('name', npc_id)
         panels.flash_msg(f"Menyikat {nama}. Bersih {sebelum}% -> 100%, +1 hati.", 1.8)

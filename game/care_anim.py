@@ -952,6 +952,50 @@ RESEP = {
 
 
 
+# ─── LAPISAN UKURAN ──────────────────────────────────────────────────────────
+def _lapisan_skala(jalur: list, skala: float) -> list:
+    """Perkecil ayunan mengikuti besar hewan, dengan ujung-ujungnya utuh.
+
+    Jongkok saja tidak cukup. Sapuan menyikat ditulis untuk lambung sapi:
+    tegak, tinggi 0,37 m. Permukaan itu memang tegak, jadi sapuan tegak benar.
+    Punggung ayam tingginya 0,44 m dan mendatar — sapuan yang sama menyapu
+    setengah bagian atasnya di UDARA. Terukur pada ayam: ujung sikat berayun
+    antara 0,49 m (menyentuh) dan 0,86 m (0,28 m di atas ayamnya), dua kali
+    tiap sapuan.
+
+    Jongkok tidak bisa menutupnya karena sudah mentok — 0,70 m pada karakter
+    1,76 m sudah jongkok penuh, lebih dari itu badannya masuk tanah.
+
+    Jadi yang diperkecil ayunannya, bukan pusatnya: tiap kunci ditarik ke
+    arah garis diam (lurus dari kunci pertama ke kunci terakhir) sebanyak
+    `1 - skala`. Ujung-ujungnya tidak bergerak, jadi aksinya tetap mulai dan
+    berakhir di pose diam yang sama; yang mengecil cuma ayunan di tengahnya.
+    Sudut bahu yang lebih kecil berarti lengan lebih menggantung, dan lengan
+    yang lebih menggantung berarti tangan lebih RENDAH — arah yang memang
+    dibutuhkan hewan pendek.
+
+    Kanal `.y` dilewati: itu satuan meter dan bentuk waktunya dipinjam
+    lapisan jongkok.
+    """
+    if skala >= 0.995:
+        return jalur
+    keluar = []
+    for j in jalur:
+        if j.sifat == 'y':
+            keluar.append(j)
+            continue
+        t0, v0 = j.kunci[0][0], j.kunci[0][1]
+        t1, v1 = j.kunci[-1][0], j.kunci[-1][1]
+        rentang_t = max(1e-6, t1 - t0)
+        baru = []
+        for t, v, k in j.kunci:
+            diam = v0 + (v1 - v0) * ((t - t0) / rentang_t)
+            baru.append((t, diam + (v - diam) * skala, k))
+        keluar.append(Jalur(j.sendi, j.sifat, baru,
+                            jeda_ms=j.jeda_ms, dasar=j.dasar))
+    return keluar
+
+
 # ─── LAPISAN JONGKOK ─────────────────────────────────────────────────────────
 def _lapisan_turun(jalur: list, turun: float) -> list:
     """Tambahkan `turun` meter kedalaman jongkok di atas resep apa pun.
@@ -993,7 +1037,8 @@ def _lapisan_turun(jalur: list, turun: float) -> list:
 
 # ─── PABRIK ──────────────────────────────────────────────────────────────────
 def mulai(player, jenis: str, titik_tuang=None, pemicu=None,
-          saat_frame=None, saat_usai=None, turun: float = 0.0) -> AksiRawat | None:
+          saat_frame=None, saat_usai=None, turun: float = 0.0,
+          skala: float = 1.0) -> AksiRawat | None:
     """Pasang aksi perawatan `jenis` ke `player`. Return aksinya, atau None.
 
     Aksi yang sedang berjalan DIBATALKAN dulu, bukan ditumpuk: dua pose yang
@@ -1008,8 +1053,11 @@ def mulai(player, jenis: str, titik_tuang=None, pemicu=None,
         lama.usai(player)
     _lepas_properti(player)
 
-    aksi = AksiRawat(jenis, resep['fase'],
-                     _lapisan_turun(resep['jalur'](), turun),
+    # Urutannya penting: ayunan diperkecil DULU, jongkok ditambahkan sesudahnya.
+    # Terbalik, jongkoknya ikut diperkecil dan hewan pendek malah kurang
+    # ditunduki — persis kebalikan dari yang dibutuhkan.
+    jalur = _lapisan_turun(_lapisan_skala(resep['jalur'](), skala), turun)
+    aksi = AksiRawat(jenis, resep['fase'], jalur,
                      pemicu=pemicu, saat_frame=saat_frame, saat_usai=saat_usai)
 
     # Alat HUD disembunyikan untuk SETIAP aksi perawatan, bukan hanya yang

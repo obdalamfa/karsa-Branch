@@ -165,10 +165,10 @@ kotak badan hewan tiap frame:
 | | sebelum (min · frame menyentuh) | sesudah |
 |---|---|---|
 | gosok sapi | 0,04 m · 60/90 | 0,00 m · 64/90 |
-| gosok kambing | 0,35 m · **0**/90 | 0,00 m · 60/90 |
-| gosok ayam | 0,73 m · **0**/90 | 0,00 m · 45/90 |
-| cukur domba | 0,14 m · 26/91 | 0,00 m · 56/91 |
-| telur ayam | 0,68 m · **0**/68 | 0,00 m · 40/68 |
+| gosok kambing | 0,35 m · **0**/90 | 0,00 m · 81/90 |
+| gosok ayam | 0,73 m · **0**/90 | 0,00 m · 61/90 |
+| cukur domba | 0,14 m · 26/91 | 0,00 m · 76/91 |
+| telur ayam | 0,68 m · **0**/68 | 0,00 m · 47/68 |
 
 Empat dari enam aksi tidak pernah menyentuh hewannya. Semuanya lulus seluruh
 ambang animasi.
@@ -239,6 +239,56 @@ benar-benar keluar. Kontak beruntun 0 → 1,13 detik; median 0,42 → 0,02 m.
 Pelajaran yang sama, dalam bentuk yang lebih tajam: **angka sudut adalah niat,
 bukan hasil.** Satu-satunya cara tahu ke mana tangan benar-benar pergi adalah
 menempelkan penanda di ujungnya dan mengukurnya.
+
+### 6b. Sebab kelima: sapuan seukuran sapi pada hewan seukuran ayam
+
+Sesudah empat sebab di atas ditutup, tiap aksi sudah MENYENTUH hewannya —
+tapi pada hewan pendek ia menyentuh lalu lepas, dua kali tiap sapuan.
+
+Sapuan menyikat ditulis untuk lambung sapi: permukaan tegak setinggi 0,37 m,
+jadi sapuan tegak sepanjang itu benar. Punggung ayam tingginya 0,44 m dan
+MENDATAR. Terukur, ujung sikat berayun antara 0,49 m (menyentuh) dan 0,86 m
+(0,28 m di atas ayamnya) — separuh tiap sapuan menyapu udara.
+
+Menunduk lebih dalam tidak bisa menutupnya: 0,70 m pada karakter 1,76 m sudah
+jongkok penuh, dan lebih dari itu badannya masuk tanah.
+
+`_lapisan_skala()` menarik tiap kunci ke arah garis diamnya sebanyak
+`1 - skala`, dengan skala = tinggi punggung / tinggi sapi (dibatasi 0,50).
+Ujung-ujungnya tidak ikut ditarik, jadi aksinya tetap mulai dan berakhir di
+pose diam yang sama. Sudut bahu yang lebih kecil berarti lengan lebih
+menggantung, dan lengan yang menggantung berarti tangan lebih RENDAH — arah
+yang memang dibutuhkan hewan pendek.
+
+Satu jebakan yang cuma ketahuan karena diukur ulang: memperkecil ayunan saja
+membuatnya LEBIH BURUK di sumbu lain. Lengan yang berayun lebih pendek juga
+menjulur lebih pendek, jadi sikatnya turun ke ketinggian yang benar tapi
+tertarik 0,07-0,27 m ke belakang dan lewat DI ATAS ayam alih-alih
+menyentuhnya. Jangkauan berdiri harus ikut diskalakan: `r + jangkau * skala`.
+
+Hasilnya, dan perhatikan bahwa baris sapi tidak bergerak sama sekali (skala
+1,00 — resep aslinya memang ditulis untuk sapi):
+
+| | sebelum skala | sesudah |
+|---|---|---|
+| belai kambing | 0,13 m · 25/46 | 0,00 m · 37/46 |
+| belai ayam | 0,22 m · 24/46 | 0,00 m · 26/46 |
+| gosok kambing | 0,04 m · 60/90 | 0,00 m · 81/90 |
+| gosok ayam | 0,25 m · 45/90 | 0,00 m · 61/90 |
+| cukur domba | 0,04 m · 56/91 | 0,00 m · 76/91 |
+| telur ayam | 0,02 m · 40/68 | 0,00 m · 47/68 |
+| gosok/belai sapi | 0,05 / 0,03 m | **sama persis** |
+
+Ambangnya tetap lulus sesudah dikecilkan — diukur pada rekaman menyikat ayam,
+sendi penggerak sikat `bahu_r.rotation_x`: rentang 36,5° (ambang 25),
+durasi 2700 ms (900), antisipasi 6,5°/267 ms (2°/60), tahanan 533 ms (80),
+ikutan 4,5° (1,5), ease 5,31 (1,35), 9 sapuan (4).
+
+Catatan alat: sesudah lapisan jongkok dipakai, `anim_trace` menyebut
+`lutut_r` sebagai penggerak karena rentangnya 107,8° — lutut jongkok
+mengalahkan sendi yang benar-benar mengerjakan aksinya. Pembacaan ambang
+harus dilakukan pada sendi kerjanya, bukan pada yang dipilih otomatis.
+
 
 
 ---

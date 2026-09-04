@@ -745,9 +745,7 @@ class InteractionController:
             self.give_gift(entities_mgr, panels)
             s.senang = min(NEED_MAX, s.senang + 15)
         elif action == 'belai':
-            s.senang = min(NEED_MAX, s.senang + 8)
-            sound_play('menu_select', 0.6)
-            panels.flash_msg(f"Kamu membelai {npc.get('name', npc_id)}.", 1.0)
+            self._belai(npc_id, npc, entities_mgr, panels)
         elif action == 'ambil_hasil':
             from ..economy import (produce_for, animal_record, animal_status,
                                    item_name, sell_price, best_process_hint,
@@ -938,6 +936,59 @@ class InteractionController:
         e = 1.0 - (1.0 - u) ** 3
         player.x = dari[0] + (tujuan[0] - dari[0]) * e
         player.z = dari[1] + (tujuan[1] - dari[1]) * e
+
+
+    # ─── BELAI ──────────────────────────────────────────────────────────────
+    def _belai(self, npc_id, npc, entities_mgr, panels):
+        """Sapaan pendek dua usapan. Gratis, tidak membersihkan apa pun.
+
+        Aksi inilah yang dipakai sebagai titik nol sepanjang pekerjaan ini —
+        diukur, ia dulu menghasilkan "TIDAK ADA SENDI YANG BERGERAK". Sekarang
+        ia bergerak, tapi sengaja dengan bobot yang jauh lebih ringan daripada
+        Gosok: separuh rentang, separuh durasi, satu tangan, tanpa alat. Kalau
+        keduanya dianimasikan sama beratnya, salah satunya jadi mubazir.
+        """
+        from ..config import NEED_MAX
+        from .. import care_anim
+
+        s = self.player.state
+        s.senang = min(NEED_MAX, s.senang + 8)
+        sound_play('menu_select', 0.6)
+
+        pos = s.npc_positions.get(npc_id) or {}
+        hx, hy = pos.get('x'), pos.get('y')
+        dari, maju_ke, turun = (self.player.x, self.player.z), None, 0.0
+        if hx is not None:
+            import math as _m
+            self.player.rotation_y = _m.degrees(
+                _m.atan2(hx - self.player.x / TS, hy - self.player.z / TS))
+            self.player.target_rotation_y = self.player.rotation_y
+            geo = self._geometri_hewan(npc_id, npc)
+            if geo is not None:
+                cx, cz, jarak, turun = geo
+                dari, maju_ke = self._langkah_masuk(cx, cz, jarak)
+
+        actor = entities_mgr.actors.get(npc_id)
+
+        def _frame(aksi, dt):
+            self._maju(self.player, dari, maju_ke, aksi.t, 300.0)
+
+        def _usap(aksi):
+            # Hewan mencondong ke telapak, sama seperti saat disikat — tapi
+            # dipicu dua kali saja, bukan enam.
+            if actor is not None and hasattr(actor, 'disikat'):
+                actor.disikat(self.player.x, self.player.z)
+
+        def _usai(aksi):
+            if actor is not None and hasattr(actor, 'selesai_disikat'):
+                actor.selesai_disikat()
+
+        care_anim.mulai(
+            self.player, 'belai',
+            pemicu=[(430, _usap), (860, _usap)],
+            saat_frame=_frame, saat_usai=_usai, turun=turun,
+        )
+        panels.flash_msg(f"Kamu membelai {npc.get('name', npc_id)}.", 1.0)
 
     # ─── GOSOK ──────────────────────────────────────────────────────────────
     def _gosok(self, npc_id, npc, entities_mgr, panels):

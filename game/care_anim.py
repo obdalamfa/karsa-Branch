@@ -857,6 +857,74 @@ def _resep_dengar() -> list:
     ]
 
 
+
+# ── BELAI ────────────────────────────────────────────────────────────────────
+# Belai adalah aksi yang dipakai sebagai TITIK NOL sepanjang pekerjaan ini:
+# diukur, ia menghasilkan "TIDAK ADA SENDI YANG BERGERAK" — cuma sebuah pesan.
+# Membiarkannya begitu sementara tetangganya di menu yang sama sudah bergerak
+# adalah ketimpangan paling terlihat di pie menu ternak.
+#
+# Yang membedakannya dari Gosok, dan kenapa keduanya tetap ada:
+#
+#   Belai   1,56 detik, SATU tangan, tanpa alat, dua usapan pendek, gratis.
+#           Rentangnya sengaja separuh gosok (45 vs 73 derajat) — ini sapaan,
+#           bukan pekerjaan.
+#   Gosok   2,9 detik, sikat di tangan, enam sapuan, memakai energi, dan
+#           benar-benar membersihkan.
+#
+# Kalau keduanya dianimasikan dengan bobot yang sama, salah satunya jadi
+# mubazir. Beda panjang dan beda jumlah tangan itulah yang membuat pemain
+# tahu mana yang "cuma menyapa" tanpa membaca satu baris teks pun.
+_FASE_BELAI = [('raih', 300), ('usap', 700), ('tarik', 320), ('redam', 240)]
+
+
+def _resep_belai() -> list:
+    kanan = [
+        (0,     0.0, 'halus'),
+        (120,   9.0, 'keluar'),      # antisipasi: tangan sedikit mundur
+        (300, -41.0, 'masuk'),       # telapak mendarat di badan hewan
+        (520, -28.0, 'halus'),       # usapan 1
+        (720, -44.0, 'halus'),
+        (1000, -30.0, 'halus'),      # usapan 2, lebih ringan
+        (1320,   7.0, 'halus'),      # ikutan
+        (1560,   0.0, 'redam'),
+    ]
+    # Usapan menyamping, fase digeser: telapak menyusuri, bukan menepuk.
+    samping = [
+        (0,    0.0, 'halus'),
+        (120, -3.0, 'keluar'),
+        (300,  8.0, 'masuk'),
+        (620, 17.0, 'halus'),
+        (900,  5.0, 'halus'),
+        (1180, 14.0, 'halus'),
+        (1320, -2.0, 'halus'),
+        (1560,  0.0, 'redam'),
+    ]
+    return [
+        Jalur('bahu_r', 'rotation_x', kanan),
+        Jalur('bahu_r', 'rotation_z', samping),
+        Jalur('siku_r', 'rotation_x', [(t, v * 0.55, k) for t, v, k in kanan], jeda_ms=65),
+        # Tangan kiri TIDAK ikut. Satu tangan yang mengusap terbaca sebagai
+        # sapaan; dua tangan simetris terbaca sebagai memegangi hewan.
+        Jalur('badan', 'rotation_x', [(t, -v * 0.14, k) for t, v, k in kanan], jeda_ms=110),
+        Jalur('leher', 'rotation_x', [(t, -v * 0.22, k) for t, v, k in kanan], jeda_ms=140),
+        Jalur('leher', 'rotation_y', [(t, v * 0.30, k) for t, v, k in samping], jeda_ms=175),
+        Jalur('badan', 'rotation_z', [(t, v * 0.16, k) for t, v, k in samping], jeda_ms=150),
+        Jalur('badan', 'y', [
+            (0, 0.0, 'halus'), (120, 0.014, 'keluar'), (300, -0.042, 'masuk'),
+            (1000, -0.036, 'halus'), (1320, 0.012, 'halus'), (1560, 0.0, 'redam'),
+        ], jeda_ms=110, dasar='awal'),
+        Jalur('bahu_r', 'y', [
+            (0, 0.0, 'halus'), (120, 0.014, 'keluar'), (300, -0.042, 'masuk'),
+            (1000, -0.036, 'halus'), (1320, 0.012, 'halus'), (1560, 0.0, 'redam'),
+        ], jeda_ms=110, dasar='awal'),
+        Jalur('leher', 'y', [
+            (0, 0.0, 'halus'), (120, 0.014, 'keluar'), (300, -0.042, 'masuk'),
+            (1000, -0.036, 'halus'), (1320, 0.012, 'halus'), (1560, 0.0, 'redam'),
+        ], jeda_ms=135, dasar='awal'),
+    ]
+
+
 RESEP = {
     'minum': {'fase': _FASE_MINUM, 'jalur': _resep_minum,
               'alat': 'ember', 'aliran': True},
@@ -865,6 +933,7 @@ RESEP = {
     'perah': {'fase': _FASE_PERAH, 'jalur': _resep_perah, 'alat': 'ember'},
     'telur': {'fase': _FASE_TELUR, 'jalur': _resep_telur, 'alat': None},
     'cukur': {'fase': _FASE_CUKUR, 'jalur': _resep_cukur, 'alat': 'gunting'},
+    'belai': {'fase': _FASE_BELAI, 'jalur': _resep_belai, 'alat': None},
     'bicara': {'fase': _FASE_BICARA, 'jalur': _resep_bicara, 'alat': None},
     'dengar': {'fase': _FASE_DENGAR, 'jalur': _resep_dengar, 'alat': None},
 }

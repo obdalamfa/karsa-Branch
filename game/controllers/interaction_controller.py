@@ -24,6 +24,7 @@ class InteractionController:
         self.use_tool_at(self.player.state.tool_index, tx, ty, entities_mgr, panels)
 
     def use_tool_at(self, tool_idx, tx, ty, entities_mgr, panels):
+        from .. import care_anim
         s = self.player.state
         tool = TOOLS[tool_idx] if tool_idx < len(TOOLS) else 'Cangkul'
         sc_name = s.scene_name
@@ -39,7 +40,7 @@ class InteractionController:
                 soil['tilled'] = True
                 self.player._spend_energy(2)
                 self.world.refresh_tile(tx, ty, soil_key)
-                self.player._play_tool_anim('down')
+                care_anim.mulai(self.player, 'cangkul')
                 self.player._fx_burst(fx, fy, fz, color.rgb(120, 82, 42))
                 sound_play('hoe', 0.8)
                 panels.flash_msg("Tanah dicangkul!", 0.8)
@@ -53,7 +54,7 @@ class InteractionController:
                 self.player._spend_energy(1)
                 s.stats['watered'] = s.stats.get('watered', 0) + 1
                 self.world.refresh_tile(tx, ty, soil_key)
-                self.player._play_tool_anim('water')
+                care_anim.mulai(self.player, 'siram')
                 self.player._fx_burst(fx, fy + 0.2, fz, color.rgb(60, 150, 255, 200), n=6)
                 sound_play('water', 0.8)
                 panels.flash_msg("Tanaman disiram!", 0.8)
@@ -70,7 +71,7 @@ class InteractionController:
                 s.inventory[seed_key] -= 1
                 self.player._spend_energy(2)
                 self.world.refresh_tile(tx, ty, soil_key)
-                self.player._play_tool_anim('bend')
+                care_anim.mulai(self.player, 'tanam')
                 self.player._fx_burst(fx, fy, fz, color.rgb(70, 200, 70), n=4)
                 sound_play('plant', 0.8)
                 if s.seed_key == 'lobak':
@@ -101,7 +102,7 @@ class InteractionController:
                     self.player._spend_energy(2)
                     s.senang = min(NEED_MAX, s.senang + 8)
                     self.world.refresh_tile(tx, ty, soil_key)
-                    self.player._play_tool_anim('bend')
+                    care_anim.mulai(self.player, 'petik')
                     self.player._fx_burst(fx, fy + 0.3, fz, color.rgb(255, 225, 50), n=7)
                     sound_play('harvest', 0.8)
                     hint = best_process_hint(crop_name)
@@ -131,7 +132,7 @@ class InteractionController:
                     sc.tiles[ty][tx] = G if tid == TR else D
                 self.world.load_scene(s.scene_name)
                 self.player._spend_energy(2)
-                self.player._play_tool_anim('swing')
+                care_anim.mulai(self.player, 'tebang')
                 self.player._fx_burst(fx, fy + 0.5, fz, color.rgb(185, 135, 72), n=6)
                 sound_play('axe', 0.8)
                 self.check_quests(panels)
@@ -166,7 +167,7 @@ class InteractionController:
                         sc.tiles[ty][tx] = 30 # MINED
                         self.world.load_scene(s.scene_name)
                 self.player._spend_energy(2)
-                self.player._play_tool_anim('mine')
+                care_anim.mulai(self.player, 'tambang')
                 self.player._fx_burst(fx, fy + 0.3, fz, spark_col, n=8)
                 sound_play('axe', 0.8)
                 self.check_quests(panels)

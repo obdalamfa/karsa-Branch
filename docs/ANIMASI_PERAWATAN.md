@@ -336,15 +336,59 @@ benar-benar bergantung pada pemain untuk air.
 
 ---
 
-## 9. Yang masih memakai mesin lama
+## 9. Alat pertanian: dipindah dari mesin lama
 
-Semua alat pertanian — cangkul, siram, panen tanaman, kapak, pickaxe, pedang —
-masih memakai `_play_tool_anim()` 350 ms. Diukur, semuanya masih antisipasi 0,
-tahanan 0, ikutan 0, ease 1,00, jeda sekunder 0.
+Enam aksi alat — cangkul, siram, tanam, panen tanaman, kapak, beliung —
+sekarang memakai `care_anim`. Yang tertinggal cuma **bertarung** (`Pedang`,
+dan `attack()`), sengaja: irama serangan adalah angka keseimbangan permainan,
+bukan angka animasi, dan memanjangkannya dari 350 ms ke 1,2 detik mengubah
+pertarungan, bukan memperbaikinya. Itu potongan tersendiri dengan patokan
+tersendiri.
 
-Memindahkannya ke `care_anim` adalah pekerjaan berikutnya yang paling besar
-hasilnya per baris kode, karena mesinnya sudah ada dan yang dibutuhkan cuma
-resep.
+Diukur dengan alat yang sama, pada sendi dengan rentang terbesar:
+
+| aksi | rentang | durasi | antisipasi | tahanan | ikutan | ease | jeda |
+|---|---|---|---|---|---|---|---|
+| cangkul | 146,0° | 1000 ms | 6,2°/200 ms | 200 ms | 7,0° | 5,10 | 533 ms |
+| siram | 78,9° | 1267 ms | 4,2°/200 ms | 667 ms | 5,8° | 7,57 | 667 ms |
+| tanam | 90,0° | 1133 ms | 4,0°/233 ms | 567 ms | 3,7° | 8,87 | 667 ms |
+| petik | 86,0° | 1167 ms | 4,0°/233 ms | 500 ms | 2,4° | 4,51 | 667 ms |
+| tebang | 174,0° | 1233 ms | 9,3°/233 ms | 200 ms | 8,9° | 4,26 | 667 ms |
+| tambang | 190,0° | 1133 ms | 9,9°/233 ms | 200 ms | 7,6° | 5,20 | 433 ms |
+| **ambang** | **25°** | **900 ms** | **2°/60 ms** | **80 ms** | **1,5°** | **1,35** | **40 ms** |
+
+Dan mesin lama, diukur langsung lewat `_play_tool_anim()` supaya
+perbandingannya bukan dari ingatan:
+
+| mode | rentang | durasi | antisipasi | tahanan | ikutan | ease | jeda |
+|---|---|---|---|---|---|---|---|
+| down | 128,6° | 433 ms | **0** | 33 ms | **0** | 1,50 | **0** |
+| water | 63,3° | 367 ms | **0** | 100 ms | **0** | **1,19** | **0** |
+| bend | 81,0° | 400 ms | **0** | 33 ms | **0** | 1,38 | **0** |
+| swing | 95,2° | 400 ms | **0** | 33 ms | **0** | 1,38 | **0** |
+| mine | 152,4° | 433 ms | **0** | 33 ms | **0** | 1,50 | 667 ms |
+
+Perhatikan bahwa RENTANG-nya tidak pernah jadi masalah — mesin lama mengayun
+sejauh yang baru. Yang tidak ada padanya adalah semua yang lain: tidak ada
+gerak balik sebelum ayunan, tidak ada pose puncak yang sempat dibaca, tidak
+ada berhenti yang melewati lalu kembali, dan seluruh badan bergerak di frame
+yang sama persis.
+
+### Yang berbeda dari resep ternak
+
+**Durasinya setengahnya** (1,15-1,35 detik lawan 2,3-2,7). Mengurus seekor
+sapi terjadi sekali sehari; mencangkul terjadi dua puluh kali berturut-turut,
+dan aksi 2,5 detik akan mengubah bertani jadi menunggu.
+
+**Alatnya tidak diganti properti.** Aksi ternak menyembunyikan alat HUD lalu
+memasang ember/sikat sendiri. Alat pertanian sudah memegang benda yang benar,
+jadi `alat_hud: True` membiarkannya terlihat — dan resep `siram` menganimasikan
+alat itu langsung lewat kanal `alat_hud`, supaya penyiramnya benar-benar
+miring saat menuang alih-alih menyemburkan air dari alat yang tetap tegak.
+
+Satu jebakan di situ: pose diam penyiram di tangan bukan nol (`rotation_x`
+−12°), jadi kanalnya harus `dasar='awal'`. Dengan `dasar='nol'`, `usai()` akan
+menulis 0 dan MELURUSKAN alat itu permanen begitu aksi selesai.
 
 ## 10. Ranjau: rig Vitaboy
 

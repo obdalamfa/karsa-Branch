@@ -105,6 +105,7 @@ SENDI = {
     'badan':     'body',
     'leher':     '_pivot_neck',
     'alat':      '_care_prop',      # benda yang dipegang selama aksi
+    'alat_hud':  '_held_tool',     # alat yang sudah di tangan (cangkul, penyiram)
 }
 
 
@@ -936,6 +937,264 @@ def _resep_belai() -> list:
     ]
 
 
+
+# ─── ALAT PERTANIAN ──────────────────────────────────────────────────────────
+# Semua aksi di bawah ini dulu memakai _play_tool_anim(): segitiga linier 350 ms
+# pada satu sendi. Diukur, semuanya menghasilkan antisipasi 0, tahanan 0,
+# ikutan 0, ease 1,00 dan jeda sekunder 0 — definisi gerakan yang di-lerp,
+# bukan dianimasikan.
+#
+# Durasinya sengaja jauh lebih pendek daripada aksi ternak (1,15-1,35 detik
+# lawan 2,3-2,7). Mengurus seekor sapi terjadi sekali sehari; mencangkul
+# terjadi dua puluh kali berturut-turut, dan aksi 2,5 detik akan mengubah
+# bertani jadi menunggu.
+
+_FASE_CANGKUL = [('angkat', 430), ('hantam', 330), ('pantul', 200), ('redam', 190)]
+
+
+def _resep_cangkul() -> list:
+    # Cangkul diangkat ke atas kepala lalu dijatuhkan. Yang membuatnya terbaca
+    # sebagai KERJA dan bukan sebagai kedutan: jeda 100 ms di titik tertinggi
+    # (mata sempat membaca posenya) dan pantulan yang lewat dari pose diam
+    # sebelum kembali — tanah memantulkan cangkul, ia tidak berhenti mati.
+    kanan = [
+        (0,      0.0, 'halus'),
+        (140,   14.0, 'keluar'),    # antisipasi: tangan turun sedikit dulu
+        (430, -128.0, 'masuk'),     # cangkul di atas kepala
+        (530, -132.0, 'halus'),     # tahanan puncak
+        (700,  -18.0, 'masuk'),     # hantaman
+        (760,   -6.0, 'halus'),     # tanah
+        (830,    7.0, 'halus'),     # ikutan: lewat dari pose diam
+        (960,   -9.0, 'halus'),
+        (1150,   0.0, 'redam'),
+    ]
+    return [
+        Jalur('bahu_r', 'rotation_x', kanan),
+        Jalur('bahu_l', 'rotation_x', [(t, v * 0.62, k) for t, v, k in kanan], jeda_ms=45),
+        Jalur('siku_r', 'rotation_x', [(t, v * 0.30, k) for t, v, k in kanan], jeda_ms=70),
+        Jalur('badan', 'rotation_x', [(t, -v * 0.16, k) for t, v, k in kanan], jeda_ms=110),
+        Jalur('leher', 'rotation_x', [(t, -v * 0.10, k) for t, v, k in kanan], jeda_ms=150),
+        Jalur('lutut_r', 'rotation_x', [(t, -v * 0.13, k) for t, v, k in kanan], jeda_ms=95),
+        Jalur('lutut_l', 'rotation_x', [(t, -v * 0.13, k) for t, v, k in kanan], jeda_ms=125),
+        Jalur('badan', 'y', [
+            (0, 0.0, 'halus'), (140, 0.020, 'keluar'), (430, 0.045, 'masuk'),
+            (700, -0.075, 'masuk'), (830, -0.030, 'halus'), (1150, 0.0, 'redam'),
+        ], jeda_ms=90, dasar='awal'),
+    ]
+
+
+_FASE_SIRAM = [('angkat', 420), ('tuang', 700), ('tegak', 280), ('redam', 200)]
+
+
+def _resep_siram() -> list:
+    # Menuang butuh TAHANAN, bukan ayunan: penyiram dimiringkan lalu ditahan
+    # 560 ms sementara airnya keluar. Versi lama memakai kurva segitiga yang
+    # sama dengan mencangkul, jadi menyiram terlihat seperti memukul tanah
+    # dengan penyiram.
+    kanan = [
+        (0,     0.0, 'halus'),
+        (150,   9.0, 'keluar'),
+        (420, -62.0, 'masuk'),
+        (560, -68.0, 'halus'),      # mulut penyiram turun, air keluar
+        (980, -64.0, 'halus'),
+        (1120, -70.0, 'halus'),     # kibasan terakhir, sisa tetesnya
+        (1250,   6.0, 'keluar'),    # ikutan
+        (1400,   0.0, 'redam'),
+    ]
+    # Penyiramnya sendiri ikut miring. Tanpa ini airnya keluar dari alat yang
+    # tetap tegak — bagian yang paling cepat terbaca salah.
+    miring = [
+        (0,     0.0, 'halus'), (150,  -5.0, 'keluar'), (420,  46.0, 'masuk'),
+        (560,  54.0, 'halus'), (980,  52.0, 'halus'), (1120, 57.0, 'halus'),
+        (1250, -4.0, 'keluar'), (1400, 0.0, 'redam'),
+    ]
+    return [
+        Jalur('bahu_r', 'rotation_x', kanan),
+        # dasar='awal': pose diam penyiram di tangan bukan nol (-12 deg), jadi
+        # menulis sudut mutlak akan meluruskannya PERMANEN begitu aksi usai.
+        Jalur('alat_hud', 'rotation_x', miring, jeda_ms=40, dasar='awal'),
+        Jalur('siku_r', 'rotation_x', [(t, v * 0.42, k) for t, v, k in kanan], jeda_ms=60),
+        Jalur('bahu_l', 'rotation_x', [(t, v * 0.22, k) for t, v, k in kanan], jeda_ms=105),
+        Jalur('badan', 'rotation_x', [(t, -v * 0.14, k) for t, v, k in kanan], jeda_ms=95),
+        Jalur('leher', 'rotation_x', [(t, -v * 0.19, k) for t, v, k in kanan], jeda_ms=135),
+        Jalur('badan', 'y', [
+            (0, 0.0, 'halus'), (150, 0.012, 'keluar'), (420, -0.048, 'masuk'),
+            (1120, -0.042, 'halus'), (1250, 0.010, 'halus'), (1400, 0.0, 'redam'),
+        ], jeda_ms=85, dasar='awal'),
+    ]
+
+
+_FASE_TANAM = [('turun', 430), ('tekan', 520), ('bangkit', 300), ('redam', 200)]
+
+
+def _resep_tanam() -> list:
+    # Berjongkok, benih ditaruh, tanahnya DITEPUK dua kali. Tepukan kedua yang
+    # lebih ringan daripada yang pertama — dua tepukan yang sama besar terbaca
+    # sebagai perulangan mesin.
+    kanan = [
+        (0,     0.0, 'halus'),
+        (140,  10.0, 'keluar'),
+        (430, -38.0, 'masuk'),      # tangan sampai di tanah
+        (620, -30.0, 'halus'),      # tepuk 1
+        (800, -36.0, 'halus'),
+        (950, -28.0, 'halus'),      # tepuk 2, lebih ringan
+        (1080,  7.0, 'keluar'),     # ikutan saat bangkit
+        (1250,  0.0, 'redam'),
+    ]
+    turun = _turun_badan(-0.55, 430, 950, 1080, 1250)
+    return [
+        Jalur('bahu_r', 'rotation_x', kanan),
+        Jalur('siku_r', 'rotation_x', [(t, v * 0.48, k) for t, v, k in kanan], jeda_ms=60),
+        Jalur('bahu_l', 'rotation_x', [(t, v * 0.35, k) for t, v, k in kanan], jeda_ms=110),
+        Jalur('lutut_r', 'rotation_x', [
+            (0, 0.0, 'halus'), (140, -4.0, 'keluar'), (430, 86.0, 'masuk'),
+            (950, 82.0, 'halus'), (1080, -5.0, 'halus'), (1250, 0.0, 'redam'),
+        ], jeda_ms=40),
+        Jalur('lutut_l', 'rotation_x', [
+            (0, 0.0, 'halus'), (140, -4.0, 'keluar'), (430, 86.0, 'masuk'),
+            (950, 82.0, 'halus'), (1080, -5.0, 'halus'), (1250, 0.0, 'redam'),
+        ], jeda_ms=85),
+        Jalur('badan', 'rotation_x', [
+            (0, 0.0, 'halus'), (140, -6.0, 'keluar'), (430, 40.0, 'masuk'),
+            (950, 37.0, 'halus'), (1080, -6.0, 'halus'), (1250, 0.0, 'redam'),
+        ], jeda_ms=100),
+        Jalur('leher', 'rotation_x', [
+            (0, 0.0, 'halus'), (140, -7.0, 'keluar'), (430, 34.0, 'masuk'),
+            (950, 31.0, 'halus'), (1080, -7.0, 'halus'), (1250, 0.0, 'redam'),
+        ], jeda_ms=145),
+        Jalur('badan', 'y', turun, dasar='awal'),
+        Jalur('bahu_r', 'y', turun, jeda_ms=25, dasar='awal'),
+        Jalur('bahu_l', 'y', turun, jeda_ms=55, dasar='awal'),
+        Jalur('leher', 'y', turun, jeda_ms=80, dasar='awal'),
+    ]
+
+
+_FASE_PETIK = [('turun', 440), ('genggam', 380), ('tarik', 280), ('angkat', 200)]
+
+
+def _resep_petik() -> list:
+    # Memanen tanaman bukan memungut: ada TAHANAN saat tangannya menggenggam
+    # dan menahan beban, lalu tarikan cepat saat akarnya lepas. Perbedaan
+    # kecepatan antara dua bagian itulah yang membuat tanahnya terasa
+    # melawan — pada segitiga linier 350 ms tidak ada bedanya sama sekali.
+    kanan = [
+        (0,     0.0, 'halus'),
+        (150,  11.0, 'keluar'),
+        (440, -36.0, 'masuk'),      # tangan di pangkal batang
+        (640, -30.0, 'halus'),      # menggenggam, menahan
+        (820, -33.0, 'halus'),
+        (960, -74.0, 'masuk'),      # lepas — tarikan cepat ke atas
+        (1080, -58.0, 'keluar'),
+        (1180,   8.0, 'halus'),     # ikutan
+        (1300,   0.0, 'redam'),
+    ]
+    turun = _turun_badan(-0.52, 440, 820, 1080, 1300)
+    return [
+        Jalur('bahu_r', 'rotation_x', kanan),
+        Jalur('siku_r', 'rotation_x', [(t, v * 0.52, k) for t, v, k in kanan], jeda_ms=55),
+        Jalur('bahu_l', 'rotation_x', [(t, v * 0.30, k) for t, v, k in kanan], jeda_ms=115),
+        Jalur('lutut_r', 'rotation_x', [
+            (0, 0.0, 'halus'), (150, -4.0, 'keluar'), (440, 82.0, 'masuk'),
+            (820, 79.0, 'halus'), (1080, 22.0, 'masuk'), (1300, 0.0, 'redam'),
+        ], jeda_ms=45),
+        Jalur('lutut_l', 'rotation_x', [
+            (0, 0.0, 'halus'), (150, -4.0, 'keluar'), (440, 82.0, 'masuk'),
+            (820, 79.0, 'halus'), (1080, 22.0, 'masuk'), (1300, 0.0, 'redam'),
+        ], jeda_ms=90),
+        Jalur('badan', 'rotation_x', [
+            (0, 0.0, 'halus'), (150, -6.0, 'keluar'), (440, 38.0, 'masuk'),
+            (820, 35.0, 'halus'), (1080, -8.0, 'halus'), (1300, 0.0, 'redam'),
+        ], jeda_ms=105),
+        Jalur('leher', 'rotation_x', [
+            (0, 0.0, 'halus'), (150, -7.0, 'keluar'), (440, 32.0, 'masuk'),
+            (820, 29.0, 'halus'), (1080, -9.0, 'halus'), (1300, 0.0, 'redam'),
+        ], jeda_ms=150),
+        Jalur('badan', 'y', turun, dasar='awal'),
+        Jalur('bahu_r', 'y', turun, jeda_ms=25, dasar='awal'),
+        Jalur('bahu_l', 'y', turun, jeda_ms=55, dasar='awal'),
+        Jalur('leher', 'y', turun, jeda_ms=80, dasar='awal'),
+    ]
+
+
+_FASE_TEBANG = [('ancang', 520), ('tebas', 300), ('tancap', 330), ('cabut', 200)]
+
+
+def _resep_tebang() -> list:
+    # Kapak MENANCAP sebelum dicabut. Fase tancap 330 ms itu yang membedakan
+    # menebang dari memukul: tanpa ia, kapaknya memantul dari batang seperti
+    # dari karet.
+    kanan = [
+        (0,     0.0, 'halus'),
+        (170,  18.0, 'keluar'),     # antisipasi besar — kapak berat
+        (520, -150.0, 'masuk'),     # ancang-ancang penuh di belakang kepala
+        (640, -156.0, 'halus'),     # tahanan puncak
+        (820, -30.0, 'masuk'),      # tebasan
+        (880, -14.0, 'halus'),      # mata kapak masuk kayu
+        (1010, -20.0, 'halus'),     # menancap: gerak kecil, bukan diam
+        (1150,   9.0, 'keluar'),    # dicabut, lewat dari pose diam
+        (1240,  -6.0, 'halus'),
+        (1350,   0.0, 'redam'),
+    ]
+    # Ayunan diagonal, bukan tegak lurus: kapak datang dari bahu ke pinggang.
+    samping = [
+        (0,    0.0, 'halus'), (170,  -4.0, 'keluar'), (520,  26.0, 'masuk'),
+        (820,  -9.0, 'masuk'), (1010, -6.0, 'halus'), (1350, 0.0, 'redam'),
+    ]
+    return [
+        Jalur('bahu_r', 'rotation_x', kanan),
+        Jalur('bahu_r', 'rotation_z', samping),
+        Jalur('bahu_l', 'rotation_x', [(t, v * 0.66, k) for t, v, k in kanan], jeda_ms=50),
+        Jalur('siku_r', 'rotation_x', [(t, v * 0.26, k) for t, v, k in kanan], jeda_ms=75),
+        Jalur('badan', 'rotation_x', [(t, -v * 0.15, k) for t, v, k in kanan], jeda_ms=120),
+        Jalur('badan', 'rotation_z', [(t, v * 0.55, k) for t, v, k in samping], jeda_ms=140),
+        Jalur('leher', 'rotation_x', [(t, -v * 0.09, k) for t, v, k in kanan], jeda_ms=165),
+        Jalur('lutut_r', 'rotation_x', [(t, -v * 0.12, k) for t, v, k in kanan], jeda_ms=100),
+        Jalur('lutut_l', 'rotation_x', [(t, -v * 0.12, k) for t, v, k in kanan], jeda_ms=130),
+        Jalur('badan', 'y', [
+            (0, 0.0, 'halus'), (170, 0.024, 'keluar'), (520, 0.052, 'masuk'),
+            (820, -0.086, 'masuk'), (1010, -0.052, 'halus'), (1350, 0.0, 'redam'),
+        ], jeda_ms=95, dasar='awal'),
+    ]
+
+
+_FASE_TAMBANG = [('ancang', 500), ('hantam', 320), ('pantul', 300), ('redam', 180)]
+
+
+def _resep_tambang() -> list:
+    # Batu tidak menyerap: beliung MEMANTUL. Pantulannya (-34 sesudah -8) lebih
+    # besar daripada pantulan cangkul di tanah (7 sesudah -6), dan itulah satu
+    # -satunya hal yang membedakan rasa dua aksi ini sekilas.
+    kanan = [
+        (0,     0.0, 'halus'),
+        (160,  20.0, 'keluar'),
+        (500, -165.0, 'masuk'),
+        (600, -170.0, 'halus'),
+        (770,  -25.0, 'masuk'),     # hantaman
+        (820,   -8.0, 'halus'),     # batu
+        (900,  -34.0, 'keluar'),    # pantulan keras
+        (1000, -16.0, 'halus'),
+        (1120,   8.0, 'halus'),     # ikutan
+        (1300,   0.0, 'redam'),
+    ]
+    return [
+        Jalur('bahu_r', 'rotation_x', kanan),
+        Jalur('bahu_r', 'rotation_z', [
+            (0, 0.0, 'halus'), (160, 3.0, 'keluar'), (500, -17.0, 'masuk'),
+            (820, 6.0, 'masuk'), (900, -4.0, 'halus'), (1300, 0.0, 'redam'),
+        ]),
+        Jalur('bahu_l', 'rotation_x', [(t, v * 0.58, k) for t, v, k in kanan], jeda_ms=45),
+        Jalur('siku_r', 'rotation_x', [(t, v * 0.24, k) for t, v, k in kanan], jeda_ms=70),
+        Jalur('badan', 'rotation_x', [(t, -v * 0.13, k) for t, v, k in kanan], jeda_ms=115),
+        Jalur('leher', 'rotation_x', [(t, -v * 0.08, k) for t, v, k in kanan], jeda_ms=160),
+        Jalur('lutut_r', 'rotation_x', [(t, -v * 0.11, k) for t, v, k in kanan], jeda_ms=100),
+        Jalur('lutut_l', 'rotation_x', [(t, -v * 0.11, k) for t, v, k in kanan], jeda_ms=128),
+        Jalur('badan', 'y', [
+            (0, 0.0, 'halus'), (160, 0.026, 'keluar'), (500, 0.056, 'masuk'),
+            (770, -0.082, 'masuk'), (900, -0.046, 'halus'), (1300, 0.0, 'redam'),
+        ], jeda_ms=92, dasar='awal'),
+    ]
+
+
 RESEP = {
     'minum': {'fase': _FASE_MINUM, 'jalur': _resep_minum,
               'alat': 'ember', 'aliran': True},
@@ -947,6 +1206,16 @@ RESEP = {
     'belai': {'fase': _FASE_BELAI, 'jalur': _resep_belai, 'alat': None},
     'bicara': {'fase': _FASE_BICARA, 'jalur': _resep_bicara, 'alat': None},
     'dengar': {'fase': _FASE_DENGAR, 'jalur': _resep_dengar, 'alat': None},
+
+    # Alat pertanian. `alat_hud` = alat yang SUDAH digenggam pemain tetap
+    # terlihat dan ikut bergerak; jangan disembunyikan lalu diganti properti,
+    # karena yang benar memang alat itu sendiri.
+    'cangkul': {'fase': _FASE_CANGKUL, 'jalur': _resep_cangkul, 'alat_hud': True},
+    'siram':   {'fase': _FASE_SIRAM,   'jalur': _resep_siram,   'alat_hud': True},
+    'tanam':   {'fase': _FASE_TANAM,   'jalur': _resep_tanam,   'alat_hud': True},
+    'petik':   {'fase': _FASE_PETIK,   'jalur': _resep_petik,   'alat_hud': True},
+    'tebang':  {'fase': _FASE_TEBANG,  'jalur': _resep_tebang,  'alat_hud': True},
+    'tambang': {'fase': _FASE_TAMBANG, 'jalur': _resep_tambang, 'alat_hud': True},
 }
 
 
@@ -1064,10 +1333,11 @@ def mulai(player, jenis: str, titik_tuang=None, pemicu=None,
     # punya properti sendiri. Tanpa ini pemain memberi isyarat sambil
     # mengacungkan cangkul saat bercakap-cakap, dan merogoh sarang ayam
     # dengan kapak masih tergenggam.
-    _sembunyikan_alat_hud(player)
-    alat = resep.get('alat')
-    if alat:
-        _pasang_properti(player, alat)
+    if not resep.get('alat_hud'):
+        _sembunyikan_alat_hud(player)
+        alat = resep.get('alat')
+        if alat:
+            _pasang_properti(player, alat)
     aksi.mulai(player)
     aksi.terapkan(player)
     player._care_anim = aksi

@@ -1089,7 +1089,7 @@ def _resep_tanam() -> list:
     ]
 
 
-_FASE_PETIK = [('turun', 440), ('genggam', 380), ('tarik', 280), ('angkat', 200)]
+_FASE_PETIK = [('turun', 440), ('genggam', 380), ('tarik', 380), ('angkat', 220)]
 
 
 def _resep_petik() -> list:
@@ -1104,30 +1104,35 @@ def _resep_petik() -> list:
         (640, -30.0, 'halus'),      # menggenggam, menahan
         (820, -33.0, 'halus'),
         (960, -74.0, 'masuk'),      # lepas — tarikan cepat ke atas
-        (1080, -58.0, 'keluar'),
-        (1180,   8.0, 'halus'),     # ikutan
-        (1300,   0.0, 'redam'),
+        # Pose puncak DITAHAN 130 ms. Tanpa ini tahanannya terukur 33 ms —
+        # satu frame — dan gagal ambang 80 ms: hasil panennya terangkat lalu
+        # langsung turun lagi, jadi momen yang seharusnya paling dibaca mata
+        # (barang di ujung tangan) tidak pernah sempat dibaca.
+        (1090, -71.0, 'halus'),
+        (1200, -56.0, 'keluar'),
+        (1300,   8.0, 'halus'),     # ikutan
+        (1420,   0.0, 'redam'),
     ]
-    turun = _turun_badan(-0.52, 440, 820, 1080, 1300)
+    turun = _turun_badan(-0.52, 440, 820, 1200, 1420)
     return [
         Jalur('bahu_r', 'rotation_x', kanan),
         Jalur('siku_r', 'rotation_x', [(t, v * 0.52, k) for t, v, k in kanan], jeda_ms=55),
         Jalur('bahu_l', 'rotation_x', [(t, v * 0.30, k) for t, v, k in kanan], jeda_ms=115),
         Jalur('lutut_r', 'rotation_x', [
             (0, 0.0, 'halus'), (150, -4.0, 'keluar'), (440, 82.0, 'masuk'),
-            (820, 79.0, 'halus'), (1080, 22.0, 'masuk'), (1300, 0.0, 'redam'),
+            (820, 79.0, 'halus'), (1200, 22.0, 'masuk'), (1420, 0.0, 'redam'),
         ], jeda_ms=45),
         Jalur('lutut_l', 'rotation_x', [
             (0, 0.0, 'halus'), (150, -4.0, 'keluar'), (440, 82.0, 'masuk'),
-            (820, 79.0, 'halus'), (1080, 22.0, 'masuk'), (1300, 0.0, 'redam'),
+            (820, 79.0, 'halus'), (1200, 22.0, 'masuk'), (1420, 0.0, 'redam'),
         ], jeda_ms=90),
         Jalur('badan', 'rotation_x', [
             (0, 0.0, 'halus'), (150, -6.0, 'keluar'), (440, 38.0, 'masuk'),
-            (820, 35.0, 'halus'), (1080, -8.0, 'halus'), (1300, 0.0, 'redam'),
+            (820, 35.0, 'halus'), (1200, -8.0, 'halus'), (1420, 0.0, 'redam'),
         ], jeda_ms=105),
         Jalur('leher', 'rotation_x', [
             (0, 0.0, 'halus'), (150, -7.0, 'keluar'), (440, 32.0, 'masuk'),
-            (820, 29.0, 'halus'), (1080, -9.0, 'halus'), (1300, 0.0, 'redam'),
+            (820, 29.0, 'halus'), (1200, -9.0, 'halus'), (1420, 0.0, 'redam'),
         ], jeda_ms=150),
         Jalur('badan', 'y', turun, dasar='awal'),
         Jalur('bahu_r', 'y', turun, jeda_ms=25, dasar='awal'),

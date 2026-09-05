@@ -217,9 +217,15 @@ def analyse(path: Path) -> dict:
         if not m.get('diam'):
             per[k] = m
 
-    # penggerak = sendi dengan rentang terbesar
+    # Penggerak = sendi yang MENGERJAKAN aksinya, bukan yang rentangnya
+    # terbesar. Sejak lapisan jongkok ada, lutut rutin mengalahkan lengan:
+    # pada menyikat ayam lutut 107,8 derajat lawan bahu 36,5, jadi baris yang
+    # dibaca untuk menilai ambang adalah baris jongkoknya. Aksi perawatan dan
+    # alat sama-sama digerakkan LENGAN; lutut dan pinggul cuma menopang.
     urut = sorted(per.items(), key=lambda kv: -kv[1]['rentang'])
-    penggerak = urut[0][0] if urut else None
+    KERJA = ('bahu_', 'siku_')
+    kerja = [kv for kv in urut if kv[0].startswith(KERJA)]
+    penggerak = (kerja[0][0] if kerja else (urut[0][0] if urut else None))
     jeda = {}
     if penggerak:
         a = _series(frames, penggerak)
@@ -244,7 +250,9 @@ def cetak(rep: dict) -> None:
     if not rep['sendi']:
         print('   TIDAK ADA SENDI YANG BERGERAK. Aksi ini tidak dianimasikan.')
         return
-    print(f"   penggerak: {rep['penggerak']}")
+    besar = max(rep['sendi'].items(), key=lambda kv: kv[1]['rentang'])[0]
+    ekor = '' if besar == rep['penggerak'] else f"   (rentang terbesar: {besar})"
+    print(f"   penggerak: {rep['penggerak']}{ekor}")
     hdr = (f"   {'sendi':22s} {'rentang':>8s} {'durasi':>7s} {'antisip':>8s} "
            f"{'tahan':>6s} {'ikutan':>7s} {'ease':>6s} {'strok':>6s} {'irama':>6s} "
            f"{'jeda':>6s}")

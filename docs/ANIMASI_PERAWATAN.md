@@ -597,6 +597,56 @@ tempat tetap jatuh ke dalamnya.
 
 ---
 
+## 6g. Vonis lengkap: dua belas aksi, seluruh tabel ambang
+
+Kritikus hanya sempat memvonis satu aksi (`gosok`) dan menyatakan terus terang
+bahwa sudut sendi aksi lain sengaja tidak diukur ulang. Ini melengkapinya,
+dengan alat ukur yang sudah diperiksa sendiri (§6e).
+
+Sebelum tabelnya bisa dibaca, satu cacat pelaporan harus ditutup: sejak lapisan
+jongkok ada, **`anim_trace` menyebut LUTUT sebagai penggerak** karena rentangnya
+terbesar — pada menyikat ayam lutut 107,8° lawan bahu 36,5°. Baris yang dibaca
+untuk menilai ambang jadi baris jongkoknya, bukan baris yang mengerjakan
+aksinya. Aksi perawatan dan alat sama-sama digerakkan LENGAN; lutut menopang.
+Penggerak sekarang dipilih dari rantai `bahu_*`/`siku_*`, dan sendi
+berentang-terbesar tetap disebut di samping supaya tidak ada yang hilang.
+
+| aksi | penggerak | rentang | durasi | antisipasi | tahanan | ikutan | ease | sapuan | irama | jeda | |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **ambang** | | ≥25° | ≥900 | ≥2°/≥60 | ≥80 | ≥1,5° | ≥1,35 | ≥4 | >8 | ≥40 | |
+| perah sapi | bahu_r | 46,0 | 2267 | 6,4/367 | 600 | 8,0 | 4,33 | 7 | 146,1 | 133 | lulus |
+| cukur domba | bahu_r | 44,4 | 2500 | 4,7/267 | 667 | 5,6 | 5,98 | 7 | 59,8 | 133 | lulus |
+| telur ayam | bahu_r | 30,0 | 2067 | 3,6/300 | 400 | 4,5 | 5,44 | — | — | 133 | lulus |
+| gosok sapi | bahu_r | 73,0 | 2667 | 6,5/233 | 567 | 9,0 | 5,31 | 9 | 33,3 | 167 | lulus |
+| gosok ayam | bahu_r | 36,5 | 2667 | 3,2/233 | 567 | 4,5 | 5,31 | 9 | 33,3 | 167 | lulus |
+| belai sapi | bahu_r | 53,0 | 1367 | 3,4/133 | 300 | 7,0 | 6,63 | — | — | 133 | lulus |
+| beri minum | bahu_r | 73,0 | 1900 | 11,9/467 | 667 | 8,0 | 4,97 | — | — | 133 | lulus |
+| cangkul | bahu_r | 146,0 | 1000 | 6,2/200 | 200 | 7,0 | 5,10 | — | — | 133 | lulus |
+| siram | bahu_r | 78,9 | 1267 | 4,2/200 | 667 | 5,8 | 7,57 | — | — | 133 | lulus |
+| tanam | bahu_r | 48,0 | 1100 | 4,4/200 | 233 | 7,0 | 4,21 | — | — | 167 | lulus |
+| petik | bahu_r | 85,0 | 1300 | 5,2/233 | 167 | 8,0 | 9,02 | — | — | 100 | lulus |
+| tebang | bahu_r | 174,0 | 1233 | 9,3/233 | 200 | 8,9 | 4,26 | — | — | 167 | lulus |
+
+`sapuan` dan `irama` hanya diberlakukan pada aksi berulang (memerah, mencukur,
+menyikat); pada aksi sekali-jalan kolomnya tidak berarti dan tidak dinilai.
+
+**Satu gagal yang ditemukan tabel ini dan sudah ditutup.** `petik` — memanen
+tanaman — tahanannya terukur **33 ms**, satu frame, jauh di bawah ambang 80.
+Pose puncaknya adalah apeks tarikan saat akar lepas, dan apeks itu cuma
+disinggung: hasil panennya terangkat lalu langsung turun lagi, jadi momen yang
+paling harus dibaca mata (barang di ujung tangan) tidak pernah sempat dibaca.
+Ditambahkan tahanan 130 ms di puncak; tahanan terukur 33 → 167 ms.
+
+**Satu gagal yang ternyata bukan gagal.** `beri minum` mula-mula melaporkan
+TIDAK ADA SENDI YANG BERGERAK. Sebabnya bukan di game: aksi itu menuntut
+pemain dekat PALUNG, bukan dekat hewannya, dan probe menempatkannya di sebelah
+sapi. Dengan siapan yang benar ia lulus dengan angka terkuat kedua di tabel
+(antisipasi 11,9°/467 ms, tahanan 667 ms). Dicatat karena ini bentuk kesalahan
+pengukuran yang paling mudah dipercaya: alat yang melaporkan NOL terdengar
+seperti temuan besar, padahal nol sering berarti aksinya tidak pernah jalan.
+
+---
+
 ## 7. Patung
 
 Tiga kali, dengan bentuk berbeda, sesuatu berhenti bergerak sama sekali:

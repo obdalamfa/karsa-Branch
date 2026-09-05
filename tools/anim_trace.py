@@ -217,16 +217,22 @@ def cetak(rep: dict) -> None:
         return
     print(f"   penggerak: {rep['penggerak']}")
     hdr = (f"   {'sendi':22s} {'rentang':>8s} {'durasi':>7s} {'antisip':>8s} "
-           f"{'tahan':>6s} {'ikutan':>7s} {'ease':>6s} {'strok':>6s} {'jeda':>6s}")
+           f"{'tahan':>6s} {'ikutan':>7s} {'ease':>6s} {'strok':>6s} {'irama':>6s} "
+           f"{'jeda':>6s}")
     print(hdr)
     print('   ' + '-' * (len(hdr) - 3))
     for k, m in sorted(rep['sendi'].items(), key=lambda kv: -kv[1]['rentang']):
         print(f"   {k:22s} {m['rentang']:8.1f} {m['durasi_ms']:6.0f}m "
               f"{m['antisipasi_deg']:5.1f}/{m['antisipasi_ms']:<3.0f} "
               f"{m['tahan_ms']:5.0f} {m['ikutan_deg']:7.1f} {m['ease']:6.2f} "
-              f"{m['stroke']:6d} {rep['jeda_sekunder_ms'].get(k, 0.0):6.0f}")
+              f"{m['stroke']:6d} {m['irama_sd_ms']:6.1f} "
+              f"{rep['jeda_sekunder_ms'].get(k, 0.0):6.0f}")
     print('   (antisip = derajat/ms gerakan berlawanan sebelum ayunan; '
-          'ease 1,00 = segitiga linier)')
+          'ease 1,00 = segitiga linier;')
+    print('    irama = simpangan baku jarak antar-sapuan, 0 = metronom = mesin. '
+          'Kolom ini DIHITUNG sejak awal')
+    print('    tapi tidak pernah dicetak, jadi salah satu ambang di BRIEF tidak '
+          'bisa dibaca dari alatnya sendiri.)')
 
 
 def main():

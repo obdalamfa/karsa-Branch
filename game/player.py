@@ -939,7 +939,14 @@ class Player3D(Entity):
             self._fx_burst(tail_x, tail_y, tail_z, spark_col, n=1, spread=0.1)
 
         # Check portals every tick unconditionally so cooldowns don't block standing players
-        self._check_portals(tx_i, ty_i)
+        if self._check_portals(tx_i, ty_i):
+            # Ganti scene MEMBATALKAN aksi perawatan yang sedang berjalan.
+            # Tanpa ini `_saat_frame` terus memanggil `_maju()`, yang menulis
+            # player.x/z tanpa syarat — jadi pemain dipaku di koordinat kandang
+            # yang lama selama sisa aksi, berdiri di peta baru sambil memegang
+            # ember, alat HUD-nya hilang, dan memerah sapi yang ada di peta lain.
+            from . import care_anim
+            care_anim.bereskan(self)
 
         # ── Aksi perawatan: DIJALANKAN TERAKHIR, dan itu disengaja ──────────
         # Blok animasi di atas melerp tiap sendi kembali ke nol setiap frame

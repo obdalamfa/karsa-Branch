@@ -280,6 +280,10 @@ class Game3D:
                 logging.error(f"Gagal update ambient dynamic: {e}")
             # Jika HP habis → pingsan, balik ke rumah, mulai hari baru
             if s.hp <= 0:
+                # Pingsan juga memindahkan scene, jadi ia juga harus
+                # membatalkan aksi perawatan yang sedang berjalan.
+                from . import care_anim as _ca
+                _ca.bereskan(self.player)
                 s.scene_name = 'house'
                 s.player_x, s.player_y = 7.0, 8.0
                 self.player._advance_day()

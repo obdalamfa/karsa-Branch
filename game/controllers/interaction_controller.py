@@ -834,20 +834,11 @@ class InteractionController:
         item = prod['item']
         jenis, kata = self.CARA_PANEN.get(item, ('telur', 'Mengambil hasil'))
 
-        self.player._spend_energy(EN_COLLECT)
 
         pos = s.npc_positions.get(npc_id) or {}
         hx, hy = pos.get('x'), pos.get('y')
-        dari, maju_ke, turun, skala = (self.player.x, self.player.z), None, 0.0, 1.0
-        if hx is not None:
-            import math as _m
-            self.player.rotation_y = _m.degrees(
-                _m.atan2(hx - self.player.x / TS, hy - self.player.z / TS))
-            self.player.target_rotation_y = self.player.rotation_y
-            geo = self._geometri_hewan(npc_id, npc, self._jangkau(jenis))
-            if geo is not None:
-                cx, cz, jarak, turun, skala = geo
-                dari, maju_ke = self._langkah_masuk(cx, cz, jarak)
+        dari, maju_ke, turun, skala = self._tempat_kerja(
+            npc_id, npc, entities_mgr, jenis)
 
         # Tahan hewannya selama aksi. Tanpa ini domba berjalan pergi di tengah
         # pencukuran — terukur, jaraknya ke gunting naik dari 0,00 m ke median
@@ -860,6 +851,9 @@ class InteractionController:
             self._maju(self.player, dari, maju_ke, aksi.t, 520.0)
 
         def _ambil(aksi):
+            # Energinya ikut di sini: aksi yang dibatalkan sebelum titik ini
+            # tidak menghasilkan apa-apa, jadi ia juga tidak boleh menagih apa-apa.
+            self.player._spend_energy(EN_COLLECT)
             s.inventory[item] = s.inventory.get(item, 0) + 1
             animal_record(s, npc_id)['siap'] = 0
             s.stats['produce_collected'] = s.stats.get('produce_collected', 0) + 1
@@ -895,6 +889,42 @@ class InteractionController:
     JANGKAU_TANGAN = 0.62      # tangan memegang alat (sikat, ember, gunting)
     JANGKAU_TELAPAK = 0.48     # tangan telanjang
 
+    def _tempat_kerja(self, npc_id, npc, entities_mgr, jenis: str):
+        """(dari, tujuan, turun, skala) — titik berdiri di rusuk hewan.
+
+        Urutannya tidak boleh ditukar: titik rusuk dihitung dulu, pemain
+        DIHADAPKAN dari titik itu, baru langkahnya dihitung. `_geser_tangan()`
+        membaca pergeseran bahu kanan pada rotasi yang sedang berlaku, jadi
+        menghadapkan pemain sesudah melangkah akan menggeser tangannya ke arah
+        yang salah.
+        """
+        import math as _m
+        s = self.player.state
+        pos = s.npc_positions.get(npc_id) or {}
+        hx, hy = pos.get('x'), pos.get('y')
+        diam = (self.player.x, self.player.z)
+        if hx is None:
+            return diam, None, 0.0, 1.0
+        geo = self._geometri_hewan(npc_id, npc, self._jangkau(jenis),
+                                   self._hadap(entities_mgr, npc_id))
+        if geo is None:
+            self.player.rotation_y = _m.degrees(
+                _m.atan2(hx - self.player.x / TS, hy - self.player.z / TS))
+            self.player.target_rotation_y = self.player.rotation_y
+            return diam, None, 0.0, 1.0
+        tx, tz, turun, skala = geo
+        self.player.rotation_y = _m.degrees(
+            _m.atan2(hx - tx / TS, hy - tz / TS))
+        self.player.target_rotation_y = self.player.rotation_y
+        dari, tujuan = self._langkah_masuk(tx, tz)
+        return dari, tujuan, turun, skala
+
+    @staticmethod
+    def _hadap(entities_mgr, npc_id: str) -> float:
+        """Arah hadap hewan sekarang, dalam derajat. 0 kalau aktornya tidak ada."""
+        aktor = entities_mgr.actors.get(npc_id) if entities_mgr else None
+        return float(getattr(aktor, 'rotation_y', 0.0) or 0.0)
+
     def _jangkau(self, jenis: str) -> float:
         """Jangkauan yang benar untuk resep `jenis`, dibaca dari resepnya.
 
@@ -908,25 +938,25 @@ class InteractionController:
         resep = care_anim.RESEP.get(jenis) or {}
         return self.JANGKAU_TANGAN if resep.get('alat') else self.JANGKAU_TELAPAK
 
-    def _geometri_hewan(self, npc_id: str, npc: dict, jangkau: float):
-        """(x_dunia, z_dunia, jarak_berdiri, kedalaman_jongkok) untuk hewan ini.
+    def _geometri_hewan(self, npc_id: str, npc: dict, jangkau: float,
+                        rotasi: float = 0.0):
+        """(x_rusuk, z_rusuk, kedalaman_jongkok, skala_ayunan) untuk hewan ini.
 
-        Jarak berdiri dihitung dari jari-jari badan KE ARAH pemain — badan
-        hewan berkaki empat itu elips, bukan lingkaran, jadi mendekat dari
-        samping dan dari depan bukan jarak yang sama.
+        Dua angka pertama adalah TITIK BERDIRI di rusuk hewan, bukan sekadar
+        jarak. Sebelumnya fungsi ini mengembalikan pusat hewan plus sebuah
+        jarak, dan pemanggilnya berdiri di sinar dari pusat itu ke tempat
+        pemain kebetulan lewat — jadi sisi mana yang dipakai ditentukan oleh
+        kebetulan. Diukur, sudut sisinya tersebar rata 0-180 derajat dan
+        seperempat pemerahan terjadi dalam 45 derajat dari moncong sapi.
         """
-        from ..animal_models import jari_jari_arah, ukuran
+        from ..animal_models import ukuran, titik_rusuk
         s = self.player.state
         pos = s.npc_positions.get(npc_id) or {}
         hx, hy = pos.get('x'), pos.get('y')
         if hx is None:
             return None
         cx, cz = hx * TS, hy * TS
-        dx, dz = self.player.x - cx, self.player.z - cz
-        if abs(dx) < 1e-3 and abs(dz) < 1e-3:
-            dx = 1.0
         spesies = npc.get('type', '')
-        r = jari_jari_arah(spesies, dx, dz)
         _hw, _hl, tinggi = ukuran(spesies)
         # Batas 0,70 m, bukan 0,52: selisih tinggi punggung ayam (0,44 m) ke
         # sapi menuntut 0,67 m, dan batas lama memotongnya tepat di situ —
@@ -944,10 +974,12 @@ class InteractionController:
         # pendek juga MENJULUR lebih pendek: terukur, memperkecil ayunan saja
         # menurunkan sikat ke ketinggian punggung ayam tapi menariknya 0,07-0,27 m
         # ke belakang, jadi ia lewat di atas ayam alih-alih menyentuhnya.
-        return cx, cz, r + jangkau * skala, turun, skala
+        tx, tz = titik_rusuk(cx, cz, spesies, rotasi,
+                             self.player.x, self.player.z, jangkau * skala)
+        return tx, tz, turun, skala
 
-    def _langkah_masuk(self, cx: float, cz: float, jarak: float):
-        """Hitung langkah pendek dari posisi sekarang ke `jarak` unit dari (cx,cz).
+    def _langkah_masuk(self, tx: float, tz: float):
+        """Hitung langkah pendek dari posisi sekarang ke titik berdiri (tx,tz).
 
         Ubin bersebelahan berjarak 2 m. Aksi perawatan yang dimulai dari ubin
         sebelah selalu terlihat seperti menyentuh udara: sikat berhenti satu
@@ -956,10 +988,8 @@ class InteractionController:
         bertani lain saat interaksi dimulai. Return (dari, tujuan); tujuan
         None kalau tidak ada yang perlu didekati.
         """
-        dx, dz = self.player.x - cx, self.player.z - cz
-        d = (dx * dx + dz * dz) ** 0.5
         dari = (self.player.x, self.player.z)
-        if d < 1e-3:
+        if abs(tx - dari[0]) < 1e-3 and abs(tz - dari[1]) < 1e-3:
             return dari, None
         # Yang harus lurus dengan hewan adalah TANGAN YANG BEKERJA, bukan
         # pusar pemain. Semua alat perawatan menggantung di lengan kanan, jadi
@@ -969,7 +999,7 @@ class InteractionController:
         # badan ayam sepanjang aksi, persis 0,30 dikurangi setengah-panjang
         # ayam 0,22. Berdirinya digeser sebanyak itu ke kiri.
         gx, gz = self._geser_tangan()
-        return dari, (cx + dx / d * jarak - gx, cz + dz / d * jarak - gz)
+        return dari, (tx - gx, tz - gz)
 
     def _geser_tangan(self) -> tuple:
         """Pergeseran (dx,dz) dunia dari pusat pemain ke bahu kanannya.
@@ -1018,16 +1048,8 @@ class InteractionController:
 
         pos = s.npc_positions.get(npc_id) or {}
         hx, hy = pos.get('x'), pos.get('y')
-        dari, maju_ke, turun, skala = (self.player.x, self.player.z), None, 0.0, 1.0
-        if hx is not None:
-            import math as _m
-            self.player.rotation_y = _m.degrees(
-                _m.atan2(hx - self.player.x / TS, hy - self.player.z / TS))
-            self.player.target_rotation_y = self.player.rotation_y
-            geo = self._geometri_hewan(npc_id, npc, self._jangkau('belai'))
-            if geo is not None:
-                cx, cz, jarak, turun, skala = geo
-                dari, maju_ke = self._langkah_masuk(cx, cz, jarak)
+        dari, maju_ke, turun, skala = self._tempat_kerja(
+            npc_id, npc, entities_mgr, 'belai')
 
         actor = entities_mgr.actors.get(npc_id)
         if actor is not None and hasattr(actor, 'tahan_diam'):
@@ -1080,30 +1102,20 @@ class InteractionController:
             panels.flash_msg("Terlalu lelah untuk menyikat.", 1.2)
             return
 
-        self.player._spend_energy(EN_BRUSH)
         sebelum = int(rec.get('bersih', 0))
 
         # Menghadap hewannya. Menyikat sambil membelakanginya adalah hal
         # pertama yang terlihat salah di filmstrip.
         pos = s.npc_positions.get(npc_id) or {}
         hx, hy = pos.get('x'), pos.get('y')
-        if hx is not None:
-            import math as _m
-            self.player.rotation_y = _m.degrees(
-                _m.atan2(hx - self.player.x / TS, hy - self.player.z / TS))
-            self.player.target_rotation_y = self.player.rotation_y
-
         actor = entities_mgr.actors.get(npc_id)
         if actor is not None and hasattr(actor, 'tahan_diam'):
             actor.tahan_diam(3.4)
 
-        # Melangkah ke sisi badan hewan supaya sikatnya benar-benar menyentuh,
+        # Melangkah ke RUSUK hewan supaya sikatnya benar-benar menyentuh,
         # dan menunduk sedalam selisih tinggi punggungnya terhadap sapi.
-        dari, maju_ke, turun, skala = (self.player.x, self.player.z), None, 0.0, 1.0
-        geo = self._geometri_hewan(npc_id, npc, self._jangkau('gosok'))
-        if geo is not None:
-            cx, cz, jarak, turun, skala = geo
-            dari, maju_ke = self._langkah_masuk(cx, cz, jarak)
+        dari, maju_ke, turun, skala = self._tempat_kerja(
+            npc_id, npc, entities_mgr, 'gosok')
 
         def _frame(aksi, dt):
             self._maju(self.player, dari, maju_ke, aksi.t, 420.0)
@@ -1115,10 +1127,20 @@ class InteractionController:
                 actor.disikat(self.player.x, self.player.z)
 
         def _terapkan(aksi):
+            # Energi ditagih DI SINI, bukan di muka. `AksiRawat.update()`
+            # berhenti memanggil pemicu begitu aksi dibatalkan, jadi biaya yang
+            # dibayar di muka akan mendarat pada aksi yang tidak pernah terjadi:
+            # terukur, menekan W setengah detik sesudah mulai menyikat memotong
+            # 2 energi, menulis "Bersih 100%, +1 hati" di HUD, dan meninggalkan
+            # hewannya tetap 12% kotor tanpa satu hati pun.
+            self.player._spend_energy(EN_BRUSH)
             ok, pesan = husb_clean(s, npc_id)
             if ok:
                 s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1)
                 s.stats['brushed'] = s.stats.get('brushed', 0) + 1
+            panels.flash_msg(
+                f"Menyikat {npc.get('name', npc_id)}. "
+                f"Bersih {sebelum}% -> 100%, +1 hati.", 1.8)
 
         def _usai(aksi):
             if actor is not None and hasattr(actor, 'selesai_disikat'):
@@ -1134,8 +1156,7 @@ class InteractionController:
                     (2320, _terapkan)],
             saat_frame=_frame, saat_usai=_usai, turun=turun, skala=skala,
         )
-        nama = npc.get('name', npc_id)
-        panels.flash_msg(f"Menyikat {nama}. Bersih {sebelum}% -> 100%, +1 hati.", 1.8)
+        panels.flash_msg(f"Menyikat {npc.get('name', npc_id)}...", 1.0)
 
     # ─── BERI MINUM ─────────────────────────────────────────────────────────
     def _pen_livestock(self) -> list:
@@ -1222,7 +1243,6 @@ class InteractionController:
 
         kawanan = self._pen_livestock() or [npc_id]
         sebelum = self._trough_level()
-        self.player._spend_energy(EN_WATER)
 
         titik = trough_pour_point(self.world)
         if titik is None:
@@ -1256,7 +1276,12 @@ class InteractionController:
         dari, maju_ke = (self.player.x, self.player.z), None
         if pal is not None:
             cx, _cy, cz = pal['pos']
-            dari, maju_ke = self._langkah_masuk(cx, cz, 1.02)
+            # Palung tidak punya arah hadap, jadi titik berdirinya masih di
+            # sinar dari pemain ke palung — 1,02 m dari pusatnya.
+            ddx, ddz = self.player.x - cx, self.player.z - cz
+            dd = (ddx * ddx + ddz * ddz) ** 0.5 or 1.0
+            dari, maju_ke = self._langkah_masuk(cx + ddx / dd * 1.02,
+                                                cz + ddz / dd * 1.02)
 
         def _mulai_tuang(aksi):
             aliran.nyala(True)
@@ -1265,12 +1290,22 @@ class InteractionController:
         def _isi(aksi):
             """Air benar-benar masuk saat air TERLIHAT jatuh, bukan saat menu
             diklik. Akibat yang mendahului sebabnya di layar terbaca sebagai
-            bug, bahkan kalau angkanya benar."""
+            bug, bahkan kalau angkanya benar.
+
+            Energi dan pesannya ikut di sini karena alasan yang sama dari sisi
+            sebaliknya: aksi yang dibatalkan sebelum titik ini tidak mengisi
+            palung, jadi ia juga tidak boleh menagih ember yang tidak pernah
+            terangkat."""
+            self.player._spend_energy(EN_WATER)
             for aid in kawanan:
                 husb_water(s, aid)
             s.stats['trough_filled'] = s.stats.get('trough_filled', 0) + 1
             for aid in kawanan:
                 s.npc_hearts[aid] = min(10, s.npc_hearts.get(aid, 0) + 0.5)
+            ekor = '' if len(kawanan) <= 1 else f" ({len(kawanan)} ekor ikut minum)"
+            panels.flash_msg(
+                f"Palung diisi untuk {npc.get('name', npc_id)}. "
+                f"Air {sebelum}% -> 100%.{ekor}", 1.8)
 
         def _selesai_tuang(aksi):
             aliran.nyala(False)
@@ -1315,10 +1350,7 @@ class InteractionController:
                 if actor is not None and hasattr(actor, 'panggil_minum'):
                     actor.panggil_minum(tx, ty, tunda=1.4)
 
-        nama = npc.get('name', npc_id)
-        ekor = '' if len(kawanan) <= 1 else f" ({len(kawanan)} ekor ikut minum)"
-        panels.flash_msg(
-            f"Palung diisi untuk {nama}. Air {sebelum}% -> 100%.{ekor}", 1.8)
+        panels.flash_msg(f"Mengisi palung untuk {npc.get('name', npc_id)}...", 1.0)
 
     def queue_toggle(self, panels):
         tx, ty = self.player._facing_tile()

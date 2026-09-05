@@ -293,6 +293,107 @@ harus dilakukan pada sendi kerjanya, bukan pada yang dipilih otomatis.
 
 ---
 
+## 6c. Apa yang ditemukan kritikus berkonteks segar
+
+Bagian ini ditulis dari laporan kritikus yang tidak pernah melihat kode ini
+sebelumnya dan diminta mengukur hal LAIN dari yang sudah diukur pembangunnya.
+Ia menemukan tiga hal yang tidak terlihat oleh kedua alat yang sudah ada, dan
+satu di antaranya adalah akar dari sesuatu yang sudah dikejar dari arah lain
+tanpa ketemu.
+
+### Tidak ada yang memilih SISI hewan
+
+`_langkah_masuk()` menaruh pemain di sinar dari pusat hewan **ke tempat pemain
+kebetulan berdiri**. Tidak ada yang memutar hewannya, dan tidak ada yang
+memilih rusuknya. Diukur pada 8 arah datang x 4 arah hadap x 5 aksi, sudut
+sisinya tersebar rata 0-180 derajat: seperempat pemerahan terjadi dalam 45
+derajat dari moncong sapi, dan mencukur domba mendarat tepat di depan
+kepalanya. Tidak ada peternak yang memerah sapi dari depan mukanya.
+
+Akar keduanya, dari sumber yang sama: **`jari_jari_arah()` menghitung elips
+badan selaras sumbu DUNIA dan tidak pernah menerima `rotation_y` hewan.**
+Begitu hewannya menoleh, sumbu panjang dan sumbu lebarnya tertukar. Pada sapi
+(0,36 x 0,68 m) galatnya 0,32 m — separuh jangkauan alatnya sendiri:
+
+| arah hadap sapi | jarak berdiri dipakai | kulit sebenarnya | selisih |
+|---|---|---|---|
+| 0°, datang 0° | 0,67 m | 0,64 m | +0,03 m |
+| 45°, datang 0° | 0,67 m | 0,40 m | +0,26 m di udara |
+| 45°, datang 90° | 0,51 m | 0,54 m | −0,03 m **menembus** |
+| 90°, datang 0° | 0,67 m | 0,37 m | +0,30 m di udara |
+| 90°, datang 90° | 0,51 m | 0,62 m | −0,10 m **menembus** |
+
+Perbaikannya `titik_rusuk()`: titik berdiri dipilih di RUANG LOKAL hewan —
+lurus di samping badan, setengah badan ke arah pemain — lalu diputar balik ke
+dunia. Hewan boleh menghadap ke mana saja; pemain selalu berakhir di rusuknya.
+Sesudahnya, pada uji yang sama:
+
+| aksi | di depan moncong (<45°) | di rusuk (60-120°) |
+|---|---|---|
+| perah | 8/32 → **0/32** | 32/32 |
+| telur | 6/32 → **0/32** | (49°/131°, lihat catatan) |
+| cukur | 5/32 → **0/32** | 32/32 |
+| gosok | 4/32 → **0/32** | 32/32 |
+| belai | 8/32 → **0/32** | 32/32 |
+
+Catatan `telur`: ayam setengah-lebarnya cuma 0,11 m, jadi pergeseran tangan
+0,30 m adalah sudut yang besar pada jari-jari sekecil itu. Pemainnya memang
+di samping ayam; yang melar adalah sudutnya, bukan posisinya.
+
+### Biaya mendarat, hasilnya kadang-kadang
+
+`AksiRawat.update()` berhenti memanggil pemicu begitu aksi dibatalkan — itu
+memang benar. Yang salah: `_spend_energy()` dan `flash_msg()` dibayar **di
+muka**, sebelum `care_anim.mulai()`. Tekan W setengah detik sesudah menyikat
+dan HUD menulis "Bersih 12% -> 100%, +1 hati" sementara kandangnya tetap
+kotor, hatinya tetap nol, dan energi hilang 2.
+
+Sekarang biaya dan pesan hasilnya ikut masuk ke pemicu, bersama efeknya.
+Pesan pembuka tinggal "Menyikat Betsy..." — janji yang tidak dibuat tidak
+bisa diingkari. Terukur sesudahnya, dibatalkan pada 500 ms:
+
+| aksi | energi | keadaan | pesan |
+|---|---|---|---|
+| gosok | 0,0 | bersih 12 → 12 | "Menyikat Betsy..." |
+| perah | 0,0 | siap 9 → 9, tas kosong | "Memerah Betsy..." |
+| beri minum | 0,0 | air 8 → 8 | "Mengisi palung..." |
+| gosok, batal pada 2400 ms | 2,0 | bersih 12 → **100**, +1,5 hati | hasil lengkap |
+
+Yang terakhir itu yang membuktikan perbaikannya bukan sekadar mematikan
+efeknya: batal SESUDAH titik efek tetap memberi hasil dan tetap menagih.
+
+### Ganti scene memaku pemain di koordinat peta lama
+
+Tidak ada `care_anim.bereskan()` di jalur portal. `_saat_frame` terus
+memanggil `_maju()`, yang menulis `player.x/z` tanpa syarat — jadi selama
+sisa aksi pemain berdiri di peta baru, tidak bisa pergi dari satu titik,
+memegang ember, alat HUD-nya hilang, dan memerah sapi yang ada di peta lain.
+Sekarang portal dan pingsan sama-sama memanggil `bereskan()`. Terukur: aksi
+dibersihkan, ember dilepas, alat HUD kembali, pemain bergerak 8,0 m dalam 45
+frame (dulu 0,0), dan susunya tidak masuk tas.
+
+### Alat ukurnya sendiri menyembunyikan satu ambang
+
+`tools/anim_trace.py` MENGHITUNG `irama_sd_ms` sejak awal tapi `cetak()` tidak
+pernah mencetak kolomnya, jadi satu ambang di BRIEF tidak bisa dibaca dari
+keluaran alatnya sendiri. Sekarang dicetak. Menyikat ayam: `bahu_r` irama
+33,3 ms (ambang > 8).
+
+### Dan satu artefak di probe kritikusnya sendiri
+
+Probe sudut sisi menjalankan 32 aksi berturut-turut tanpa mengembalikan
+energi pemain. Aksi pertama (`perah`) habis-habisan memakainya, jadi tiga
+aksi berikutnya DITOLAK — pemainnya tidak melangkah ke mana pun dan sudut
+sisinya jadi sekadar arah datang tadi. Itu yang membuat `cukur`, `gosok` dan
+`telur` tetap terlihat tersebar 0-180 derajat sesudah diperbaiki. Dengan
+`s.energy = 100` dikembalikan tiap iterasi, ketiganya ikut lulus.
+
+Ini kesalahan pengukuran kesebelas yang tercatat di pekerjaan ini, dan yang
+kesatu yang datang dari kritikus, bukan dari pembangun. Pelajarannya tidak
+berubah: **alat ukur yang belum pernah salah biasanya belum pernah diperiksa.**
+
+---
+
 ## 7. Patung
 
 Tiga kali, dengan bentuk berbeda, sesuatu berhenti bergerak sama sekali:

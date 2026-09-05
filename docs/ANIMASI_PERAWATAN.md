@@ -394,6 +394,90 @@ berubah: **alat ukur yang belum pernah salah biasanya belum pernah diperiksa.**
 
 ---
 
+## 6d. Sudut yang ketiga kalinya terbalik, dan alat ukur yang akhirnya jujur
+
+Sesudah semua di atas, satu-satunya alat ukur yang tersisa masih berbohong
+dalam tiga cara sekaligus, dan ketiganya membuat angkanya terlalu bagus:
+
+1. **Kotak badannya ditulis tangan** di probe, dan lebih besar daripada torso
+   yang benar (kambing setengah-panjang 0,62 lawan 0,36 yang sebenarnya).
+   Diverifikasi lewat `getTightBounds()` tiap anak rig: `UKURAN` di game
+   ternyata BENAR — cocok persis dengan kotak torso yang dirender untuk
+   kelima spesies. Yang salah probe-nya. (Satu kekecualian nyata: tinggi
+   domba tercatat 0,85 m sementara torsonya berhenti di 0,77 m.)
+2. **Rotasi hewan diabaikan.** Sapi berdiri pada `rotation_y = -90`, jadi
+   sumbu panjangnya (0,68) ada di X dunia sementara probe memakainya di Z.
+   Kotaknya tertukar sisinya.
+3. **Jaraknya tak bertanda.** Menyerempet permukaan dan terbenam 30 cm di
+   dalam daging sama-sama tercatat 0,00.
+
+Probe penggantinya membaca `UKURAN` dari game, memutar titik ujung alat ke
+ruang lokal hewan (swauji: pusat torso sapi harus jatuh di lokal 0,0 — hasilnya
+0,004), dan mengembalikan jarak BERTANDA. Ia langsung menemukan dua hal yang
+tidak pernah terlihat sebelumnya.
+
+### Memerah dilakukan di atas punggung sapi
+
+Diukur di ruang lokal sapi, selama seluruh fase menarik: ember ada di
+`lx` 0,05-0,14 (torso setengah-lebar 0,36 — jadi di GARIS TENGAH) dan
+`ly` 1,29-1,59 (punggung 1,37 — jadi DI ATASNYA). Yang dianimasikan bukan
+memerah, melainkan menjulurkan tangan melewati sapi sambil menenteng ember
+di atas tulang belakangnya.
+
+Sebabnya sama persis seperti pada resep telur, ketiga kalinya: bahu ditahan
+di -70..-87 derajat karena angka besar terbaca seperti "menjulur ke bawah",
+padahal lengan menggantung dari bahu sehingga sudut sebesar itu MENGANGKATNYA.
+
+Kali ini petanya dibuat dulu, bukan ditebak: resep ditambal jadi tanjakan
+lambat 0 → -90 derajat di dalam mesin sungguhan, lalu tiap frame mencatat
+posisi ujung ember di ruang lokal sapi.
+
+| bahu | lx | ly | | bahu | lx | ly |
+|---|---|---|---|---|---|---|
+| −10 | 0,74 | 0,33 | | −50 | 0,13 | 0,83 |
+| −28 | 0,40 | 0,49 | | −71 | 0,06 | 1,26 |
+| −32 | 0,33 | 0,55 | | −86 | 0,12 | 2,05 |
+
+Ambing ada di lx 0,33-0,40 / ly 0,49-0,55, yaitu bahu **−28..−34**. Seluruh
+tarikan dipindah ke pita itu. Sesudahnya ember bertahan di lx 0,33-0,55 dan
+ly 0,45-0,55 sepanjang fase menarik, dengan jarak bertanda −0,03 s.d. +0,09.
+
+### Kelonggaran berdiri per resep
+
+Mencukur menyapu panjang lewat `rotation_z`, jadi ujung bilahnya menjulur
+lebih jauh ke dalam daripada aksi lain dengan jangkauan yang sama: terukur,
+ia terbenam 9-22 cm ke dalam torso domba di 49 dari 91 frame. `RESEP` sekarang
+menerima `renggang` — meter tambahan jarak berdiri, ditambahkan SESUDAH
+penskalaan, karena galatnya bukan proporsi melainkan panjang tetap alatnya.
+
+Hasil akhir seluruh tabel, diukur dengan alat yang sudah jujur:
+
+| aksi | min | frame menyentuh (≤12 cm) | frame menembus > 8 cm |
+|---|---|---|---|
+| belai sapi | −0,03 | 25/46 | 0 |
+| belai ayam | 0,00 | 22/46 | 0 |
+| belai kambing | −0,04 | 24/46 | 0 |
+| gosok sapi | −0,04 | 54/90 | 0 |
+| gosok kambing | −0,12 | 59/90 | **10** |
+| gosok ayam | −0,09 | 57/90 | 1 |
+| perah sapi | −0,26 → **−0,03** | 24 → 38/90 | 11 → **0** |
+| cukur domba | −0,23 → **−0,08** | 25 → 54/91 | 49 → **2** |
+| telur ayam | −0,11 → **−0,03** | 39 → 35/68 | 17 → **0** |
+
+Ambang animasi `perah` tetap lulus sesudah pitanya dipindah, diukur pada
+`bahu_r.rotation_x`: rentang 46,0° (dari 87), durasi 2300 ms, antisipasi
+11,0°/433 ms, tahanan 600 ms, ikutan 8,0°, ease 4,29, 7 sapuan, irama 146,1 ms.
+
+### Satu baris yang sengaja dibiarkan merah
+
+`gosok kambing` masih menembus 0,12 m di 10 dari 90 frame. Kelonggaran 0,05 m
+pada `gosok` diuji: tembusan kambing turun ke 5/90, **tapi sentuhan pada SAPI
+jatuh dari 54 ke 40 dari 90**. Sapi hewan yang paling sering disikat, jadi
+tukar itu rugi. Sisanya dibiarkan dan dicatat, bukan ditukar dengan kemunduran
+pada kasus yang paling sering terjadi.
+
+---
+
 ## 7. Patung
 
 Tiga kali, dengan bentuk berbeda, sesuatu berhenti bergerak sama sekali:

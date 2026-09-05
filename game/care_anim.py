@@ -610,19 +610,39 @@ def _turun_badan(dalam: float, t_turun: int, t_tahan: int, t_naik: int,
 def _resep_perah() -> list:
     # Tarikan bergantian: kanan pada 780/1180/1580, kiri pada 980/1380/1780.
     # Dua tangan yang menarik bersamaan terlihat seperti meremas, bukan memerah.
+    #
+    # Sudutnya diukur, bukan ditebak — dan tebakan pertamanya terbalik, persis
+    # seperti pada resep telur. Versi lama menahan bahu di -70..-87 derajat
+    # karena angka besar terbaca seperti "menjulur ke bawah sapi". Yang
+    # sebenarnya terjadi: lengan menggantung dari bahu, jadi sudut sebesar itu
+    # MENGANGKATNYA. Diukur di dalam mesin sendiri (resep ditambal jadi
+    # tanjakan lambat 0 -> -90 derajat, lalu tiap frame dicatat posisi ujung
+    # ember di ruang lokal sapi):
+    #
+    #     bahu -10  ->  lx 0,74  ly 0,33      bahu -50  ->  lx 0,13  ly 0,83
+    #     bahu -28  ->  lx 0,40  ly 0,49      bahu -71  ->  lx 0,06  ly 1,26
+    #     bahu -32  ->  lx 0,33  ly 0,55      bahu -86  ->  lx 0,12  ly 2,05
+    #
+    # Torso sapi setengah-lebarnya 0,36 m dan punggungnya 1,37 m. Jadi resep
+    # lama memegang ember di ly 1,26-2,05 pada lx 0,06 — di GARIS TENGAH sapi,
+    # setinggi punggungnya. Yang dianimasikan bukan memerah, tapi menjulurkan
+    # tangan melewati sapi sambil menenteng ember di atas tulang belakangnya.
+    #
+    # Ambing ada di lx 0,33-0,40, ly 0,49-0,55: bahu -28..-34 derajat. Seluruh
+    # tarikan dipindahkan ke pita itu.
     kanan = [
-        (0,     0.0, 'halus'), (200,  11.0, 'keluar'), (620, -74.0, 'masuk'),
-        (780, -86.0, 'halus'), (980, -70.0, 'halus'), (1180, -87.0, 'halus'),
-        (1380, -71.0, 'halus'), (1580, -85.0, 'halus'), (1780, -72.0, 'halus'),
+        (0,     0.0, 'halus'), (200,  11.0, 'keluar'), (620, -30.0, 'masuk'),
+        (780, -34.0, 'halus'), (980, -27.0, 'halus'), (1180, -35.0, 'halus'),
+        (1380, -28.0, 'halus'), (1580, -34.0, 'halus'), (1780, -28.0, 'halus'),
         (2180,   8.0, 'halus'), (2500,  0.0, 'redam'),
     ]
     kiri = [
-        (0,     0.0, 'halus'), (200,   9.0, 'keluar'), (620, -70.0, 'masuk'),
-        (780, -68.0, 'halus'), (980, -84.0, 'halus'), (1180, -69.0, 'halus'),
-        (1380, -85.0, 'halus'), (1580, -70.0, 'halus'), (1780, -84.0, 'halus'),
+        (0,     0.0, 'halus'), (200,   9.0, 'keluar'), (620, -28.0, 'masuk'),
+        (780, -27.0, 'halus'), (980, -33.0, 'halus'), (1180, -28.0, 'halus'),
+        (1380, -34.0, 'halus'), (1580, -28.0, 'halus'), (1780, -33.0, 'halus'),
         (2180,   7.0, 'halus'), (2500,  0.0, 'redam'),
     ]
-    turun = _turun_badan(-0.46, 620, 1780, 2180, 2500)
+    turun = _turun_badan(-0.50, 620, 1780, 2180, 2500)
     lutut = [
         (0, 0.0, 'halus'), (200, -4.0, 'keluar'), (620, 62.0, 'masuk'),
         (1780, 58.0, 'halus'), (2180, -5.0, 'halus'), (2500, 0.0, 'redam'),
@@ -1198,11 +1218,26 @@ def _resep_tambang() -> list:
 RESEP = {
     'minum': {'fase': _FASE_MINUM, 'jalur': _resep_minum,
               'alat': 'ember', 'aliran': True},
+    # Menggosok TIDAK diberi kelonggaran. Diuji dengan 0,05 m: tembusan pada
+    # kambing turun 10 -> 5 dari 90 frame, tapi sentuhan pada SAPI jatuh dari
+    # 54 ke 40 dari 90 — dan sapi hewan yang paling sering disikat. Sisa
+    # tembusan 0,12 m pada kambing dibiarkan, tercatat, tidak ditukar dengan
+    # kemunduran pada kasus yang paling sering terjadi.
     'gosok': {'fase': _FASE_GOSOK, 'jalur': _resep_gosok,
               'alat': 'sikat', 'aliran': False},
     'perah': {'fase': _FASE_PERAH, 'jalur': _resep_perah, 'alat': 'ember'},
-    'telur': {'fase': _FASE_TELUR, 'jalur': _resep_telur, 'alat': None},
-    'cukur': {'fase': _FASE_CUKUR, 'jalur': _resep_cukur, 'alat': 'gunting'},
+    # Ayam torsonya cuma 0,22 x 0,30 m, jadi tangan yang meleset 11 cm ke
+    # dalam sudah setengah menembus burungnya. Terukur: 17 dari 68 frame lebih
+    # dalam dari 8 cm sebelum kelonggaran ini ditambahkan.
+    'telur': {'fase': _FASE_TELUR, 'jalur': _resep_telur, 'alat': None,
+              'renggang': 0.09},
+    # `renggang` = meter tambahan jarak berdiri, DI ATAS jangkauan yang sudah
+    # diskalakan. Mencukur menyapu panjang lewat rotation_z, jadi ujung
+    # bilahnya menjulur lebih jauh ke dalam daripada aksi lain dengan
+    # jangkauan yang sama — terukur, ia terbenam 9-22 cm ke dalam torso domba
+    # sepanjang sapuan.
+    'cukur': {'fase': _FASE_CUKUR, 'jalur': _resep_cukur, 'alat': 'gunting',
+              'renggang': 0.18},
     'belai': {'fase': _FASE_BELAI, 'jalur': _resep_belai, 'alat': None},
     'bicara': {'fase': _FASE_BICARA, 'jalur': _resep_bicara, 'alat': None},
     'dengar': {'fase': _FASE_DENGAR, 'jalur': _resep_dengar, 'alat': None},

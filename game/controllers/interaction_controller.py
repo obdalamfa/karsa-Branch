@@ -906,7 +906,7 @@ class InteractionController:
         if hx is None:
             return diam, None, 0.0, 1.0
         geo = self._geometri_hewan(npc_id, npc, self._jangkau(jenis),
-                                   self._hadap(entities_mgr, npc_id))
+                                   self._hadap(entities_mgr, npc_id), jenis)
         if geo is None:
             self.player.rotation_y = _m.degrees(
                 _m.atan2(hx - self.player.x / TS, hy - self.player.z / TS))
@@ -939,7 +939,7 @@ class InteractionController:
         return self.JANGKAU_TANGAN if resep.get('alat') else self.JANGKAU_TELAPAK
 
     def _geometri_hewan(self, npc_id: str, npc: dict, jangkau: float,
-                        rotasi: float = 0.0):
+                        rotasi: float = 0.0, jenis_resep: str = ''):
         """(x_rusuk, z_rusuk, kedalaman_jongkok, skala_ayunan) untuk hewan ini.
 
         Dua angka pertama adalah TITIK BERDIRI di rusuk hewan, bukan sekadar
@@ -950,6 +950,7 @@ class InteractionController:
         seperempat pemerahan terjadi dalam 45 derajat dari moncong sapi.
         """
         from ..animal_models import ukuran, titik_rusuk
+        from .. import care_anim as _ca
         s = self.player.state
         pos = s.npc_positions.get(npc_id) or {}
         hx, hy = pos.get('x'), pos.get('y')
@@ -974,8 +975,10 @@ class InteractionController:
         # pendek juga MENJULUR lebih pendek: terukur, memperkecil ayunan saja
         # menurunkan sikat ke ketinggian punggung ayam tapi menariknya 0,07-0,27 m
         # ke belakang, jadi ia lewat di atas ayam alih-alih menyentuhnya.
+        renggang = (_ca.RESEP.get(jenis_resep) or {}).get('renggang', 0.0)
         tx, tz = titik_rusuk(cx, cz, spesies, rotasi,
-                             self.player.x, self.player.z, jangkau * skala)
+                             self.player.x, self.player.z,
+                             jangkau * skala + renggang)
         return tx, tz, turun, skala
 
     def _langkah_masuk(self, tx: float, tz: float):

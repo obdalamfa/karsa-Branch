@@ -354,7 +354,7 @@ UKURAN = {
     'kelinci': (0.10, 0.16, 0.30),
     'rubah':   (0.12, 0.25, 0.42),
     'kambing': (0.16, 0.36, 0.74),
-    'domba':   (0.23, 0.39, 0.85),
+    'domba':   (0.23, 0.39, 0.77),   # diverifikasi lewat getTightBounds torso
     'sapi':    (0.36, 0.68, 1.37),
     'kuda':    (0.29, 0.65, 1.56),
 }

@@ -139,9 +139,14 @@ dibagi rata-rata. Aksi dengan tahanan panjang punya rata-rata rendah, jadi
 `ease`-nya naik tanpa gerakannya membaik. Nilai ~5 pada aksi bertahanan 533 ms
 adalah artefak, bukan prestasi.
 
-**`jeda` bisa mengunci ke siklus salah.** Korelasi silang kadang mengeluarkan
-−667 ms pada sendi yang jelas-jelas mengikuti. Angka negatif besar di kolom itu
-harus dicurigai, bukan dilaporkan.
+**`jeda` pernah mengunci ke siklus salah — SUDAH DIPERBAIKI, lihat §6e.**
+Korelasi silang mengeluarkan −667 ms pada sendi yang jelas-jelas mengikuti.
+Ternyata bukan satu cacat tapi dua: puncak yang seri diselesaikan ke lag paling
+negatif, dan sendi yang bergerak berlawanan arah tidak pernah ketemu karena
+puncaknya dicari pada korelasi bertanda. Sekarang ada swauji tertanam
+(`python tools/anim_trace.py --swauji`). Dicatat di sini karena angka −667 ms
+sempat masuk ke beberapa tabel di dokumen ini sebelum ketahuan; tabel-tabel itu
+sudah diukur ulang.
 
 **Mengukur satu sumbu punya buta arah.** Condongan hewan yang disikat dibagi
 antara `rotation_x` dan `rotation_z` menurut arah datangnya sikat. Probe yang
@@ -466,7 +471,9 @@ Hasil akhir seluruh tabel, diukur dengan alat yang sudah jujur:
 
 Ambang animasi `perah` tetap lulus sesudah pitanya dipindah, diukur pada
 `bahu_r.rotation_x`: rentang 46,0° (dari 87), durasi 2300 ms, antisipasi
-11,0°/433 ms, tahanan 600 ms, ikutan 8,0°, ease 4,29, 7 sapuan, irama 146,1 ms.
+11,0°/433 ms, tahanan 600 ms, ikutan 8,0°, ease 4,29, 7 sapuan, irama 146,1 ms,
+jeda sekunder 67 ms pada leher (diukur ulang dengan pengukur yang sudah
+diperbaiki, §6e).
 
 ### Satu baris yang sengaja dibiarkan merah
 
@@ -594,12 +601,12 @@ Diukur dengan alat yang sama, pada sendi dengan rentang terbesar:
 
 | aksi | rentang | durasi | antisipasi | tahanan | ikutan | ease | jeda |
 |---|---|---|---|---|---|---|---|
-| cangkul | 146,0° | 1000 ms | 6,2°/200 ms | 200 ms | 7,0° | 5,10 | 533 ms |
-| siram | 78,9° | 1267 ms | 4,2°/200 ms | 667 ms | 5,8° | 7,57 | 667 ms |
-| tanam | 90,0° | 1133 ms | 4,0°/233 ms | 567 ms | 3,7° | 8,87 | 667 ms |
-| petik | 86,0° | 1167 ms | 4,0°/233 ms | 500 ms | 2,4° | 4,51 | 667 ms |
-| tebang | 174,0° | 1233 ms | 9,3°/233 ms | 200 ms | 8,9° | 4,26 | 667 ms |
-| tambang | 190,0° | 1133 ms | 9,9°/233 ms | 200 ms | 7,6° | 5,20 | 433 ms |
+| cangkul | 146,0° | 1000 ms | 6,2°/200 ms | 200 ms | 7,0° | 5,10 | 133 ms |
+| siram | 78,9° | 1267 ms | 4,2°/200 ms | 667 ms | 5,8° | 7,57 | 133 ms |
+| tanam | 90,0° | 1133 ms | 4,0°/233 ms | 567 ms | 3,7° | 8,87 | 100 ms |
+| petik | 86,0° | 1167 ms | 4,0°/233 ms | 500 ms | 2,4° | 4,51 | 133 ms |
+| tebang | 174,0° | 1233 ms | 9,3°/233 ms | 200 ms | 8,9° | 4,26 | 167 ms |
+| tambang | 190,0° | 1133 ms | 9,9°/233 ms | 200 ms | 7,6° | 5,20 | 167 ms |
 | **ambang** | **25°** | **900 ms** | **2°/60 ms** | **80 ms** | **1,5°** | **1,35** | **40 ms** |
 
 Dan mesin lama, diukur langsung lewat `_play_tool_anim()` supaya
@@ -611,7 +618,14 @@ perbandingannya bukan dari ingatan:
 | water | 63,3° | 367 ms | **0** | 100 ms | **0** | **1,19** | **0** |
 | bend | 81,0° | 400 ms | **0** | 33 ms | **0** | 1,38 | **0** |
 | swing | 95,2° | 400 ms | **0** | 33 ms | **0** | 1,38 | **0** |
-| mine | 152,4° | 433 ms | **0** | 33 ms | **0** | 1,50 | 667 ms |
+| mine | 152,4° | 433 ms | **0** | 33 ms | **0** | 1,50 | **0** |
+
+Kolom `jeda` di kedua tabel di atas DIUKUR ULANG sesudah pengukurnya sendiri
+diperbaiki (§6e). Angka pertama yang tercatat — 433-667 ms untuk resep baru,
+dan 667 ms untuk mode `mine` yang lama — adalah artefak batas pencarian, bukan
+pengukuran. Yang benar: resep baru 100-167 ms, mesin lama **nol di kelima
+modenya**. Perbaikannya membuat mesin lama terlihat lebih buruk, bukan lebih
+baik, karena satu-satunya angka yang dulu terlihat mendukungnya ternyata palsu.
 
 Perhatikan bahwa RENTANG-nya tidak pernah jadi masalah — mesin lama mengayun
 sejauh yang baru. Yang tidak ada padanya adalah semua yang lain: tidak ada

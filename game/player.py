@@ -945,7 +945,9 @@ class Player3D(Entity):
             # player.x/z tanpa syarat — jadi pemain dipaku di koordinat kandang
             # yang lama selama sisa aksi, berdiri di peta baru sambil memegang
             # ember, alat HUD-nya hilang, dan memerah sapi yang ada di peta lain.
-            from . import care_anim
+            # (care_anim sudah diimpor di tingkat modul — mengimpornya lagi di
+            # sini membuat namanya LOKAL untuk seluruh tick(), dan pemakaian di
+            # bawah jadi UnboundLocalError tiap kali aksi selesai normal.)
             care_anim.bereskan(self)
 
         # ── Aksi perawatan: DIJALANKAN TERAKHIR, dan itu disengaja ──────────

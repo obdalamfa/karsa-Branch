@@ -176,6 +176,107 @@ _TILE_TAMBALAN = (TR, PALM, DT, LN, CH, MB, PP, CL, MR, BS, SH, CT, TB, BD,
                   ST, FP, GR, TV, CHR, CAL, BOT, DR)
 
 
+
+# ─── PALUNG MINUM TERNAK ────────────────────────────────────────────────────
+# Satu palung per kandang, di ubin tetap TROUGH_TILE. Ubin PETA-nya tidak
+# diubah: palung ini prop, bukan tile, jadi ia tidak bisa mengurung pemain —
+# dan `cek_pemain_valid` di tools/regress.py tetap melihat peta yang sama.
+TROUGH_TILE = (18, 4)
+
+_KAYU_PALUNG = color.rgb(126,  94,  60)
+_KAYU_GELAP  = color.rgb( 92,  66,  40)
+_AIR_PALUNG  = color.rgb(104, 168, 202)
+
+
+def build_trough(world, tx, ty):
+    """Palung kayu dengan permukaan air yang TINGGINYA ikut takaran hewan.
+
+    Angka air di husbandry.py tidak ada gunanya kalau pemain harus membuka
+    panel untuk melihatnya. Palung yang isinya benar-benar naik-turun membuat
+    "sapinya haus" bisa dibaca dari seberang kandang, tanpa satu baris teks.
+    """
+    from ursina import Entity, Vec3
+    wx, wz = tx * TS, ty * TS
+    # Lantai kandang ada di GROUND_H, bukan di y=0. Membangun palung dari nol
+    # menenggelamkannya 20 cm ke dalam tanah: yang terlihat cuma bibir tipis,
+    # dan permukaan airnya seolah melayang di atas rumput.
+    y0 = GROUND_H + world.get_surface_height(tx, ty)
+    L, W, H = TS * 1.10, TS * 0.40, 0.34       # panjang, lebar, tinggi dinding
+    T = 0.06                                    # tebal papan
+
+    def papan(pos, scale, col):
+        e = world._create_entity('cube', pos, scale, 'wood_plank', col)
+        world._obj_ents.append(e)
+        return e
+
+    papan((wx, y0 + T * 0.5, wz), (L, T, W), _KAYU_GELAP)                   # dasar
+    papan((wx, y0 + H * 0.5, wz - W * 0.5), (L, H, T), _KAYU_PALUNG)        # sisi utara
+    papan((wx, y0 + H * 0.5, wz + W * 0.5), (L, H, T), _KAYU_PALUNG)        # sisi selatan
+    papan((wx - L * 0.5, y0 + H * 0.5, wz), (T, H, W), _KAYU_PALUNG)        # ujung barat
+    papan((wx + L * 0.5, y0 + H * 0.5, wz), (T, H, W), _KAYU_PALUNG)        # ujung timur
+    for sx in (-1, 1):                                                       # kaki
+        papan((wx + sx * L * 0.38, y0 - 0.06, wz), (0.11, 0.16, 0.11), _KAYU_GELAP)
+
+    # Permukaan air: satu papan tipis yang dinaik-turunkan, bukan entity yang
+    # dibuat-hancur tiap kali — membuat ulang Entity tiap perubahan takaran
+    # adalah cara termurah menghidupkan lagi bug NodePath ganda.
+    air = Entity(model='cube', color=_AIR_PALUNG, unlit=True,
+                 position=Vec3(wx, y0 + T, wz),
+                 scale=(L - T * 2.4, 0.02, W - T * 2.4))
+    world._obj_ents.append(air)
+
+    world.trough = {
+        'tile': (tx, ty),
+        'air': air,
+        'dasar_y': y0 + T,
+        'tinggi': H - T * 1.8,
+        'pos': (wx, y0 + H * 0.92, wz),
+    }
+    # Tinggi awal dibaca dari keadaan, bukan dari nol: palung yang selalu
+    # mulai kering tiap kali pemain masuk-keluar kandang akan berbohong.
+    set_trough_level(world, _trough_state_level(world))
+
+
+def _trough_state_level(world) -> int:
+    """Takaran air TERENDAH di antara ternak scene ini.
+
+    Yang terendah, bukan rata-rata: palung setengah penuh sementara satu ekor
+    sudah 0% menyembunyikan hal yang justru harus dilihat pemain.
+    """
+    try:
+        from game.data import ANIMAL_NPCS
+        from game.husbandry import is_penned, care_of
+        st = world.state
+        nilai = [care_of(st, aid).get('air', 0) for aid in ANIMAL_NPCS
+                 if is_penned(aid)
+                 and (st.npc_positions.get(aid) or {}).get('scene') == world.scene_name]
+        return int(min(nilai)) if nilai else 0
+    except Exception:
+        return 0
+
+
+def set_trough_level(world, persen: float) -> None:
+    """Naik-turunkan permukaan air. 0 = palung kering (papan disembunyikan)."""
+    t = getattr(world, 'trough', None)
+    if not t or t.get('air') is None:
+        return
+    u = max(0.0, min(1.0, float(persen) / 100.0))
+    air = t['air']
+    if u <= 0.01:
+        air.enabled = False
+        return
+    air.enabled = True
+    tinggi = max(0.012, t['tinggi'] * u)
+    air.scale_y = tinggi
+    air.y = t['dasar_y'] + tinggi * 0.5
+
+
+def trough_pour_point(world):
+    """Titik jatuh air: tepat di atas bibir palung."""
+    t = getattr(world, 'trough', None)
+    return t['pos'] if t else None
+
+
 def default_prop_builder(world, scene):
     from game.world import OBJ_TEX
     from game.scenes.zone_paint import paint_zone, patch_tile
@@ -215,3 +316,10 @@ def default_prop_builder(world, scene):
             elif tid in (ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS):
                 ore_tex = OBJ_TEX.get(tid, 'crystal')
                 build_ore(world, wx, wz, ore_tex)
+
+    # Kandang kebun punya satu palung minum. Dibangun di sini, bukan dari ubin,
+    # supaya peta tidak berubah sama sekali — palung yang jadi tile akan
+    # menutup ubin dan bisa mengurung pemain di dalam kandang.
+    world.trough = None
+    if getattr(scene, 'name', '') == 'farm':
+        build_trough(world, *TROUGH_TILE)

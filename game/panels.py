@@ -51,7 +51,13 @@ def _ui(model='quad', **kw):
     return Entity(parent=camera.ui, model=model, **kw)
 
 
-_FONT_NAME = 'Montserrat-Bold.ttf'  # Ursina cari via glob(**) di asset_folder
+# Ursina lama menemukan font ini lewat glob(**) di asset_folder; Ursina baru
+# menyerahkannya mentah-mentah ke Panda3D loadFont(), yang hanya melihat model
+# path. Jadi pakai jalur absolut kalau file-nya memang ada di repo — nama telanjang
+# hanya sebagai cadangan supaya instalasi lama tetap jalan.
+_FONT_FILE = (_Path(__file__).resolve().parent.parent
+              / 'assets' / 'fonts' / 'Montserrat-Bold.ttf')
+_FONT_NAME = _FONT_FILE.as_posix() if _FONT_FILE.exists() else 'Montserrat-Bold.ttf'
 
 def _txt(text='', pos=(0, 0), scale=1.0, col=color.white, **kw):
     kw.setdefault('font', _FONT_NAME)

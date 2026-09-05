@@ -29,6 +29,7 @@ from .pathfinder import PathGrid, PathMover
 from .controllers.time_controller import TimeController
 from .controllers.quest_controller import QuestController
 from .controllers.interaction_controller import InteractionController
+from . import care_anim
 
 TS = TILE_SIZE
 _GH = GROUND_H
@@ -131,6 +132,12 @@ class Player3D(Entity):
         self._anim_t           = 0.0
         self._attack_anim      = 0.0
         self._anim_mode        = 'swing' # swing|down|water|bend
+        # Aksi perawatan berdurasi (care_anim.AksiRawat) atau None. Bukan bagian
+        # dari _attack_anim: yang ini punya fase, kurva, dan banyak sendi, dan
+        # ia menulis pose SESUDAH blok animasi lama supaya tidak ditimpa
+        # lerp-ke-nol milik pose diam.
+        self._care_anim        = None
+        self._care_prop        = None
         self.target_rotation_y = 0.0
         self.velocity_x        = 0.0
         self.velocity_y        = 0.0
@@ -495,6 +502,13 @@ class Player3D(Entity):
         if held_keys['s'] or held_keys['down arrow']:  dz_in -= 1
         if held_keys['a'] or held_keys['left arrow']:  dx_in -= 1
         if held_keys['d'] or held_keys['right arrow']: dx_in += 1
+
+        # Aksi perawatan menyerah begitu pemain memilih jalan. Aksi yang
+        # mengunci pemain sampai selesai adalah cara tercepat membuat orang
+        # merasa game-nya rusak — pelajaran yang sudah dibayar dua kali di
+        # proyek ini ("jalan saja tidak bisa").
+        if (dx_in or dz_in) and self._care_anim is not None:
+            self._care_anim.batal()
 
         is_moving_wasd = False
         run = held_keys['shift'] and s.energy > 0
@@ -925,7 +939,28 @@ class Player3D(Entity):
             self._fx_burst(tail_x, tail_y, tail_z, spark_col, n=1, spread=0.1)
 
         # Check portals every tick unconditionally so cooldowns don't block standing players
-        self._check_portals(tx_i, ty_i)
+        if self._check_portals(tx_i, ty_i):
+            # Ganti scene MEMBATALKAN aksi perawatan yang sedang berjalan.
+            # Tanpa ini `_saat_frame` terus memanggil `_maju()`, yang menulis
+            # player.x/z tanpa syarat — jadi pemain dipaku di koordinat kandang
+            # yang lama selama sisa aksi, berdiri di peta baru sambil memegang
+            # ember, alat HUD-nya hilang, dan memerah sapi yang ada di peta lain.
+            # (care_anim sudah diimpor di tingkat modul — mengimpornya lagi di
+            # sini membuat namanya LOKAL untuk seluruh tick(), dan pemakaian di
+            # bawah jadi UnboundLocalError tiap kali aksi selesai normal.)
+            care_anim.bereskan(self)
+
+        # ── Aksi perawatan: DIJALANKAN TERAKHIR, dan itu disengaja ──────────
+        # Blok animasi di atas melerp tiap sendi kembali ke nol setiap frame
+        # saat pemain diam. Kalau aksi perawatan menulis posenya lebih dulu,
+        # lerp itu akan menghapusnya di frame yang sama dan tidak ada yang
+        # pernah terlihat bergerak. Menulis terakhir = menang.
+        if self._care_anim is not None:
+            self._care_anim.update(dt)
+            if self._care_anim.selesai:
+                care_anim.bereskan(self)
+            else:
+                self._care_anim.terapkan(self)
 
     def _reset_anim(self):
         for piv in (self._pivot_hip_l, self._pivot_hip_r,

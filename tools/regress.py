@@ -152,10 +152,21 @@ def cek_motif_waras(g):
     mood = mv.mood
     if mood != mood or abs(mood) > 1e6:
         return _fail(f'mood tidak terhingga: {mood}')
+    # Uji peluruhan harus MEMULIHKAN keadaan sesudahnya. Versi lama tidak,
+    # jadi tiap scene menua sim-nya 4 jam; pada scene ke-14 `lapar` sudah
+    # menyentuh lantai -100, dan laju peluruhannya sendiri
+    # (HUNGER_RATIO * (100 + lapar)) jadi nol. Hasilnya swarga GAGAL bukan
+    # karena ada yang rusak, tapi karena pemeriksanya memakan umpannya sendiri.
+    simpan = {m: mv.get(m) for m in MOTIVES}
+    simpan_acc, simpan_carry = dict(mv._acc), mv._tick_carry
     sebelum = mv.get('lapar')
     mv.tick(240.0)
-    if mv.get('lapar') >= sebelum:
-        return _fail('lapar tidak turun setelah 4 jam-sim')
+    sesudah = mv.get('lapar')
+    for m, v in simpan.items():
+        setattr(mv, m, v)
+    mv._acc, mv._tick_carry = simpan_acc, simpan_carry
+    if sesudah >= sebelum:
+        return _fail(f'lapar tidak turun setelah 4 jam-sim ({sebelum:.1f} -> {sesudah:.1f})')
     return _ok(f'mood {mood:+.1f}')
 
 

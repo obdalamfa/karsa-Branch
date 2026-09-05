@@ -71,3 +71,6 @@
 {"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
 {"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
 {"slice":"jeda","round":2,"role":"note","note":"Semua nilai jeda yang sudah terlanjur ditulis di dokumen diukur ulang dengan pengukur yang diperbaiki. Resep alat baru: 433-667 ms (artefak) -> 100-167 ms. Mesin lama mode 'mine': 667 ms (artefak) -> 0. Perbaikannya membuat mesin lama terlihat LEBIH buruk, karena satu-satunya angka yang dulu mendukungnya ternyata palsu."}
+{"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
+{"slice":"bicara","round":1,"role":"build","note":"Lawan bicara berpaling 320 ms ease-out lewat jalur terpendek (dulu mematah dalam 1 frame; rentang rotation_y terukur 0,0 karena putarannya selesai sebelum frame pertama). Berpaling balik 420 ms memakai _bicara_rot0 yang selama ini disimpan tapi tidak pernah dipakai. Dan hash(actor_id) -> sum(ord) di npc.py dan animal.py: Python mengacak hash string tiap proses, jadi fase anggukan dan napas berbeda tiap jalan dan rekaman tidak bisa dibandingkan. Diverifikasi: dua proses memberi _bicara_t 2,3415 yang sama."}
+{"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}

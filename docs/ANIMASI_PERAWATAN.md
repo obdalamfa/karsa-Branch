@@ -545,6 +545,58 @@ diperiksa biasanya belum pernah salah hanya karena tidak ada yang melihat.
 
 ---
 
+## 6f. Berbicara: lawan bicaranya mematah, dan fasenya tidak bisa diulang
+
+Dari tiga animasi yang diminta di brief — panen, menggosok, berbicara — yang
+ketiga paling sedikit diperiksa. Diukur sekarang.
+
+**Yang sudah benar.** Keduanya saling menatap (selisih 0,00° di kedua arah).
+Sisi pemain lulus seluruh ambang pada `bahu_r.rotation_x`: rentang 53,0°,
+durasi 4333 ms, antisipasi 7,0°/233 ms, tahanan 733 ms, ease 6,71, 13 ketukan,
+irama 61,6 ms. Lawan bicaranya bergerak, bukan patung: angguk 6,1°, goyang
+4,8°, dan napas yang tidak pernah berhenti.
+
+**Batas yang tidak bisa dilewati.** NPC manusia di sini satu mesh
+`humanoid.obj` TANPA pivot sendi — jalur Vitaboy gagal di lingkungan ini, dan
+`entities.py` sengaja menangkap kegagalannya supaya game tetap bisa dibuka.
+Jadi lawan bicara cuma punya rotasi badan utuh dan posisi. Tidak ada isyarat
+tangan yang mungkin dibuat tanpa rig itu. Ini batas struktural, bukan sesuatu
+yang bisa diperbaiki di dalam potongan ini.
+
+**Cacat satu: berpaling tidak butuh waktu.** `mulai_percakapan()` menulis
+`rotation_y` sekali di frame pembuka, jadi lawan bicara mematah menghadap
+pemain dalam SATU frame. Terukur, rentang `rotation_y` selama seluruh
+percakapan 0,0° — bukan karena ia tidak berputar, tapi karena seluruh
+putarannya sudah selesai sebelum frame pertama tercatat.
+
+Sekarang ia berpaling 320 ms dengan ease-out kubik lewat jalur sudut
+terpendek. Terukur: 8 frame (266 ms) dari 0° ke 90°, berangkat 25° di frame
+pertama dan mendarat 0,02° di frame terakhir — leher yang berhenti sendiri,
+bukan motor yang dimatikan.
+
+**Cacat dua: berpaling balik tidak pernah terjadi.** `_bicara_rot0` disimpan
+sejak awal dan tidak pernah dipakai satu kali pun. Lawan bicara tetap
+menghadap ke tempat pemain berdiri, selamanya, bahkan sesudah pemain pergi.
+Sekarang ia kembali dalam 420 ms — lebih lambat daripada saat menoleh, karena
+tidak ada yang menariknya. Terukur: 10 frame (333 ms) dari 53,6° ke 0,0°.
+
+**Cacat tiga, dan ini yang merusak seluruh proyek ini: `hash()`.** Fase
+anggukan NPC dan fase napas hewan sama-sama diambil dari `hash(actor_id)`.
+Python **mengacak ulang hash string tiap proses**. Artinya dua rekaman dari
+kode yang sama persis punya fase berbeda, dan tidak bisa dibandingkan —
+padahal seluruh metode kerja di dokumen ini bersandar pada rekaman yang bisa
+diulang. Jebakan yang sama sudah tercatat di `entities.py:262` sejak lama,
+dengan perbaikannya sekaligus: `sum(map(ord, ...))`.
+
+Diperiksa: dua proses terpisah sekarang memberi `_bicara_t` awal 2,3415 yang
+sama persis.
+
+Pelajaran yang mahal: **catatan tentang sebuah jebakan tidak mencegah jebakan
+itu.** Peringatannya sudah ditulis di berkas lain di repo yang sama, dan dua
+tempat tetap jatuh ke dalamnya.
+
+---
+
 ## 7. Patung
 
 Tiga kali, dengan bentuk berbeda, sesuatu berhenti bergerak sama sekali:

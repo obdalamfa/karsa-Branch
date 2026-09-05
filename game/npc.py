@@ -24,6 +24,11 @@ class NPC(BaseActor):
         self.ai_state = NPCState.IDLE
 
     def update_ai(self, dt: float, brains, can_walk_fn):
+        # Berpaling balik berlanjut sesudah kotak dialog ditutup; tanpa ini
+        # gerakannya terpotong di frame terakhir percakapan dan yang terlihat
+        # tetap sebuah patahan, cuma dipindah ke ujung yang lain.
+        if self._tick_paling(dt):
+            return
         if self.activity == 'sleeping':
             self.ai_state = NPCState.SLEEPING
             return
@@ -82,16 +87,56 @@ class NPC(BaseActor):
     NAPAS_DERAJAT   = 0.6      # selalu ada, bahkan di antara anggukan
     NAPAS_PERIODE   = 3.1
 
+    # Berpaling butuh WAKTU. Versi pertama menulis rotation_y sekali di frame
+    # pembuka, jadi lawan bicara mematah menghadap pemain dalam satu frame —
+    # gerakan yang tidak dilakukan makhluk hidup mana pun. Diukur dari jejak:
+    # rentang rotation_y selama seluruh percakapan 0,0 derajat, karena seluruh
+    # perubahannya sudah selesai sebelum frame pertama tercatat.
+    PALING_MS       = 320.0    # menoleh ke pemain saat percakapan dimulai
+    PALING_BALIK_MS = 420.0    # kembali ke arah semula sesudah selesai
+
     def mulai_percakapan(self, px: float, pz: float) -> None:
         from .config import TILE_SIZE as _TS
         # Fase awal diambil dari id-nya, bukan nol: kalau dua NPC memakai fase
         # yang sama, mereka mengangguk serempak seperti pasukan.
-        self._bicara_t = (hash(self.actor_id) % 1000) / 1000.0 * self.ANGGUK_PERIODE
+        #
+        # sum(ord) — BUKAN hash(), yang diacak ulang tiap proses Python. Dengan
+        # hash(), dua rekaman dari kode yang sama persis punya fase anggukan
+        # berbeda dan tidak bisa dibandingkan. Jebakan yang sama sudah tercatat
+        # di entities.py:262.
+        self._bicara_t = ((sum(map(ord, self.actor_id)) % 1000) / 1000.0
+                          * self.ANGGUK_PERIODE)
         self._bicara_rot0 = self.rotation_y
         dx = px / _TS - self.logical_x
         dz = pz / _TS - self.logical_y
         if abs(dx) > 1e-6 or abs(dz) > 1e-6:
-            self.rotation_y = math.degrees(math.atan2(dx, dz))
+            self._paling(math.degrees(math.atan2(dx, dz)), self.PALING_MS)
+
+    # ── berpaling ───────────────────────────────────────────────────────────
+    def _paling(self, ke_derajat: float, panjang_ms: float) -> None:
+        """Mulai berpaling ke `ke_derajat` selama `panjang_ms`."""
+        self._paling_dari = float(self.rotation_y)
+        # Lewat jalur terpendek: memutar 350 derajat untuk sampai ke -10 adalah
+        # cara paling cepat membuat orang terlihat seperti mesin.
+        selisih = (float(ke_derajat) - self._paling_dari + 180.0) % 360.0 - 180.0
+        self._paling_delta = selisih
+        self._paling_t = 0.0
+        self._paling_ms = float(panjang_ms)
+
+    def _tick_paling(self, dt: float) -> bool:
+        """Satu langkah berpaling. True kalau masih berjalan."""
+        if getattr(self, '_paling_t', None) is None:
+            return False
+        self._paling_t += dt
+        u = min(1.0, self._paling_t * 1000.0 / self._paling_ms)
+        # Ease-out kubik: kepala berangkat cepat lalu mendarat pelan, seperti
+        # leher yang berhenti sendiri, bukan seperti motor yang dimatikan.
+        e = 1.0 - (1.0 - u) ** 3
+        self.rotation_y = self._paling_dari + self._paling_delta * e
+        if u >= 1.0:
+            self._paling_t = None
+            return False
+        return True
 
     def tick_percakapan(self, dt: float, px: float, pz: float) -> None:
         """Anggukan berdenyut + napas yang tidak pernah berhenti.
@@ -108,6 +153,7 @@ class NPC(BaseActor):
         """
         if getattr(self, '_bicara_t', None) is None:
             self.mulai_percakapan(px, pz)
+        self._tick_paling(dt)
         self._bicara_t += dt
         t = self._bicara_t
 
@@ -134,3 +180,10 @@ class NPC(BaseActor):
         self._bicara_t = None
         self.rotation_x = 0.0
         self.rotation_z = 0.0
+        # `_bicara_rot0` disimpan sejak awal tapi tidak pernah dipakai: lawan
+        # bicara tetap menghadap ke tempat pemain berdiri, selamanya, bahkan
+        # sesudah pemain pergi. Sekarang ia berpaling kembali — lebih lambat
+        # daripada saat menoleh, karena tidak ada yang menariknya.
+        rot0 = getattr(self, '_bicara_rot0', None)
+        if rot0 is not None:
+            self._paling(rot0, self.PALING_BALIK_MS)

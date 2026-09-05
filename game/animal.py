@@ -186,7 +186,11 @@ class FarmAnimal(BaseActor):
         sebagai satu benda, bukan sebagai beberapa hewan.
         """
         self._napas_t = getattr(self, '_napas_t', 0.0)
-        geser = (hash(self.actor_id) % 997) / 997.0 * self.NAPAS_PERIODE
+        # sum(ord) — BUKAN hash(), yang diacak ulang tiap proses Python.
+        # Dengan hash(), fase napas tiap ekor berbeda tiap kali game dijalankan,
+        # jadi dua rekaman dari kode yang sama persis tidak bisa dibandingkan.
+        # Jebakan yang sama sudah tercatat di entities.py:262.
+        geser = (sum(map(ord, self.actor_id)) % 997) / 997.0 * self.NAPAS_PERIODE
         return self.NAPAS_DERAJAT * math.sin(
             (self._napas_t + geser) * math.tau / self.NAPAS_PERIODE)
 

@@ -144,7 +144,30 @@ def measure(xs: list[float], fps: float) -> dict:
 
 
 def _lag_ms(a: list[float], b: list[float], fps: float, max_lag: int = 20) -> float:
-    """Jeda sendi b terhadap a lewat korelasi silang. Positif = b terlambat."""
+    """Jeda sendi b terhadap a lewat korelasi silang. Positif = b terlambat.
+
+    Gerakan berulang membuat korelasi silang AMBIGU: sapuan menyikat berperiode
+    sekitar 300 ms punya puncak yang sama tinggi di lag 0, +/-1 periode,
+    +/-2 periode, dan seterusnya. Versi pertama fungsi ini memakai `c > best`,
+    jadi di antara puncak yang seri ia menyimpan yang PERTAMA ditemukan — dan
+    loopnya mulai dari -max_lag, jadi yang menang selalu lag paling negatif.
+    Diuji dengan sinyal yang jawabannya sudah diketahui: dua deret berperiode
+    9 frame dengan jeda NOL dilaporkan -600 ms. Itu yang membuat laporan
+    menyebut kepala dan lutut MENDAHULUI lengan penggerak dua pertiga detik —
+    angka yang tidak mungkin, karena resepnya cuma pernah menggeser MAJU.
+
+    Sekarang, di antara puncak yang praktis seri, yang dipilih adalah lag
+    dengan |lag| terkecil. Untuk sinyal ambigu itu penjelasan yang paling
+    sederhana, dan ia membuat jeda nol terbaca nol.
+
+    Cacat kedua, terpisah: puncaknya dicari pada korelasi BERTANDA, jadi sendi
+    yang bergerak BERLAWANAN arah penggeraknya tidak pernah ketemu. Padahal
+    itu justru gerak sekunder yang benar — badan mencondong ke belakang saat
+    lengan mengayun ke depan; di resep menggosok empat kanal memang ditulis
+    sebagai kelipatan NEGATIF penggeraknya. Keempatnya melaporkan -667 ms,
+    yaitu batas pencarian, bukan sebuah pengukuran. Yang dicari sekarang
+    puncak |korelasi|: yang diukur adalah selisih WAKTU, bukan tandanya.
+    """
     def norm(xs):
         m = statistics.fmean(xs)
         s = statistics.pstdev(xs) or 1.0
@@ -154,7 +177,7 @@ def _lag_ms(a: list[float], b: list[float], fps: float, max_lag: int = 20) -> fl
     if (max(a) - min(a)) < 0.5 or (max(b) - min(b)) < 0.5:
         return 0.0
     A, B = norm(a), norm(b)
-    best, best_lag = -9e9, 0
+    skor = {}
     for lag in range(-max_lag, max_lag + 1):
         acc, cnt = 0.0, 0
         for i in range(len(A)):
@@ -163,9 +186,15 @@ def _lag_ms(a: list[float], b: list[float], fps: float, max_lag: int = 20) -> fl
                 acc += A[i] * B[j]
                 cnt += 1
         if cnt >= 8:
-            c = acc / cnt
-            if c > best:
-                best, best_lag = c, lag
+            skor[lag] = abs(acc / cnt)
+    if not skor:
+        return 0.0
+    puncak = max(skor.values())
+    # 0,02 dalam satuan korelasi ternormalkan: cukup longgar untuk menangkap
+    # puncak alias yang "sama tinggi", cukup ketat untuk tidak menelan puncak
+    # yang benar-benar lebih rendah.
+    seri = [lag for lag, c in skor.items() if c >= puncak - 0.02]
+    best_lag = min(seri, key=lambda l: (abs(l), l))
     return round(best_lag * 1000.0 / fps, 1)
 
 
@@ -235,11 +264,57 @@ def cetak(rep: dict) -> None:
           'bisa dibaca dari alatnya sendiri.)')
 
 
+def swauji() -> int:
+    """Periksa pengukur jeda terhadap sinyal yang jawabannya sudah diketahui.
+
+    Alat ukur yang belum pernah diperiksa biasanya belum pernah salah HANYA
+    karena tidak ada yang melihat. Kolom `jeda` pernah melaporkan -667 ms —
+    kepala mendahului lengan penggerak dua pertiga detik, angka yang tidak
+    mungkin karena resep cuma pernah menggeser MAJU. Dua sebab, keduanya
+    ditangkap oleh uji di bawah ini:
+
+      * puncak korelasi yang seri diselesaikan ke lag paling negatif;
+      * sendi yang bergerak BERLAWANAN arah penggeraknya tidak pernah ketemu.
+
+    Jalankan: python tools/anim_trace.py --swauji
+    """
+    import math
+    fps = 30.0
+    def geser(xs, n):
+        return [xs[max(0, i - n)] for i in range(len(xs))]
+    punuk = [0.0] * 10 + [math.sin(math.pi * i / 20) * 40 for i in range(20)] + [0.0] * 40
+    sapu = [math.sin(2 * math.pi * i / 9) * 40 for i in range(90)]   # periode 300 ms
+    kasus = [('punuk sekali jalan', punuk, punuk),
+             ('punuk berlawanan arah', punuk, [-v for v in punuk]),
+             ('sapuan berulang 300 ms', sapu, sapu),
+             ('sapuan berulang berlawanan', sapu, [-v for v in sapu])]
+    gagal = 0
+    print('swauji pengukur jeda (1 frame = 33,3 ms):')
+    for nama, dasar, ikut in kasus:
+        baris = []
+        for n in (0, 2, 4, 8):
+            harap = round(n * 1000.0 / fps, 1)
+            dapat = _lag_ms(dasar, geser(ikut, n), fps)
+            ok = abs(dapat - harap) <= 1.0
+            gagal += 0 if ok else 1
+            baris.append(f"{harap:.0f}->{dapat:.0f}{'' if ok else ' GAGAL'}")
+        print(f"   {nama:30s} {'  '.join(baris)}")
+    print('   ' + ('SEMUA LULUS' if not gagal else f'{gagal} PEMERIKSAAN GAGAL'))
+    return 1 if gagal else 0
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('traces', nargs='+')
+    ap.add_argument('traces', nargs='*')
     ap.add_argument('--json', action='store_true')
+    ap.add_argument('--swauji', action='store_true',
+                    help='periksa pengukur jeda terhadap sinyal buatan')
     args = ap.parse_args()
+
+    if args.swauji:
+        return swauji()
+    if not args.traces:
+        ap.error('sebutkan minimal satu berkas *_trace.json, atau pakai --swauji')
 
     reps = [analyse(Path(t)) for t in args.traces]
     if args.json:

@@ -478,6 +478,66 @@ pada kasus yang paling sering terjadi.
 
 ---
 
+## 6e. Pertanyaan terbuka kritikus, dijawab: pengukurnya yang salah
+
+Kritikus meninggalkan satu hal tanpa vonis: kolom `jeda` melaporkan **−667 ms**
+untuk kepala, badan dan kedua lutut saat menggosok — sendi-sendi itu
+MENDAHULUI lengan penggerak dua pertiga detik. Ia menulis: "salah satu dari
+dua hal ini keliru dan belum ada yang menengahi: gerak sekundernya, atau
+pengukur jedanya."
+
+Diadili dengan sinyal yang jawabannya sudah diketahui. Dua cacat, keduanya di
+pengukurnya, dan keduanya membuat angkanya tidak sekadar meleset tapi terbalik
+maknanya.
+
+**Satu: puncak yang seri diselesaikan ke lag paling negatif.** Gerakan berulang
+membuat korelasi silang ambigu — sapuan berperiode 300 ms punya puncak sama
+tinggi di lag 0, ±1 periode, ±2 periode. Kode lama memakai `c > best`, jadi di
+antara puncak yang seri ia menyimpan yang pertama ditemukan, dan loopnya mulai
+dari `-max_lag`. Diuji: dua deret berperiode 9 frame dengan jeda **nol**
+dilaporkan **−600 ms**.
+
+**Dua: sendi yang bergerak berlawanan arah tidak pernah ketemu.** Puncaknya
+dicari pada korelasi BERTANDA. Empat kanal di resep menggosok ditulis sebagai
+kelipatan NEGATIF penggeraknya — badan mencondong ke belakang saat lengan
+mengayun ke depan, yang justru gerak sekunder yang benar. Korelasinya negatif
+di lag sebenarnya, jadi pencarian puncak mendarat di batas pencarian: −667 ms
+bukan sebuah pengukuran, itu angka `max_lag`.
+
+Perbaikannya: cari puncak |korelasi| (yang diukur selisih WAKTU, bukan
+tandanya), dan di antara puncak yang praktis seri pilih |lag| terkecil.
+
+Diperiksa terhadap dua kebenaran dasar yang saling bebas. Sinyal buatan:
+
+| kasus | jeda 0 | 67 ms | 133 ms | 267 ms |
+|---|---|---|---|---|
+| punuk sekali jalan | 0 | 67 | 133 | 267 |
+| punuk berlawanan arah | 0 | 67 | 133 | 267 |
+| sapuan berulang 300 ms | 0 | 67 | 133 | 267 |
+| sapuan berulang berlawanan | 0 | 67 | 133 | 267 |
+
+Dan `jeda_ms` yang tertulis di resep menggosok, dibandingkan dengan yang
+diukur dari rekaman sungguhan:
+
+| kanal | tertulis | terukur | selisih |
+|---|---|---|---|
+| siku_r.rotation_x | 70 | 67 | −3 |
+| badan.rotation_x | 130 | 100 | −30 |
+| leher.rotation_x | 150 | 133 | −17 |
+| lutut_r.rotation_x | 140 | 133 | −7 |
+| badan.rotation_z | 175 | 167 | −8 |
+| lutut_l.rotation_x | 185 | 167 | −18 |
+| leher.rotation_y | 195 | 167 | −28 |
+
+Semua di dalam satu frame (33,3 ms). Jawaban atas pertanyaan kritikus:
+**gerak sekundernya benar sejak awal; yang bohong pengukurnya.**
+
+Swauji itu sekarang tertanam di alatnya: `python tools/anim_trace.py --swauji`,
+keluar dengan kode 1 kalau ada yang gagal. Alat ukur yang belum pernah
+diperiksa biasanya belum pernah salah hanya karena tidak ada yang melihat.
+
+---
+
 ## 7. Patung
 
 Tiga kali, dengan bentuk berbeda, sesuatu berhenti bergerak sama sekali:

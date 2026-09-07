@@ -121,8 +121,8 @@ gerbangnya tertutup, kedelapan potongan berstatus yang pertama.
 
 ## Yang perlu Anda lakukan supaya loopnya bisa jalan
 
-Delapan frame, semuanya tercantum di `_bench/refs/MANIFEST.json` lengkap
-dengan situasi yang harus ditangkap:
+Dua belas potongan, semuanya tercantum di `_bench/refs/MANIFEST.json` lengkap
+dengan situasi yang harus ditangkap. Delapan gambar diam dulu:
 
 | slug | yang harus terlihat |
 |---|---|
@@ -139,6 +139,43 @@ PNG resolusi penuh, minimal 1280×720, **tidak di-crop dan tidak disunting** —
 yang dinilai termasuk bagaimana permainannya membingkai layarnya sendiri.
 Idealnya kedelapan frame dari sumber dan pengaturan grafis yang sama, supaya
 perbandingannya tidak tercemar beda setting.
+
+---
+
+## Empat klip, karena gerak tidak bisa dinilai dari gambar diam
+
+Delapan potongan di atas menilai TAMPILAN. Empat potongan berikut menilai
+GERAK, dan tidak satu pun dari mereka bisa dijawab tangkapan layar:
+
+| slug | yang harus terekam |
+|---|---|
+| `naik_kuda` | pemain naik ke kuda lalu bergerak beberapa langkah |
+| `anim_panen` | satu gerakan memanen, dari awal sampai selesai |
+| `anim_gosok` | menyikat atau membelai ternak, satu siklus penuh |
+| `anim_bicara` | percakapan dengan penduduk, sampai satu baris dialog selesai |
+
+Rekam layar gameplay 1–3 detik yang memuat satu gerakan **penuh**, simpan
+sebagai `_bench/refs/<slug>.webp` animasi. Minimal **12 frame** dan sisi
+terpendek 480 px — 12 frame itu 0,6 detik pada 20 fps, dan di bawah itu satu
+ayunan tidak muat.
+
+`.mp4` dan `.webm` diterima tapi **isinya tidak bisa diperiksa** di sini:
+tidak ada ffmpeg maupun pembaca video, jadi gerbangnya hanya melihat
+ukurannya dan mengatakan terang-terangan bahwa ia tidak memeriksa. Itu
+disengaja — gerbang yang mengaku memeriksa padahal tidak membuat orang
+berhenti curiga.
+
+Sisi kita direkam sendiri:
+
+```
+python tools/rekam.py --out _bench/klip/gosok.webp --scene farm \
+    --anim gosok:900 --detik 1.6 --dist 7 --pitch 16
+```
+
+Keluarannya WebP animasi (tambahkan `--gif` kalau penampilmu menolaknya —
+diukur pada klip nyata, GIF lebar penuh 6.479 KiB lawan WebP 883 KiB untuk
+isi yang sama). Ia menjalankan game yang sebenarnya lewat jalur yang sama
+dengan `capture.py`, jadi rekamannya bukti, bukan mockup.
 
 Simpan sebagai `_bench/refs/<slug>.png`. **Jangan di-commit** — gitignore dan
 `bar_gate` sudah menjaganya. Lalu:
@@ -159,6 +196,7 @@ latarnya sendiri juga. Yang seperti itu dikerjakan dan diukur sendiri:
 
 | cacat | diukur sebagai | pemeriksaan |
 |---|---|---|
+| klip 1 frame lolos sebagai klip | jumlah frame < 12 | `bar_gate._periksa_klip` |
 | HUD terpotong | tepi elemen lewat `±aspect/2` | `hud_muat` |
 | bar motif tertimbun | piksel layar ≠ warna yang diminta | `hud_terbaca` |
 | rumput papan catur | korelasi terang dengan paritas ubin | `rumput_catur` |

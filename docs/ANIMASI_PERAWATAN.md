@@ -475,13 +475,40 @@ Ambang animasi `perah` tetap lulus sesudah pitanya dipindah, diukur pada
 jeda sekunder 67 ms pada leher (diukur ulang dengan pengukur yang sudah
 diperbaiki, §6e).
 
-### Satu baris yang sengaja dibiarkan merah
+### Baris terakhir yang merah, dan bentuk kelonggaran yang benar
 
-`gosok kambing` masih menembus 0,12 m di 10 dari 90 frame. Kelonggaran 0,05 m
-pada `gosok` diuji: tembusan kambing turun ke 5/90, **tapi sentuhan pada SAPI
-jatuh dari 54 ke 40 dari 90**. Sapi hewan yang paling sering disikat, jadi
-tukar itu rugi. Sisanya dibiarkan dan dicatat, bukan ditukar dengan kemunduran
-pada kasus yang paling sering terjadi.
+`gosok kambing` menembus 0,12 m di 10 dari 90 frame. Kelonggaran **datar**
+0,05 m pada `gosok` diuji lebih dulu: tembusan kambing turun ke 5/90, **tapi
+sentuhan pada SAPI jatuh dari 54 ke 40 dari 90**. Sapi hewan yang paling sering
+disikat, jadi tukar itu ditolak, dan sisanya sempat dibiarkan tercatat merah.
+
+Yang salah bukan besarnya, tapi BENTUKNYA. Sapi tidak butuh kelonggaran sama
+sekali: resep menyikat memang ditulis untuk badannya. Yang perlu dikompensasi
+adalah panjang TETAP — jarak tempuh sapuan ke dalam badan — dan setengah-lebar
+sapi 0,36 m menyerapnya sementara kambing 0,16 m tidak. Jadi kelonggarannya
+sebanding dengan `(0,36 − setengah_lebar)`, yang **nol untuk sapi menurut
+konstruksinya**, bukan karena disetel begitu.
+
+`renggang_sempit: 0,50` pada resep `gosok`. Terukur:
+
+| | sebelum | sesudah |
+|---|---|---|
+| gosok sapi | 54/90 menyentuh · 0 menembus | **sama persis** |
+| gosok kambing | 59/90 · **10** menembus | 58/90 · **1** menembus |
+| gosok ayam | 57/90 · 1 menembus | 48/90 · 0 menembus |
+
+Hanya dipasang pada `gosok`. Membelai tidak menyapu, jadi tidak punya jarak
+tempuh ke dalam yang perlu dikompensasi — diuji, memberinya kelonggaran yang
+sama cuma mendorong telapaknya menjauh (median kambing 0,11 → 0,21 m).
+
+Ayam kehilangan 9 frame sentuhan untuk menutup 1 frame tembusan: rumusnya
+memberi kelonggaran TERBESAR justru ke hewan yang masalahnya terkecil. Batas
+atas 0,08 dan 0,10 m diuji untuk menahannya, dan keduanya menukar balik
+tembusan kambing (0 → 3 dan 0 → 2). Selisihnya di tingkat 1-3 frame dari 90,
+dan tembusan yang paling terlihat salah di layar adalah kambingnya, jadi
+penyetelan dihentikan di sini alih-alih dikejar ke dalam derau.
+
+Sesudah ini tidak ada baris kontak yang menembus lebih dari 2 dari 90 frame.
 
 ---
 

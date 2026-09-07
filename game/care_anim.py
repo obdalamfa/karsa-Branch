@@ -296,9 +296,76 @@ class AksiRawat:
                 setattr(ent, sifat, dasar + delta)
             except Exception:
                 pass
+        self._cermin_vitaboy(player, akum)
+
+    # ─── JALUR VITABOY ──────────────────────────────────────────────────────
+    # Ranjau yang sudah lama tercatat di docs/ANIMASI_PERAWATAN.md §10, dan
+    # sekarang dipasangi pengaman.
+    #
+    # `assets/vitaboy/` tidak ada di repo, jadi jalur avatar Vitaboy gagal di
+    # semua mesin dan semua orang mendapat rig voxel — rig yang punya semua
+    # pivot dan yang diukur di seluruh dokumen itu. Tapi kalau aset itu suatu
+    # saat di-bake, `player._pivot_*` dan `player.body` menjadi **Entity kosong
+    # tanpa geometri** (player.py menyebutnya sendiri "dummy pivots for
+    # compatibility with existing item attachment logic"), dan `_pivot_elbow_*`
+    # bahkan tidak dibuat sama sekali.
+    #
+    # Akibatnya bukan animasi yang jelek, tapi gagal SENYAP: seluruh resep
+    # tetap berjalan, menulis rotasi ke entity yang tidak menggambar apa pun,
+    # sementara ember dan sikat yang menempel di pivot itu tetap terlihat.
+    # Yang tampil di layar adalah petani beku dengan ember melayang.
+    #
+    # Mesin lama `_play_tool_anim()` punya jalur untuk ini — ia memiringkan
+    # `va_root.rotation_x`. Mesin ini tidak punya, jadi memindahkan aksi ke
+    # sini justru MENGHILANGKAN satu-satunya gerakan yang tersisa di jalur
+    # Vitaboy. Cermin di bawah mengembalikannya: condongan badan resep
+    # diteruskan ke akar avatar dengan penguatan, supaya pada rig itu aksinya
+    # setidaknya menggerakkan seluruh tubuh.
+    #
+    # CATATAN JUJUR: jalur ini TIDAK BISA diuji di lingkungan ini — asetnya
+    # tidak ada, jadi `_va` selalu None dan seluruh fungsi ini tidak pernah
+    # dijalankan. Ia ditulis defensif (semua akses dibungkus) supaya kalau
+    # tebakannya salah, yang terjadi paling buruk adalah tidak ada tambahan
+    # gerakan, bukan pengecualian yang menghentikan aksi.
+    _VA_GAIN_X = 2.6           # condongan badan -> condongan seluruh avatar
+    _VA_GAIN_Z = 1.8
+    _sudah_ingatkan = False
+
+    def _cermin_vitaboy(self, player, akum: dict) -> None:
+        if not getattr(player, '_is_vitaboy', False):
+            return
+        va = getattr(player, '_va', None)
+        akar = getattr(va, 'root_entity', None) if va is not None else None
+        if akar is None:
+            return
+        if not AksiRawat._sudah_ingatkan:
+            AksiRawat._sudah_ingatkan = True
+            import logging
+            logging.warning(
+                '[RAWAT] rig Vitaboy aktif: _pivot_* adalah entity kosong, jadi '
+                'pose resep tidak terlihat. Yang dijalankan cuma condongan akar '
+                'avatar. Animasi perawatan harus disambungkan ulang ke '
+                'VitaboyAvatar sebelum jalur ini dipakai sungguhan '
+                '(docs/ANIMASI_PERAWATAN.md §10).')
+        try:
+            bx = akum.get(('badan', 'rotation_x'))
+            bz = akum.get(('badan', 'rotation_z'))
+            akar.rotation_x = (bx[2] * self._VA_GAIN_X) if bx else 0.0
+            akar.rotation_z = (bz[2] * self._VA_GAIN_Z) if bz else 0.0
+        except Exception:
+            pass
 
     def usai(self, player) -> None:
         """Bereskan: pulangkan kanal ke pose dasar dan lepas properti."""
+        if getattr(player, '_is_vitaboy', False):
+            va = getattr(player, '_va', None)
+            akar = getattr(va, 'root_entity', None) if va is not None else None
+            if akar is not None:
+                try:
+                    akar.rotation_x = 0.0
+                    akar.rotation_z = 0.0
+                except Exception:
+                    pass
         for j in self._jalur:
             ent = self._entitas(player, j.sendi)
             if ent is None:

@@ -1223,13 +1223,22 @@ def _resep_tambang() -> list:
 RESEP = {
     'minum': {'fase': _FASE_MINUM, 'jalur': _resep_minum,
               'alat': 'ember', 'aliran': True},
-    # Menggosok TIDAK diberi kelonggaran. Diuji dengan 0,05 m: tembusan pada
-    # kambing turun 10 -> 5 dari 90 frame, tapi sentuhan pada SAPI jatuh dari
-    # 54 ke 40 dari 90 — dan sapi hewan yang paling sering disikat. Sisa
-    # tembusan 0,12 m pada kambing dibiarkan, tercatat, tidak ditukar dengan
-    # kemunduran pada kasus yang paling sering terjadi.
+    # `renggang_sempit` = kelonggaran yang SEBANDING dengan kesempitan hewan,
+    # dikalikan (0,36 - setengah_lebar); nol untuk sapi menurut konstruksinya.
+    #
+    # Kelonggaran DATAR sudah diuji dan ditolak: 0,05 m menurunkan tembusan
+    # kambing 10 -> 5 dari 90 frame tapi menjatuhkan sentuhan SAPI dari 54 ke
+    # 40 — dan sapi hewan yang paling sering disikat. Yang dikompensasi
+    # sebenarnya panjang TETAP, yaitu jarak tempuh sapuan ke dalam badan:
+    # setengah-lebar sapi 0,36 m menyerapnya, kambing 0,16 m tidak. Bentuk
+    # inilah yang benar, dan terukur ia tidak menyentuh baris sapi sama sekali
+    # sementara tembusan kambing turun ke 2 dari 90.
+    #
+    # Hanya pada `gosok`: membelai tidak menyapu, jadi tidak punya jarak tempuh
+    # ke dalam yang perlu dikompensasi — memberinya kelonggaran yang sama cuma
+    # mendorong telapaknya menjauh (median kambing 0,11 -> 0,21 m saat diuji).
     'gosok': {'fase': _FASE_GOSOK, 'jalur': _resep_gosok,
-              'alat': 'sikat', 'aliran': False},
+              'alat': 'sikat', 'aliran': False, 'renggang_sempit': 0.50},
     'perah': {'fase': _FASE_PERAH, 'jalur': _resep_perah, 'alat': 'ember'},
     # Ayam torsonya cuma 0,22 x 0,30 m, jadi tangan yang meleset 11 cm ke
     # dalam sudah setengah menembus burungnya. Terukur: 17 dari 68 frame lebih

@@ -881,6 +881,9 @@ class InteractionController:
     # ditulis untuk tangan yang bekerja di ketinggian itu. Hewan yang lebih
     # pendek butuh pemainnya menunduk selisihnya.
     TINGGI_PATOKAN = 1.37
+    # Setengah-lebar sapi. Dipakai sebagai titik nol kelonggaran-kesempitan:
+    # resep ditulis untuk badan selebar ini, jadi sapi tidak butuh kompensasi.
+    HW_PATOKAN = 0.36
     # Jangkauan dari sisi badan hewan ke ujung yang bekerja. Sikat menambah
     # panjang; telapak telanjang tidak. Memakai satu angka untuk keduanya
     # membuat aksi bertangan kosong berhenti sependek selisih itu — terukur,
@@ -975,7 +978,13 @@ class InteractionController:
         # pendek juga MENJULUR lebih pendek: terukur, memperkecil ayunan saja
         # menurunkan sikat ke ketinggian punggung ayam tapi menariknya 0,07-0,27 m
         # ke belakang, jadi ia lewat di atas ayam alih-alih menyentuhnya.
-        renggang = (_ca.RESEP.get(jenis_resep) or {}).get('renggang', 0.0)
+        resep = _ca.RESEP.get(jenis_resep) or {}
+        # Kelonggaran datar + kelonggaran yang sebanding dengan kesempitan
+        # hewan. Yang kedua nol untuk sapi menurut konstruksinya, jadi resep
+        # yang memang ditulis untuk sapi tidak pernah tergeser olehnya.
+        renggang = (resep.get('renggang', 0.0)
+                    + resep.get('renggang_sempit', 0.0)
+                    * max(0.0, self.HW_PATOKAN - _hw))
         tx, tz = titik_rusuk(cx, cz, spesies, rotasi,
                              self.player.x, self.player.z,
                              jangkau * skala + renggang)

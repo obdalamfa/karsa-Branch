@@ -77,3 +77,6 @@
 {"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
 {"slice":"vonis","round":1,"role":"judge","verdict":"ours","gap":"12/12 aksi lulus SELURUH tabel ambang. Dua temuan: petik tahanannya 33 ms (satu frame) - pose puncak tarikan cuma disinggung, sekarang ditahan 130 ms jadi 167 ms; dan anim_trace menyebut LUTUT sebagai penggerak sejak lapisan jongkok ada (ayam: lutut 107,8 lawan bahu 36,5), jadi baris yang dinilai adalah baris jongkoknya. Penggerak sekarang dipilih dari rantai lengan. Bukan perbandingan buta - _bench/bar/ masih kosong."}
 {"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
+{"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
+{"slice":"sempit","round":1,"role":"build","note":"renggang_sempit: kelonggaran berdiri sebanding (0,36 - setengah_lebar), nol untuk sapi menurut konstruksinya. gosok kambing menembus 10/90 -> 1/90; gosok sapi tidak berubah sama sekali. Kelonggaran datar 0,05 m yang ditolak dulu salah BENTUKNYA, bukan besarnya. Hanya dipasang pada gosok - membelai tidak menyapu."}
+{"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal; vonis 12/12 aksi lulus seluruh ambang"}

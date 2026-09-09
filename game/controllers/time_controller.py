@@ -199,6 +199,28 @@ class TimeController:
             if s.season_index == 0 and old_season == 3:
                 s.year += 1
 
+        # ── Ekosistem & pasar ────────────────────────────────────────────
+        # Dipanggil SEBELUM cuaca hari baru diundi. Pertumbuhan semalam
+        # ditentukan oleh cuaca yang baru saja lewat — hujan kemarin yang
+        # menyuburkan hutan, bukan hujan yang belum terjadi.
+        try:
+            from ..ecology import daily_tick as _eco_tick, morning_note as _eco_note
+            delta = _eco_tick(s)
+            self._eco_pagi = _eco_note(s, delta)
+        except Exception as e:
+            import logging
+            logging.warning(f"[EKOLOGI] daily_tick gagal: {e}")
+            self._eco_pagi = None
+
+        try:
+            from ..market import daily_tick as _pasar_tick, demand_note as _pasar_note
+            lap = _pasar_tick(s, _rng)
+            self._pasar_pagi = _pasar_note(s) if lap.get('permintaan_baru') else None
+        except Exception as e:
+            import logging
+            logging.warning(f"[PASAR] daily_tick gagal: {e}")
+            self._pasar_pagi = None
+
         _weathers = ['Cerah','Cerah','Cerah','Mendung','Hujan','Berangin','Badai']
         _weights  = [38, 22, 14, 12, 8, 4, 2]
         s.weather = _rng.choices(_weathers, weights=_weights)[0]
@@ -305,5 +327,15 @@ class TimeController:
             if getattr(player, '_pending_lore_msg', None):
                 invoke(panels.flash_msg, player._pending_lore_msg, 3.5, delay=3.0)
                 player._pending_lore_msg = None
+            # Kabar lembah: hanya muncul kalau ada yang benar-benar berubah.
+            # `morning_note()` dan `demand_note()` mengembalikan None saat
+            # semuanya biasa saja, dan pemberitahuan yang muncul tiap pagi
+            # berhenti dibaca pada pagi keempat.
+            if getattr(self, '_eco_pagi', None):
+                invoke(panels.flash_msg, self._eco_pagi, 3.5, delay=4.0)
+                self._eco_pagi = None
+            if getattr(self, '_pasar_pagi', None):
+                invoke(panels.flash_msg, self._pasar_pagi, 3.5, delay=6.0)
+                self._pasar_pagi = None
         else:
             panels.flash_msg("Tidur hanya di rumah (T).", 0.8)

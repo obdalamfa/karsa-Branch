@@ -65,6 +65,19 @@ class GameState:
 
     mobs: list = field(default_factory=list)
 
+    # ─── Ekosistem & pasar (game/ecology.py, game/market.py) ───
+    # Keduanya dict biasa supaya save tetap JSON murni. Keduanya juga sengaja
+    # dibiarkan KOSONG di sini: `ecology.ensure()` mengisi kolam yang hilang
+    # dengan kapasitas penuh, jadi save lama membuka dunia yang utuh, bukan
+    # dunia yang tiba-tiba habis. Lihat catatan di kedua modul itu.
+    eco:    dict = field(default_factory=dict)
+    market: dict = field(default_factory=dict)
+
+    # Papan kerja sampingan (game/jobs.py) dan buku catatan memancing
+    # (game/fishing.py). Bentuknya dijaga oleh `ensure()` masing-masing modul.
+    jobs:     dict = field(default_factory=dict)
+    fish_log: dict = field(default_factory=dict)
+
     dungeon_level: int  = 0
     dungeon_tiles: list = field(default_factory=list)
     dungeon_seed:  int  = 0

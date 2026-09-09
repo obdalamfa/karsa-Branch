@@ -87,3 +87,6 @@
 {"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
 {"slice":"wajah","round":2,"role":"build","note":"NPC dirapikan: mesh diwarnai BAJU (lengan jadi lengan baju; diwarnai kulit ia terbaca dua lengan telanjang merah muda), kepala ditumpuk bola kulit 1,18x, rambut memakai bola bukan kotak, badan memakai chibi_torso_mesh(), kaki dan sepatu di ketinggian yang diukur penanda. bangun_wajah() sekarang menghitung kedalaman tiap fitur dari persamaan bola - di bidang datar, rona pipi di x=0,71R melayang lepas dari permukaan dan menjulur seperti dua batang."}
 {"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus; vonis 12/12; swauji jeda lulus; 7 aksi tuntas 0 error"}
+{"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
+{"slice":"cahaya","round":1,"role":"build","note":"vhs_bloom: LUM_THRESHOLD 0,65 -> 0,80 (kulit tersinari luminans 0,85, jadi WAJAH ikut mekar), saklar keras diganti lutut lunak kuadrat, dan penjagaan rona di akhir. Bloom menambahkan cahaya DI ATAS warna, jadi tanpa penjagaan itu ia mengembalikan pemotongan putih yang baru ditutup di smooth_shader.py - kulit hangat dijadikan putih lagi oleh mekarnya sendiri."}
+{"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus; vonis 12/12; 7 aksi tuntas 0 error"}

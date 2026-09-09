@@ -14,70 +14,48 @@ void main() {
 
 _FRAG = '''
 #version 140
+// Color-grade Disco Elysium (mengganti VHS/CRT lama yang bentrok dengan mood painterly).
+// Tanpa chromatic aberration / scanline / barrel distortion.
 uniform sampler2D tex;
 uniform float time;
 in vec2 uv;
 out vec4 fragColor;
 
-const int SAMPLES = 3;
-const float SPREAD = 0.0035;
-const float LUM_THRESHOLD = 0.65;
+// Resolusi piksel efektif — HALUS (butiran seperti pasir), gambar tetap jelas.
+const vec2 PIXEL_RES = vec2(960.0, 540.0);
 
-vec3 getBloom(vec2 coord) {
-    vec3 bloom = vec3(0.0);
-    float count = 0.0;
-    for(int i = -SAMPLES; i <= SAMPLES; i++) {
-        for(int j = -SAMPLES; j <= SAMPLES; j++) {
-            vec2 offset = vec2(float(i), float(j)) * SPREAD;
-            vec3 c = texture(tex, coord + offset).rgb;
-            float lum = dot(c, vec3(0.299, 0.587, 0.114));
-            if (lum > LUM_THRESHOLD) {
-                // boost the bright parts slightly
-                bloom += c * (c * 1.2);
-            }
-            count += 1.0;
-        }
-    }
-    return bloom / count;
+// Grain pseudo-acak per-piksel (tekstur "pasir" halus)
+float grain(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 void main() {
-    // 1. CRT Barrel Distortion (extremely subtle, virtually flat for clear visibility)
-    vec2 crt_uv = uv - 0.5;
-    float dist = dot(crt_uv, crt_uv);
-    crt_uv = crt_uv * (1.0 + dist * 0.015); // warp factor reduced from 0.15
-    crt_uv += 0.5;
-    
-    // Check screen bounds for black borders
-    if (crt_uv.x < 0.0 || crt_uv.x > 1.0 || crt_uv.y < 0.0 || crt_uv.y > 1.0) {
-        fragColor = vec4(0.0, 0.0, 0.0, 1.0);
-        return;
-    }
+    // 0. PIXELATION halus — kuantisasi UV ke grid rapat (sampel di tengah sel)
+    vec2 puv = (floor(uv * PIXEL_RES) + 0.5) / PIXEL_RES;
+    vec3 c = texture(tex, puv).rgb;
 
-    // 2. Glitch Sine Wave / Tearing (highly subtle, no hard jumps to prevent visual fatigue)
-    float glitch = sin(crt_uv.y * 20.0 + time * 4.0) * 0.0002;
-    float jump = 0.0;
-    vec2 fetch_uv = crt_uv + vec2(glitch + jump, 0.0);
+    // 0b. Butiran pasir (grit Zomboid — terlihat tapi tidak mengganggu)
+    float g = grain(floor(uv * PIXEL_RES));
+    c += (g - 0.5) * 0.030;
 
-    // 3. Chromatic Aberration (highly reduced from 0.0025 to 0.0004 for super crisp colors)
-    float r = texture(tex, fetch_uv + vec2(0.0004, 0.0)).r;
-    float g = texture(tex, fetch_uv).g;
-    float b = texture(tex, fetch_uv - vec2(0.0004, 0.0)).b;
-    vec3 base_color = vec3(r, g, b);
+    // 1. Desaturasi Disco Elysium — dunia pudar kelelahan
+    float luma = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(luma), c, 0.78);
 
-    // 4. Pseudo-Bloom (softened from 1.8 to 0.45 for an elegant glow instead of color blinding)
-    vec3 bloom_color = getBloom(fetch_uv);
-    vec3 final_color = base_color + bloom_color * 0.45;
+    // 1b. Split-tone: bayangan ditarik ke teal dingin, merah turun di area gelap
+    c -= vec3(0.022, 0.004, 0.012) * (1.0 - luma);
 
-    // 5. Scanlines (extremely faint and soft)
-    float scanline = sin(crt_uv.y * 800.0 + time * 5.0) * 0.015;
-    final_color -= scanline;
+    // 2. Angkat black supaya tile gelap jadi abu (BUKAN hitam → tidak ada magenta)
+    c = c * 0.90 + 0.07;
 
-    // 6. Vignette (very soft edge shading, no dark corners)
-    float vignette = length(uv - 0.5);
-    final_color *= smoothstep(0.9, 0.48, vignette);
+    // 3. Kontras sangat lembut (hampir netral) — tidak memperkuat noise gelap
+    c = (c - 0.5) * 1.02 + 0.5;
 
-    fragColor = vec4(final_color, 1.0);
+    // 4. Vignette — bingkai suram menekan sudut layar
+    float v = length(uv - 0.5);
+    c *= smoothstep(1.15, 0.35, v) * 0.14 + 0.86;
+
+    fragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
 }
 '''
 

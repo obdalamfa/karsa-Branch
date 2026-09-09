@@ -42,7 +42,11 @@ def _init_thermo_tex():
     _THERMO_FILL_TEX = _lt('up_thermo_slice_active')
 from .data import CROPS
 from .data import (HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS,
-                   QUEST_STAGES, SWORD_RECIPES, PICKAXE_RECIPES, SHOP_ITEMS)
+                   QUEST_STAGES, SWORD_RECIPES, PICKAXE_RECIPES, SHOP_ITEMS,
+                   CRAFT_RECIPES)
+from .sound import play as sound_play
+from .batin import VOICES as BVOICES, DIFF_NAME, pct as batin_pct, roll as batin_roll, raise_voice
+import textwrap as _tw
 
 _ALL_NPCS = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
 
@@ -442,6 +446,26 @@ def _ui(model='quad', **kw):
 
 _FONT_NAME = 'Montserrat-Bold.ttf'  # Ursina cari via glob(**) di asset_folder
 
+# ── Skin panel 'chrome' ala TSO (ROADMAP M3-A) ──
+_CHROME_PATH = _Path(__file__).resolve().parent.parent / 'assets' / 'ui' / 'panel_chrome.png'
+_chrome_tex = None
+def _chrome():
+    global _chrome_tex
+    if _chrome_tex is None:
+        try:
+            _chrome_tex = Texture(_PILImg.open(_CHROME_PATH)) if _CHROME_PATH.exists() else False
+        except Exception:
+            _chrome_tex = False
+    return _chrome_tex or None
+
+def _skin_chrome(ent):
+    """Pasang bingkai chrome TSO sbg tekstur latar panel (tahan-stretch)."""
+    t = _chrome()
+    if t is not None:
+        ent.texture = t
+        ent.color = color.white
+    return ent
+
 def _txt(text='', pos=(0, 0), scale=1.0, col=color.white, **kw):
     kw.setdefault('font', _FONT_NAME)
     return Text(text, parent=camera.ui, position=pos,
@@ -469,7 +493,11 @@ class UIManager:
         self._build_hud()
         self._build_dialog_box()
         self._build_panel_bg()
+        self._build_inventory_grid()
         self._build_pie_menu()
+        self._build_batin()
+        self._build_pause()
+        self._build_buy()
 
         # Previous motives cache for Arrow indicators
         self._prev_hunger = None
@@ -792,8 +820,21 @@ class UIManager:
                     color=color.rgb(120, 200, 130)))
         self._motif_tampil = True
 
-        # ── Flash message tengah ───────────────────────────────
-        self._flash_ent = _txt('', pos=(0, 0.108), scale=1.1,
+        # ── Objective tracker (kiri-atas) — tutorial / quest aktif ──
+        self._obj_bg = _ui(scale=(0.385, 0.092), position=(-0.685, 0.398),
+                           color=color.rgb(20, 19, 18, 215), z=0.9)
+        self._obj_rust = _ui(scale=(0.385, 0.006), position=(-0.685, 0.446),
+                             color=color.rgb(150, 96, 60), z=0.85)
+        self._obj_title = _txt('TUTORIAL', pos=(-0.868, 0.434), scale=0.62,
+                               col=color.rgb(214, 168, 110))
+        self._obj_step = _txt('...', pos=(-0.868, 0.408), scale=0.78,
+                              col=color.rgb(228, 222, 198))
+        self._obj_hint = _txt('', pos=(-0.868, 0.380), scale=0.58,
+                              col=color.rgb(150, 158, 168))
+        self._obj_last = None   # cache: deteksi pergantian langkah → emote
+
+        # ── Flash message tengah ──
+        self._flash_ent = _txt('', pos=(0, 0.15), scale=1.1,
                                col=color.rgb(255, 245, 80), origin=(0, 0))
         self._flash_ent.enabled = False
 
@@ -1166,6 +1207,35 @@ class UIManager:
         self._en_bar.color = color.rgb(220, 80, 55) if en_r <= 0.3 else color.rgb(55, 205, 75)
         self._en_val.text = f'{int(s.energy)}/{s.max_energy}'
 
+        # Objective tracker — tutorial / quest aktif (modul game.tutorial)
+        if getattr(self, '_obj_title', None):
+            from .tutorial import tracker_lines
+            title, step, hint = tracker_lines(s)
+            self._obj_title.text = title
+            self._obj_step.text = step
+            self._obj_hint.text = hint
+            self._obj_hint.enabled = bool(hint)
+            self._obj_bg.scale_y = 0.092 if hint else 0.066
+            if self._obj_last is not None and self._obj_last != step:
+                self.emote('v Selesai!', color.rgb(140, 220, 140), 1.4)
+                sound_play('menu_select', 0.7)
+            self._obj_last = step
+
+        # Needs sim-life (Lapar/Sosial/Senang) — redup saat kritis
+        if getattr(self, '_need_fills', None):
+            from .config import NEED_MAX
+            for key, (fill, nx, nw, ncol) in self._need_fills.items():
+                val = max(0.0, min(1.0, getattr(s, key, NEED_MAX) / max(NEED_MAX, 1)))
+                _shrink_bar(fill, nx, nw, max(0.001, val))
+                fill.color = color.rgb(200, 70, 55) if val <= 0.25 else ncol
+
+        # Chip mood (S4) — nama emosi + warnanya
+        if getattr(self, '_mood_txt', None):
+            from .sims_mood import mood_label, mood_color
+            _mc = mood_color(s)
+            self._mood_txt.text = f"MOOD  {mood_label(s)}"
+            self._mood_txt.color = color.rgb(*_mc)
+
         # Gold + buff (§ simbol web-style)
         self._gold_txt.text = f'§ {s.gold}G'
         self._buff_txt.text = '+'.join(b.upper() for b in s.buffs) if s.buffs else ''
@@ -1183,7 +1253,7 @@ class UIManager:
         if s.tool_index in (2, 3):
             seed_name = CROPS.get(s.seed_key, {}).get('name', s.seed_key)
             seed_qty  = s.inventory.get(s.seed_key + '_seed', 0)
-            self._seed_txt.text = f'Q/R: {seed_name} x{seed_qty}'
+            self._seed_txt.text = f'O/P: {seed_name} x{seed_qty}'
         else:
             self._seed_txt.text = ''
 
@@ -1220,6 +1290,98 @@ class UIManager:
             self._tata_ulang_hud()
 
     # ─── PUBLIC: FLASH MESSAGE ───────────────────────────
+    def emote(self, text: str, col=None, dur: float = 1.1, x: float = 0.0, y: float = 0.02):
+        """Umpan balik kecil di tengah layar, dipanggil dari tiap interaksi.
+
+        Ditulis ulang, bukan diambil dari feature/3d-mobs, dan alasannya
+        spesifik: versi di sana menaruh tiap emote ke `self._emotes` lalu
+        menyerahkan pemudarannya ke loop tick di dalam blok HUD sisi sana —
+        dan blok itu bertabrakan langsung dengan roda ikon alat milik sisi
+        visual, yang sudah MENANG penilaian buta melawan Story of Seasons.
+        Mengambilnya berarti menukar kemenangan yang sudah dibuktikan dengan
+        sebuah animasi teks.
+
+        Versi ini tidak butuh loop tick sama sekali: tiap emote menjadwalkan
+        penghapusannya SENDIRI. Tidak ada state bersama, tidak ada dua tempat
+        yang harus ingat, dan pemanggilnya (interaction_controller) tidak
+        perlu tahu bedanya.
+        """
+        try:
+            from ursina import invoke as _inv, destroy as _des
+            e = _txt(text, pos=(x, y), scale=1.05,
+                     col=col or color.rgb(255, 238, 150), origin=(0, 0))
+            e.z = -0.6
+            _inv(_des, e, delay=dur)
+        except Exception:
+            pass
+
+    # ── Panel dari feature/3d-mobs yang tidak bertabrakan dengan HUD ───────
+    # Ketiganya DIPANGGIL oleh bagian panels.py yang ikut masuk dari sisi
+    # 3d-mobs, tapi definisinya jatuh di dalam blok yang bertabrakan langsung
+    # dengan roda ikon alat — dan HUD sisi visual sudah MENANG penilaian buta
+    # melawan Story of Seasons, jadi blok itu diambil dari sisi visual.
+    #
+    # Akibatnya `AttributeError: 'UIManager' object has no attribute
+    # '_build_batin'` saat boot: game gagal dibangun sama sekali. Ketiganya
+    # dibawa masuk terpisah di sini — majelis batin (Disco Elysium), panel
+    # Bangun/Beli (Sims S7), dan menu jeda — karena tidak satu pun menyentuh
+    # tata letak HUD yang menang.
+
+    def _build_batin(self):
+        self.batin = None              # diisi app.py setelah Batin dibuat
+        self._batin_open = False
+        self._voice_sub_t = 0.0
+        bg = _skin_chrome(_ui(scale=(0.58, 0.96), position=(-0.60, 0.0), color=color.rgb(20, 18, 16, 237), z=1.0))
+        title = _txt('MAJELIS BATIN', pos=(-0.86, 0.43), scale=0.95, col=color.rgb(231, 178, 61))
+        sub = _txt('Empat sukma, satu tengkorak.', pos=(-0.86, 0.395), scale=0.58, col=color.rgb(150, 135, 100))
+        self._batin_chips = []
+        for i, k in enumerate(['bara', 'akar', 'sukma', 'lapar']):
+            vd = BVOICES[k]
+            chip = _txt(f"{vd['name']} 1", pos=(-0.86 + i * 0.185, 0.35), scale=0.6,
+                        col=color.rgb(*vd['col']))
+            self._batin_chips.append((k, chip))
+        self._batin_log = _txt('', pos=(-0.875, 0.30), scale=0.62, col=color.rgb(224, 216, 188))
+        self._batin_ents = [bg, title, sub, self._batin_log] + [c for _, c in self._batin_chips]
+        for e in self._batin_ents:
+            e.enabled = False
+        # subtitle bawah (selalu ada, fade)
+        self._voice_sub = _txt('', pos=(0, -0.30), scale=0.78, col=color.white, origin=(0, 0))
+        self._voice_sub.enabled = False
+
+    def _build_buy(self):
+        self._buy_sel = 0
+        bg = _skin_chrome(_ui(scale=(0.62, 0.66), position=(0, 0),
+                              color=color.rgb(16, 14, 12, 244), z=0.9))
+        title = _txt('BANGUN / BELI', pos=(0, 0.25), scale=1.25,
+                     col=color.rgb(231, 178, 61), origin=(0, 0))
+        self._buy_items = [_txt('', pos=(0, 0.15 - i * 0.052), scale=0.78,
+                                col=color.white, origin=(0, 0)) for i in range(12)]
+        hint = _txt('[W/S] pilih  [Enter] beli & pasang di depanmu  '
+                    '[X] jual  [Esc] tutup', pos=(0, -0.26), scale=0.5,
+                    col=color.rgb(150, 135, 100), origin=(0, 0))
+        self._buy_gold = _txt('', pos=(0, 0.205), scale=0.7,
+                              col=color.rgb(231, 200, 120), origin=(0, 0))
+        self._buy_ents = [bg, title, hint, self._buy_gold] + self._buy_items
+        for e in self._buy_ents:
+            e.enabled = False
+
+    def _build_pause(self):
+        self._pause_sel = 0
+        self._pause_view = 'root'   # root | save | load | settings
+        bg = _skin_chrome(_ui(scale=(0.52, 0.64), position=(0, 0), color=color.rgb(16, 14, 12, 242), z=0.9))
+        title = _txt('JEDA', pos=(0, 0.24), scale=1.4, col=color.rgb(231, 178, 61), origin=(0, 0))
+        # pool baris (cukup untuk menu terpanjang)
+        self._pause_items = [_txt('', pos=(0, 0.12 - i * 0.074), scale=0.9,
+                                  col=color.white, origin=(0, 0)) for i in range(6)]
+        hint = _txt('[W/S] pilih   [A/D] ubah   [Enter] OK   [Esc] kembali', pos=(0, -0.25),
+                    scale=0.5, col=color.rgb(150, 135, 100), origin=(0, 0))
+        self._pause_title = title
+        self._pause_ents = [bg, title, hint] + self._pause_items
+        for e in self._pause_ents:
+            e.enabled = False
+
+    # ─── MODE BANGUN/BELI (S7) ───────────────────────────
+
     def flash_msg(self, text: str, duration: float = 1.2):
         if self._flash_ent:
             self._flash_ent.text    = text
@@ -1421,7 +1583,10 @@ class UIManager:
         self._set_dialog_visible(False)
         self.mode = 'hud'
         if hasattr(self, 'player') and self.player:
-            self.player._check_quest_progress(self)
+            if hasattr(self.player, '_check_quest_progress'):
+                self.player._check_quest_progress(self)
+            elif getattr(self.player, 'quest_controller', None):
+                self.player.quest_controller.check_quest_progress(self)
 
     def _refresh_dialog_choices_ui(self):
         for i, ent in enumerate(self._dlg_choice_ents):
@@ -1498,8 +1663,12 @@ class UIManager:
 
     # ─── PUBLIC: PANEL ───────────────────────────────────
     def _build_panel_bg(self):
+        # Lapisan peredup layar penuh (paling belakang)
         self._panel_bg = _ui(scale=(1.5, 1.2), position=(0, 0),
-                              color=color.rgb(10, 5, 20, 210))
+                              color=color.rgb(10, 5, 20, 210), z=0.2)
+        # Bingkai chrome TSO di depan peredup, di belakang konten/teks (M3-A)
+        self._panel_frame = _skin_chrome(_ui(scale=(1.18, 1.02), position=(0, 0),
+                                             color=color.rgb(20, 16, 14, 240), z=0.1))
         self._panel_title = _txt('', pos=(-0.45, 0.44), scale=1.2,
                                   col=color.rgb(220, 190, 255))
         self._panel_body  = _txt('', pos=(-0.45, 0.36), scale=0.80,
@@ -1573,9 +1742,167 @@ class UIManager:
             self.toggle_motive_panel()
 
     def _set_panel_visible(self, v: bool):
-        for e in (self._panel_bg, self._panel_title,
+        for e in (self._panel_bg, self._panel_frame, self._panel_title,
                   self._panel_body, self._panel_hint):
             e.enabled = v
+        if not v:
+            self._hide_inventory_grid()
+
+    # ─── INVENTORY GRID (gaya Harvest Moon) ──────────────────
+    _INV_COLS = 7
+    _INV_ROWS = 5
+    _INV_CATS = ['Semua', 'Benih', 'Panen', 'Bahan', 'Alat']
+
+    def _build_inventory_grid(self):
+        """Grid slot inventory: kategori tab + border + bg + ikon + jumlah + kursor."""
+        self._inv_slots   = []
+        self._inv_cursor  = 0   # index slot terpilih
+        self._inv_cat_idx = 0   # index kategori aktif
+        x0, y0 = -0.46, 0.28
+        dx, dy = 0.155, 0.150
+
+        # ── Kategori tab di atas grid ──
+        self._inv_cat_tabs = []
+        cat_x0 = -0.48
+        for i, cat in enumerate(self._INV_CATS):
+            tab = _txt(cat, pos=(cat_x0 + i * 0.24, y0 + 0.075), scale=0.68,
+                       col=color.rgb(255, 220, 100) if i == 0 else color.rgb(150, 140, 120),
+                       origin=(0, 0))
+            tab.enabled = False
+            self._inv_cat_tabs.append(tab)
+
+        # ── Detail item (bawah grid) ──
+        self._inv_detail = _txt('', pos=(x0, y0 - self._INV_ROWS * dy - 0.01),
+                                scale=0.60, col=color.rgb(200, 190, 165), origin=(0, 0))
+        self._inv_detail.enabled = False
+
+        for r in range(self._INV_ROWS):
+            for c in range(self._INV_COLS):
+                px = x0 + c * dx
+                py = y0 - r * dy
+                border  = _ui(scale=(0.135, 0.135), position=(px, py), color=color.rgb(95, 74, 52), z=-0.06)
+                bg      = _ui(scale=(0.122, 0.122), position=(px, py), color=color.rgb(38, 32, 28, 240), z=-0.08)
+                icon    = _ui(scale=(0.088, 0.088), position=(px, py + 0.010), color=color.rgb(120, 120, 120), z=-0.12)
+                qty     = _txt('', pos=(px + 0.028, py - 0.052), scale=0.62, col=color.rgb(255, 255, 230), z=-0.16)
+                nm      = _txt('', pos=(px, py - 0.062), scale=0.40, col=color.rgb(205, 205, 215), origin=(0, 0), z=-0.16)
+                cursor  = _ui(scale=(0.140, 0.140), position=(px, py), color=color.rgb(255, 215, 60, 180), z=-0.04)
+                cursor.enabled = False
+                for e in (border, bg, icon, qty, nm):
+                    e.enabled = False
+                self._inv_slots.append({'border': border, 'bg': bg, 'icon': icon,
+                                        'qty': qty, 'nm': nm, 'cursor': cursor})
+
+    def _hide_inventory_grid(self):
+        for slot in getattr(self, '_inv_slots', []):
+            for e in slot.values():
+                e.enabled = False
+        for tab in getattr(self, '_inv_cat_tabs', []):
+            tab.enabled = False
+        if hasattr(self, '_inv_detail'):
+            self._inv_detail.enabled = False
+
+    @staticmethod
+    def _item_icon_color(item_id: str):
+        """Warna kategori untuk fallback ikon (Harvest Moon vibe)."""
+        if item_id.endswith('_seed'):            return color.rgb(110, 180, 90)   # benih hijau
+        if item_id in CROPS:                     return color.rgb(225, 150, 70)   # hasil panen oranye
+        if item_id in ('kayu', 'batu'):          return color.rgb(140, 105, 65)   # bahan coklat
+        if 'besi' in item_id or 'tembaga' in item_id or 'emas' in item_id or 'ore' in item_id or 'kristal' in item_id or 'mithril' in item_id:
+            return color.rgb(165, 170, 190)      # logam abu
+        if 'wild' in item_id or 'herb' in item_id or 'berry' in item_id or 'jamur' in item_id or 'mandrake' in item_id:
+            return color.rgb(90, 175, 150)       # liar teal
+        if item_id in ('susu', 'telur', 'wol'):  return color.rgb(235, 225, 200)  # produk hewan
+        return color.rgb(190, 165, 120)          # default
+
+    def _item_icon_tex(self, item_id: str):
+        """Coba muat tekstur ikon (crop) dari assets/textures, else None."""
+        cache = getattr(self, '_inv_tex_cache', None)
+        if cache is None:
+            cache = self._inv_tex_cache = {}
+        if item_id in cache:
+            return cache[item_id]
+        base = item_id[:-5] if item_id.endswith('_seed') else item_id
+        tex = None
+        for cand in (f'crop_{base}', base, item_id):
+            p = _Path(__file__).resolve().parent.parent / 'assets' / 'textures' / f'{cand}.png'
+            if p.exists():
+                try:
+                    tex = Texture(_PILImg.open(p)); break
+                except Exception:
+                    pass
+        cache[item_id] = tex
+        return tex
+
+    def _inv_filter_items(self):
+        """Kembalikan list (item_id, qty) sesuai kategori aktif."""
+        s   = self.state
+        cat = self._INV_CATS[getattr(self, '_inv_cat_idx', 0)]
+        all_items = [(k, v) for k, v in sorted(s.inventory.items()) if v > 0]
+        if cat == 'Semua':
+            return all_items
+        if cat == 'Benih':
+            return [(k, v) for k, v in all_items if k.endswith('_seed')]
+        if cat == 'Panen':
+            return [(k, v) for k, v in all_items if k in CROPS]
+        if cat == 'Bahan':
+            return [(k, v) for k, v in all_items
+                    if k in ('kayu', 'batu') or any(x in k for x in
+                       ('besi', 'tembaga', 'emas', 'ore', 'kristal', 'mithril', 'wild', 'herb', 'berry', 'mandrake'))]
+        if cat == 'Alat':
+            return [(k, v) for k, v in all_items if k in ('susu', 'telur', 'wol') or
+                    not (k.endswith('_seed') or k in CROPS or
+                         k in ('kayu', 'batu') or
+                         any(x in k for x in ('besi', 'tembaga', 'emas', 'ore', 'kristal', 'mithril',
+                                               'wild', 'herb', 'berry', 'mandrake')))]
+        return all_items
+
+    def _render_inventory_grid(self):
+        """Isi slot dari state.inventory (filter kategori, tampilkan kursor)."""
+        items   = self._inv_filter_items()
+        cursor  = getattr(self, '_inv_cursor', 0)
+        cursor  = min(cursor, max(0, len(items) - 1))
+        self._inv_cursor = cursor
+
+        # Update tab warna
+        for i, tab in enumerate(getattr(self, '_inv_cat_tabs', [])):
+            tab.color = color.rgb(255, 215, 60) if i == getattr(self, '_inv_cat_idx', 0) else color.rgb(150, 140, 120)
+            tab.enabled = True
+
+        for i, slot in enumerate(self._inv_slots):
+            is_cursor = (i == cursor)
+            if i < len(items):
+                item_id, qty = items[i]
+                slot['border'].enabled = True
+                slot['bg'].enabled = True
+                slot['cursor'].enabled = is_cursor
+                ic = slot['icon']
+                tex = self._item_icon_tex(item_id)
+                if tex is not None:
+                    ic.texture = tex
+                    ic.color   = color.white
+                else:
+                    ic.texture = None
+                    ic.color   = self._item_icon_color(item_id)
+                ic.enabled = True
+                slot['qty'].text    = str(qty) if qty > 1 else ''
+                slot['qty'].enabled = True
+                disp = CROPS.get(item_id, {}).get('name') or item_id.replace('_seed', '~').replace('_', ' ')
+                slot['nm'].text    = disp[:9]
+                slot['nm'].enabled = True
+            else:
+                for k, e in slot.items():
+                    e.enabled = False
+
+        # Detail item terpilih
+        if hasattr(self, '_inv_detail'):
+            if items and cursor < len(items):
+                item_id, qty = items[cursor]
+                disp = CROPS.get(item_id, {}).get('name') or item_id.replace('_seed', '~').replace('_', ' ')
+                self._inv_detail.text    = f'{disp}  x{qty}'
+                self._inv_detail.enabled = True
+            else:
+                self._inv_detail.text    = 'Inventori kosong'
+                self._inv_detail.enabled = True
 
     def open_panel(self, name: str):
         self._panel_name = name
@@ -1597,6 +1924,9 @@ class UIManager:
             'catatan':   'Catatan Lembah',
         }
         self._panel_title.text = titles.get(name, name.capitalize())
+        # Grid inventory hanya muncul di panel inventory
+        if name != 'inventory':
+            self._hide_inventory_grid()
         # Update hint sesuai panel
         if name == 'shop':
             self._panel_hint.text = ('[TAB atau 0: ganti BELI/JUAL]   [1-9: pilih baris]'
@@ -1732,6 +2062,17 @@ class UIManager:
                 mark = '[v]' if already else ('[o]' if (got_gold and got_mat) else '[ ]')
                 lines.append(f"  [{num}] {mark} {r['name']:18s}  {r['cost_gold']:>4}G + {need} (DMG {r['damage']})")
             lines.append('')
+            lines.append("── PERKAKAS ──")
+            base_num = len(PICKAXE_RECIPES) + len(SWORD_RECIPES) + 1
+            for i, r in enumerate(CRAFT_RECIPES):
+                num = base_num + i
+                need = ', '.join(f"{k}×{v}" for k, v in r['needs'].items())
+                got_gold = s.gold >= r['cost_gold']
+                got_mat  = all(inv.get(k, 0) >= v for k, v in r['needs'].items())
+                mark = '[o]' if (got_gold and got_mat) else '[ ]'
+                gtxt = f"{r['cost_gold']:>4}G + " if r['cost_gold'] else "       "
+                lines.append(f"  [{num}] {mark} {r['name']:14s} {gtxt}{need}  — {r['desc']}")
+            lines.append('')
             lines.append("[ ]=kurang bahan  [o]=siap  [v]=sudah punya")
             self._panel_body.text = '\n'.join(lines)
 
@@ -1740,9 +2081,12 @@ class UIManager:
                 "── GERAK ──\n"
                 "  WASD / Arrow  : Jalan\n"
                 "  Shift+WASD    : Lari (pakai energi)\n\n"
+                "── KAMERA ──\n"
+                "  Q / E  : Putar kamera kiri/kanan\n"
+                "  Klik kanan + geser : Putar bebas\n\n"
                 "── AKSI ──\n"
                 "  SPACE  : Pakai alat aktif\n"
-                "  E      : Pie Menu interaksi NPC\n"
+                "  R      : Interaksi NPC / objek\n"
                 "  Z      : Serang (butuh pedang)\n"
                 "  X      : Tambah/hapus tile ke Antrian\n"
                 "  C      : Jalankan semua Antrian Aksi\n"
@@ -2023,9 +2367,14 @@ class UIManager:
             if s.sword_id == r['id']:
                 return "Sudah punya pedang ini."
             return self._do_craft(r, set_sword=r['id'])
+        gi = si - len(SWORD_RECIPES)          # lanjut ke perkakas umum
+        if 0 <= gi < len(CRAFT_RECIPES):
+            r = CRAFT_RECIPES[gi]
+            return self._do_craft(r, give_item=(r['id'], r.get('gives', 1)))
         return ''
 
-    def _do_craft(self, r: dict, set_pickaxe: int = None, set_sword: str = None) -> str:
+    def _do_craft(self, r: dict, set_pickaxe: int = None, set_sword: str = None,
+                  give_item: tuple = None) -> str:
         s = self.state
         if s.gold < r['cost_gold']:
             return f"Gold kurang ({r['cost_gold']}G)."
@@ -2040,6 +2389,9 @@ class UIManager:
             s.pickaxe_tier = set_pickaxe
         if set_sword is not None:
             s.sword_id = set_sword
+        if give_item is not None:
+            iid, qty = give_item
+            s.inventory[iid] = s.inventory.get(iid, 0) + qty
         self._render_panel('crafting')
         return f"Berhasil membuat {r['name']}!"
 
@@ -2116,6 +2468,32 @@ class UIManager:
         self._pie_callback = None
         if self.mode == 'pie':
             self.mode = 'hud'
+
+    # ─── INVENTORY NAVIGATION ────────────────────────────────
+    def navigate_inventory(self, dr: int, dc: int):
+        """Gerakkan kursor inventory. dr=baris, dc=kolom."""
+        if getattr(self, '_panel_name', '') != 'inventory':
+            return
+        items  = self._inv_filter_items()
+        if not items:
+            return
+        cur    = getattr(self, '_inv_cursor', 0)
+        cols   = self._INV_COLS
+        r, c   = divmod(cur, cols)
+        c      = max(0, min(cols - 1, c + dc))
+        r      = max(0, min(self._INV_ROWS - 1, r + dr))
+        new    = r * cols + c
+        self._inv_cursor = min(new, len(items) - 1)
+        self._render_inventory_grid()
+
+    def navigate_inventory_cat(self, delta: int):
+        """Ganti tab kategori inventory."""
+        if getattr(self, '_panel_name', '') != 'inventory':
+            return
+        n = len(self._INV_CATS)
+        self._inv_cat_idx = (getattr(self, '_inv_cat_idx', 0) + delta) % n
+        self._inv_cursor  = 0
+        self._render_inventory_grid()
 
     def _refresh_pie_ui(self):
         from .data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS

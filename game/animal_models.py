@@ -349,3 +349,224 @@ def build_animal(parent, species: str) -> float:
     """
     fn = _BUILDERS.get(species, _kambing)
     return fn(parent)
+
+
+# ── Entitas LIAR, digabung dari feature/3d-mobs ────────────────────────────
+#
+# Kedua sisi menyentuh berkas ini tapi nyaris tidak beririsan: sisi visual
+# membangun HEWAN TERNAK (dan menyimpan kakinya supaya bisa diayun), sisi
+# 3d-mobs membangun ENTITAS LIAR yang dipetik pemain — kunang-kunang, jamur,
+# mandrake, beri, herbal. `entities.py` sisi 3d-mobs memanggil
+# `build_wild_entity()` dan `update_anim_wild()`, jadi membuang blok ini akan
+# mematikan seluruh sistem entitas liar, bukan sekadar menghilangkan model.
+
+def get_animal_model_file(animal_type: str):
+    """Return nama model aset bila tersedia, else None."""
+    for ext in ('.glb', '.obj'):
+        if (_MODELS_DIR / f'animal_{animal_type}{ext}').exists():
+            return f'animal_{animal_type}'
+    return None
+
+def _c(r, g, b):
+    return color.rgb(r, g, b)
+
+def _soft_cube():
+    from .meshes import soft_cube_mesh
+    return soft_cube_mesh()
+
+def build_wild_entity(actor, kind: str):
+    """Rakit entitas liar cute sebagai child-parts pada `actor`."""
+    from .smooth_shader import apply_smooth
+    parts = []
+    actor.model  = 'cube'
+    actor.color  = color.clear
+    actor.scale  = _WILD_SCALES.get(kind, 0.50)
+
+    def part(model, pos, scale, c, **kw):
+        e = Entity(parent=actor, model=model, position=pos, scale=scale, color=c, **kw)
+        apply_smooth(e, has_texture=False)
+        parts.append(e)
+        return e
+
+    sc = _soft_cube()
+
+    if   kind == 'running_mushroom': _build_mushroom(part, sc)
+    elif kind == 'firefly':          _build_firefly(part, sc)
+    elif kind == 'mandrake':         _build_mandrake(part, sc)
+    elif kind == 'wild_herb':        _build_wild_herb(part, sc)
+    elif kind == 'wild_berry':       _build_wild_berry(part, sc)
+
+    actor._wild_parts = parts
+    return parts
+
+def _build_mushroom(part, sc):
+    """Jamur berlari chibi — topi merah bintik putih, wajah lucu di tangkai."""
+    # Tangkai putih gemuk
+    part(sc, (0, 0.22, 0), (0.24, 0.44, 0.24), _c(248, 242, 232))
+    # Topi merah besar
+    part(sc, (0, 0.52, 0), (0.62, 0.40, 0.62), _c(222, 62, 52))
+    # Pinggiran topi (putih)
+    part(sc, (0, 0.34, 0), (0.72, 0.10, 0.68), _c(248, 244, 238))
+    # Bintik putih topi (5)
+    for ox, oz, sz in ((0.14, 0.14, 0.11), (-0.16, 0.08, 0.09),
+                       (0.06, -0.18, 0.10), (-0.04, 0.18, 0.08), (0.20, -0.06, 0.08)):
+        part(sc, (ox, 0.58, oz + 0.32), (sz, 0.06, sz * 0.5), _c(255, 252, 248))
+    # Mata chibi di tangkai
+    for sx in (-1, 1):
+        ex = sx * 0.08
+        part('sphere', (ex,            0.28,  0.14), (0.09, 0.09, 0.05), _EYE_W)
+        part('sphere', (ex,            0.28,  0.152), (0.068, 0.068, 0.04), _c(62, 168, 75))
+        part('sphere', (ex,            0.28,  0.162), (0.042, 0.042, 0.04), _EYE_PU)
+        part('sphere', (ex+sx*0.025,   0.302, 0.170), (0.025, 0.025, 0.02), _EYE_W)
+    # Pipi blush
+    for sx in (-1, 1):
+        part(sc, (sx*0.12, 0.24, 0.12), (0.10, 0.06, 0.04), _BLUSH)
+    # Senyum
+    part(sc, (0, 0.21, 0.14), (0.09, 0.025, 0.025), _c(175, 78, 78))
+    # Kaki kecil (2)
+    for sx in (-1, 1):
+        part(sc, (sx*0.10, 0.05, 0.02), (0.10, 0.12, 0.10), _c(238, 228, 215))
+
+def _build_firefly(part, sc):
+    """Kunang-kunang chibi — tubuh hijau-kuning berkilau, sayap transparan."""
+    # Tubuh oval kuning-hijau berkilau
+    part(sc, (0, 0.28, 0), (0.28, 0.22, 0.22), _c(185, 228, 78))
+    # Lingkaran cahaya (glow — solid warna lebih terang)
+    part(sc, (0, 0.28, 0), (0.48, 0.38, 0.38), _c(225, 255, 140))
+    # Kepala kuning cerah
+    part(sc, (0, 0.44, 0), (0.22, 0.20, 0.20), _c(232, 248, 102))
+    # Mata besar bulat
+    for sx in (-1, 1):
+        ex = sx * 0.07
+        part('sphere', (ex,           0.46,  0.12), (0.088, 0.088, 0.05), _EYE_W)
+        part('sphere', (ex,           0.46,  0.132),(0.065, 0.065, 0.04), _c(30, 160, 65))
+        part('sphere', (ex,           0.46,  0.142),(0.040, 0.040, 0.03), _EYE_PU)
+        part('sphere', (ex+sx*0.022,  0.476, 0.150),(0.024, 0.024, 0.02), _EYE_W)
+    # Pipi kuning terang
+    for sx in (-1, 1):
+        part(sc, (sx*0.10, 0.44, 0.10), (0.08, 0.05, 0.03), _c(255, 232, 100))
+    # Senyum kecil
+    part(sc, (0, 0.43, 0.12), (0.07, 0.022, 0.022), _c(80, 150, 55))
+    # Sayap (2 pasang kecil)
+    for sx in (-1, 1):
+        part(sc, (sx*0.28, 0.36, 0.00), (0.20, 0.12, 0.32), _c(215, 248, 205),
+             rotation=(0, sx*28, 0))
+        part(sc, (sx*0.24, 0.28, 0.02), (0.16, 0.08, 0.22), _c(228, 255, 185),
+             rotation=(0, sx*22, 12))
+    # Antena (2)
+    for sx in (-1, 1):
+        part(sc, (sx*0.07, 0.58, 0.04), (0.025, 0.16, 0.025), _c(155, 195, 68),
+             rotation=(0, 0, sx*-25))
+        part('sphere', (sx*0.10, 0.66, 0.04), (0.065, 0.065, 0.065), _c(248, 255, 108))
+
+def _build_mandrake(part, sc):
+    """Mandrake chibi — akar gemuk coklat, wajah teriak lucu, mahkota daun hijau."""
+    # Akar tubuh coklat bulat
+    part(sc, (0, 0.28, 0), (0.44, 0.56, 0.44), _c(185, 148, 100))
+    # Garis tekstur akar
+    part(sc, (0, 0.18, 0.23), (0.38, 0.42, 0.04), _c(165, 128, 82))
+    # Kaki-akar (2 tonjolan bawah)
+    for sx in (-1, 1):
+        part(sc, (sx*0.14, 0.06, 0.02), (0.14, 0.18, 0.14), _c(158, 122, 80))
+    # Kepala bulat hijau
+    part(sc, (0, 0.65, 0), (0.46, 0.46, 0.46), _c(145, 188, 112))
+    # Mata melotot besar (mandrake kaget)
+    for sx in (-1, 1):
+        ex = sx * 0.12
+        part('sphere', (ex,           0.70,  0.24), (0.115, 0.115, 0.06), _EYE_W)
+        part('sphere', (ex,           0.70,  0.255),(0.086, 0.086, 0.05), _c(48, 138, 58))
+        part('sphere', (ex,           0.70,  0.268),(0.055, 0.055, 0.04), _EYE_PU)
+        part('sphere', (ex+sx*0.032,  0.720, 0.278),(0.026, 0.026, 0.025),_EYE_W)
+    # Mulut terbuka teriak
+    part(sc, (0, 0.61, 0.24), (0.22, 0.18, 0.05), _c(22, 18, 22))
+    part(sc, (0, 0.61, 0.245),(0.14, 0.08, 0.04), _c(185, 72, 72))
+    # Pipi
+    for sx in (-1, 1):
+        part(sc, (sx*0.18, 0.64, 0.22), (0.12, 0.07, 0.04), _BLUSH)
+    # Tangan kecil (opsional, ekspresi dramatis)
+    for sx in (-1, 1):
+        part(sc, (sx*0.30, 0.42, 0.10), (0.10, 0.08, 0.10), _c(158, 122, 80),
+             rotation=(0, 0, sx*55))
+    # Daun mahkota di atas (4 daun berbeda)
+    for ox, rot_y, sz in ((0.00, 0, 0.26), (-0.15, -38, 0.20), (0.14, 32, 0.18), (0.02, 15, 0.15)):
+        part(sc, (ox, 0.95, 0.04), (sz, sz*1.75, sz*0.12),
+             _c(82, 162, 68), rotation=(0, rot_y, 0))
+
+def _build_wild_herb(part, sc):
+    """Herba liar chibi — gundukan hijau segar, daun memancar, wajah kecil."""
+    # Gundukan tanah
+    part(sc, (0, 0.07, 0), (0.44, 0.14, 0.44), _c(132, 105, 72))
+    # Batang utama
+    part(sc, (0, 0.26, 0), (0.07, 0.32, 0.07), _c(85, 158, 68))
+    # 6 daun memancar ke berbagai arah
+    leaf_data = [
+        ( 0.20,  0.00,  22,  15, 0.16),
+        (-0.20,  0.00, -22, -15, 0.16),
+        ( 0.00,  0.22,   0,  12, 0.18),
+        ( 0.14, -0.14,  45, -10, 0.14),
+        (-0.14, -0.14, -45,  10, 0.14),
+        ( 0.08,  0.16,  12,  -8, 0.13),
+    ]
+    for ox, oz, ry, rz, sz in leaf_data:
+        g = int(165 + abs(ox) * 25)
+        part(sc, (ox, 0.38, oz), (sz, sz*2.0, sz*0.11),
+             _c(62, g, 55), rotation=(0, ry, rz))
+    # Wajah di batang
+    for sx in (-1, 1):
+        part('sphere', (sx*0.046, 0.295, 0.05), (0.048, 0.048, 0.032), _EYE_PU)
+    part(sc, (0, 0.268, 0.05), (0.065, 0.020, 0.020), _c(68, 145, 58))  # senyum
+    # Bunga kecil di ujung batang
+    part(sc, (0, 0.46, 0), (0.18, 0.18, 0.18), _c(245, 205, 75))
+    part(sc, (0, 0.47, 0), (0.09, 0.09, 0.09), _c(248, 130, 48))
+
+def _build_wild_berry(part, sc):
+    """Beri liar chibi — buah bulat ungu-merah cerah, wajah ceria."""
+    # Buah berry bulat besar
+    part('sphere', (0, 0.26, 0), (0.45, 0.45, 0.45), _c(182, 58, 148))
+    # Kilap buah
+    part('sphere', (0.12, 0.36, 0.18), (0.14, 0.14, 0.12), _c(238, 175, 228))
+    # Tangkai
+    part(sc, (0, 0.50, 0), (0.05, 0.14, 0.05), _c(72, 142, 58))
+    # Daun (3 kecil)
+    for ox, rot_y in ((0.09, 35), (-0.09, -35), (0.00, 0)):
+        part(sc, (ox, 0.54, 0.04), (0.16, 0.22, 0.09),
+             _c(68, 165, 60), rotation=(0, rot_y, 0))
+    # Mata chibi
+    for sx in (-1, 1):
+        ex = sx * 0.11
+        part('sphere', (ex,          0.28,  0.23), (0.088, 0.088, 0.05), _EYE_W)
+        part('sphere', (ex,          0.28,  0.242),(0.065, 0.065, 0.04), _c(135, 45, 175))
+        part('sphere', (ex,          0.28,  0.252),(0.040, 0.040, 0.03), _EYE_PU)
+        part('sphere', (ex+sx*0.025, 0.302, 0.260),(0.024, 0.024, 0.02), _EYE_W)
+    # Pipi
+    for sx in (-1, 1):
+        part(sc, (sx*0.16, 0.24, 0.21), (0.10, 0.062, 0.04), _BLUSH)
+    # Senyum
+    part(sc, (0, 0.23, 0.23), (0.09, 0.026, 0.026), _c(188, 95, 155))
+
+
+import math as _math
+
+def update_anim_wild(actor, kind: str, t: float):
+    """Animasikan entitas liar setiap frame — bob, goyang, melayang."""
+    base_y = getattr(actor, '_base_y', 0.25)
+    if kind == 'running_mushroom':
+        # Lompat-lompat + condong kiri-kanan saat berlari
+        actor.y = base_y + abs(_math.sin(t * 4.5)) * 0.14
+        actor.rotation_z = _math.sin(t * 4.5) * 10
+    elif kind == 'firefly':
+        # Melayang naik-turun + putaran lambat
+        actor.y = base_y + _math.sin(t * 1.8) * 0.20
+        actor.rotation_y = t * 45 % 360
+    elif kind == 'mandrake':
+        # Bergoyang panik + memantul ringan
+        actor.rotation_z = _math.sin(t * 3.2) * 8
+        actor.y = base_y + abs(_math.sin(t * 3.2)) * 0.05
+    elif kind == 'wild_herb':
+        # Melambai tertiup angin
+        actor.rotation_z = _math.sin(t * 1.4) * 5
+        actor.rotation_x = _math.sin(t * 1.1) * 3
+    elif kind == 'wild_berry':
+        # Bob perlahan + sedikit ayun
+        actor.y = base_y + _math.sin(t * 1.3) * 0.06
+        actor.rotation_z = _math.sin(t * 0.9) * 4

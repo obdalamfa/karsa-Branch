@@ -28,6 +28,8 @@ FPS      = 60
 CAM_TARGET_LIFT = 1.0   # titik fokus kamera lebih terpusat ke badan karakter
 CAM_LERP        = 8.0   # kamera bergerak mengikuti lebih cepat
 
+SHIP_BIN_TILE   = (6, 4)   # posisi Peti Kirim di scene farm (tile)
+
 # ─── TIMING ──────────────────────────────────────────────
 REAL_SECONDS_PER_INGAME_DAY     = 900
 INGAME_MINUTES_PER_REAL_SECOND  = 1440 / REAL_SECONDS_PER_INGAME_DAY
@@ -62,7 +64,14 @@ CT, SH, GR, LN, DT, CV_W, CV_F, PEN, STR_T, \
 DCK, BOT, LLY, CRYS, \
 ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, \
 STAIRS_DOWN, STAIRS_UP, MINED, \
-SD, LGH_B, LGH_F, CLOUD, GOLD_W, PALM, TV, CHR, CAL = range(51)
+SD, LGH_B, LGH_F, CLOUD, GOLD_W, PALM, TV, CHR, CAL, \
+WARUNG, RUMAH_PG, UNION_HL, SHRINE, DEBRIS, LAUNDRY, GRAFFITI_W = range(58)
+
+SHOP_EXT, CLINIC_EXT, SMITH_EXT, GREENHOUSE_EXT = range(58, 62)
+KUIL = 62   # kuil surgawi — hanya di scene swarga
+# Objek rumah tangga ala Sims (S2) — ditambah di ID baru agar tak menggeser
+# penomoran tile lama (scene & save lama tetap valid).
+KLK, WC, SWR = 63, 64, 65   # kulkas, toilet, pancuran/shower
 
 TILE_NAMES = {
     G:'grass', D:'dirt', P:'path', W:'water', FL:'floor', WL:'wall',
@@ -78,13 +87,22 @@ TILE_NAMES = {
     STAIRS_DOWN:'stairs_down', STAIRS_UP:'stairs_up', MINED:'mined_floor',
     SD:'sand', LGH_B:'lighthouse_broken', LGH_F:'lighthouse_fixed',
     CLOUD:'cloud_floor', GOLD_W:'gold_wall', PALM:'palm_tree',
-    TV:'tv', CHR:'chair', CAL:'calendar'
+    TV:'tv', CHR:'chair', CAL:'calendar',
+    WARUNG:'warung', RUMAH_PG:'rumah_panggung', UNION_HL:'union_hall',
+    SHRINE:'shrine', DEBRIS:'debris', LAUNDRY:'laundry', GRAFFITI_W:'graffiti_wall',
+    SHOP_EXT:'shop_ext', CLINIC_EXT:'clinic_ext', SMITH_EXT:'smith_ext',
+    GREENHOUSE_EXT:'greenhouse_ext',
+    KUIL:'kuil',
+    KLK:'kulkas', WC:'toilet', SWR:'pancuran',
 }
 
 WALKABLE  = [G, D, P, FL, DR, GT, CV_F, STR_T, DCK, LLY, MINED, STAIRS_DOWN, STAIRS_UP, SD, CLOUD]
 TILLABLE  = [G, D]
 BLOCKING  = [WL, TR, H, FN, BD, ST, TB, BS, MR, FP, CL, PP, CH, CT, SH, GR, LN, DT,
-             CV_W, PEN, BOT, CRYS, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, MB, LGH_B, LGH_F, GOLD_W, PALM, TV, CAL]
+             CV_W, PEN, BOT, CRYS, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, MB, LGH_B, LGH_F, GOLD_W, PALM, TV, CAL,
+             WARUNG, RUMAH_PG, UNION_HL, SHRINE, DEBRIS, LAUNDRY, GRAFFITI_W,
+             SHOP_EXT, CLINIC_EXT, SMITH_EXT, GREENHOUSE_EXT, KUIL,
+             KLK, WC, SWR]
 MINEABLE  = [CV_W, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS]
 
 SEASONS      = ['Semi', 'Panas', 'Gugur', 'Dingin']
@@ -100,6 +118,9 @@ NEED_HIGH     = 70    # di atas ini  → bonus mood
 NEED_DECAY_LAPAR  = 0.020   # ~5000 menit ≈ 3.5 hari in-game
 NEED_DECAY_SOSIAL = 0.015   # ~6700 menit ≈ 4.6 hari
 NEED_DECAY_SENANG = 0.012   # ~8300 menit ≈ 5.8 hari
+# Motif Sims tambahan (S1): kandung kemih terisi paling cepat, kebersihan pelan
+NEED_DECAY_KANDUNG = 0.055  # ~1800 menit ≈ 1.3 hari — paling mendesak
+NEED_DECAY_BERSIH  = 0.018  # ~5500 menit ≈ 3.8 hari
 
 # ─── ACTION QUEUE (ala FreeSO VMQueuedAction) ─────────────
 QUEUE_USER_DRIVEN = 50

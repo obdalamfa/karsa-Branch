@@ -9,6 +9,14 @@ from panda3d.core import loadPrcFileData
 loadPrcFileData('', 'load-display pandagl')
 loadPrcFileData('', 'aux-display pandadx9')
 
+# Saat dibundel PyInstaller (frozen): arahkan asset_folder Ursina ke folder
+# tempat exe berada supaya font (glob **/*.ttf) & aset internal ditemukan.
+# Path model memakai _MODELS_DIR absolut (relatif paket game/) jadi tetap valid.
+if getattr(sys, 'frozen', False):
+    from pathlib import Path as _Path
+    from ursina import application as _app
+    _app.asset_folder = _Path(sys.executable).resolve().parent
+
 from game.app import run
 
 # Setup logging dasar

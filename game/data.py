@@ -54,7 +54,29 @@ WILD_ITEMS = {
     'wild_berry':       {'name':'Beri Liar','sell':20,'description':'Beri manis'},
     'air_keabadian':    {'name':'Air Keabadian','sell':500,'description':'Air ruqyah dari naga'},
     'ikan_legendaris':  {'name':'Ikan Legendaris','sell':1000,'description':'Ikan raksasa penghuni danau terdalam'},
+    # ── Hasil kerajinan & laut ──
+    'perahu':           {'name':'Perahu Kayu','sell':400,'description':'Perahu kecil untuk berlayar dari dermaga pantai'},
+    'obor':             {'name':'Obor','sell':12,'description':'Penerangan kayu sederhana'},
+    'jala':             {'name':'Jala Ikan','sell':90,'description':'Meningkatkan peluang memancing'},
+    'peti_kayu':        {'name':'Peti Kayu','sell':95,'description':'Peti buatan tangan, laku dijual'},
+    'pagar_kayu':       {'name':'Pagar Kayu','sell':35,'description':'Segmen pagar dekorasi kebun'},
+    'ikan_laut':        {'name':'Ikan Laut','sell':60,'description':'Tangkapan segar dari laut lepas'},
+    'mutiara':          {'name':'Mutiara','sell':250,'description':'Mutiara berkilau dari dasar laut'},
 }
+
+# ─── RESEP KERAJINAN UMUM (meja kerja Bengkel Budi, tombol U) ───────────────
+CRAFT_RECIPES = [
+    {'id':'perahu',    'name':'Perahu Kayu', 'cost_gold':150, 'gives':1,
+     'needs':{'kayu':24,'besi':4}, 'desc':'Berlayar dari dermaga pantai'},
+    {'id':'jala',      'name':'Jala Ikan',   'cost_gold':30,  'gives':1,
+     'needs':{'kayu':3,'besi':1},  'desc':'Mancing lebih mujur'},
+    {'id':'obor',      'name':'Obor (x3)',   'cost_gold':0,   'gives':3,
+     'needs':{'kayu':2},           'desc':'Penerangan murah'},
+    {'id':'peti_kayu', 'name':'Peti Kayu',   'cost_gold':0,   'gives':1,
+     'needs':{'kayu':6},           'desc':'Barang dagangan'},
+    {'id':'pagar_kayu','name':'Pagar (x2)',  'cost_gold':0,   'gives':2,
+     'needs':{'kayu':3},           'desc':'Dekorasi kebun'},
+]
 
 HUMAN_NPCS = {
     'arya':       {'name':'Arya','type':'human','gift':'jagung',
@@ -149,7 +171,7 @@ HUMAN_NPCS = {
             'quest_11': [["Masakan dengan bahan dari lembah yang sehat... tidak ada yang mengalahkannya."]],
         },
         'gift_r':"Sehat!"},
-    'pak_guru':   {'name':'Pak Guru','type':'human','gift':'lobak',
+    'pak_guru':   {'name':'Pak Hadi','type':'human','gift':'lobak',
         'talks':{
             'default': [["Pendidikan kunci kemajuan."],["Murid-muridku perlu buku."]],
             'hearts_3': [["Pendidikan tanpa alam adalah kosong. Aku mengajar anak-anak tentang lembah."]],
@@ -354,6 +376,17 @@ ANIMAL_NPCS = {
     'rubah_hutan':     {'name':'Reynard','type':'rubah','talks':[["(Mengintai)"]],'product':None},
     'kelinci_putih':   {'name':'Pinky','type':'kelinci','talks':[["(Hidung berkedut)"]],'product':None},
 }
+
+# ─── Hasil ternak harian (dikumpulkan [R] dari hewan, dijual via Peti Kirim) ───
+ANIMAL_PRODUCTS = {
+    'susu':  {'name': 'Susu',  'sell': 90,  'description': 'Susu segar dari sapi'},
+    'telur': {'name': 'Telur', 'sell': 55,  'description': 'Telur ayam pagi'},
+    'wol':   {'name': 'Wol',   'sell': 130, 'description': 'Wol hangat dari domba/kambing'},
+}
+
+# Harga jual gabungan untuk Peti Kirim (hasil panen + hasil ternak)
+SHIP_PRICES = {**{k: v.get('sell', 0) for k, v in CROPS.items()},
+               **{k: v['sell'] for k, v in ANIMAL_PRODUCTS.items()}}
 
 def all_npcs():
     return list(HUMAN_NPCS.keys()) + list(SUPERNATURAL_NPCS.keys()) + list(ANIMAL_NPCS.keys())

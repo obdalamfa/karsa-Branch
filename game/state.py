@@ -89,6 +89,53 @@ class GameState:
     sosial: float = 100.0
     senang: float = 100.0
 
+    # ── Sistem Sims, digabung dari feature/3d-mobs ─────────────────────────
+    # Aditif terhadap mesin motif di atas, bukan pengganti: `motives` tetap
+    # sumber kebenaran untuk kebutuhan, sementara blok di bawah membawa
+    # sistem yang belum pernah ada di sisi ini sama sekali — skill & karier,
+    # mode Bangun/Beli, rumah tangga & tagihan, keinginan & aspirasi, tahap
+    # hidup, dan relasi asmara. `lapar`/`sosial`/`senang` sengaja TIDAK
+    # diikutkan lagi dari sisi sana; ketiganya sudah dideklarasikan di atas
+    # sebagai cermin save lama, dan mendeklarasikannya dua kali membuat
+    # dataclass menolak dimuat.
+    # ─── Needs / Motives (ala The Sims / FreeSO) ───
+    kandung: float = 100.0  # Bladder — terisi waktu → kosongkan di toilet (S1 Sims)
+    bersih:  float = 100.0  # Hygiene — turun waktu → isi dengan mandi (S1 Sims)
+    free_will: bool = True  # Autonomi ala Sims (S3): Sim urus kebutuhan sendiri
+    # Relasi dua-meter ala Sims (S5). Persahabatan pakai npc_hearts yang sudah
+    # ada; asmara & catatan hari interaksi terakhir (utk peluruhan) di sini.
+    npc_romance:     dict = field(default_factory=dict)
+    npc_last_social: dict = field(default_factory=dict)
+    # Skill & karier ala Sims (S6)
+    skills:       dict = field(default_factory=dict)   # id -> {'lv':int,'xp':float}
+    career:       str  = ''
+    career_level: int  = 0
+    work_days:    int  = 0
+    worked_today: bool = False
+    # Mode Bangun/Beli (S7): objek yang dibeli pemain per scene
+    placed_objects: dict = field(default_factory=dict)  # scene -> {'x,y': tile_id}
+    # Rumah tangga & tagihan (S8)
+    household:    list = field(default_factory=list)   # npc_id yang tinggal bersama
+    bill_days:    int  = 0
+    unpaid_bills: int  = 0
+    # Keinginan & aspirasi (S9)
+    wants:           list = field(default_factory=list)
+    wants_done:      int  = 0
+    aspiration:      str  = ''
+    aspiration_done: bool = False
+    title:           str  = ''
+    # Tahap hidup (S10)
+    age_days:   int = 14          # mulai sebagai dewasa
+    life_stage: str = 'dewasa'
+
+    # ─── Majelis Batin (4 suara + skill-check ala Disco Elysium) ───
+    batin: dict = field(default_factory=lambda: {'bara': 1, 'akar': 1, 'sukma': 1, 'lapar': 1})
+    batin_red: list = field(default_factory=list)   # id red-check yang sudah gagal (terkunci)
+
+    # ─── Peti Kirim (shipping bin ala Stardew) — jual hasil panen saat tidur ───
+    ship_bin: dict = field(default_factory=dict)     # item → jumlah menunggu dijual
+    animals_collected: list = field(default_factory=list)  # id hewan yg hasilnya diambil hari ini
+
     # ─── Penampilan karakter (chargen) ───
     char_name:  str = ''         # kosong = belum buat karakter (trigger chargen)
     char_skin:  int = 0
@@ -167,23 +214,49 @@ class GameState:
         else:
             return 1.4
 
-    def save(self):
+    @staticmethod
+    def slot_path(slot: int = 0) -> str:
+        """Slot 0 = file lama (kompatibel mundur); slot 1-3 = file bersufiks."""
+        if not slot:
+            return SAVE_FILE
+        base, ext = os.path.splitext(SAVE_FILE)
+        return f"{base}_slot{slot}{ext}"
+
+    def save(self, slot: int = 0):
+        # Tulis atomik: temp dulu lalu os.replace → save lama TAK pernah rusak
+        # walau penulisan gagal/crash di tengah (cegah kehilangan progres).
+        path = GameState.slot_path(slot)
+        tmp = path + '.tmp'
         try:
-            with open(SAVE_FILE, 'w') as f:
+            with open(tmp, 'w') as f:
+                # sync_motives() dari sisi visual: mesin motif harus dicerminkan
+                # ke field datar SEBELUM ditulis, kalau tidak save-nya membawa
+                # nilai basi. Penyaring `_` juga dipertahankan — objek mesin
+                # tidak boleh masuk JSON.
                 self.sync_motives()
                 json.dump({k: v for k, v in self.__dict__.items()
                            if not k.startswith('_')}, f, indent=2)
+            # Tulis-atomik dari feature/3d-mobs: tulis ke berkas sementara lalu
+            # ganti. Tanpa ini, mati listrik saat menyimpan meninggalkan save
+            # yang terpotong separuh dan permainan gagal boot.
+            os.replace(tmp, path)
             return True
         except Exception as e:
             print(f"Save error: {e}")
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except Exception:
+                pass
             return False
 
     @classmethod
-    def load(cls):
-        if not os.path.exists(SAVE_FILE):
+    def load(cls, slot: int = 0):
+        path = cls.slot_path(slot)
+        if not os.path.exists(path):
             return None
         try:
-            with open(SAVE_FILE) as f:
+            with open(path) as f:
                 data = json.load(f)
             gs = cls()
             for k, v in data.items():
@@ -192,4 +265,21 @@ class GameState:
             return gs
         except Exception as e:
             print(f"Load error: {e}")
+            return None
+
+    @classmethod
+    def slot_info(cls, slot: int = 0):
+        """Ringkasan ringkas slot untuk UI simpan/muat; None bila kosong/rusak."""
+        path = cls.slot_path(slot)
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path) as f:
+                d = json.load(f)
+            return {
+                'name': d.get('char_name') or 'Tanpa Nama',
+                'day':  int(d.get('day', 1)),
+                'gold': int(d.get('gold', 0)),
+            }
+        except Exception:
             return None

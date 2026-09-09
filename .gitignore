@@ -1,6 +1,54 @@
-# Bytecode Python. Sesi agen menjalankan game dengan versi Python yang
-# berbeda dari mesin pemilik, dan tiap kali itu meninggalkan puluhan berkas
-# .pyc baru yang tidak ada hubungannya dengan perubahan apa pun.
-# Berkas .pyc yang sudah terlanjur terlacak tidak ikut terpengaruh aturan ini.
+# Bytecode Python. Sesi agen menjalankan game dengan versi Python yang berbeda
+# dari mesin pemilik, dan tiap kali itu meninggalkan puluhan .pyc baru yang tidak
+# berhubungan dengan perubahan apa pun. Saat menggabungkan feature/3d-mobs,
+# .pyc yang terlanjur terlacak menghasilkan 118 dari 143 konflik — seluruhnya
+# palsu. Semuanya sudah dikeluarkan dari indeks; aturan di bawah menjaganya.
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Save game
+lembah_karsa_3d_save.json
+*.save
+
+# Dev tooling / capture harness output (jangan di-push)
+screenshots/
+tools/cap_*.png
+tools/_*.py
+tools/_*.png
+
+# Aset/refs yang diunduh (besar; bukan bagian kode)
+tools/assets_dl/
+tools/refs/
+
+# File sumber Blender (.blend) DI-TRACK sebagai sumber model (naga_dragon, environment).
+# Backup .blend1 & duplikat scratch "2blend" tetap diabaikan. Render preview di bawah.
+/*.blend1
+*2blend*
+/lembah_karsa_*.png
+/naga_*.png
+/mob_*.png
+/mobs_*.png
+/preview_*.png
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+
+# Folder export model legacy (di-regenerasi runtime; kanonik = assets/models/)
+/game/assets/
+
+tools/cap_*.png
+tools/vm_*.png
+tools/icon_contact.png
+tools/cam_shot.png
+
+tools/icon3d/
+tools/*_sheet.png
+boot_out.log
+boot_err.log

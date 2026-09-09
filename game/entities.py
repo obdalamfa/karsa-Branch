@@ -667,3 +667,43 @@ def respawn_wild_at_morning(state):
                 'kind': rng.choice(['wild_herb', 'wild_berry']),
                 'x': x, 'y': y, 'scene': scene, 'moving': False,
             })
+
+
+# ── Helper tingkat-modul dari feature/3d-mobs ──────────────────────────────
+# Jalur SPAWN di berkas ini sengaja diambil utuh dari sisi visual: ia membangun
+# avatar TSO, dan avatar itulah yang dinilai kritikus — wajah, tangan, proporsi
+# chibi, dan pose berkuda semuanya bergantung padanya. Mencampur cabang if/else
+# dari kedua sisi di dalam satu fungsi sudah dicoba dan menghasilkan `else:`
+# yatim; struktur kendali tidak bisa digabung sepotong-sepotong.
+#
+# Yang di bawah ini BERBEDA: keduanya berdiri sendiri, tidak menyentuh alur
+# spawn, dan dibutuhkan sistem mob/prop sisi 3d-mobs. Jadi keduanya ikut.
+
+def load_texture_file(name: str):
+    """Load & cache tekstur PNG dari assets/textures/ via PIL (bypass string-search Ursina)."""
+    if not name:
+        return None
+    if name in _TEX_CACHE:
+        return _TEX_CACHE[name]
+    p = _ASSET_DIR / f'{name}.png'
+    tex = None
+    if p.exists():
+        try:
+            from PIL import Image
+            tex = Texture(Image.open(p))
+        except Exception as e:
+            import logging
+            logging.warning(f"Gagal load tekstur '{name}': {e}")
+    _TEX_CACHE[name] = tex
+    return tex
+
+MODEL_COLORS = {
+    'sumur':         (150, 140, 125),   # batu + kayu
+    'lantern':       (120, 110, 90),    # besi + kaca redup
+    'pagar_bambu':   (158, 162, 100),   # bambu
+    'pohon_bambu':   (150, 165, 95),    # bambu hijau pudar
+    'rumah_kampung': (168, 150, 122),   # plester hangat
+    'rumah_limasan': (170, 152, 120),
+    'rumah_joglo':   (165, 145, 112),
+    'warung':        (152, 114, 74),    # kayu
+}

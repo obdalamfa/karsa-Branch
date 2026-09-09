@@ -10,28 +10,40 @@ class QuestController:
 
     def check_quest_progress(self, panels=None):
         s = self.state
-        if s.quest_stage == 0 and s.mail_read:
-            s.quest_stage = 1
+        # Rantai: satu aksi bisa melompati beberapa tahap sekaligus (cegah macet).
+        while s.quest_stage < 11 and self._stage_done(s.quest_stage):
+            s.quest_stage += 1
+            if s.quest_stage >= 11:
+                s.post_game = True
+            self._notify_quest_up(panels)
 
-        if s.quest_stage == 1:
-            if s.stats.get('lobak_harvested', 0) >= 3 and s.stats.get('earned', 0) >= 500:
-                s.quest_stage = 2
-                self._notify_quest_up(panels)
-
-        if s.quest_stage == 2:
-            if s.npc_relations.get('arya', 0) >= 15:
-                s.quest_stage = 3
-                self._notify_quest_up(panels)
-
-        if s.quest_stage == 3:
-            if getattr(s, 'lighthouse_fixed', False):
-                s.quest_stage = 4
-                self._notify_quest_up(panels)
+    def _stage_done(self, st):
+        """Syarat tiap tahap — DICOCOKKAN dgn deskripsi QUEST_STAGES, pakai sinyal
+        yang benar-benar terjadi di gameplay (audit M4)."""
+        s = self.state
+        inv = s.inventory
+        stt = s.stats
+        if st == 0:  return bool(s.mail_read)                                       # cek kotak pos
+        if st == 1:  return stt.get('lobak_planted', 0) >= 3 and stt.get('watered', 0) >= 3
+        if st == 2:  return stt.get('lobak_harvested', 0) >= 3                       # panen 3 lobak
+        if st == 3:  return s.gold >= 150                                           # kumpulkan 150G
+        if st == 4:  return s.pickaxe_tier >= 1 or bool(s.sword_id)                 # alat lebih baik
+        if st == 5:  return s.pickaxe_tier >= 1 and stt.get('deepest_level', 0) >= 1 # crafting + masuk gua
+        if st == 6:  return inv.get('tembaga', 0) >= 5 and inv.get('besi', 0) >= 3   # 5 tembaga + 3 besi
+        # Pedang besi ATAU lebih tinggi (kalau pemain sudah upgrade ke emas/mithril,
+        # '== sword_besi' bikin quest MACET PERMANEN — pemblokir tamat game).
+        if st == 7:  return s.sword_id in ('sword_besi', 'sword_emas', 'sword_mithril') and stt.get('mobs_killed', 0) >= 5
+        if st == 8:  return s.captured_supernatural >= 1                            # tangkap makhluk halus
+        if st == 9:  return stt.get('deepest_level', 0) >= 10                       # gua level 10
+        if st == 10: return bool(s.naga_defeated)                                   # kalahkan Naga
+        return False
 
     def _notify_quest_up(self, panels):
         s = self.state
         sound_play('magic', 0.8)
-        msg = f"Quest Update: Tahap {s.quest_stage} - {QUEST_STAGES.get(s.quest_stage, 'Rahasia baru terungkap')}"
+        # QUEST_STAGES adalah list of {'s','t','d'} (bukan dict) — cari berdasarkan stage.
+        stage_title = next((q['t'] for q in QUEST_STAGES if q['s'] == s.quest_stage), 'Rahasia baru terungkap')
+        msg = f"Quest Update: Tahap {s.quest_stage} - {stage_title}"
         if panels:
             panels.flash_msg(msg, 3.5)
         else:
@@ -60,14 +72,16 @@ class QuestController:
         # tapi dulu ia satu-satunya cerita di gua DAN ia hilang begitu kotak
         # pesannya habis. Sekarang ia pendamping fragmen, bukan penggantinya.
         lore_msg = None
-        if dungeon_level == 3 and not s.lore_found.get('dungeon_3'):
-            s.lore_found['dungeon_3'] = True
+        # State pakai lore_collected (list), konsisten dgn add_lore() di bawah.
+        lore_col = getattr(s, 'lore_collected', [])
+        if dungeon_level == 3 and 'dungeon_3' not in lore_col:
+            lore_col.append('dungeon_3'); s.lore_collected = lore_col
             lore_msg = "Sebuah prasasti kuno: 'Kutukan Lembah Karsa berawal dari keserakahan manusia...'"
-        elif dungeon_level == 7 and not s.lore_found.get('dungeon_7'):
-            s.lore_found['dungeon_7'] = True
+        elif dungeon_level == 7 and 'dungeon_7' not in lore_col:
+            lore_col.append('dungeon_7'); s.lore_collected = lore_col
             lore_msg = "Sisa-sisa kemah penambang. Ada buku harian: 'Kami menggali terlalu dalam. Sesuatu terbangun...'"
-        elif dungeon_level == 12 and not s.lore_found.get('dungeon_12'):
-            s.lore_found['dungeon_12'] = True
+        elif dungeon_level == 12 and 'dungeon_12' not in lore_col:
+            lore_col.append('dungeon_12'); s.lore_collected = lore_col
             lore_msg = "Dinding bercahaya: 'Hanya hati yang murni yang bisa menenangkan sang Naga Bumi...'"
 
         if lore_msg:

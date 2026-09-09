@@ -527,3 +527,60 @@ def default_prop_builder(world, scene):
             elif tid in (ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS):
                 ore_tex = OBJ_TEX.get(tid, 'crystal')
                 build_ore(world, wx, wz, ore_tex)
+
+
+# ── scatter_obj_props(), dibawa dari feature/3d-mobs ───────────────────────
+# Tiga scene yang ikut masuk dari sisi 3d-mobs (mountain, lake, cemetery)
+# meng-import fungsi ini, dan tanpanya ketiganya GAGAL BOOT dengan ImportError
+# — bukan tampil jelek, tapi tidak bisa dimuat sama sekali.
+#
+# Sisi visual props.py yang dipakai untuk seluruh berkas ini (town.py
+# bergantung pada sistem zone_paint di dalamnya), jadi fungsi ini dibawa
+# terpisah alih-alih menukar seluruh berkas.
+
+def scatter_obj_props(world, scene, specs, count, seed=0, avoid=2, floor=None):
+    """Sebar model .obj di tile lantai kosong yang walkable & jauh dari portal.
+
+    specs : list (model_name, scale). Penempatan deterministik (LCG) supaya
+            konsisten tiap boot & tak menimpa portal/jalur. Aman: kalau model
+            tak ada atau tak ada tile kosong, fungsi diam saja.
+    floor : tile (atau tuple tile) yang dianggap lantai kosong; default G (rumput).
+            Scene berlantai lain (mis. kuburan = D) cukup oper floor=D.
+    """
+    from game.config import TILE_SIZE as _TS, GROUND_H as _GH, G as _G
+    try:
+        from game.entities import make_obj_entity
+    except Exception:
+        return
+    allowed = (floor,) if (floor is not None and not isinstance(floor, (tuple, list, set))) \
+        else (tuple(floor) if floor is not None else (_G,))
+    portals = {(p[0], p[1]) for p in getattr(scene, 'portals', [])}
+    cands = []
+    for ty in range(1, scene.h - 1):
+        for tx in range(1, scene.w - 1):
+            if scene.tiles[ty][tx] not in allowed:
+                continue
+            if any(abs(tx - px) <= avoid and abs(ty - py) <= avoid for (px, py) in portals):
+                continue
+            cands.append((tx, ty))
+    if not cands:
+        return
+    placed = 0
+    i = seed * 7 + 3
+    used = set()
+    guard = 0
+    while placed < count and guard < count * 40:
+        guard += 1
+        i = (i * 1103515245 + 12345) & 0x7fffffff
+        tx, ty = cands[i % len(cands)]
+        if (tx, ty) in used:
+            continue
+        used.add((tx, ty))
+        name, sc = specs[placed % len(specs)]
+        placed += 1
+        e = make_obj_entity(name, (tx * _TS, _GH, ty * _TS), scale=sc, rot_y=i % 360)
+        if e is not None:
+            world._obj_ents.append(e)
+
+
+# ─── OBJEK KECIL ─────────────────────────────────────────────────────────────

@@ -147,12 +147,20 @@ _RAMBUT_PALET = [(58, 38, 18), (28, 22, 12), (74, 52, 30), (42, 30, 22)]
 def _dandani_manekin(actor, actor_id: str) -> float:
     """Skalakan, warnai, beri baju, wajah dan rambut. Return tinggi label baru."""
     from ursina import Entity, Vec3, color as _c
-    from .wajah import bangun_rambut, bangun_wajah
+    from .wajah import bangun_rambut_bola, bangun_wajah
     from .player import SKIN_COLOR
+    from .smooth_shader import apply_smooth as _smooth
     try:
         skala = _TINGGI_PEMAIN / _MANEKIN_TINGGI
         actor.scale = skala
-        actor.color = SKIN_COLOR
+        # Meshnya diwarnai BAJU, bukan kulit. Diwarnai kulit, lengan manekin
+        # yang menjuntai di sisi badan terbaca sebagai dua lengan telanjang
+        # merah muda menyala — dan karena mesh ini satu potong, tidak ada cara
+        # mewarnai lengan berbeda dari badan. Dengan warna baju, lengan itu
+        # otomatis jadi lengan baju panjang, dan yang tersisa perlu kulit
+        # hanyalah kepala — yang memang ditumpuk terpisah di bawah.
+        baju  = _warna_dari_id(actor_id, _BAJU_PALET)
+        actor.color = _c.rgb(*baju)
 
         def kotak(pos, sk, warna):
             e = Entity(model='cube', position=Vec3(*pos), scale=sk,
@@ -161,30 +169,48 @@ def _dandani_manekin(actor, actor_id: str) -> float:
             apply_smooth(e, has_texture=False)
             return e
 
-        baju  = _warna_dari_id(actor_id, _BAJU_PALET)
         bawah = _warna_dari_id(actor_id + 'b', _BAWAH_PALET)
-        # Baju dan celana dalam satuan LOKAL manekin (belum diskalakan) karena
-        # keduanya anak dari actor dan ikut skalanya.
-        # Baju berhenti jauh di bawah dagu: kotak yang naik sampai leher
-        # menelan sambungan kepala dan membuatnya terlihat seperti kepala yang
-        # ditancapkan ke kardus.
-        kotak((0.0, 1.88, 0.0), (0.74, 0.86, 0.58), baju)
-        kotak((0.0, 1.18, 0.0), (0.68, 0.62, 0.52), bawah)
+        # Semua ketinggian di bawah ini DIUKUR dengan kubus penanda di
+        # 0,15 / 0,55 / 1,00 / 1,45 / 1,90 pada mesh yang belum diskalakan:
+        #   rok/pinggul  1,15-1,45     kolom kaki  0,20-1,15     kaki  < 0,20
+        # Semuanya dalam satuan LOKAL manekin karena semuanya anak dari actor
+        # dan ikut skalanya.
+        #
+        # Badan memakai chibi_torso_mesh() — barrel bahu-lebar-pinggang-sempit
+        # dengan bevel halus yang, seperti chibi_head_mesh(), sudah ada di
+        # meshes.py sejak lama dan tidak pernah dipanggil sekali pun. Kotak
+        # datar menempel di depan dada seperti papan iklan; barrel membungkus.
+        from .meshes import chibi_torso_mesh
+        from ursina import Entity as _E
+        _b = _E(model=chibi_torso_mesh(), position=Vec3(0, 1.90, 0),
+                scale=(1.16, 0.98, 0.66), color=_c.rgb(*baju), parent=actor)
+        _smooth(_b, has_texture=False)
+        kotak((0.0, 1.30, 0.0), (0.86, 0.46, 0.62), bawah)     # rok/pinggul
+        kotak((0.0, 0.72, 0.0), (0.46, 0.98, 0.42), bawah)     # kolom kaki
+        kotak((0.0, 0.11, 0.0), (0.52, 0.20, 0.60),
+              (52, 44, 40))                                     # sepatu
 
         hw, ht = _MANEKIN_KEPALA_W, _MANEKIN_KEPALA_H
         kepala = Entity(parent=actor, position=Vec3(0, _MANEKIN_KEPALA_Y, 0))
-        # Rambut diturunkan dan dirapatkan untuk kepala BOLA. Resep rambut
-        # dirancang membungkus kotak; di atas bola, batok seukuran kotak duduk
-        # seperti papan yang ditaruh di atas kepala, dengan celah terlihat di
-        # kedua sisinya.
-        r_induk = Entity(parent=actor,
-                         position=Vec3(0, _MANEKIN_KEPALA_Y - ht * 0.30, 0))
-        bangun_rambut(r_induk, hw * 0.94, ht * 0.92,
-                      _c.rgb(*_warna_dari_id(actor_id + 'r', _RAMBUT_PALET)))
-        # Kepala manekin BOLA, bukan kotak, jadi bidang mukanya lebih dekat ke
-        # pusat daripada setengah-lebarnya; fitur wajah ditempel di 0,80 hw
-        # supaya menempel di permukaan lengkung itu, bukan melayang di depannya.
-        bangun_wajah(kepala, hw, ht, hw * 0.80)
+        # Bola kulit yang menutup kepala mesh yang sekarang berwarna baju.
+        # Sedikit lebih besar (1,04) supaya tidak ada permukaan mesh yang
+        # menyembul dan berkedip melawannya.
+        # 1,18x: kepala manekin aslinya terlalu kecil untuk proporsi chibi.
+        # Game kehidupan Jepang memberi kepala porsi yang jauh lebih besar
+        # daripada manusia sungguhan, dan itulah yang membuat wajah kecil
+        # sekali pun masih terbaca dari jarak main.
+        R = hw * 1.18
+        _k = Entity(model='sphere', parent=kepala, scale=R * 2,
+                    color=SKIN_COLOR)
+        _smooth(_k, has_texture=False)
+        bangun_rambut_bola(kepala, R,
+                           _c.rgb(*_warna_dari_id(actor_id + 'r', _RAMBUT_PALET)))
+        # Fitur wajah harus mendarat di PERMUKAAN bola, dan permukaan bola pada
+        # ketinggian mata bukan jari-jarinya: pada y = -0,26 ht, jaraknya dari
+        # pusat adalah sqrt(R^2 - y^2). Percobaan pertama memakai 0,80 hw dan
+        # seluruh wajahnya tenggelam DI DALAM kepala — tidak ada mata, tidak
+        # ada mulut, cuma bola kulit polos.
+        bangun_wajah(kepala, R, R * 0.72, R, bola_r=R)
         actor._kepala = kepala
         return _MANEKIN_TINGGI + 0.45
     except Exception:

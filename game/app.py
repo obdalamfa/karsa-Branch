@@ -301,6 +301,13 @@ class Game3D:
                 except Exception:
                     self.panels.mode = 'hud'
 
+        # Mode Bangun/Beli (Sims S7): selama panel terbuka, seluruh tombol
+        # milik panel itu. Tanpa rute ini `open_buy()` membuka panel yang tidak
+        # bisa dinavigasi maupun ditutup.
+        if self.panels.mode == 'buy':
+            self.panels.buy_input(key, self.player, self.world)
+            return
+
         if self.panels.mode == 'hud':
             # Pemicu sinema. Diletakkan di sini, bukan di quest_controller,
             # karena tahap quest dinaikkan dari beberapa tempat berbeda —
@@ -636,6 +643,12 @@ class Game3D:
             # Hotkeys menu
             if key == 'i':
                 self.panels.open_panel('inventory')
+            elif key == 'l':
+                # Bangun/Beli (Sims S7). `sims_build.py` ikut masuk saat merge
+                # feature/3d-mobs tapi tidak dipanggil dari mana pun — panelnya
+                # ada, katalognya ada, dan tidak ada satu tombol pun yang
+                # membukanya.
+                self.panels.open_buy()
             elif key == 'm':
                 self.panels.open_panel('map')
             elif key == 'j':

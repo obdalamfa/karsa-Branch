@@ -1382,6 +1382,81 @@ class UIManager:
 
     # ─── MODE BANGUN/BELI (S7) ───────────────────────────
 
+    # ── Mode Bangun/Beli (Sims S7), disambungkan dari feature/3d-mobs ──────
+    # `_build_buy()` di atas cuma membangun PANELNYA. Logikanya — katalog,
+    # membeli, memasang, menjual — hidup di keempat metode ini, dan keempatnya
+    # jatuh di dalam blok HUD yang dimenangkan sisi visual saat merge.
+    #
+    # Akibatnya `sims_build.py` masuk ke pohon tapi dipanggil dari NOL berkas:
+    # sistemnya ada, lengkap, dan tidak bisa dijangkau pemain sama sekali.
+    # Diukur dengan menghitung pemanggil tiap modul sims_* — tujuh dari delapan
+    # tersambung, satu ini tidak. Regresi tetap 14/14 hijau sepanjang waktu itu,
+    # karena regresi tidak menguji satu pun sistem Sims.
+
+    def open_buy(self):
+        self._buy_sel = 0
+        self.mode = 'buy'
+        for e in self._buy_ents:
+            e.enabled = True
+        self._render_buy()
+
+    def close_buy(self):
+        for e in self._buy_ents:
+            e.enabled = False
+        self.mode = 'hud'
+
+    def _render_buy(self):
+        from .sims_build import catalog, BUY_PRICES
+        rows = catalog()
+        self._buy_gold.text = f"Simoleon: {self.state.gold}G"
+        for i, t in enumerate(self._buy_items):
+            if i < len(rows):
+                tid, label, act, price = rows[i]
+                sel = (i == self._buy_sel)
+                afford = self.state.gold >= price
+                t.enabled = True
+                t.text = ('> ' if sel else '    ') + f"{label:<12} {price:>4}G   ({act})"
+                if not afford:
+                    t.color = color.rgb(120, 100, 95)
+                else:
+                    t.color = color.rgb(231, 178, 61) if sel else color.rgb(205, 200, 190)
+            else:
+                t.enabled = False
+                t.text = ''
+
+    def buy_input(self, key, player, world):
+        """Return True bila input dikonsumsi."""
+        from .sims_build import catalog, place, sell
+        rows = catalog()
+        n = max(1, len(rows))
+        if key in ('w', 'up arrow'):
+            self._buy_sel = (self._buy_sel - 1) % n; self._render_buy(); return True
+        if key in ('s', 'down arrow'):
+            self._buy_sel = (self._buy_sel + 1) % n; self._render_buy(); return True
+        if key == 'escape':
+            self.close_buy(); return True
+        tx, ty = player._facing_tile()
+        if key in ('enter', 'space'):
+            tid = rows[self._buy_sel][0]
+            ok, msg = place(self.state, world, tid, tx, ty)
+            sound_play('buy' if ok else 'blocked', 0.8)
+            self.flash_msg(msg, 2.0)
+            if ok:
+                world.load_scene(world.scene_name)      # render objek baru
+                if getattr(player, 'rebuild_pathgrid', None):
+                    player.rebuild_pathgrid()           # objek baru = penghalang
+            self._render_buy(); return True
+        if key == 'x':
+            ok, msg = sell(self.state, world, tx, ty)
+            sound_play('sell' if ok else 'blocked', 0.8)
+            self.flash_msg(msg, 2.0)
+            if ok:
+                world.load_scene(world.scene_name)
+                if getattr(player, 'rebuild_pathgrid', None):
+                    player.rebuild_pathgrid()
+            self._render_buy(); return True
+        return True
+
     def flash_msg(self, text: str, duration: float = 1.2):
         if self._flash_ent:
             self._flash_ent.text    = text

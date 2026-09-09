@@ -462,6 +462,15 @@ class World3D:
         self._clear()
         self.scene_name = name
         self.scene_obj  = SCENES[name]
+        # Objek yang DIBELI pemain (Sims S7) di-overlay sebelum tile dibangun,
+        # supaya ikut dirender dan bertahan lintas save — SCENES adalah
+        # template global, jadi tanpa langkah ini objek yang dibeli hilang tiap
+        # kali scene dimuat ulang.
+        try:
+            from .sims_build import apply_placed
+            apply_placed(self.state, self.scene_obj)
+        except Exception:
+            pass
         self._build_tiles()
         self._build_all_crops()
         if hasattr(self.scene_obj, 'builder') and self.scene_obj.builder:

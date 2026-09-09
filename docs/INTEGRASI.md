@@ -141,3 +141,87 @@ yang bertanya "versi mana yang benar". Sebelum menghapus, pastikan tiap cabang
 benar-benar 0 commit unik:
 
     git log --oneline master..<cabang>
+
+---
+
+# Vonis konflik merge feature/3d-mobs (2 Sep 2026)
+
+143 konflik awal. **118 di antaranya `.pyc`** — bytecode yang seharusnya tidak
+pernah dilacak git; semuanya dikeluarkan dari indeks dan `.gitignore` diperketat.
+Sisanya 25 berkas / 58 blok kode nyata. Tiap satunya dibaca.
+
+Aturannya satu: **yang sedang DINILAI tetap milik sisi visual; yang BELUM PERNAH
+ADA diambil dari 3d-mobs.**
+
+| Berkas | Blok | Vonis |
+|---|---|---|
+| `.gitignore` | 1 | **mereka** (jauh lebih lengkap) + catatan bytecode kita |
+| `lembah_karsa_3d_save.json` | — | **kita** (dihapus di sisi mereka; permainan membacanya saat boot) |
+| `game/state.py` | 3 | **keduanya** — motif kita + SELURUH field Sims mereka + tulis-atomik mereka |
+| `game/animal.py` | 1 | **keduanya** — `ayun_kaki()` kita (dipakai berkuda) + `update_anim()` mereka |
+| `game/animal_models.py` | seluruh | **keduanya** — ternak+kaki kita + 10 fungsi entitas liar mereka |
+| `game/scenes/scene_base.py` | seluruh | **keduanya** — `Scene(paint=)` kita + pembangun ruangan mereka (superset) |
+| `game/controllers/interaction_controller.py` | 12 | **campur** — blok 5/9/10/11 mereka (relasi + `lamar_kerja`), sisanya kita |
+| `game/controllers/time_controller.py` | 2 | **campur** — mesin motif kita + tahap hidup & kelaparan mereka + DUA laporan pagi |
+| `game/entities.py` | 6 | **kita** (jalur spawn avatar TSO) + `load_texture_file`/`MODEL_COLORS` mereka |
+| `game/panels.py` | 7 | **kita** (HUD sudah menang buta) + `_build_batin`/`_build_buy`/`_build_pause` mereka; `emote()` DITULIS ULANG |
+| `game/scenes/props.py` | 8 | **kita** (town.py bergantung zone_paint) + `scatter_obj_props` mereka |
+| `game/scenes/{clinic,shop,smith,studio}.py` | 1 ea | **mereka** (interior lebih kaya) + koordinat portal KITA |
+| `game/scenes/{greenhouse,mountain}.py` | 1 ea | **mereka** |
+| `game/scenes/town.py` | seluruh | **kita** (kerja DESA, ada di tangkapan layar yang dinilai) |
+| `game/scenes/farm.py` | seluruh | **kita** |
+| `game/player.py` | seluruh | **kita** — berkuda, tangan, wajah, klip TSO |
+| `game/world.py` | seluruh | **kita** — tekstur terrain, sebaran, normal mesh prosedural |
+| `game/app.py` | seluruh | **kita** |
+| `game/smooth_shader.py` | 4 | **kita** — bahu sorot, normal dua-sisi |
+| `game/grass_shader.py` | 1 | **kita** |
+| `game/sky.py` | 1 | **kita** — perbaikan langit magenta |
+
+## Empat kali merge ini gagal boot, dan semuanya satu pelajaran
+
+**Struktur kendali tidak bisa digabung sepotong-sepotong.**
+
+1. `entities.py` — mencampur cabang `if`/`else` dari dua sisi di dalam SATU
+   fungsi menghasilkan `else:` yatim di baris 730. Diperbaiki dengan mengambil
+   jalur spawn utuh dari satu sisi, lalu menambahkan helper tingkat-modul
+   sisi lain secara terpisah.
+2. `panels.py` — mengambil blok HUD dari sisi visual ikut menghapus `emote()`,
+   yang ternyata hanya ada di sisi 3d-mobs DI DALAM blok itu, padahal
+   `interaction_controller` yang baru digabung memanggilnya.
+3. `panels.py` lagi — `_build_batin`, `_build_buy`, `_build_pause` hilang dengan
+   cara yang sama, dan game GAGAL DIBANGUN TOTAL (`AttributeError` saat boot).
+4. `props.py` — mengambil sisi visual menghilangkan `scatter_obj_props`,
+   sehingga `mountain`, `lake`, dan `cemetery` gagal boot dengan `ImportError`.
+
+Polanya sama tiap kali: sebuah nama dipanggil dari bagian berkas yang datang
+dari SATU sisi, sementara definisinya jatuh di dalam blok yang dimenangkan sisi
+LAIN. Cara mendeteksinya murah dan harus dilakukan tiap kali:
+
+    # metode dipanggil tapi tidak didefinisikan
+    grep -oE "self\.(_[a-zA-Z]\w*)\(" berkas.py | sort -u
+    # nama yang di-import dari satu modul tapi tidak ada di sana
+    grep -rE "from .*props import" game/
+
+## `emote()` ditulis ulang, bukan diambil
+
+Versi 3d-mobs menaruh tiap emote di `self._emotes` dan menyerahkan pemudarannya
+ke loop tick DI DALAM blok HUD — blok yang kalah. Mengambilnya berarti menukar
+kemenangan buta dengan sebuah animasi teks. Versi di pohon ini menjadwalkan
+penghapusannya sendiri lewat `invoke(destroy, e, delay=dur)`: tidak ada state
+bersama, dan tidak ada dua tempat yang harus ingat.
+
+## Yang dimenangkan sisi visual TIDAK dibuang
+
+Perubahan sisi 3d-mobs untuk berkas-berkas itu diarsipkan utuh sebagai diff di
+`_bench/port/` — 2.601 baris total. Port sepotong-sepotong dari sana, jangan
+merge ulang cabangnya:
+
+    _bench/port/game_scenes_props.py.diff   1805 baris
+    _bench/port/game_app.py.diff             336 baris
+    _bench/port/game_scenes_town.py.diff     243 baris
+    _bench/port/game_world.py.diff           231 baris
+    _bench/port/game_scenes_farm.py.diff     160 baris
+    _bench/port/game_player.py.diff          145 baris
+    _bench/port/game_smooth_shader.py.diff    26 baris
+    _bench/port/game_sky.py.diff              18 baris
+    _bench/port/game_grass_shader.py.diff     10 baris

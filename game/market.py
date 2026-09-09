@@ -154,6 +154,21 @@ def inventory_value(state, inventory: dict) -> int:
     return sum(price(state, k) * max(0, q) for k, q in inventory.items())
 
 
+def shippable_items(state, inventory: dict) -> list[tuple[str, int, int]]:
+    """Isi Peti Kirim dengan harga hari ini.
+
+    Aturan APA yang boleh masuk peti tetap milik economy.py (`is_shippable`) —
+    itu keputusan desain, bukan keputusan harga. Yang berubah di sini cuma
+    berapa peti membayarnya.
+    """
+    from .economy import is_shippable
+    out = [(k, q, shipping_price(state, k) * q)
+           for k, q in inventory.items()
+           if q > 0 and is_shippable(k)]
+    out.sort(key=lambda r: -r[2])
+    return out
+
+
 def sellable_items(state, inventory: dict) -> list[tuple[str, int, int]]:
     """[(item, jumlah, total_emas_hari_ini)] terurut paling berharga dulu."""
     out = [(k, q, price(state, k) * q)

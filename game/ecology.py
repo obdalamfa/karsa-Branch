@@ -52,34 +52,60 @@ import math
 # `label` nama yang dibaca pemain di panel Ekosistem.
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Angka `cap` dan `r` DITENTUKAN oleh satu besaran turunan, bukan dikarang:
+#
+#     hasil lestari maksimum (HLM) = r * cap / 4
+#
+# Itu panen tertinggi yang bisa diulang selamanya, dan letaknya persis di
+# setengah kapasitas. Angka itulah yang harus sepadan dengan apa yang benar-
+# benar dilakukan pemain dalam sehari — kalau tidak, sistemnya bohong.
+#
+# Versi pertama tabel ini gagal di situ, dan gagalnya besar. Danau diberi
+# cap 60 / r 0,22, jadi HLM-nya 3,3 ikan per hari. Sementara memancing hanya
+# berongkos 2 energi dari 100 energi sehari — lima puluh lemparan. Ekologi yang
+# sanggup tiga ikan sehari dipasang di depan pemain yang mampu dua puluh tujuh.
+# Hasilnya bukan "keputusan berapa banyak boleh diambil", tapi danau yang mati
+# di minggu pertama karena bermain normal.
+#
+# Sekarang tiap HLM disebut di komentarnya dan dipatok ke laju kerja nyata.
 STOCKS: dict[str, dict] = {
     # ── AIR ──────────────────────────────────────────────
-    'ikan_danau':   {'cap': 60,  'r': 0.22, 'jenis': 'ikan',   'label': 'Ikan Danau Karsa'},
-    'ikan_pantai':  {'cap': 80,  'r': 0.26, 'jenis': 'ikan',   'label': 'Ikan Pantai Selatan'},
+    # HLM 6,8 ikan/hari. Satu sesi memancing wajar (~10 lemparan, 20 energi,
+    # seperlima hari) menghasilkan ~6 ikan — jadi memancing tiap hari itu
+    # impas, dan yang menguras danau adalah menggilingnya, bukan memainkannya.
+    'ikan_danau':   {'cap': 90,  'r': 0.30, 'jenis': 'ikan',   'label': 'Ikan Danau Karsa'},
+    # HLM 8,8. Laut lebih besar dari danau; itu satu-satunya alasannya.
+    'ikan_pantai':  {'cap': 110, 'r': 0.32, 'jenis': 'ikan',   'label': 'Ikan Pantai Selatan'},
+    # HLM 0,54 — dua lusin ikan di seluruh danau dan nyaris tidak beranak.
     # Danau di dasar gua tidak kena musim dan tidak kena hujan. Ia pulih paling
     # lambat di seluruh game, dan itulah yang membuat Ikan Legendaris langka
     # tanpa perlu satu pun angka peluang tambahan.
     'ikan_gua':     {'cap': 24,  'r': 0.09, 'jenis': 'gelap',  'label': 'Ikan Danau Legendaris'},
 
     # ── HUTAN & GUNUNG ───────────────────────────────────
-    'herba_gunung': {'cap': 40,  'r': 0.30, 'jenis': 'hijau',  'label': 'Herba & Beri Liar'},
-    'jamur_gunung': {'cap': 30,  'r': 0.24, 'jenis': 'hijau',  'label': 'Jamur Lari'},
-    'mandrake':     {'cap': 8,   'r': 0.06, 'jenis': 'hijau',  'label': 'Mandrake'},
-    'kayu_gunung':  {'cap': 120, 'r': 0.12, 'jenis': 'kayu',   'label': 'Pohon Lereng'},
+    'herba_gunung': {'cap': 70,  'r': 0.34, 'jenis': 'hijau',  'label': 'Herba & Beri Liar'},   # HLM 5,9
+    'jamur_gunung': {'cap': 45,  'r': 0.28, 'jenis': 'hijau',  'label': 'Jamur Lari'},          # HLM 3,2
+    'mandrake':     {'cap': 8,   'r': 0.06, 'jenis': 'hijau',  'label': 'Mandrake'},            # HLM 0,12
+    # HLM 6,8 satuan; menebang satu pohon memakan 3 satuan (BIAYA_PANEN), jadi
+    # sekitar 2 pohon sehari. Hutan boleh dipanen; ia tidak boleh dibabat.
+    'kayu_gunung':  {'cap': 150, 'r': 0.18, 'jenis': 'kayu',   'label': 'Pohon Lereng'},
 
     # ── PANTAI ───────────────────────────────────────────
-    'kerang_pantai':{'cap': 45,  'r': 0.34, 'jenis': 'pasang', 'label': 'Kerang & Damparan'},
+    # HLM 5,4, tapi memungut kerang hanya mungkin saat air surut — jadi
+    # pembatas sebenarnya adalah jam, bukan kolamnya.
+    'kerang_pantai':{'cap': 60,  'r': 0.36, 'jenis': 'pasang', 'label': 'Kerang & Damparan'},
 
     # ── LEMBAH ───────────────────────────────────────────
-    'kunang':       {'cap': 50,  'r': 0.40, 'jenis': 'hijau',  'label': 'Kunang-kunang'},
+    'kunang':       {'cap': 50,  'r': 0.40, 'jenis': 'hijau',  'label': 'Kunang-kunang'},       # HLM 5,0
 
     # ── BAWAH TANAH ──────────────────────────────────────
     # "Pemulihan" bijih bukan batu yang tumbuh; ia adalah lorong baru yang
-    # terbuka saat langit-langit runtuh. Karena itu lajunya paling kecil dan
-    # tidak peduli musim.
-    'bijih_dangkal':{'cap': 200, 'r': 0.16, 'jenis': 'batu',   'label': 'Urat Bijih Lv.1-5'},
-    'bijih_tengah': {'cap': 140, 'r': 0.11, 'jenis': 'batu',   'label': 'Urat Bijih Lv.6-10'},
-    'bijih_dalam':  {'cap': 90,  'r': 0.07, 'jenis': 'batu',   'label': 'Urat Bijih Lv.11-13'},
+    # terbuka saat langit-langit runtuh. Karena itu lajunya kecil dan tidak
+    # peduli musim — tapi kapasitasnya besar, karena satu turun ke gua bisa
+    # memecah puluhan urat dan menambang adalah loop inti, bukan sampingan.
+    'bijih_dangkal':{'cap': 400, 'r': 0.20, 'jenis': 'batu',   'label': 'Urat Bijih Lv.1-5'},   # HLM 20
+    'bijih_tengah': {'cap': 260, 'r': 0.15, 'jenis': 'batu',   'label': 'Urat Bijih Lv.6-10'},  # HLM 9,8
+    'bijih_dalam':  {'cap': 160, 'r': 0.10, 'jenis': 'batu',   'label': 'Urat Bijih Lv.11-13'}, # HLM 4,0
 }
 
 # Pengali laju pemulihan per musim. Indeks = state.season_index

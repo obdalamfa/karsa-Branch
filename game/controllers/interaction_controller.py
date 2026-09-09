@@ -792,10 +792,11 @@ class InteractionController:
         # motif. Keduanya disisipkan di puncak menu supaya pemain menemukannya
         # tanpa membaca panduan: peti di kebun = jual cepat, kompor = olah.
         from ..config import CH, ST
-        from ..economy import shippable_items, SHIPPING_RATE
+        from ..economy import SHIPPING_RATE
+        from ..market import shippable_items
         s_ = self.player.state
         if tid == CH:
-            rows  = shippable_items(s_.inventory)
+            rows  = shippable_items(s_, s_.inventory)
             total = sum(r[2] for r in rows)
             n     = sum(r[1] for r in rows)
             options.append((
@@ -846,17 +847,22 @@ class InteractionController:
         menahan barangnya untuk diolah dulu. Potongan 15% adalah harga dari
         kenyamanan tidak berjalan ke Warung.
         """
-        from ..economy import shippable_items, shipping_price, item_name
+        from ..economy import item_name
+        from ..market import shippable_items, shipping_price, on_sold
         s = self.player.state
-        rows = shippable_items(s.inventory)
+        rows = shippable_items(s, s.inventory)
         if not rows:
             sound_play('blocked', 0.5)
             panels.flash_msg("Peti kosong — belum ada hasil untuk dijual.", 1.4)
             return
         total = 0
         for item, qty, _ in rows:
-            total += shipping_price(item) * qty
+            total += shipping_price(s, item) * qty
             del s.inventory[item]
+            # Peti Kirim menekan pasar persis seperti Warung. Kalau tidak,
+            # peti jadi pintu belakang untuk membuang seratus lobak tanpa
+            # harganya bergerak sedikit pun.
+            on_sold(s, item, qty)
         s.gold += total
         s.stats['earned'] = s.stats.get('earned', 0) + total
         sound_play('harvest', 0.9)

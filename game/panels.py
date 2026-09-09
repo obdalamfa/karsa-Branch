@@ -1997,6 +1997,7 @@ class UIManager:
             'crafting':  'Bengkel Pak Budi',
             'help':      'Panduan Kontrol',
             'catatan':   'Catatan Lembah',
+            'ekosistem': 'Ekosistem Lembah',
         }
         self._panel_title.text = titles.get(name, name.capitalize())
         # Grid inventory hanya muncul di panel inventory
@@ -2019,27 +2020,52 @@ class UIManager:
             # jadi tiap baris kini membawa nama layak baca, harga satuan, nilai
             # total, dan - hanya kalau mengolahnya memang lebih untung - ke mana
             # barang itu sebaiknya pergi.
-            from .economy import (item_name, sell_price, best_process_hint,
-                                  inventory_value)
+            from .economy import item_name, best_process_hint
+            from .market import price as sell_price, inventory_value as _nilai_tas
             lines = [f"Emas: {s.gold}G   HP: {s.hp}/{s.max_hp}   Energi: {s.energy}/{s.max_energy}",
                      f"Pickaxe: Tier {s.pickaxe_tier}   Pedang: {s.sword_id or 'Tidak punya'}", '']
             rows = [(k, q) for k, q in s.inventory.items() if q > 0]
             if rows:
                 # Paling berharga di atas: itu yang sedang dipikirkan pemain.
-                rows.sort(key=lambda r: (-sell_price(r[0]) * r[1], r[0]))
+                rows.sort(key=lambda r: (-sell_price(s, r[0]) * r[1], r[0]))
                 lines.append(f"  {'BARANG':<18}{'JML':>4}{'@':>7}{'TOTAL':>8}   SARAN")
                 for item, qty in rows[:19]:
-                    harga = sell_price(item)
+                    harga = sell_price(s, item)
                     hrg_s = f"{harga}G" if harga else "-"
                     tot_s = f"{harga * qty}G" if harga else "-"
                     lines.append(f"  {item_name(item)[:18]:<18}{qty:>4}{hrg_s:>7}"
                                  f"{tot_s:>8}   {best_process_hint(item)}")
                 lines.append('')
                 lines.append("  Nilai seluruh tas bila dijual di Warung: "
-                             f"{inventory_value(s.inventory)}G")
+                             f"{_nilai_tas(s, s.inventory)}G")
                 lines.append("  Peti Kirim di kebun membayar 85% tanpa perlu jalan.")
             else:
                 lines.append("  (Kosong)")
+            self._panel_body.text = '\n'.join(lines[:28])
+
+        elif name == 'ekosistem':
+            # Satu-satunya layar yang menjelaskan kenapa hasil memancing hari
+            # ini lebih sedikit dari minggu lalu. Tanpa layar ini, kelimpahan
+            # yang menurun terbaca sebagai nasib buruk, bukan sebagai akibat.
+            from .ecology import report_lines
+            from .market import movers, demand_note
+            from .economy import item_name
+            lines = report_lines(s)
+            lines.append('')
+            lines.append("── PASAR ──")
+            gerak = movers(s, 5)
+            if gerak:
+                for item, kini, normal, rasio in gerak:
+                    arah = 'naik' if rasio > 1 else 'turun'
+                    lines.append(f"  {item_name(item)[:22]:<22} {kini:>5}G  "
+                                 f"({arah} {abs(int(round((rasio-1)*100))):>2}% "
+                                 f"dari {normal}G)")
+            else:
+                lines.append("  Semua harga sedang di sekitar nilai normalnya.")
+            catatan = demand_note(s)
+            if catatan:
+                lines.append('')
+                lines.append(f"  * {catatan}")
             self._panel_body.text = '\n'.join(lines[:28])
 
         elif name == 'quest':
@@ -2266,14 +2292,23 @@ class UIManager:
         return rows[start:start + self.ROWS_PER_PAGE], self._market_page, n_pages
 
     def _render_market(self, s) -> list:
-        from .economy import (margin_hint, sellable_items, sell_price,
-                              item_name, inventory_value)
+        from .economy import margin_hint, item_name
+        # Harga yang DIBAYAR hari ini datang dari market.py, bukan dari nilai
+        # kanonik di economy.py. Keduanya sengaja dipisah: economy.py adalah
+        # papan neraca desain yang tidak boleh bergerak, market.py adalah papan
+        # harga warung yang memang harus bergerak.
+        from .market import (price as harga_kini, sellable_items,
+                             inventory_value, trend_mark, demand_note)
         mode, _ = self._market_state()
         tab = ('>> BELI <<      jual' if mode == 'beli'
                else '   beli      >> JUAL <<')
         lines = [f"Emas: {s.gold}G   Musim: {self._season_name(s)}   "
-                 f"Nilai tas: {inventory_value(s.inventory)}G",
+                 f"Nilai tas: {inventory_value(s, s.inventory)}G",
                  tab, '']
+        _pengumuman = demand_note(s)
+        if _pengumuman:
+            lines.append(f"  * {_pengumuman}")
+            lines.append('')
 
         if mode == 'beli':
             rows, page, n_pages = self._page_slice(list(SHOP_ITEMS))
@@ -2291,19 +2326,21 @@ class UIManager:
             lines.append("  Angka = beli 1. Kolom kanan memberi tahu berapa hasil")
             lines.append("  panennya nanti, jadi untung-ruginya terlihat sebelum bayar.")
         else:
-            all_rows = sellable_items(s.inventory)
+            all_rows = sellable_items(s, s.inventory)
             if not all_rows:
                 lines.append("  Tidak ada yang bisa dijual. Panen dulu, atau ambil")
                 lines.append("  hasil ternak di kandang.")
                 return lines
             rows, page, n_pages = self._page_slice(all_rows)
-            lines.append(f"  {'BARANG':<20}{'JML':>4}{'@':>7}{'SEMUA':>8}")
+            lines.append(f"  {'BARANG':<20}{'JML':>4}{'@':>7}{'SEMUA':>8}  ARAH")
             for i, (item, qty, total) in enumerate(rows):
                 lines.append(f"  [{i+1}] {item_name(item)[:16]:<16}{qty:>4}"
-                             f"{sell_price(item):>6}G{total:>7}G")
+                             f"{harga_kini(s, item):>6}G{total:>7}G  "
+                             f"{trend_mark(s, item)}")
             lines.append('')
-            lines.append("  Angka = jual SEMUA barang di baris itu, harga penuh.")
-            lines.append("  Peti Kirim di kebun lebih cepat tapi hanya membayar 85%.")
+            lines.append("  Angka = jual SEMUA barang di baris itu, harga hari ini.")
+            lines.append("  ^ = di atas harga normal, v = di bawah. Menjual banyak")
+            lines.append("  sekaligus menekan harganya sendiri; ia pulih tiap pagi.")
 
         if n_pages > 1:
             lines.append(f"  -- halaman {page+1}/{n_pages}  [Q/R] --")
@@ -2390,17 +2427,25 @@ class UIManager:
         menekan tombol 40 kali. Peti Kirim tetap ada untuk yang ingin menjual
         semuanya sekaligus dengan potongan.
         """
-        from .economy import sellable_items, item_name
+        from .economy import item_name
+        from .market import sellable_items, on_sold, price as harga_kini
         s = self.state
-        rows, _page, _n = self._page_slice(sellable_items(s.inventory))
+        rows, _page, _n = self._page_slice(sellable_items(s, s.inventory))
         if not (1 <= idx <= len(rows)):
             return ''
         item, qty, total = rows[idx - 1]
+        sebelum = harga_kini(s, item)
         del s.inventory[item]
         s.gold += total
         s.stats['earned'] = s.stats.get('earned', 0) + total
+        # Pasar harus TAHU. Kalau satu jalur uang lupa memanggil ini, jalur itu
+        # jadi celah bebas-konsekuensi, dan pemain akan menemukannya sebelum
+        # kita menemukannya.
+        on_sold(s, item, qty)
+        sesudah = harga_kini(s, item)
         self._render_panel('shop')
-        return f"Jual {item_name(item)} x{qty} +{total}G"
+        ekor = f"  (harga turun {sebelum}G > {sesudah}G)" if sesudah < sebelum else ""
+        return f"Jual {item_name(item)} x{qty} +{total}G{ekor}"
 
     def _process_item(self, idx: int) -> str:
         """Olah bahan mentah jadi barang lebih mahal, bayar dengan energi."""

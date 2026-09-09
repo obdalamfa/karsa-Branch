@@ -80,3 +80,7 @@
 {"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
 {"slice":"sempit","round":1,"role":"build","note":"renggang_sempit: kelonggaran berdiri sebanding (0,36 - setengah_lebar), nol untuk sapi menurut konstruksinya. gosok kambing menembus 10/90 -> 1/90; gosok sapi tidak berubah sama sekali. Kelonggaran datar 0,05 m yang ditolak dulu salah BENTUKNYA, bukan besarnya. Hanya dipasang pada gosok - membelai tidak menyapu."}
 {"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal; vonis 12/12 aksi lulus seluruh ambang"}
+{"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
+{"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
+{"slice":"wajah","round":1,"role":"build","note":"Kepala pemain dulu kotak kulit polos tanpa wajah, dengan leher 0,14 di antara dada 0,52 dan kepala 0,35 (terbaca melayang di atas tangkai), plus cincin magenta dan kubus cyan melayang ('surreal floating geometric halo') pada SETIAP pemain. NPC manusia lebih buruk: humanoid.obj putih murni (1,1,1,1) setinggi 3,42 unit - 1,45x pemain - tanpa wajah, rambut, atau baju. Dan shader tidak pernah membatasi hasil pencahayaan: pengganda 1,50 memotong kulit rgb(230,190,148) jadi rgb(255,255,210), jadi wajahnya memang bercahaya."}
+{"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus; vonis 12/12; swauji jeda lulus"}

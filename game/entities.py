@@ -93,6 +93,106 @@ def daftarkan_pemain(pl):
     _PEMAIN_AKTIF[0] = pl
 
 
+
+# ─── MANEKIN JADI ORANG ──────────────────────────────────────────────────────
+# Jalur Vitaboy gagal di lingkungan ini (asetnya tidak ada di repo), jadi SEMUA
+# NPC manusia jatuh ke `humanoid.obj`. Diukur, bukan dikira, apa adanya:
+#
+#   Color(1,0, 1,0, 1,0, 1,0)   putih murni, tanpa tekstur, tanpa material
+#   tinggi 3,42 unit            pemain cuma ~2,35 — NPC 1,45x lebih tinggi
+#   anak: ['text']              cuma label nama; tanpa wajah, rambut, baju
+#
+# Hasilnya di layar adalah manekin putih menyala yang menjulang di atas
+# pemain — dan `resolve_outfit()` mengembalikan nama aset Vitaboy yang tidak
+# pernah dipakai jalur ini, jadi warna baju yang sudah ditentukan per-NPC
+# tidak pernah sampai ke mana pun.
+#
+# Empat hal diperbaiki di sini, dan urutannya sesuai besar kerusakannya:
+#   1. TINGGI. Manekin diskalakan ke tinggi pemain. Menjulang membuat tiap NPC
+#      terbaca mengancam sebelum ekspresi apa pun sempat terbaca.
+#   2. WARNA. Putih murni tidak bisa diselamatkan oleh pencahayaan apa pun —
+#      ia terbaca sebagai hantu. Meshnya diwarnai KULIT, lalu baju ditumpuk
+#      sebagai kotak terpisah.
+#   3. WAJAH. Mata, kilau, mulut, rona pipi — resep yang sama dengan pemain.
+#   4. RAMBUT. Yang memberi kepala arah depan.
+# Angka-angka ini DIUKUR dengan menempelkan kubus penanda berwarna di
+# ketinggian lokal 2,40 / 2,70 / 3,00 / 3,30 / 3,45 lalu melihat mana yang
+# mendarat di kepala. Percobaan pertama memakai 3,09 hasil menebak dari
+# profil verteks, dan seluruh rambut serta wajahnya melayang di ATAS kepala.
+# Profil verteks berbohong karena sumbu atas mesh ini y, bukan z, dan karena
+# ada geometri di atas ubun-ubun yang bukan bagian kepala.
+_MANEKIN_TINGGI   = 3.42     # tinggi mesh humanoid.obj apa adanya
+_MANEKIN_KEPALA_Y = 2.80     # pusat kepala (penanda hijau 2,70 dan biru 3,00
+                             # mengapitnya)
+_MANEKIN_KEPALA_W = 0.31     # setengah-lebar kepala
+_MANEKIN_KEPALA_H = 0.22     # setengah-tinggi kepala
+_TINGGI_PEMAIN    = 2.35
+
+
+def _warna_dari_id(actor_id: str, palet):
+    """Warna tetap per NPC, diambil dari huruf namanya.
+
+    sum(ord) — BUKAN hash(), yang diacak ulang tiap proses Python, yang berarti
+    baju tiap NPC akan berganti warna tiap kali game dijalankan.
+    """
+    return palet[sum(map(ord, actor_id)) % len(palet)]
+
+
+_BAJU_PALET = [(196, 84, 78), (72, 122, 168), (108, 152, 84), (188, 148, 66),
+               (140, 96, 156), (208, 130, 92), (86, 142, 138), (176, 96, 120)]
+_BAWAH_PALET = [(72, 66, 88), (94, 74, 58), (58, 74, 90), (86, 82, 74)]
+_RAMBUT_PALET = [(58, 38, 18), (28, 22, 12), (74, 52, 30), (42, 30, 22)]
+
+
+def _dandani_manekin(actor, actor_id: str) -> float:
+    """Skalakan, warnai, beri baju, wajah dan rambut. Return tinggi label baru."""
+    from ursina import Entity, Vec3, color as _c
+    from .wajah import bangun_rambut, bangun_wajah
+    from .player import SKIN_COLOR
+    try:
+        skala = _TINGGI_PEMAIN / _MANEKIN_TINGGI
+        actor.scale = skala
+        actor.color = SKIN_COLOR
+
+        def kotak(pos, sk, warna):
+            e = Entity(model='cube', position=Vec3(*pos), scale=sk,
+                       color=_c.rgb(*warna), parent=actor)
+            from .smooth_shader import apply_smooth
+            apply_smooth(e, has_texture=False)
+            return e
+
+        baju  = _warna_dari_id(actor_id, _BAJU_PALET)
+        bawah = _warna_dari_id(actor_id + 'b', _BAWAH_PALET)
+        # Baju dan celana dalam satuan LOKAL manekin (belum diskalakan) karena
+        # keduanya anak dari actor dan ikut skalanya.
+        # Baju berhenti jauh di bawah dagu: kotak yang naik sampai leher
+        # menelan sambungan kepala dan membuatnya terlihat seperti kepala yang
+        # ditancapkan ke kardus.
+        kotak((0.0, 1.88, 0.0), (0.74, 0.86, 0.58), baju)
+        kotak((0.0, 1.18, 0.0), (0.68, 0.62, 0.52), bawah)
+
+        hw, ht = _MANEKIN_KEPALA_W, _MANEKIN_KEPALA_H
+        kepala = Entity(parent=actor, position=Vec3(0, _MANEKIN_KEPALA_Y, 0))
+        # Rambut diturunkan dan dirapatkan untuk kepala BOLA. Resep rambut
+        # dirancang membungkus kotak; di atas bola, batok seukuran kotak duduk
+        # seperti papan yang ditaruh di atas kepala, dengan celah terlihat di
+        # kedua sisinya.
+        r_induk = Entity(parent=actor,
+                         position=Vec3(0, _MANEKIN_KEPALA_Y - ht * 0.30, 0))
+        bangun_rambut(r_induk, hw * 0.94, ht * 0.92,
+                      _c.rgb(*_warna_dari_id(actor_id + 'r', _RAMBUT_PALET)))
+        # Kepala manekin BOLA, bukan kotak, jadi bidang mukanya lebih dekat ke
+        # pusat daripada setengah-lebarnya; fitur wajah ditempel di 0,80 hw
+        # supaya menempel di permukaan lengkung itu, bukan melayang di depannya.
+        bangun_wajah(kepala, hw, ht, hw * 0.80)
+        actor._kepala = kepala
+        return _MANEKIN_TINGGI + 0.45
+    except Exception:
+        import logging
+        logging.warning('[NPC] gagal mendandani manekin %r', actor_id, exc_info=True)
+        return 3.1
+
+
 def get_npc_model_name(npc_id):
     if npc_id == 'naga_bijak':
         return 'naga'
@@ -302,7 +402,8 @@ class EntitiesManager:
                         actor.model = panda_fallback
                     else:
                         actor.model = 'cube'
-                    
+                lbl_y = _dandani_manekin(actor, actor_id)
+
             # Setup Label
             all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
             name = all_d.get(actor_id, {}).get('name', actor_id)

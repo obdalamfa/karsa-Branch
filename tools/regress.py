@@ -858,6 +858,53 @@ def cek_save_bolak(g):
 
 # ─── PENGGERAK ───────────────────────────────────────────
 
+def cek_sims_tersambung():
+    """Tiap modul `sims_*` harus DIPANGGIL dari luar dirinya sendiri.
+
+    Dijaga karena kegagalannya sudah terjadi, bukan dibayangkan. Saat
+    feature/3d-mobs digabung, kedelapan modul Sims masuk ke pohon dengan bersih
+    — berkas baru, nol konflik. Tujuh tersambung. `sims_build.py` tidak: mode
+    Bangun/Beli ada lengkap dengan katalog dan panelnya, dan tidak ada satu
+    tombol pun yang membukanya.
+
+    Penyebabnya bentuk yang sama dengan empat kegagalan boot di merge itu —
+    titik panggil jatuh di dalam blok yang dimenangkan sisi lain — tapi jauh
+    lebih sunyi. Yang itu MELEDAK saat boot dan ketahuan dalam hitungan detik.
+    Yang ini tidak melempar apa pun, dan regresi tetap hijau 14/14 sepanjang
+    waktu, karena regresi tidak menguji satu pun sistem Sims.
+
+    Cek ini murah dan statis: ia tidak menjalankan sistemnya, cuma menuntut
+    ada yang memanggilnya. Itu tidak membuktikan sistemnya benar — tapi ia
+    membuktikan sistemnya BISA DIJANGKAU, dan itulah yang hilang tanpa suara.
+    """
+    akar = Path(__file__).resolve().parent.parent / 'game'
+    modul = sorted(p.stem for p in akar.glob('sims_*.py'))
+    if not modul:
+        return _ok('tidak ada modul sims_*')
+    sumber = {p: p.read_text(encoding='utf-8', errors='replace')
+              for p in akar.rglob('*.py')}
+    # Dicocokkan sebagai SUBSTRING, bukan regex, dan itu bukan kemalasan.
+    # Versi pertama cek ini memakai batas kata regex, escape-nya runtuh saat
+    # ditulis (yang sampai ke berkas adalah karakter BACKSPACE, bukan ), dan
+    # regex-nya tidak pernah cocok — KEDELAPAN modul dilaporkan yatim, termasuk
+    # yang jelas punya pemanggil. Cek yang selalu merah lebih berbahaya
+    # daripada tidak ada cek: ia mengajari orang mengabaikan warna merah.
+    #
+    # Nama modul `sims_*` cukup khas untuk dicocokkan sebagai substring biasa,
+    # dan substring tidak punya escape yang bisa runtuh.
+    yatim = []
+    for m in modul:
+        pemanggil = [p.name for p, t in sumber.items()
+                     if p.stem != m and m in t]
+        if not pemanggil:
+            yatim.append(m)
+    if yatim:
+        return _fail(f'masuk ke pohon tapi TIDAK dipanggil siapa pun: '
+                     f'{", ".join(yatim)} — sistemnya ada dan tidak bisa '
+                     f'dijangkau pemain')
+    return _ok(f'{len(modul)} modul sims_* semuanya punya pemanggil')
+
+
 def main():
     from ursina import application
     application.asset_folder = ROOT
@@ -984,6 +1031,17 @@ def main():
         arah_baris.append(('?', False, f'probe arah gagal jalan: {e}'))
         gagal_total += 1
 
+    # ── sistem Sims tersambung (sekali saja; statis, tidak bergantung scene) ──
+    sims_baris = []
+    try:
+        ok, cat = cek_sims_tersambung()
+        sims_baris.append(('sims', ok, cat))
+        if not ok:
+            gagal_total += 1
+    except Exception as e:
+        sims_baris.append(('sims', False, f'cek sims gagal jalan: {e}'))
+        gagal_total += 1
+
     # ── laporan ──
     print()
     print(f'{"scene":14s} {"hasil":>7s} {"ms/frame":>9s} {"entity":>7s}  catatan')
@@ -996,6 +1054,10 @@ def main():
     print('-' * 78)
     for k, ok, c in otonomi_baris:
         print(f'{"otonomi":14s} {"LULUS" if ok else "GAGAL":>7s} {"":>9s} {"":>7s}  {c[:44]}')
+    print('-' * 78)
+    for k, ok, c in sims_baris:
+        print(f'{"sistem sims":14s} {"LULUS" if ok else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {c[:44]}')
     print('-' * 78)
     tanda_arah = 'LULUS' if all(ok for _, ok, _ in arah_baris) else 'GAGAL'
     rangkum = ', '.join(f'{k.upper()}={c.split(" ")[0]}' for k, ok, c in arah_baris)

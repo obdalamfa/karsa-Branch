@@ -69,67 +69,28 @@ def bangun_rambut(induk, hw: float, ht: float, warna, maju: float = 0.0):
     return out
 
 
-def bangun_rambut_bola(induk, r: float, warna):
-    """Rambut untuk kepala BERBENTUK BOLA (manekin NPC).
-
-    `bangun_rambut()` di atas dirancang membungkus KOTAK. Di atas bola,
-    batok kotaknya duduk seperti papan yang ditaruh di atas kepala, dengan
-    celah terlihat di kedua sisi — terlihat jelas begitu dipotret dari dekat.
-
-    Yang ini memakai bola juga: bola rambut seukuran kepala, digeser KE
-    BELAKANG sehingga muka menyembul keluar di depannya. Dengan jari-jari
-    1,03r dan geseran 0,40r, permukaan depan rambut ada di 0,63r sementara
-    muka ada di 1,0r — jadi wajah punya bidang sendiri selebar 0,37r tanpa
-    perlu memotong mesh apa pun. Percobaan pertama memakai geseran 0,26r dan
-    wajah yang tersisa terlalu sempit untuk memuat mata.
-    """
-    out = []
-    def bola(pos, skala):
-        # `skala` boleh skalar (bola) atau tuple (bola gepeng).
-        e = Entity(model='sphere', position=Vec3(*pos), scale=skala,
-                   color=warna, parent=induk)
-        from .smooth_shader import apply_smooth
-        apply_smooth(e, has_texture=False)
-        out.append(e)
-        return e
-    bola((0.0, r * 0.05, -r * 0.40), r * 2.06)
-    # Poni: bola PIPIH, bukan kotak. Kotak selebar kepala punya sudut, dan di
-    # atas bola sudut-sudut itu menyembul keluar dari siluetnya — terbaca
-    # sebagai tepi topi yang melayang, bukan sebagai rambut. Bola yang
-    # digepengkan mengikuti lengkung dahi dan berhenti sendiri di sisinya.
-    bola((0.0, r * 0.44, r * 0.20), (r * 1.92, r * 1.06, r * 1.86))
-    # Tuft sisi berbentuk KOTAK dibuang. Di atas bola, dua kotak setinggi
-    # kepala di kiri-kanan tidak membingkai wajah — ia membentuk PIGURA gelap
-    # persegi di sekelilingnya, dan itu jauh lebih aneh daripada tidak ada
-    # tuft sama sekali. Bola rambutnya sendiri sudah membingkai sisi wajah.
-    return out
-
-
-def bangun_wajah(induk, hw: float, ht: float, muka_z: float,
-                 bola_r: float = 0.0):
+def bangun_wajah(induk, hw: float, ht: float, muka_z: float):
     """Mata, kilau, mulut dan rona pipi pada bidang muka.
 
     `muka_z` adalah jarak bidang muka dari pusat kepala, dalam satuan induk.
     Semua fitur ditempel sedikit di depannya supaya tidak berkedip melawan
     permukaan kepala (z-fighting).
 
-    `bola_r` > 0 berarti kepalanya BOLA berjari-jari itu, bukan kotak. Bedanya
-    bukan kosmetik: pada bidang datar, fitur yang jauh dari tengah wajah tetap
-    berada di kedalaman yang sama, jadi di atas bola ia MELAYANG LEPAS dari
-    permukaan. Terukur pada manekin NPC, rona pipi di x = 0,71R menjulur ke
-    samping seperti dua batang merah muda yang keluar dari siluet kepala.
-    Dengan bola_r, tiap fitur dihitung kedalamannya sendiri dari persamaan
-    bola: z = sqrt(R^2 - x^2 - y^2).
+    Pemain DAN NPC sama-sama berkepala kotak-membulat (`chibi_head_mesh`),
+    jadi satu bidang muka datar cukup untuk keduanya. Varian bola sempat ada
+    untuk kepala manekin NPC — lengkap dengan perhitungan kedalaman per fitur
+    dari persamaan bola, karena di bidang datar rona pipi di x = 0,71R
+    melayang lepas dari permukaan dan menjulur seperti dua batang merah muda.
+    Varian itu dibuang begitu kepala NPC ikut memakai bentuk yang sama:
+    bola Ursina bersegi rendah, dan cel-shader di sini memotong terang-gelap
+    pada ambang keras, jadi batas bayangannya membentuk tangga yang terlihat
+    di pipi dari jarak dekat.
     """
-    import math
     out = []
     z = muka_z
 
     def kedalaman(x, y, maju):
-        if bola_r <= 0.0:
-            return muka_z + maju
-        sisa = bola_r * bola_r - x * x - y * y
-        return (math.sqrt(sisa) if sisa > 1e-6 else 0.0) + maju
+        return muka_z + maju
     for sx in (-1, 1):
         x, y = sx * hw * 0.41, -ht * 0.26
         out.append(_kotak(induk, (x, y, kedalaman(x, y, 0.0)),
@@ -145,7 +106,10 @@ def bangun_wajah(induk, hw: float, ht: float, muka_z: float,
                       (hw * 0.22, ht * 0.07, hw * 0.069),
                       color.rgb(*MULUT_WARNA)))
     for sx in (-1, 1):
-        px, py = sx * hw * 0.71, -ht * 0.50
+        # 0,60 bukan 0,71: pada kepala yang dibingkai rambut di kedua sisi,
+        # 0,71 mendarat tepat di batas rambut dan separuh rona menggantung
+        # keluar dari pipi.
+        px, py = sx * hw * 0.60, -ht * 0.50
         out.append(_kotak(induk, (px, py, kedalaman(px, py, -hw * 0.023)),
                           (hw * 0.30, ht * 0.12, hw * 0.046),
                           color.rgb(*PIPI_WARNA)))

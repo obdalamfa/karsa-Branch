@@ -147,7 +147,7 @@ _RAMBUT_PALET = [(58, 38, 18), (28, 22, 12), (74, 52, 30), (42, 30, 22)]
 def _dandani_manekin(actor, actor_id: str) -> float:
     """Skalakan, warnai, beri baju, wajah dan rambut. Return tinggi label baru."""
     from ursina import Entity, Vec3, color as _c
-    from .wajah import bangun_rambut_bola, bangun_wajah
+    from .wajah import bangun_rambut, bangun_wajah
     from .player import SKIN_COLOR
     from .smooth_shader import apply_smooth as _smooth
     try:
@@ -199,18 +199,30 @@ def _dandani_manekin(actor, actor_id: str) -> float:
         # Game kehidupan Jepang memberi kepala porsi yang jauh lebih besar
         # daripada manusia sungguhan, dan itulah yang membuat wajah kecil
         # sekali pun masih terbaca dari jarak main.
+        #
+        # Bentuknya chibi_head_mesh(), SAMA dengan kepala pemain, bukan bola.
+        # Bola Ursina bersegi rendah, dan cel-shader di sini memotong terang
+        # dan gelap pada ambang keras — jadi batas bayangannya mengikuti
+        # segi-segi bola itu dan membentuk TANGGA yang terlihat di pipi dari
+        # jarak dekat. Rounded box punya bidang yang lebih besar dan lebih
+        # rata, jadi batasnya bersih. Bonusnya: pemain dan NPC jadi satu
+        # bahasa bentuk, dan resep rambut yang sama dipakai keduanya —
+        # varian bola yang khusus ditulis untuk manekin tidak diperlukan lagi.
+        from .meshes import chibi_head_mesh
         R = hw * 1.18
-        _k = Entity(model='sphere', parent=kepala, scale=R * 2,
-                    color=SKIN_COLOR)
+        _k = Entity(model=chibi_head_mesh(), parent=kepala,
+                    scale=(R * 2, R * 2 * 1.16, R * 2), color=SKIN_COLOR)
         _smooth(_k, has_texture=False)
-        bangun_rambut_bola(kepala, R,
-                           _c.rgb(*_warna_dari_id(actor_id + 'r', _RAMBUT_PALET)))
+        bangun_rambut(kepala, R, R * 1.16,
+                      _c.rgb(*_warna_dari_id(actor_id + 'r', _RAMBUT_PALET)))
         # Fitur wajah harus mendarat di PERMUKAAN bola, dan permukaan bola pada
         # ketinggian mata bukan jari-jarinya: pada y = -0,26 ht, jaraknya dari
         # pusat adalah sqrt(R^2 - y^2). Percobaan pertama memakai 0,80 hw dan
         # seluruh wajahnya tenggelam DI DALAM kepala — tidak ada mata, tidak
         # ada mulut, cuma bola kulit polos.
-        bangun_wajah(kepala, R, R * 0.72, R, bola_r=R)
+        # Kepalanya kotak-membulat sekarang, jadi bidang mukanya datar dan
+        # `bola_r` tidak dipakai lagi.
+        bangun_wajah(kepala, R, R * 1.16, R * 1.005)
         actor._kepala = kepala
         return _MANEKIN_TINGGI + 0.45
     except Exception:

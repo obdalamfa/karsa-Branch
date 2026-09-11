@@ -2066,7 +2066,26 @@ class UIManager:
             if catatan:
                 lines.append('')
                 lines.append(f"  * {catatan}")
-            self._panel_body.text = '\n'.join(lines[:28])
+
+            # Rekor pancing. Ini satu-satunya alasan ikan mas ke-lima-puluh
+            # masih layak dilihat — beratnya, bukan barangnya.
+            from .fishing import SPESIES, tersedia, perairan_untuk, AIR_DANAU
+            log = getattr(s, 'fish_log', None) or {}
+            if log:
+                lines.append('')
+                lines.append("── REKOR PANCING ──")
+                rek = sorted(((k, v) for k, v in log.items() if k in SPESIES),
+                             key=lambda r: -float(r[1]))
+                for sid, kg in rek[:6]:
+                    lines.append(f"  {item_name(sid)[:22]:<22} {float(kg):>6.2f} kg")
+            air = perairan_untuk(s, None)
+            umpan = tersedia(s, air)
+            if umpan:
+                lines.append('')
+                lines.append(f"  Sedang menggigit di sini: "
+                             f"{', '.join(item_name(u) for u in umpan[:4])}")
+
+            self._panel_body.text = '\n'.join(lines[:34])
 
         elif name == 'quest':
             qs   = s.quest_stage

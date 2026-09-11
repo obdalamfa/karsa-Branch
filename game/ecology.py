@@ -223,6 +223,19 @@ def yield_multiplier(state, key: str) -> float:
     mustahil — pemain harus bisa melihat sendiri bahwa tempat itu sudah habis,
     dan tetap punya jalan pulang. Kolam yang melimpah memberi bonus kecil supaya
     ada alasan mencari tempat yang belum dijamah.
+
+    Lantainya 0,08, dan angka itu bukan selera. Versi pertama memakai 0,25, dan
+    itu diam-diam membatalkan seluruh modul ini: dengan 0,25 sebuah danau yang
+    sudah rata masih menyerahkan 15% per lemparan SELAMANYA, jadi empat puluh
+    lemparan sehari menarik ~6 ikan dari kolam yang hanya sanggup memasok ~1.
+    Kolam kosong berubah jadi keran tak terbatas yang lambat, dan menggiling
+    kembali jadi jawaban terbaik.
+
+    Ketahuan lewat simulasi, bukan lewat pembacaan ulang: 20 dan 40 lemparan
+    per hari menghasilkan LEBIH BANYAK ikan daripada 10, padahal keduanya
+    meratakan danau. Begitu lantainya 0,08, urutannya terbalik seperti yang
+    seharusnya — dan "jangan diambil semua" akhirnya jadi nasihat yang benar
+    secara aritmetika, bukan sekadar sopan.
     """
     a = abundance(state, key)
     if a >= 0.85:
@@ -230,10 +243,10 @@ def yield_multiplier(state, key: str) -> float:
     if a >= 0.55:
         return 1.0
     if a >= 0.30:
-        return 0.75
+        return 0.70
     if a >= 0.12:
-        return 0.45
-    return 0.25
+        return 0.35
+    return 0.08
 
 
 def status_word(state, key: str) -> str:

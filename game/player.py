@@ -612,6 +612,11 @@ class Player3D(Entity):
         # Alat di tangan mengikuti pilihan pemain (murah: keluar cepat kalau sama)
         self.refresh_held_tool()
 
+        # Umpan yang sedang menggantung. Keluar di baris pertama kalau tidak ada
+        # yang dipancing, jadi ongkosnya nol untuk pemain yang tidak memancing.
+        if panels is not None:
+            self.interaction_controller.tick_fishing(dt, panels)
+
         # ── WASD MOVEMENT (kamera-relative isometric) ──────────────────────
         dx_in, dz_in = 0.0, 0.0
         if held_keys['w'] or held_keys['up arrow']:    dz_in += 1

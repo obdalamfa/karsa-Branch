@@ -616,8 +616,42 @@ class InteractionController:
         return True
 
     def try_fishing(self, panels) -> bool:
+        """SPACE saat memancing. Satu tombol, tiga arti — tergantung fasenya.
+
+        Melempar dan menarik dipisah. Umpan menggantung beberapa detik, ikan
+        menyambar, dan pemain punya jendela pendek untuk menyentak. Ini yang
+        mengubah memancing dari transaksi jadi kejadian, dan ia tidak butuh UI
+        baru sama sekali — cuma teks yang memang sudah ada.
+        """
         import random as _rng
         from ..config import DCK, LLY, W
+        from .. import fishing as fs
+
+        p = getattr(self, '_pancing', None)
+
+        # ── Umpan sudah di air: tombol ini berarti MENYENTAK ─────────────────
+        if p is not None:
+            if p['fase'] == 'gigit':
+                hasil = fs.tarik(self.player.state, p['air'], p['sid'], _rng)
+                self._pancing = None
+                sound_play('harvest', 0.85)
+                from ..economy import item_name
+                ekor = "  REKOR BARU!" if hasil['rekor'] else ""
+                panels.emote('><(((*>  !!', color.rgb(255, 220, 120), 1.8)
+                panels.flash_msg(
+                    f"Dapat {item_name(hasil['id'])} {hasil['kg']} kg "
+                    f"({hasil['nilai']}G){ekor}", 2.2)
+                self.check_quests(panels)
+            else:
+                # Menyentak sebelum disambar. Umpannya hilang, energinya sudah
+                # terbayar. Tanpa hukuman ini jendela gigitan tidak berarti
+                # apa-apa: menekan SPACE secepat mungkin akan jadi taktik.
+                self._pancing = None
+                sound_play('blocked', 0.4)
+                panels.flash_msg("Terlalu cepat — umpan lepas.", 1.2)
+            return True
+
+        # ── Belum melempar: harus benar-benar menghadap air ──────────────────
         tx, ty = self.player.get_tile_pos()
         on_dock      = self.world.get_tile(tx, ty) in (DCK, LLY)
         ftx, fty     = self.player._facing_tile()
@@ -626,36 +660,71 @@ class InteractionController:
             return False
 
         s = self.player.state
-        if s.energy < 2:
+        if s.energy < fs.EN_LEMPAR:
             sound_play('blocked', 0.5)
             panels.flash_msg("Terlalu lelah untuk memancing.", 1.0)
             return True
 
-        s.energy = max(0, s.energy - 2)
-        is_legendary_lake = (s.scene_name == 'dungeon' and getattr(self.world, 'dungeon_level', 0) == 13)
+        s.energy = max(0, s.energy - fs.EN_LEMPAR)
+        air = fs.perairan_untuk(s, self.world)
 
-        chance = 0.55 + (0.20 if s.inventory.get('jala', 0) > 0 else 0)
-        if _rng.random() < chance:
-            if is_legendary_lake and _rng.random() < 0.25:
-                s.inventory['ikan_legendaris'] = s.inventory.get('ikan_legendaris', 0) + 1
-                sound_play('harvest', 0.8)
-                panels.emote('><(((*>  !!', color.rgb(255, 220, 120), 1.8)
-                panels.flash_msg("Luar Biasa! Dapat Ikan Legendaris!", 2.5)
-            else:
-                # Dulu memancing menyetor emas langsung ke dompet. Itu satu
-                # aturan berbeda dari seluruh sisa permainan; sekarang SEMUA
-                # hasil kerja masuk tas dulu dan baru bernilai setelah dijual.
-                from ..economy import sell_price
-                s.inventory['ikan'] = s.inventory.get('ikan', 0) + 1
-                sound_play('harvest', 0.8)
-                panels.flash_msg(f"+1 Ikan (nilai {sell_price('ikan')}G)", 1.5)
-            self.check_quests(panels)
-        else:
-            sound_play('blocked', 0.4)
-            panels.emote('. . .', color.rgb(160, 165, 170))
-            panels.flash_msg("Tidak ada yang menggigit... coba lagi.", 1.0)
+        # Apakah lemparan ini akan berbuah sudah diputuskan SEKARANG, bukan saat
+        # menyentak. Kalau tidak, pemain yang menyentak sempurna tetap bisa
+        # gagal, dan jendela gigitan berubah dari keterampilan jadi hiasan.
+        # Jala Ikan ikut dihitung di dalam peluang_gigit(), bersama kelimpahan
+        # kolam dan pasang-surut — satu tempat, supaya tidak ada dua rumus
+        # peluang yang diam-diam menyimpang.
+        sid = fs.pilih_spesies(s, air, _rng) if _rng.random() < fs.peluang_gigit(s, air) else None
+        self._pancing = {
+            'fase':   'menunggu',
+            't':      0.0,
+            'tunggu': fs.tunggu_gigitan(_rng),
+            'air':    air,
+            'sid':    sid,
+        }
+        sound_play('menu_move', 0.5)
         self.player._play_tool_anim('water')
+        panels.flash_msg("Melempar umpan... tunggu sampai menyambar.", 1.4)
         return True
+
+    def tick_fishing(self, dt: float, panels) -> None:
+        """Jalankan umpan yang sedang menggantung. Dipanggil tiap frame.
+
+        Baris pertamanya keluar untuk pemain yang tidak sedang memancing, jadi
+        ongkosnya nol bagi semua orang lain.
+        """
+        p = getattr(self, '_pancing', None)
+        if p is None:
+            return
+
+        from .. import fishing as fs
+
+        # Berpindah scene membatalkan lemparan. Umpan yang masih menggantung di
+        # danau saat pemain sudah di dalam gua adalah bug yang menunggu giliran.
+        if self.player.state.scene_name != getattr(self, '_pancing_scene', self.player.state.scene_name):
+            self._pancing = None
+            return
+        self._pancing_scene = self.player.state.scene_name
+
+        p['t'] += dt
+
+        if p['fase'] == 'menunggu':
+            if p['t'] >= p['tunggu']:
+                if p['sid'] is None:
+                    self._pancing = None
+                    sound_play('blocked', 0.35)
+                    panels.emote('. . .', color.rgb(160, 165, 170))
+                    panels.flash_msg("Tidak ada yang menggigit... coba lagi.", 1.0)
+                else:
+                    p['fase'] = 'gigit'
+                    sound_play('menu_select', 0.9)
+                    panels.emote('!', color.rgb(255, 240, 180), 1.0)
+                    panels.flash_msg("!! MENYAMBAR — tekan SPACE sekarang !!", fs.JENDELA)
+        elif p['fase'] == 'gigit':
+            if p['t'] >= p['tunggu'] + fs.JENDELA:
+                self._pancing = None
+                sound_play('blocked', 0.4)
+                panels.flash_msg("Terlambat — ikannya lepas.", 1.2)
 
     def try_healing(self, panels) -> bool:
         s = self.player.state

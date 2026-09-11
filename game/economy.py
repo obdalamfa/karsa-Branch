@@ -378,6 +378,24 @@ def margin_hint(shop_item: dict) -> str:
     Ini satu-satunya tempat pemain bisa melihat seluruh rantai dalam satu
     kalimat sebelum mengeluarkan uang.
     """
+    # Ternak: rantainya beda bentuk — bukan sekali panen, tapi pemasukan
+    # harian dikurangi pakan harian. Yang perlu dilihat pemain sebelum
+    # mengeluarkan 672G adalah berapa hari sampai balik modal, bukan harga
+    # sebotol susu.
+    aid = shop_item.get('animal')
+    if aid:
+        from .data import ANIMAL_NPCS
+        prod = produce_for(ANIMAL_NPCS.get(aid, {}).get('type', ''))
+        if not prod:
+            return ''
+        per_hari = sell_price(prod['item']) / float(prod['cycle'])
+        untung = per_hari - FEED_DAY_VALUE
+        if untung <= 0:
+            return f"{item_name(prod['item'])} {per_hari:.0f}G/hari — RUGI vs pakan"
+        balik = int(round(int(shop_item['price']) / untung))
+        return (f"{item_name(prod['item'])} +{untung:.0f}G/hari, "
+                f"balik modal {balik}h")
+
     crop = shop_item.get('crop')
     if not crop or crop not in CROPS:
         return ''

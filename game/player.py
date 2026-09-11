@@ -273,32 +273,68 @@ class Player3D(Entity):
             skin  = SKIN_COLOR
             cloth = self._shirt_col
 
-            PEL_Y, WST_Y, CHEST_Y = _GH + 0.96, _GH + 1.16, _GH + 1.42
-            NECK_Y, HEAD_Y        = _GH + 1.62, _GH + 1.89
-            SHOULDER_Y, HIP_Y     = _GH + 1.55, _GH + 0.88
+            # ── PROPORSI CHIBI ──────────────────────────────────
+            # Sebelumnya kepala 0,45 tinggi pada badan setinggi 2,115 — nisbah
+            # kepala-badan 1 : 4,7, yaitu proporsi orang dewasa realistis.
+            # Patokan kita bukan itu: Story of Seasons dan sekelasnya memakai
+            # chibi sekitar 1 : 3, dan nisbah itulah yang membuat orang terbaca
+            # sebagai orang dari jarak main — wajahnya cukup besar untuk punya
+            # arah hadap, badannya cukup kecil untuk tidak menutupi wajahnya.
+            #
+            # Tinggi TOTAL sengaja dipertahankan ~2,1: kamera, collider, tinggi
+            # pintu, dan seluruh animasi alat dikalibrasi ke angka itu.
+            # Kepalanya membesar dengan MEMENDEKKAN kaki dan torso, bukan
+            # dengan meninggikan orangnya.
+            #
+            #   kaki  : sepatu 0,10 + betis 0,30 + paha 0,34  = 0,74
+            #   torso : pinggul 0,74 -> leher 1,40            = 0,66
+            #   kepala: 1,40 .. 2,00                          = 0,60
+            #   total 2,00   ->  0,60 / 2,00 = 1 : 3,33
+            PEL_Y, WST_Y, CHEST_Y = _GH + 0.82, _GH + 0.98, _GH + 1.18
+            NECK_Y, HEAD_Y        = _GH + 1.40, _GH + 1.70
+            SHOULDER_Y, HIP_Y     = _GH + 1.28, _GH + 0.74
 
             # Destroy the default dummy body, and recreate body properly
             if hasattr(self, 'body') and self.body:
                 destroy(self.body)
 
-            # Build body boxes
-            self.belt = _part_box(Vec3(0, PEL_Y, 0), (0.42, 0.18, 0.28), pants, parent=p)
-            self.waist = _part_box(Vec3(0, WST_Y, 0), (0.40, 0.22, 0.26), cloth, parent=p)
-            self.body = _part_box(Vec3(0, CHEST_Y, 0), (0.52, 0.30, 0.30), cloth, parent=p)
+            # Build body boxes. Torso memakai `chibi_torso` — mesh
+            # superellipsoid bertepi dibevel yang sudah ada di meshes.py sejak
+            # lama, lengkap dengan dispatch-nya di _part(), dan TIDAK PERNAH
+            # dipanggil satu kali pun: seluruh badan dibangun dari kubus polos.
+            self.belt = _part_box(Vec3(0, PEL_Y, 0), (0.40, 0.16, 0.26), pants, parent=p)
+            self.waist = _part_box(Vec3(0, WST_Y, 0), (0.38, 0.20, 0.25), cloth, parent=p)
+            self.body = _part('chibi_torso', Vec3(0, CHEST_Y, 0),
+                              (0.50, 0.34, 0.30), None, cloth, parent=p)
 
             # Neck & Head
-            _part_box(Vec3(0, NECK_Y, 0), (0.14, 0.10, 0.14), skin, parent=p)
+            _part_box(Vec3(0, NECK_Y, 0), (0.13, 0.09, 0.13), skin, parent=p)
             if hasattr(self, '_pivot_neck') and self._pivot_neck:
                 destroy(self._pivot_neck)
             self._pivot_neck = Entity(parent=p, position=Vec3(0, HEAD_Y, 0))
-            self.head = _part_box(Vec3(0, 0, 0), (0.35, 0.45, 0.35), skin, parent=self._pivot_neck)
+            # Kepala LEBIH LEBAR dari bahu (0,62 lawan 0,50) — itu ciri chibi
+            # yang paling menentukan, dan kepala kubus 0,35x0,45 yang lama
+            # justru lebih tinggi daripada lebar, kebalikannya.
+            # 0,52 lebar — sekitar selebar bahu, bukan lebih lebar. Percobaan
+            # pertama memakai 0,62x0,70 dan terukur di foto: kepala 116 px
+            # lawan torso 70 px, yaitu 1,66x — itu bobblehead, bukan chibi.
+            # Patokan kita memakai kepala kira-kira SELEBAR bahu.
+            self.head = _part('chibi_head', Vec3(0, 0, 0), (0.52, 0.60, 0.50),
+                              None, skin, parent=self._pivot_neck)
 
-            # Surreal floating geometric halo
-            self._halo_ring = Entity(model='cylinder', position=Vec3(0, 0.45, 0), scale=(0.5, 0.05, 0.5), color=color.rgb(255, 0, 255), parent=self._pivot_neck)
-            self._halo_cube = Entity(model='cube', position=Vec3(0, 0.7, 0), scale=(0.15, 0.15, 0.15), color=color.rgb(0, 255, 255), parent=self._pivot_neck, rotation=(45, 45, 45))
-            from .smooth_shader import apply_smooth
-            apply_smooth(self._halo_ring, has_texture=False)
-            apply_smooth(self._halo_cube, has_texture=False)
+            # Wajah. Dua mata cukup untuk memberi arah hadap; tanpa ini kepala
+            # sebesar apa pun tetap gumpalan, dan pemain tidak bisa tahu warga
+            # sedang menghadap ke mana. Ditempel sebagai anak KEPALA supaya ikut
+            # berputar saat kepala menoleh.
+            _MATA = color.rgb(38, 30, 28)
+            for _sx in (-1, 1):
+                _part_box(Vec3(_sx * 0.122, 0.048, 0.252),
+                          (0.072, 0.098, 0.040), _MATA, parent=self.head)
+                # Kilau kecil di sudut atas mata — satu voxel putih, dan itu
+                # yang membedakan mata hidup dari dua lubang gelap.
+                _part_box(Vec3(_sx * 0.100, 0.076, 0.266),
+                          (0.026, 0.031, 0.018), color.rgb(250, 250, 248),
+                          parent=self.head)
 
             # Destroy and recreate pivot shoulders & hips to have proper positions
             if hasattr(self, '_pivot_shoulder_l') and self._pivot_shoulder_l: destroy(self._pivot_shoulder_l)
@@ -310,37 +346,37 @@ class Player3D(Entity):
 
             # Arms
             for side, sx in (('l', -1), ('r', 1)):
-                piv_sh = Entity(parent=p, position=Vec3(sx * 0.30, SHOULDER_Y, 0))
+                piv_sh = Entity(parent=p, position=Vec3(sx * 0.26, SHOULDER_Y, 0))
                 setattr(self, f'_pivot_shoulder_{side}', piv_sh)
 
-                ua = _part_box(Vec3(0, -0.16, 0), (0.14, 0.32, 0.16), cloth, parent=piv_sh)
+                ua = _part_box(Vec3(0, -0.13, 0), (0.13, 0.26, 0.15), cloth, parent=piv_sh)
                 setattr(self, f'upper_arm_{side}', ua)
 
-                piv_el = Entity(parent=piv_sh, position=Vec3(0, -0.32, 0))
+                piv_el = Entity(parent=piv_sh, position=Vec3(0, -0.26, 0))
                 setattr(self, f'_pivot_elbow_{side}', piv_el)
 
-                fa = _part_box(Vec3(0, -0.15, 0), (0.13, 0.30, 0.14), skin, parent=piv_el)
+                fa = _part_box(Vec3(0, -0.11, 0), (0.12, 0.22, 0.13), skin, parent=piv_el)
                 setattr(self, f'forearm_{side}', fa)
 
-                hd = _part_box(Vec3(0, -0.36, 0), (0.14, 0.12, 0.14), skin, parent=piv_el)
+                hd = _part_box(Vec3(0, -0.27, 0), (0.14, 0.13, 0.14), skin, parent=piv_el)
                 setattr(self, f'hand_{side}', hd)
                 setattr(self, f'_arm_{side}', ua)
 
             # Legs
             for side, sx in (('l', -1), ('r', 1)):
-                piv_hip = Entity(parent=p, position=Vec3(sx * 0.12, HIP_Y, 0))
+                piv_hip = Entity(parent=p, position=Vec3(sx * 0.115, HIP_Y, 0))
                 setattr(self, f'_pivot_hip_{side}', piv_hip)
 
-                th = _part_box(Vec3(0, -0.21, 0), (0.18, 0.42, 0.22), pants, parent=piv_hip)
+                th = _part_box(Vec3(0, -0.17, 0), (0.175, 0.34, 0.21), pants, parent=piv_hip)
                 setattr(self, f'thigh_{side}', th)
 
-                piv_kn = Entity(parent=piv_hip, position=Vec3(0, -0.42, 0))
+                piv_kn = Entity(parent=piv_hip, position=Vec3(0, -0.34, 0))
                 setattr(self, f'_pivot_knee_{side}', piv_kn)
 
-                sh_e = _part_box(Vec3(0, -0.20, 0), (0.17, 0.40, 0.20), pants, parent=piv_kn)
+                sh_e = _part_box(Vec3(0, -0.15, 0), (0.165, 0.30, 0.19), pants, parent=piv_kn)
                 setattr(self, f'shin_{side}', sh_e)
 
-                foot = _part_box(Vec3(0, -0.45, 0.06), (0.20, 0.10, 0.32), shoe, parent=piv_kn)
+                foot = _part_box(Vec3(0, -0.35, 0.05), (0.195, 0.10, 0.30), shoe, parent=piv_kn)
                 setattr(self, f'shoe_{side}', foot)
                 setattr(self, f'_leg_{side}', th)
 
@@ -767,13 +803,6 @@ class Player3D(Entity):
             if not hasattr(self, '_walk_t'):
                 self._walk_t = 0.0
 
-            # Floating halo ring and cube rotation & bobbing
-            if hasattr(self, '_halo_ring') and self._halo_ring:
-                self._halo_ring.rotation_y += dt * 50
-                self._halo_cube.rotation_x += dt * 70
-                self._halo_cube.rotation_y += dt * 90
-                self._halo_ring.y = 0.45 + math.sin(self._walk_t * 2.0) * 0.02
-                self._halo_cube.y = 0.70 + math.cos(self._walk_t * 2.0) * 0.03
 
             if getattr(self, '_slide_active_ms', 0) > 0:
                 # Slide pose for Voxel chibi
@@ -871,7 +900,7 @@ class Player3D(Entity):
 
         # Animasi alat/serangan — per mode
         if self._attack_anim > 0:
-            t  = self._attack_anim / 350.0
+            t  = self._attack_anim / float(getattr(self, '_anim_dur', 350.0) or 350.0)
             # Gaya voxel: ayunan kaku linier (segitiga 0 -> 1 -> 0), bukan gelombang sinus halus
             st = 1.0 - abs(t * 2.0 - 1.0)
             m  = self._anim_mode
@@ -910,6 +939,25 @@ class Player3D(Entity):
                 self._pivot_shoulder_r.rotation_x = -85 * st
                 self._pivot_shoulder_l.rotation_x = -85 * st
                 if va_root: va_root.rotation_x = -45 * st
+            elif m == 'gosok':
+                # Menggosok bukan mengayun. Yang membedakan keduanya BOLAK-BALIK
+                # berulang, jadi lengannya diayun tiga kali dalam satu aksi
+                # (sin 6*pi = 3 siklus penuh) alih-alih sekali naik-turun.
+                # Badan condong sedikit dan TETAP condong sepanjang aksi —
+                # menyikat itu bertumpu, bukan memukul.
+                sapu = math.sin(t * math.pi * 6.0)
+                self._pivot_shoulder_r.rotation_x = -55 + 28 * sapu
+                self._pivot_shoulder_l.rotation_x = -20
+                self.body.rotation_x = 12
+                if va_root: va_root.rotation_x = -25
+            elif m == 'bicara':
+                # Bicara: satu tangan terangkat sebentar lalu turun, badan
+                # tegak. Tidak ada ayunan sama sekali — gerakan yang terlalu
+                # besar membuat menyapa tetangga terlihat seperti melempar.
+                self._pivot_shoulder_r.rotation_x = -32 * st
+                self._pivot_shoulder_r.rotation_z = -14 * st
+                self._pivot_shoulder_l.rotation_x = 0
+                if va_root: va_root.rotation_x = 0
         else:
             self._pivot_shoulder_r.rotation_z = 0
             if moving_now and not getattr(self, '_is_vitaboy', True):
@@ -935,11 +983,17 @@ class Player3D(Entity):
                 del s.buffs[buff_name]
 
         # Invuln: kedip merah
+        # Alpha 0,4 di cabang TANPA invuln adalah salin-tempel dari cabang
+        # kedipnya: hasilnya dada pemain 60% tembus pandang sepanjang permainan,
+        # bukan cuma selama kebal. Yang kedip tetap kedip; yang tidak, pejal.
         if self._invuln > 0:
             blink = int(self._invuln / 80) % 2 == 0
-            self.body.color = color.rgb(255, 80, 80, 102) if blink else Vec4(self._shirt_col[0], self._shirt_col[1], self._shirt_col[2], 0.4)
+            self.body.color = (color.rgb(255, 80, 80, 102) if blink else
+                               Vec4(self._shirt_col[0], self._shirt_col[1],
+                                    self._shirt_col[2], 0.4))
         else:
-            self.body.color = Vec4(self._shirt_col[0], self._shirt_col[1], self._shirt_col[2], 0.4)
+            self.body.color = Vec4(self._shirt_col[0], self._shirt_col[1],
+                                   self._shirt_col[2], 1.0)
 
         # Sync state
         s.player_x = self.x / TS
@@ -1148,8 +1202,15 @@ class Player3D(Entity):
         # ── Lore pickup at specific dungeon levels ──
         self.quest_controller.check_dungeon_lore(s.dungeon_level, self)
 
-    def _play_tool_anim(self, mode='swing'):
-        self._attack_anim = 350
+    def _play_tool_anim(self, mode='swing', ms=350):
+        """Mainkan satu pose alat/aksi selama `ms` milidetik.
+
+        Durasinya jadi parameter karena tidak semua aksi selesai dalam 350 ms.
+        Menggosok butuh cukup lama untuk terbaca sebagai BOLAK-BALIK — satu
+        sapuan 350 ms tidak bisa dibedakan dari mengayun.
+        """
+        self._attack_anim = float(ms)
+        self._anim_dur    = float(ms)
         self._anim_mode   = mode
 
     def _fx_burst(self, wx, wy, wz, col, n=5, spread=0.45, dur=0.38):

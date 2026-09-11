@@ -1,0 +1,74 @@
+{
+  "temuan": [
+    {
+      "id": "HUD-01",
+      "judul": "HUD terpotong di tepi kanan",
+      "sebab": "camera.ui membentang -aspect/2..+aspect/2, bukan -0.5..0.5. Teks kanan dijangkar di KIRI pada x mati 0.70, jadi tumbuh melewati tepi 0.889.",
+      "ukur": "tanggal luber +0.112 · nama scene +0.063 · baris kontrol +0.178",
+      "jaga": "hud_muat — menangkap 4 elemen terpotong pada kode lama"
+    },
+    {
+      "id": "HUD-02",
+      "judul": "Panel motif terbaca mati",
+      "sebab": "Bukan warna, tapi urutan gambar. Semua elemen camera.ui di z=0; Panda menyortir bin transparannya tanpa urutan yang bisa diandalkan dan latar panel menang.",
+      "ukur": "fill diminta rgb(120,200,130) → di layar rgb(19,33,31) = 0.926x latar + 0.074x fill → sesudah z: rgb(108,196,128)",
+      "jaga": "hud_terbaca — membaca PIKSEL, bukan properti color; menangkap 9 bar tertimbun"
+    },
+    {
+      "id": "TANAH-01",
+      "judul": "Rumput terbaca sebagai papan catur",
+      "sebab": "Yang salah periodenya, bukan warnanya. (tx+ty) % 2 adalah pola paling teratur yang bisa dibuat; mata mengunci gridnya sebelum sempat membacanya sebagai tanah.",
+      "ukur": "korelasi terang-vs-paritas 2.00 → mendekati 0 (ambang 0.50)",
+      "jaga": "rumput_catur"
+    },
+    {
+      "id": "AVATAR-01",
+      "judul": "Warga desa jadi gumpalan putih tanpa TSO",
+      "sebab": "humanoid.obj tidak punya warna sama sekali, dan satu mesh cuma punya satu entity.color. Diwarnai per-vertex — nol entity tambahan, karena mountain sudah 2.177 entity.",
+      "ukur": "5 warna per warga (sepatu, celana, baju, kulit, rambut), palet deterministik per id",
+      "jaga": "avatar_warna — menuntut warnanya ADA dan shader yang membacanya terpasang"
+    },
+    {
+      "id": "CAHAYA-01",
+      "judul": "Siang-malam tidak pernah sampai ke dunia",
+      "sebab": "Jembatan lampu→shader ada dan dipanggil tiap frame. Yang membatalkannya default_input Ursina: dipasang per ENTITY, dan input entity menimpa input scene.",
+      "ukur": "ubah sm_ambient di SCENE → 0,00% piksel berubah · di ENTITY → 91,92%. Sesudah: rata-rata layar (98,134,34) → (24,39,24)",
+      "jaga": "cahaya_global — piksel DAN sumber fragmen"
+    },
+    {
+      "id": "CAHAYA-02",
+      "judul": "Rumput tidak pernah kena cahaya",
+      "sebab": "Fragmen grass_shader satu baris: fragColor = texture(...). Tutup rumput membuang tint per ubin, cahaya, siang-malam, bayangan toon, AO.",
+      "ukur": "112 tutup rumput tidak cukup menggeser rata-rata layar — hanya tertangkap dengan membaca sumber fragmennya",
+      "jaga": "cahaya_global (separuh struktural)"
+    },
+    {
+      "id": "PERF-01",
+      "judul": "976 set_shader_input per frame",
+      "sebab": "update_time() memanggilnya dua kali untuk TIAP entity rumput, tiap frame. Shader input diwariskan ke keturunan, jadi cukup dua panggilan.",
+      "ukur": "_update Ursina 28,4 → 23,8 ms/frame. Portabel: sama besarnya di mesin ber-GPU.",
+      "jaga": "rumput_lambai — piksel DAN tidak ada entity yang menyimpan grs_time sendiri"
+    },
+    {
+      "id": "OTONOMI-01",
+      "judul": "Katalog perabot tidak pernah dibaca",
+      "sebab": "choose_action() dan autonomy_candidates() lengkap tapi tidak pernah dipanggil siapa pun. Warga memilih dari daftar mati tiga baris dan tidak pernah melihat sekelilingnya.",
+      "ukur": "51 interaksi dunia dipilih, 43 tuntas dalam satu jalan regresi penuh. Contoh: Tidur pada Kasur · Nonton TV pada Televisi · Buka Peti pada Peti · Cuci Muka pada Air",
+      "jaga": "otonomi_hidup (per scene) + baris otonomi (tingkat suite)"
+    }
+  ],
+  "terbuka": [
+    {
+      "judul": "Katalog iklan defisit secara aritmetika",
+      "isi": "Satu hari-sim tanpa interaksi meluruhkan 1.006 poin (energi 180, kandung 170, lapar 160, nyaman 150, senang 140, higiene 122, sosial 84). Sim punya 1.440 menit dan interaksi tipikal memberi ~40 poin per ~60 menit — ~965 poin pada kesibukan 100% dengan pilihan sempurna dan tanpa perjalanan. Defisit sebelum satu langkah pun diambil; warga berakhir di mood -13 sampai -38 setelah sehari. Berlaku untuk pemain juga, mesinnya sama. Menaikkan delta atau menurunkan laju luruh adalah keputusan rasa — keputusan pemilik."
+    },
+    {
+      "judul": "Batching terrain tidak bisa diukur di sini",
+      "isi": "GeomNode hampir sama dengan jumlah entity (mountain 2.224 vs 2.177): hampir tiap entity satu batch sendiri, dan itu masalah di mesin mana pun. Tapi flattenStrong() tidak menggabung apa pun (1.993 → 1.993), bahkan setelah clearModelNodes(). Batching menuntut terrain dibangun sebagai mesh gabungan sejak awal — perombakan world.py yang besar, dan payoffnya tidak bisa diukur di container tanpa GPU."
+    },
+    {
+      "judul": "Container ini tidak punya GPU",
+      "isi": "/dev/dri tidak ada; Mesa jatuh ke llvmpipe. Biaya frame di sini didominasi fill rate CPU: mountain 158 ms di 1280x720 turun jadi 77 ms di 640x360 untuk seperempat piksel. Angka ms/frame dari sini — termasuk '104 ms' yang beredar dari sesi sebelumnya — tidak mewakili mesin ber-GPU dan tidak boleh dipakai menilai target 30 FPS."
+    }
+  ]
+}

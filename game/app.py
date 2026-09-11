@@ -49,6 +49,28 @@ class GameHandler(Entity):
     def input(self, key):
         self.game.input(key)
 
+
+_OVERLAY_DEBUG = ('exit_button', 'fps_counter', 'entity_counter',
+                  'collider_counter')
+
+
+def _pasang_overlay_debug(nyala: bool) -> None:
+    """Nyalakan/matikan overlay debug bawaan Ursina.
+
+    Dibungkus karena namanya empat dan letaknya di modul window Ursina, bukan
+    di sini — kalau versi Ursina berganti dan salah satu hilang, yang terjadi
+    cuma satu overlay tidak ikut diatur, bukan game yang gagal boot.
+    """
+    from ursina import window
+    for nama in _OVERLAY_DEBUG:
+        e = getattr(window, nama, None)
+        if e is not None:
+            try:
+                e.enabled = nyala
+            except Exception:
+                pass
+
+
 class Game3D:
     def __init__(self):
         logging.info("Inisialisasi Game Engine 3D (Ursina)...")
@@ -58,7 +80,20 @@ class Game3D:
                           title='Lembah Karsa 3D — v0.10 [Cozy Edition]',
                           borderless=False)
         window.color = color.rgb(30, 20, 40)
-        window.fps_counter.enabled = True
+
+        # Overlay debug bawaan Ursina dimatikan, dan ini bukan soal selera.
+        #
+        # exit_button, fps_counter, entity_counter dan collider_counter semuanya
+        # duduk di x 0,839–0,897 dan y 0,359–0,500 — persis di atas kolom kanan
+        # HUD: jam di y 0,45, tanggal 0,40, cuaca 0,36. Selama ini jam terlihat
+        # "terpotong" di setiap tangkapan layar; ia tidak terpotong, ia
+        # TERTIMBUN tombol X merah dan tiga angka putih. entity_counter bahkan
+        # menjorok sampai x 0,897, lewat tepi layar 0,889 yang dijaga hud_muat.
+        #
+        # Tidak dibuang, cuma disembunyikan: F3 menyalakannya lagi saat butuh
+        # mengukur. Alat ukur yang dibuang akan ditulis ulang dengan buruk.
+        self._debug_overlay = False
+        _pasang_overlay_debug(False)
         
         # Pencahayaan — arah lebih datar agar detail karakter chibi terlihat
         self.sun = DirectionalLight(shadows=False)
@@ -177,6 +212,11 @@ class Game3D:
         self.player = Player3D(self.state, self.world)
         self.panels.player = self.player
 
+        # Sinema. Dibuat sekali dan dipakai ulang; ia tidak menggambar apa pun
+        # sampai `mulai()` dipanggil, jadi biayanya nol saat tidak ada adegan.
+        from .cutscene import Sinema
+        self.sinema = Sinema(self)
+
         # Terapkan penampilan tersimpan (jika sudah pernah chargen)
         if self.state.char_name:
             self.player.apply_appearance(self.state)
@@ -236,7 +276,23 @@ class Game3D:
         self.panels.update(s, dt)
         self._pulihkan_mode_yatim()
 
+        if self.panels.mode == 'sinema':
+            # Sengaja di luar gerbang 'hud' di bawah: dunia memang harus beku,
+            # tapi kamera sinema justru satu-satunya yang masih harus bergerak.
+            self.sinema.tick(dt)
+
         if self.panels.mode == 'hud':
+            # Pemicu sinema. Diletakkan di sini, bukan di quest_controller,
+            # karena tahap quest dinaikkan dari beberapa tempat berbeda —
+            # membandingkan nilainya di satu tempat tidak bisa ketinggalan
+            # satu pun, sementara memanggil pemicu di tiap tempat bisa.
+            # `mulai()` sendiri menolak adegan yang sudah pernah ditonton,
+            # jadi memanggilnya berulang aman.
+            from .cutscene import pemicu_tahap
+            _adegan = pemicu_tahap(s.quest_stage)
+            if _adegan:
+                self.sinema.mulai(_adegan)
+
             # ── Maju waktu in-game & Needs Decay (via TimeManager) ──
             msg = self.player.time_controller.tick(dt, self.player)
             if msg:
@@ -358,18 +414,30 @@ class Game3D:
                 target_sky   = color.rgb(20, 15, 25)
                 target_cloud = color.rgb(0, 0, 0, 0)
             else:
-                # Catatan: ambient + sun×dot ≤ 100% agar warna tidak overflow putih
-                # ambient max ~70, sun max ~185 (di floor dot≈0.82: 70/255+185/255×0.82 ≈ 87%)
+                # ambient + sun ≤ 100% supaya warna tidak overflow jadi putih.
+                # ambient max 70, sun max 185 (70/255 + 185/255 = 1,00; di
+                # floor dot≈0.82 jadi ≈87%).
+                #
+                # Batas itu SUDAH tertulis di sini sejak lama, dan nilainya di
+                # bawah melanggarnya: siang memakai sun 255 dan ambient 95,
+                # jumlahnya 1,373. Akibatnya terukur — apa pun di atas 186 dari
+                # 255 pasti terpotong jadi putih. Kulit bawaan "Cerah"
+                # (255,225,180) jadi bidang putih rata tanpa satu pun detail
+                # wajah tersisa, dan dinding rumah krem (248,235,200) ikut.
+                # Nisbah warnanya dipertahankan persis, cuma skalanya diturunkan
+                # ke batas yang komentarnya sendiri sebutkan.
                 if 6 <= hour < 17:
                     # Siang: sinar matahari hangat keemasan (Animal Crossing golden feel)
-                    target_sun = color.rgb(255, 248, 215) if not is_raining else color.rgb(145, 145, 158)
-                    target_amb = color.rgb(95, 90, 78, 255) if not is_raining else color.rgb(62, 62, 72, 255)
+                    target_sun = color.rgb(185, 180, 156) if not is_raining else color.rgb(145, 145, 158)
+                    target_amb = color.rgb(70, 66, 57, 255) if not is_raining else color.rgb(62, 62, 72, 255)
                     target_sky = color.rgb(128, 205, 248) if not is_raining else color.rgb(88, 98, 115)
                     target_cloud = color.rgb(248, 248, 255, 175) if not is_raining else color.rgb(145, 148, 162, 215)
                 elif 17 <= hour < 19:
                     # Senja: oranye kemerahan lembut
-                    target_sun = color.rgb(255, 162, 72) if not is_raining else color.rgb(148, 95, 72)
-                    target_amb = color.rgb(88, 55, 45, 255) if not is_raining else color.rgb(55, 38, 35, 255)
+                    # Senja ikut diturunkan dengan alasan yang sama: 255+88 =
+                    # 343 di kanal merah, jauh di atas batas.
+                    target_sun = color.rgb(185, 118, 52) if not is_raining else color.rgb(148, 95, 72)
+                    target_amb = color.rgb(70, 44, 36, 255) if not is_raining else color.rgb(55, 38, 35, 255)
                     target_sky = color.rgb(248, 138, 88) if not is_raining else color.rgb(115, 82, 82)
                     target_cloud = color.rgb(255, 195, 148, 145) if not is_raining else color.rgb(135, 108, 102, 195)
                 else:
@@ -382,6 +450,14 @@ class Game3D:
             self.sun.color = lerp(self.sun.color, target_sun, dt)
             self.ambient.color = lerp(self.ambient.color, target_amb, dt)
             window.color = lerp(window.color, target_sky, dt)
+
+            # Dua baris di atas mengubah lampu Panda, dan smooth_shader sama
+            # sekali tidak membacanya — ia membaca sm_sun_color/sm_ambient.
+            # Jembatannya _sync_smooth_lighting(), dipanggil ~25 baris di bawah
+            # ini. Jembatan itu SUDAH ADA dan SUDAH DIPANGGIL sejak lama; yang
+            # membuatnya tidak berefek apa pun adalah default_input shader, yang
+            # menaruh salinan sm_* di TIAP entity dan menimpa nilai di scene.
+            # Lihat smooth_shader.get_smooth_shader().
             
             from ursina import scene
             # PERF (diukur, bukan ditebak): setter `scene.fog_color` milik Ursina
@@ -448,6 +524,11 @@ class Game3D:
         if self.panels.mode == 'chargen':
             if self._chargen:
                 self._chargen.handle_input(key)
+            return
+
+        # Sinema mengunci semuanya: cuma lanjut dan lewati yang diterima.
+        if self.panels.mode == 'sinema':
+            self.sinema.input(key)
             return
 
         # Intercept input saat UI / Dialog aktif
@@ -555,6 +636,9 @@ class Game3D:
                     self.panels.open_panel('crafting')
                 else:
                     self.panels.flash_msg("Pergi ke Bengkel Budi!")
+            elif key == 'f3':
+                self._debug_overlay = not getattr(self, '_debug_overlay', False)
+                _pasang_overlay_debug(self._debug_overlay)
             elif key == 'f1':
                 self.panels.open_panel('help')
             elif key == 'f2':
@@ -621,6 +705,16 @@ class Game3D:
         elif mode == 'dialog':
             bg = getattr(p, '_dlg_bg', None)
             yatim = bg is None or not getattr(bg, 'enabled', False)
+        elif mode == 'sinema':
+            # Pemiliknya runner sinema, bukan entity UI: adegan yang sudah
+            # `selesai()` membongkar UI-nya sendiri, jadi keberadaan quad
+            # bukan tanda yang benar. Yang menentukan `aktif`.
+            #
+            # Baris ini ditambahkan setelah penjaga di bawah menangkap mode
+            # 'sinema' sebagai tak dikenal dan mengembalikannya ke HUD tiap
+            # frame — sinema tidak pernah bisa jalan satu beat pun. Penjaganya
+            # benar; mode barunya yang lupa didaftarkan.
+            yatim = not getattr(getattr(self, 'sinema', None), 'aktif', False)
         else:
             yatim = True    # mode yang tidak dikenal sama sekali
         if yatim:

@@ -93,3 +93,6 @@
 {"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
 {"slice":"wajah","round":3,"role":"build","note":"Kepala NPC memakai chibi_head_mesh(), sama dengan pemain, bukan bola. Bola Ursina bersegi rendah dan cel-shader memotong terang-gelap pada ambang keras, jadi batas bayangan mengikuti segi-seginya dan membentuk tangga di pipi. Efek sampingnya satu jalur kode: varian rambut-bola dan perhitungan kedalaman per-fitur dari persamaan bola dibuang seluruhnya. Rona pipi ditarik 0,71 -> 0,60 hw karena 0,71 mendarat tepat di batas rambut."}
 {"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus; vonis 12/12; 7 aksi tuntas 0 error"}
+{"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
+{"slice":"rupa","round":0,"role":"note","note":"docs/RUPA_KARAKTER.md ditulis: lima sebab karakter terbaca creepy, tiga di antaranya bukan modelnya melainkan shader dan skala. Termasuk catatan kegagalan tiap langkah, bukan cuma hasilnya."}
+{"slice": "REGRESI", "round": 0, "role": "note", "note": "Gerbang akhir: 14/14 scene; 12/12 aksi lulus ambang; swauji jeda SEMUA LULUS; 7 aksi tuntas 0 error; kontak <=2/90 frame menembus di semua baris"}

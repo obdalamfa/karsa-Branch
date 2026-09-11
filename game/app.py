@@ -691,6 +691,8 @@ class Game3D:
                 self.panels.open_panel('relations')
             elif key == 'n':
                 self.panels.open_panel('catatan')
+            elif key == 'l':
+                self.panels.open_panel('ekosistem')
             elif key == 'k':
                 if self.state.scene_name == 'shop':
                     self.panels.open_panel('shop')

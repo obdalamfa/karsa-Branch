@@ -34,6 +34,10 @@
     {
       "slug": "evening_light",
       "catatan": "Adegan luar ruang saat senja. Patokan untuk warna langit, arah bayangan, dan seberapa jauh warna dunia bergeser mengikuti waktu."
+    },
+    {
+      "slug": "gua_interior",
+      "catatan": "Ruang bawah tanah dari jarak main biasa, diterangi lentera. Patokan untuk lantai tanah galian, seberapa jauh cahaya lentera menjangkau sebelum habis, dan bagaimana dinding batu tetap terbaca dalam gelap tanpa jadi hitam pekat. Ditambahkan karena delapan slug pertama semuanya menilai kehidupan permukaan, sementara separuh pekerjaan yang sedang berjalan ada di Gua Sang Hyang dan dungeon — dan potongan yang tidak punya patokan akan dinilai dari ingatan, yang persis kegagalan yang gerbang ini dibangun untuk mencegah."
     }
   ],
   "jangan_di_commit": "Repo ini PUBLIK. Frame patokan boleh ada di disk untuk pembandingan internal, tapi tidak boleh ter-commit — itu redistribusi karya orang lain. `_bench/.gitignore` menjaganya, dan `bar_gate.py check` menolak jalan kalau ada yang bocor. Akibat yang diterima dengan sadar: berkasnya hilang tiap container ditarik, jadi loop ini hanya bisa dijalankan di mesin yang menyimpan berkasnya, bukan di sesi web.",

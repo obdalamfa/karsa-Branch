@@ -62,6 +62,25 @@ WILD_ITEMS = {
     'pagar_kayu':       {'name':'Pagar Kayu','sell':35,'description':'Segmen pagar dekorasi kebun'},
     'ikan_laut':        {'name':'Ikan Laut','sell':60,'description':'Tangkapan segar dari laut lepas'},
     'mutiara':          {'name':'Mutiara','sell':250,'description':'Mutiara berkilau dari dasar laut'},
+
+    # ── IKAN ─────────────────────────────────────────────────────────────────
+    # Kapan dan di mana tiap ikan menggigit ada di game/fishing.py; yang ada di
+    # sini hanya NILAI dan namanya, supaya economy.py tetap satu-satunya tempat
+    # harga lahir. 'ikan' yang lama sengaja dipertahankan sebagai tangkapan
+    # paling umum: quest dan save yang menyebut namanya tidak boleh patah, dan
+    # tangkapan biasa yang tidak istimewa memang harus ada — tanpa dasar yang
+    # membosankan, tidak ada yang terasa langka.
+    'ikan_mas':         {'name':'Ikan Mas','sell':55,'description':'Penghuni tenang dasar danau'},
+    'ikan_nila':        {'name':'Ikan Nila','sell':48,'description':'Ramai di air hangat'},
+    'ikan_gabus':       {'name':'Ikan Gabus','sell':75,'description':'Pemburu malam bersirip panjang'},
+    'belut':            {'name':'Belut','sell':95,'description':'Keluar dari lumpur saat hujan'},
+    'udang_galah':      {'name':'Udang Galah','sell':80,'description':'Bercapit biru, hanya pagi musim panas'},
+    'ikan_kembung':     {'name':'Ikan Kembung','sell':52,'description':'Bergerombol di perairan dangkal'},
+    'ikan_kakap':       {'name':'Ikan Kakap','sell':120,'description':'Menyambar umpan menjelang senja'},
+    'cumi':             {'name':'Cumi','sell':88,'description':'Naik ke permukaan setelah gelap'},
+    'kepiting_bakau':   {'name':'Kepiting Bakau','sell':100,'description':'Hanya terlihat saat air surut'},
+    'ikan_layur':       {'name':'Ikan Layur','sell':140,'description':'Perak panjang; badai musim dingin'},
+    'ikan_buta':        {'name':'Ikan Buta','sell':210,'description':'Tak bermata, tak pernah melihat matahari'},
 }
 
 # ─── RESEP KERAJINAN UMUM (meja kerja Bengkel Budi, tombol U) ───────────────

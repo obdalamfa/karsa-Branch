@@ -329,26 +329,56 @@ class EntitiesManager:
                 pos['activity'] = current[4]
 
     def _spawn_wild_state(self):
+        """Isi dunia pertama kali dari tabel populasi ekologi.
+
+        Dulu jumlah dan sebarannya ditulis tangan di sini, dan tidak ada
+        hubungannya dengan apa pun. Sekarang angkanya datang dari kolam stok
+        yang sama yang dipakai memancing, menebang dan menambang — jadi satu
+        tempat saja yang perlu disetel, dan lereng yang terlihat gundul memang
+        gundul di data.
+        """
         s = self.state
-        if s.wild_entities: return
+        if s.wild_entities:
+            return
+        from .ecology import WILD_POPULASI, wild_target
         rng = random.Random(s.day * 7)
-        for _ in range(3):
-            x, y = rng.randint(2, 28), rng.randint(5, 22)
-            s.wild_entities.append({'kind':'mandrake','x':x,'y':y,'scene':'mountain','moving':False})
-        for scene in ['farm','mountain']:
-            for _ in range(3):
-                x, y = rng.randint(5, 20), rng.randint(5, 15)
-                s.wild_entities.append({'kind':'running_mushroom','x':x,'y':y,'scene':scene,'moving':True})
-        for scene in ['farm','town','lake']:
-            for _ in range(5):
-                x, y = rng.randint(3, 15), rng.randint(3, 12)
-                s.wild_entities.append({'kind':'firefly','x':x,'y':y,'scene':scene,'moving':True,'night_only':True})
-        for _ in range(15):
-            x, y = rng.randint(2, 28), rng.randint(5, 22)
-            s.wild_entities.append({
-                'kind': rng.choice(['wild_herb','wild_berry']),
-                'x':x,'y':y,'scene':'mountain','moving':False,
-            })
+        for kind, scene, _penuh, _stok in WILD_POPULASI:
+            for _ in range(wild_target(s, kind, scene)):
+                spot = self._petak_liar_kosong(scene, rng)
+                if spot is None:
+                    continue
+                s.wild_entities.append(self._buat_liar(kind, scene, spot))
+
+    def _petak_liar_kosong(self, scene: str, rng):
+        return EntitiesManager._petak_liar_kosong_statis(scene, rng)
+
+    @staticmethod
+    def _petak_liar_kosong_statis(scene: str, rng):
+        """Cari satu petak yang benar-benar bisa dijalani di scene itu.
+
+        Dulu koordinatnya diundi buta di kotak (2..28, 5..22) dan dipakai apa
+        adanya, jadi herba rutin tumbuh di dalam batu, di dalam air, dan di
+        luar peta scene yang lebih kecil dari kotak itu. Pemain melihatnya
+        sebagai barang yang tidak bisa diambil.
+        """
+        from .scenes import SCENES
+        sc = SCENES.get(scene)
+        if sc is None:
+            return None
+        for _ in range(24):
+            x = rng.randint(1, max(1, sc.w - 2))
+            y = rng.randint(1, max(1, sc.h - 2))
+            if _can_walk(x, y, scene, None):
+                return (x, y)
+        return None
+
+    @staticmethod
+    def _buat_liar(kind: str, scene: str, spot) -> dict:
+        w = {'kind': kind, 'x': spot[0], 'y': spot[1], 'scene': scene,
+             'moving': kind in ('running_mushroom', 'firefly')}
+        if kind == 'firefly':
+            w['night_only'] = True
+        return w
 
     def load_scene(self, scene_name: str):
         self._clear_all()
@@ -790,7 +820,18 @@ class EntitiesManager:
             kind = w['kind']
             rates = {'running_mushroom': 0.60, 'firefly': 0.70,
                      'mandrake': 0.30, 'wild_herb': 0.90, 'wild_berry': 0.90}
-            if rng_mod.random() < rates.get(kind, 0.5):
+            # Kelimpahan kolam ikut menentukan peluang. Petak terakhir di lereng
+            # yang sudah dikuras memang lebih sulit dipetik daripada petak
+            # pertama di lereng yang penuh — pemain merasakan kolam menipis
+            # sebelum ia membuka panel mana pun.
+            from .ecology import WILD_STOK, yield_multiplier, take as eco_take
+            stok = WILD_STOK.get(kind)
+            peluang = rates.get(kind, 0.5)
+            if stok:
+                peluang *= yield_multiplier(state, stok)
+            if rng_mod.random() < peluang:
+                if stok:
+                    eco_take(state, stok, 1)
                 state.wild_entities.remove(w)
                 # Cleanup visually
                 for i, we in list(self.wild_ents.items()):
@@ -802,14 +843,49 @@ class EntitiesManager:
         return None
 
 def respawn_wild_at_morning(state):
-    rng = random.Random()
-    for scene in ['farm', 'mountain']:
-        for _ in range(rng.randint(2, 4)):
-            x, y = rng.randint(2, 20), rng.randint(5, 15)
-            state.wild_entities.append({
-                'kind': rng.choice(['wild_herb', 'wild_berry']),
-                'x': x, 'y': y, 'scene': scene, 'moving': False,
-            })
+    """Samakan jumlah tanaman liar yang berdiri dengan isi kolam ekologi.
+
+    Ini REKONSILIASI, bukan penambahan. Versi sebelumnya menempelkan 2-4 entri
+    baru tiap pagi tanpa batas atas apa pun, jadi save yang dimainkan sebulan
+    membawa ratusan herba yang ikut disimpan, di-tick, dan digambar selamanya —
+    kebocoran memori yang menyamar sebagai fitur.
+
+    Sekarang: kalau kolam sedang penuh, petak yang kau kosongkan kemarin terisi
+    lagi. Kalau kolam sedang kritis, yang berdiri justru BERKURANG — dan itulah
+    satu-satunya cara pemain bisa MELIHAT bahwa ia mengambil terlalu banyak,
+    tanpa membuka satu panel pun.
+    """
+    import random as _r
+    from .ecology import WILD_POPULASI, wild_target
+    rng = _r.Random()
+
+    # Berapa yang sekarang berdiri, per (jenis, scene).
+    ada: dict[tuple, list] = {}
+    for w in state.wild_entities:
+        ada.setdefault((w.get('kind'), w.get('scene')), []).append(w)
+
+    # Entri untuk jenis/scene yang sudah tidak ada di tabel (save lama) dibiarkan
+    # apa adanya: menghapusnya diam-diam akan membuang barang milik pemain.
+    for kind, scene, _penuh, _stok in WILD_POPULASI:
+        target  = wild_target(state, kind, scene)
+        sekarang = ada.get((kind, scene), [])
+        selisih = target - len(sekarang)
+
+        if selisih > 0:
+            # Maksimal 4 tumbuh per pagi per jenis. Lereng yang penuh dalam
+            # semalam terbaca sebagai sulap, bukan sebagai pemulihan.
+            for _ in range(min(selisih, 4)):
+                spot = EntitiesManager._petak_liar_kosong_statis(scene, rng)
+                if spot is None:
+                    break
+                state.wild_entities.append(
+                    EntitiesManager._buat_liar(kind, scene, spot))
+        elif selisih < 0:
+            for w in sekarang[:(-selisih)]:
+                try:
+                    state.wild_entities.remove(w)
+                except ValueError:
+                    pass
 
 
 # ── Helper tingkat-modul dari feature/3d-mobs ──────────────────────────────

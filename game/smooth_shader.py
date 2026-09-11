@@ -191,10 +191,24 @@ def get_smooth_shader():
     return _smooth_shader
 
 
+# Pencahayaan siang. Jumlah ambient + sun_color adalah PENGALI pada permukaan
+# yang menghadap matahari penuh, dan itu yang menentukan berapa terang warna
+# boleh ditulis sebelum terpotong.
+#
+# Nilai lama menjumlah 1,50 (0,45 + 1,05), dan akibatnya terukur: warna apa pun
+# di atas 170 dari 255 PASTI terpotong jadi 255 di sisi yang kena matahari.
+# Kulit pemain (230,190,148) jadi putih rata tanpa satu pun detail wajah
+# tersisa; dinding rumah krem (248,235,200) jadi bidang putih. Bukan gaya —
+# tidak ada ruang kepala sama sekali.
+#
+# Sekarang jumlahnya ~1,02: warna yang ditulis tampil hampir persis seperti
+# yang ditulis saat kena matahari penuh, dan sisi bayangannya turun ke ~0,33.
+# Nisbah hangat/dingin aslinya dipertahankan — mataharinya tetap sedikit
+# kekuningan, ambient-nya tetap sedikit kebiruan.
 _UNIFORM_GLOBAL_AWAL = {
     'sm_sun_dir':   Vec3(-0.5, -0.8, -0.4),
-    'sm_sun_color': Vec3(1.05, 1.02, 0.92),
-    'sm_ambient':   Vec3(0.45, 0.46, 0.50),
+    'sm_sun_color': Vec3(0.70, 0.68, 0.61),
+    'sm_ambient':   Vec3(0.33, 0.34, 0.37),
 }
 
 

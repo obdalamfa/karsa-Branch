@@ -414,18 +414,30 @@ class Game3D:
                 target_sky   = color.rgb(20, 15, 25)
                 target_cloud = color.rgb(0, 0, 0, 0)
             else:
-                # Catatan: ambient + sun×dot ≤ 100% agar warna tidak overflow putih
-                # ambient max ~70, sun max ~185 (di floor dot≈0.82: 70/255+185/255×0.82 ≈ 87%)
+                # ambient + sun ≤ 100% supaya warna tidak overflow jadi putih.
+                # ambient max 70, sun max 185 (70/255 + 185/255 = 1,00; di
+                # floor dot≈0.82 jadi ≈87%).
+                #
+                # Batas itu SUDAH tertulis di sini sejak lama, dan nilainya di
+                # bawah melanggarnya: siang memakai sun 255 dan ambient 95,
+                # jumlahnya 1,373. Akibatnya terukur — apa pun di atas 186 dari
+                # 255 pasti terpotong jadi putih. Kulit bawaan "Cerah"
+                # (255,225,180) jadi bidang putih rata tanpa satu pun detail
+                # wajah tersisa, dan dinding rumah krem (248,235,200) ikut.
+                # Nisbah warnanya dipertahankan persis, cuma skalanya diturunkan
+                # ke batas yang komentarnya sendiri sebutkan.
                 if 6 <= hour < 17:
                     # Siang: sinar matahari hangat keemasan (Animal Crossing golden feel)
-                    target_sun = color.rgb(255, 248, 215) if not is_raining else color.rgb(145, 145, 158)
-                    target_amb = color.rgb(95, 90, 78, 255) if not is_raining else color.rgb(62, 62, 72, 255)
+                    target_sun = color.rgb(185, 180, 156) if not is_raining else color.rgb(145, 145, 158)
+                    target_amb = color.rgb(70, 66, 57, 255) if not is_raining else color.rgb(62, 62, 72, 255)
                     target_sky = color.rgb(128, 205, 248) if not is_raining else color.rgb(88, 98, 115)
                     target_cloud = color.rgb(248, 248, 255, 175) if not is_raining else color.rgb(145, 148, 162, 215)
                 elif 17 <= hour < 19:
                     # Senja: oranye kemerahan lembut
-                    target_sun = color.rgb(255, 162, 72) if not is_raining else color.rgb(148, 95, 72)
-                    target_amb = color.rgb(88, 55, 45, 255) if not is_raining else color.rgb(55, 38, 35, 255)
+                    # Senja ikut diturunkan dengan alasan yang sama: 255+88 =
+                    # 343 di kanal merah, jauh di atas batas.
+                    target_sun = color.rgb(185, 118, 52) if not is_raining else color.rgb(148, 95, 72)
+                    target_amb = color.rgb(70, 44, 36, 255) if not is_raining else color.rgb(55, 38, 35, 255)
                     target_sky = color.rgb(248, 138, 88) if not is_raining else color.rgb(115, 82, 82)
                     target_cloud = color.rgb(255, 195, 148, 145) if not is_raining else color.rgb(135, 108, 102, 195)
                 else:

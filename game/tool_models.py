@@ -49,6 +49,9 @@ KADO       = color.rgb(168,  82,  80)
 PITA       = color.rgb(226, 198, 124)
 PELAMPUNG  = color.rgb(206,  78,  62)
 SENAR      = color.rgb(232, 230, 214)
+AIR        = color.rgb(118, 176, 206)   # air di ember/palung
+BULU_SIKAT = color.rgb( 78,  62,  46)   # bulu sikat ternak
+BULU_SIKAT_TUA = color.rgb( 54,  42,  32)
 
 
 # ─── GEOMETRI DASAR ─────────────────────────────────────────────────────────
@@ -172,6 +175,65 @@ def _build_penyiram(r):
     _rod(r, (0, -0.075, 0.318), SENG_TUA, 10, 0.058, 0.050, 0.028, rot=(64, 0, 0))
 
 
+def _build_ember(r):
+    """Ember seng untuk mengisi palung minum ternak.
+
+    Sengaja BUKAN gembor: gembor punya corong panjang dan kepala percik, jadi
+    di filmstrip 30 fps keduanya harus bisa dipisah sekilas. Ember dibaca dari
+    siluetnya — badan mengerucut ke bawah, bibir lebar, satu busur pegangan
+    yang menyeberang di atas mulut. Titik genggam (0,0,0) duduk di busur itu,
+    supaya memiringkan ember memutar mulutnya, bukan pangkalnya.
+    """
+    # Badan mengerucut: mulut lebar di atas, dasar lebih sempit.
+    _rod(r, (0, -0.185, 0), SENG,     12, 0.098, 0.132, 0.215)
+    _rod(r, (0, -0.296, 0), SENG_TUA, 12, 0.100, 0.100, 0.016)   # dasar
+    _rod(r, (0, -0.076, 0), SENG_TUA, 12, 0.136, 0.136, 0.020)   # bibir mulut
+    # Air di dalamnya — sedikit di bawah bibir, jadi saat ember dimiringkan
+    # 100° penonton melihat bidang biru itu memang berada di mulut ember.
+    _rod(r, (0, -0.098, 0), AIR,      12, 0.124, 0.124, 0.012)
+    # Busur pegangan menyeberang di atas mulut; inilah yang digenggam.
+    _box(r, (-0.128, -0.038, 0), (0.018, 0.088, 0.020), BESI_TUA, rot=(0, 0, 22))
+    _box(r, ( 0.128, -0.038, 0), (0.018, 0.088, 0.020), BESI_TUA, rot=(0, 0, -22))
+    _box(r, ( 0.000,  0.004, 0), (0.268, 0.018, 0.020), BESI)
+
+
+def _build_sikat(r):
+    """Sikat ternak: balok kayu segenggam dengan bulu kaku di sisi bawah.
+
+    Kecil, jadi siluetnya harus keras: papan terang di atas, pita bulu gelap
+    rapat di bawah, dan busur pegangan yang jelas. Tanpa pita gelap itu sikat
+    terbaca sebagai potongan kayu tak berarti saat tangan bergerak cepat.
+    """
+    _box(r, (0, -0.055, 0), (0.075, 0.055, 0.185), KAYU)          # punggung sikat
+    _box(r, (0, -0.028, 0), (0.062, 0.030, 0.150), KAYU_TUA)      # pegangan cekung
+    # Bulu: satu pita gelap + tiga baris gigi supaya ujungnya tidak rata mati.
+    _box(r, (0, -0.098, 0), (0.072, 0.038, 0.178), BULU_SIKAT)
+    for dz in (-0.058, 0.0, 0.058):
+        _box(r, (0, -0.120, dz), (0.066, 0.020, 0.040), BULU_SIKAT_TUA)
+
+
+def _build_gunting(r):
+    """Gunting cukur domba: dua bilah panjang dari satu pegas U.
+
+    Bukan gunting jahit — gunting domba tradisional adalah sepasang bilah
+    yang disatukan pegas, jadi siluetnya sempit dan panjang. Itu yang membuat
+    aksi mencukur bisa dibedakan dari menyikat sekilas.
+    """
+    _rod(r, (0, 0.035, 0), BESI_TUA, 8, 0.020, 0.020, 0.075)      # pegas U
+    for sx in (-1, 1):
+        _box(r, (sx * 0.020, -0.120, 0), (0.016, 0.235, 0.030), BESI,
+             rot=(0, 0, sx * 3.5))
+        _box(r, (sx * 0.026, -0.255, 0), (0.012, 0.090, 0.024), BESI_KILAP,
+             rot=(0, 0, sx * 5.0))
+
+
+def _build_hasil(r):
+    """Wadah hasil di tangan: bakul kecil tempat telur/wol/susu ditaruh."""
+    _rod(r, (0, -0.090, 0), ANYAM, 10, 0.090, 0.105, 0.115)
+    _rod(r, (0, -0.036, 0), ANYAM_TUA, 10, 0.108, 0.108, 0.016)
+    _box(r, (0, 0.002, 0), (0.190, 0.014, 0.016), ANYAM_TUA)
+
+
 def _build_kapak(r):
     """Kapak kayu bakar: gagang 0,70 m, kepala baji dengan bibir terang."""
     _rod(r, (0, -0.170, 0), KAYU, 8, 0.024, 0.020, 0.700)
@@ -274,6 +336,10 @@ _BUILDERS = {
     'pedang':   _build_pedang,
     'pancing':  _build_pancing,
     'bawaan':   _build_bawaan,
+    'ember':    _build_ember,
+    'sikat':    _build_sikat,
+    'gunting':  _build_gunting,
+    'hasil':    _build_hasil,
 }
 
 # Urutan persis config.TOOLS:
@@ -301,6 +367,10 @@ CARRY_POSE = {
     'pedang':   ( -6.0,  0.0,  -6.0),
     'pancing':  (-152.0, 0.0,  10.0),
     'bawaan':   (  0.0,  0.0,   0.0),
+    'ember':    (  0.0,  0.0,   0.0),
+    'sikat':    (  0.0,  0.0,   0.0),
+    'gunting':  (  0.0,  0.0,   0.0),
+    'hasil':    (  0.0,  0.0,   0.0),
 }
 
 # Geseran kecil supaya gagang duduk di tengah kepalan, bukan di titik tulang.
@@ -315,6 +385,10 @@ GRIP_OFFSET = {
     'pedang':   (0.0, 0.0, 0.0),
     'pancing':  (0.0, 0.0, 0.0),
     'bawaan':   (0.0, -0.02, 0.0),
+    'ember':    (0.0, -0.03, 0.0),
+    'sikat':    (0.0, -0.02, 0.0),
+    'gunting':  (0.0, -0.02, 0.0),
+    'hasil':    (0.0, -0.03, 0.0),
 }
 
 

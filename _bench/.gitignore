@@ -58,3 +58,7 @@
 #
 # Tidak ada yang hilang: halaman itu turunan. `bash tools/bench.sh` membangunnya
 # ulang dalam ~3,5 menit dari slices.json, temuan.json, dan game itu sendiri.
+
+# Dari cabang livestock:
+!BRIEF.md
+!progress.jsonl

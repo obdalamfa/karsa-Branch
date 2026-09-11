@@ -444,7 +444,27 @@ def _ui(model='quad', **kw):
     return Entity(parent=camera.ui, model=model, **kw)
 
 
-_FONT_NAME = 'Montserrat-Bold.ttf'  # Ursina cari via glob(**) di asset_folder
+# Ursina lama menemukan font ini lewat glob(**) di asset_folder; Ursina baru
+# menyerahkannya mentah-mentah ke Panda3D loadFont(), yang hanya melihat model
+# path. Jadi pakai jalur absolut kalau file-nya memang ada di repo — nama telanjang
+# hanya sebagai cadangan supaya instalasi lama tetap jalan.
+_FONT_FILE = (_Path(__file__).resolve().parent.parent
+              / 'assets' / 'fonts' / 'Montserrat-Bold.ttf')
+# NAMA TELANJANG, bukan jalur absolut — dan ini dikembalikan dengan sengaja.
+#
+# Cabang livestock mengubah baris ini jadi `_FONT_FILE.as_posix()`, dan git
+# meng-auto-merge-nya tanpa konflik. Di pohon INI perubahan itu salah dan
+# membuat game GAGAL DIBANGUN TOTAL: `app.py` sudah mendaftarkan root dan
+# `assets/fonts` ke model-path Panda3D sejak baris 29, jadi nama telanjang
+# justru yang bisa ditemukan — sementara jalur absolut diserahkan mentah ke
+# `loader.loadFont()`, gagal di-resolve (jalurnya memuat spasi: "Game
+# Research"), dan `font_file_path` kembali None:
+#
+#     AttributeError: 'NoneType' object has no attribute 'parent'
+#
+# Ini jenis kerusakan yang paling mahal di merge: TIDAK ADA konflik, jadi tidak
+# ada yang meminta keputusan, dan baru ketahuan saat game menolak boot.
+_FONT_NAME = 'Montserrat-Bold.ttf'
 
 # ── Skin panel 'chrome' ala TSO (ROADMAP M3-A) ──
 _CHROME_PATH = _Path(__file__).resolve().parent.parent / 'assets' / 'ui' / 'panel_chrome.png'

@@ -209,6 +209,14 @@ def cek_motif_waras(g):
     mood = mv.mood
     if mood != mood or abs(mood) > 1e6:
         return _fail(f'mood tidak terhingga: {mood}')
+    # Dua sesi menemukan bug yang SAMA di pemeriksa ini secara terpisah: ia
+    # men-tick state hidup dan jalan sekali per scene, jadi di scene ke-14
+    # motifnya sudah diluruhkan 14x4 jam tanpa pernah makan dan pemeriksanya
+    # melaporkan GAGAL karena memakan umpannya sendiri. Cabang livestock
+    # memperbaikinya dengan MEMULIHKAN nilai sesudah tick; versi di bawah
+    # mengujinya pada SALINAN. Yang ini yang dipakai: ia tidak menyentuh state
+    # hidup sama sekali, jadi tidak ada yang perlu dipulihkan dan tidak ada
+    # ketergantungan pada atribut privat `_acc`/`_tick_carry`.
     # Peluruhan diuji pada SALINAN, bukan pada state yang dipakai game.
     #
     # Versi sebelumnya men-tick state hidup, dan pemeriksaan ini jalan sekali

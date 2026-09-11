@@ -29,6 +29,7 @@ from .pathfinder import PathGrid, PathMover
 from .controllers.time_controller import TimeController
 from .controllers.quest_controller import QuestController
 from .controllers.interaction_controller import InteractionController
+from . import care_anim
 
 TS = TILE_SIZE
 _GH = GROUND_H
@@ -166,6 +167,12 @@ class Player3D(Entity):
         self._held_tool_idx    = None
         self._alat_tampil      = False
         self._alat_ekor        = 0.0
+        # Aksi perawatan berdurasi (care_anim.AksiRawat) atau None. Bukan bagian
+        # dari _attack_anim: yang ini punya fase, kurva, dan banyak sendi, dan
+        # ia menulis pose SESUDAH blok animasi lama supaya tidak ditimpa
+        # lerp-ke-nol milik pose diam.
+        self._care_anim        = None
+        self._care_prop        = None
         self.target_rotation_y = 0.0
         self._tunggangan       = None
         self.velocity_x        = 0.0
@@ -309,19 +316,30 @@ class Player3D(Entity):
             self.waist = _part_box(Vec3(0, WST_Y, 0), (0.40, 0.22, 0.26), cloth, parent=p)
             self.body = _part_box(Vec3(0, CHEST_Y, 0), (0.52, 0.30, 0.30), cloth, parent=p)
 
-            # Neck & Head
-            _part_box(Vec3(0, NECK_Y, 0), (0.14, 0.10, 0.14), skin, parent=p)
+            # Leher dan kerah. Leher lama 0,14 lebar berdiri di antara dada
+            # 0,52 dan kepala 0,35, jadi kepalanya terbaca melayang di atas
+            # sebuah tangkai. Sekarang lehernya lebih lebar dan sengaja
+            # TUMPANG TINDIH dengan keduanya (1,555-1,675 melewati puncak dada
+            # 1,57 dan dasar kepala 1,665), lalu kerah baju menutup sambungannya
+            # — cara yang sama dipakai karakter chibi game pertanian Jepang:
+            # tidak ada leher yang terlihat sama sekali.
+            _part_box(Vec3(0, NECK_Y - 0.005, 0), (0.21, 0.12, 0.19), skin, parent=p)
+            self.kerah = _part_box(Vec3(0, CHEST_Y + 0.155, 0),
+                                   (0.40, 0.07, 0.34), cloth, parent=p)
             if hasattr(self, '_pivot_neck') and self._pivot_neck:
                 destroy(self._pivot_neck)
             self._pivot_neck = Entity(parent=p, position=Vec3(0, HEAD_Y, 0))
-            self.head = _part_box(Vec3(0, 0, 0), (0.35, 0.45, 0.35), skin, parent=self._pivot_neck)
+            # chibi_head_mesh() sudah ada di meshes.py — rounded box dengan
+            # sudut dibevel halus — tapi tidak pernah dipanggil satu kali pun;
+            # kepalanya memakai kubus tajam. Siluet bulat itu yang membedakan
+            # kepala karakter dari sebuah kotak.
+            self.head = _part('chibi_head', Vec3(0, 0, 0), (0.35, 0.45, 0.35),
+                              None, skin, parent=self._pivot_neck)
 
-            # Surreal floating geometric halo
-            self._halo_ring = Entity(model='cylinder', position=Vec3(0, 0.45, 0), scale=(0.5, 0.05, 0.5), color=color.rgb(255, 0, 255), parent=self._pivot_neck)
-            self._halo_cube = Entity(model='cube', position=Vec3(0, 0.7, 0), scale=(0.15, 0.15, 0.15), color=color.rgb(0, 255, 255), parent=self._pivot_neck, rotation=(45, 45, 45))
-            from .smooth_shader import apply_smooth
-            apply_smooth(self._halo_ring, has_texture=False)
-            apply_smooth(self._halo_cube, has_texture=False)
+            # Cincin magenta dan kubus cyan yang dulu melayang di atas kepala
+            # ("surreal floating geometric halo") DIBUANG. Itu perancah uji
+            # yang tertinggal, dan ia terpasang pada setiap pemain.
+            self._bangun_wajah(skin)
 
             # Destroy and recreate pivot shoulders & hips to have proper positions
             if hasattr(self, '_pivot_shoulder_l') and self._pivot_shoulder_l: destroy(self._pivot_shoulder_l)
@@ -435,6 +453,29 @@ class Player3D(Entity):
                     getattr(self, f'shin_{side}').color = pants
             if hasattr(self, 'head') and self.head:
                 self.head.color = skin
+            if hasattr(self, 'kerah') and self.kerah:
+                self.kerah.color = cloth
+            for e in getattr(self, '_rambut', ()) or ():
+                try:
+                    e.color = self._warna_rambut()
+                except Exception:
+                    pass
+
+    # ─── WAJAH ───────────────────────────────────────────
+    # Resepnya ada di game/wajah.py — satu bahasa rupa untuk pemain DAN NPC,
+    # ukurannya pecahan dari setengah-lebar kepala jadi satu resep pas di
+    # kepala pemain (0,175) maupun di kepala manekin NPC (0,36).
+    def _warna_rambut(self):
+        from .wajah import warna_rambut
+        return warna_rambut(self.state)
+
+    def _bangun_wajah(self, skin):
+        """Rambut dan wajah pada kepala voxel pemain."""
+        from .wajah import bangun_rambut, bangun_wajah
+        n = self._pivot_neck
+        HW, HT = 0.175, 0.225          # kepala 0,35 x 0,45
+        self._rambut = bangun_rambut(n, HW, HT, self._warna_rambut())
+        bangun_wajah(n, HW, HT, HW * 1.005)
 
     # ─── POSITION HELPERS ────────────────────────────────
     def set_tile_pos(self, tx: float, ty: float):
@@ -618,6 +659,13 @@ class Player3D(Entity):
         if held_keys['s'] or held_keys['down arrow']:  dz_in -= 1
         if held_keys['a'] or held_keys['left arrow']:  dx_in -= 1
         if held_keys['d'] or held_keys['right arrow']: dx_in += 1
+
+        # Aksi perawatan menyerah begitu pemain memilih jalan. Aksi yang
+        # mengunci pemain sampai selesai adalah cara tercepat membuat orang
+        # merasa game-nya rusak — pelajaran yang sudah dibayar dua kali di
+        # proyek ini ("jalan saja tidak bisa").
+        if (dx_in or dz_in) and self._care_anim is not None:
+            self._care_anim.batal()
 
         is_moving_wasd = False
         run = held_keys['shift'] and s.energy > 0
@@ -1133,7 +1181,28 @@ class Player3D(Entity):
         self._tick_tunggangan(dt)
 
         # Check portals every tick unconditionally so cooldowns don't block standing players
-        self._check_portals(tx_i, ty_i)
+        if self._check_portals(tx_i, ty_i):
+            # Ganti scene MEMBATALKAN aksi perawatan yang sedang berjalan.
+            # Tanpa ini `_saat_frame` terus memanggil `_maju()`, yang menulis
+            # player.x/z tanpa syarat — jadi pemain dipaku di koordinat kandang
+            # yang lama selama sisa aksi, berdiri di peta baru sambil memegang
+            # ember, alat HUD-nya hilang, dan memerah sapi yang ada di peta lain.
+            # (care_anim sudah diimpor di tingkat modul — mengimpornya lagi di
+            # sini membuat namanya LOKAL untuk seluruh tick(), dan pemakaian di
+            # bawah jadi UnboundLocalError tiap kali aksi selesai normal.)
+            care_anim.bereskan(self)
+
+        # ── Aksi perawatan: DIJALANKAN TERAKHIR, dan itu disengaja ──────────
+        # Blok animasi di atas melerp tiap sendi kembali ke nol setiap frame
+        # saat pemain diam. Kalau aksi perawatan menulis posenya lebih dulu,
+        # lerp itu akan menghapusnya di frame yang sama dan tidak ada yang
+        # pernah terlihat bergerak. Menulis terakhir = menang.
+        if self._care_anim is not None:
+            self._care_anim.update(dt)
+            if self._care_anim.selesai:
+                care_anim.bereskan(self)
+            else:
+                self._care_anim.terapkan(self)
 
     # ── Menunggang ────────────────────────────────────────────────────────
     # Tinggi duduk di pelana, dalam satuan dunia. Diambil dari tinggi badan

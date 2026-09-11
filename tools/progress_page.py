@@ -79,6 +79,20 @@ def thumb(path: Path, width: int = THUMB_W) -> str | None:
     return 'data:image/jpeg;base64,' + base64.b64encode(buf.getvalue()).decode()
 
 
+def clip_uri(path: Path, budget_mb: float = 3.0) -> str | None:
+    """Sisipkan mp4 sebagai data URI. None kalau terlalu besar atau gagal.
+
+    Halaman ini untuk DITONTON — animasi tidak bisa dinilai dari gambar diam,
+    dan itu berlaku juga untuk pemiliknya, bukan cuma untuk juri."""
+    try:
+        raw = path.read_bytes()
+    except Exception:
+        return None
+    if len(raw) > budget_mb * 1024 * 1024:
+        return None
+    return 'data:video/mp4;base64,' + base64.b64encode(raw).decode()
+
+
 def newest(pattern: str) -> Path | None:
     hits = sorted(BENCH.glob(pattern), key=lambda p: p.stat().st_mtime)
     return hits[-1] if hits else None
@@ -196,6 +210,8 @@ def build_model():
             # putusan, dan celah yang disebut kritikus — dan itu justru yang
             # ingin ditonton pemilik proyek.
             sheet = None
+        clip = newest(f'clips/{sid}.mp4') or newest(f'clips/{sid}_*.mp4')
+        strip = newest(f'clips/{sid}_strip.png') or newest(f'clips/{sid}_*_strip.png')
         rows.append({
             'id': sid,
             'title': s.get('title') or sid,
@@ -210,6 +226,11 @@ def build_model():
             'sheet': thumb(sheet) if sheet else None,
             'sheet_name': sheet.name if sheet else '',
             'shot': thumb(shot, THUMB_W) if (shot and not sheet) else None,
+            'clip': clip_uri(clip) if clip else None,
+            'clip_name': clip.name if clip else '',
+            'strip': thumb(strip) if strip else None,
+            'strip_name': strip.name if strip else '',
+            'shot': thumb(shot, 560) if (shot and not sheet) else None,
             'events': len(evs),
         })
 
@@ -246,6 +267,19 @@ CSS = """
   --pink:#E77E9A;
   --shadow:0 1px 0 rgba(0,0,0,.4);
 }
+
+figure video{width:100%;border:1px solid var(--edge);border-radius:3px;display:block;background:#000}
+.banner{
+  border:1px solid var(--bronze); border-left-width:4px; border-radius:3px;
+  background:var(--surface); padding:14px 16px; margin:26px 0 8px;
+}
+.banner .k{
+  display:block; font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:10px; letter-spacing:.15em; text-transform:uppercase;
+  color:var(--bronze); margin-bottom:4px;
+}
+.banner b{display:block;margin-bottom:5px}
+.banner p{margin:0;color:var(--ink-soft);max-width:74ch}
 
 *{box-sizing:border-box}
 body{
@@ -494,6 +528,14 @@ def render() -> str:
                'memilih milik kita &nbsp;·&nbsp; <i>perunggu</i> = juri memilih '
                'tangkapan layar aslinya, bagian dikembalikan ke pembangun.</p>')
 
+    st = BENCH / 'bar' / 'STATUS.md'
+    if st.exists():
+        teks = st.read_text(encoding='utf-8', errors='replace').strip()
+        judul, _, isi = teks.partition('\n')
+        out.append('<div class="banner"><span class="k">Status patokan</span>'
+                   f'<b>{html.escape(judul.lstrip("# ").strip())}</b>'
+                   f'<p>{html.escape(isi.strip())}</p></div>')
+
     out.append('<h2 class="sec">Bagian</h2>')
     if not rows:
         out.append('<div class="empty">Pemetaan bagian belum selesai. '
@@ -531,6 +573,16 @@ def render() -> str:
         if r['open_gap']:
             out.append('<p class="gap"><span class="k">Celah terbesar</span>'
                        f'{html.escape(r["open_gap"])}</p>')
+        if r['clip']:
+            out.append(f'<figure><video src="{r["clip"]}" controls loop muted '
+                       'playsinline preload="metadata"></video>'
+                       f'<figcaption>klip dari game yang benar-benar jalan · '
+                       f'{html.escape(r["clip_name"])}</figcaption></figure>')
+        if r['strip']:
+            out.append(f'<figure><img src="{r["strip"]}" alt="Filmstrip '
+                       f'{html.escape(r["id"])}"><figcaption>filmstrip, tiap '
+                       f'petak berlabel ms · {html.escape(r["strip_name"])}'
+                       '</figcaption></figure>')
         img = r['sheet'] or r['shot']
         if img:
             cap = (f'lembar perbandingan buta · {html.escape(r["sheet_name"])}'
@@ -596,9 +648,10 @@ def render() -> str:
             out.append(f'<div><b>{sid}</b> · {role} · {note}</div>')
         out.append('</div>')
 
-    out.append('<footer>Bukti mentah ada di <code>_bench/</code> — '
-               'tangkapan game asli, lembar perbandingan buta, dan '
-               '<code>progress.jsonl</code>. Frame patokan dipakai hanya untuk '
+    out.append('<footer>Bukti mentah ada di <code>_bench/</code> — klip dari '
+               'game yang benar-benar jalan, jejak angka per frame '
+               '(<code>*_trace.json</code>), lembar banding buta, dan '
+               '<code>progress.jsonl</code>. Klip patokan hanya dipakai untuk '
                'pembandingan internal.</footer>')
     out.append('</div>')
     return '\n'.join(out)

@@ -67,6 +67,22 @@ MANIFEST = REFS / 'MANIFEST.json'
 MIN_BYTES = 20_000
 MIN_SISI = 480
 
+# Klip patokan dinilai dengan syarat sendiri: yang membuatnya berguna bukan
+# ukuran berkas tapi JUMLAH FRAME. Satu frame tunggal disimpan sebagai .webp
+# lolos semua ambang gambar diam sementara ia tidak bisa menilai gerak sama
+# sekali — dan gerak justru satu-satunya alasan klip ada di sini.
+#
+# 12 frame = 0,6 detik pada 20 fps. Di bawah itu satu ayunan tidak muat, dan
+# klip yang tidak memuat satu siklus penuh tidak bisa menjawab "apakah ini
+# terbaca sebagai menggosok".
+MIN_BYTES_KLIP = 40_000
+MIN_FRAME_KLIP = 12
+
+# Format yang isinya benar-benar bisa DIPERIKSA di sini (Pillow membacanya),
+# dan format wadah video yang hanya bisa diperiksa ukurannya.
+EKS_KLIP_PERIKSA = ('.webp', '.gif', '.apng', '.png')
+EKS_KLIP_WADAH   = ('.mp4', '.webm', '.mkv', '.mov')
+
 
 def _ter_track_git(paths) -> list:
     """Berkas mana dari `paths` yang dilacak git."""
@@ -99,7 +115,11 @@ def _periksa_kebocoran() -> list:
     from itertools import chain
     kandidat = list(chain(
         (p for p in REFS.glob('*') if p.suffix.lower() in
-         ('.png', '.jpg', '.jpeg', '.webp')),
+         ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.apng',
+          '.mp4', '.webm', '.mkv', '.mov')),
+        # Klip milik KITA tidak berhak ada di git juga: _bench seluruhnya
+        # scratch, dan klip gameplay kita bisa dibangun ulang kapan saja.
+        (ROOT / '_bench' / 'klip').glob('*') if (ROOT / '_bench' / 'klip').exists() else [],
         (ROOT / '_bench' / 'sheets').glob('*') if (ROOT / '_bench' / 'sheets').exists() else [],
         [ROOT / '_bench' / 'progress.html'],
     ))
@@ -120,16 +140,68 @@ def _muat_manifest():
     return data, None
 
 
+def _periksa_klip(slug, p):
+    """(ok, catatan) untuk satu klip patokan.
+
+    Syaratnya beda dari gambar diam, dan bedanya penting: yang membuat klip
+    berguna JUMLAH FRAME-nya, bukan besar berkasnya. Satu frame tunggal
+    disimpan sebagai .webp lolos semua ambang gambar diam dan tetap tidak bisa
+    menilai gerak sedikit pun.
+    """
+    n = p.stat().st_size
+    if n < MIN_BYTES_KLIP:
+        return False, f'{slug}: klip cuma {n} B — bukan rekaman'
+
+    if p.suffix.lower() in EKS_KLIP_WADAH:
+        # Tidak ada ffprobe di lingkungan ini, dan Pillow tidak membaca wadah
+        # video. Jadi isinya TIDAK diperiksa — dan itu dikatakan, bukan
+        # didiamkan. Gerbang yang mengaku memeriksa padahal tidak justru
+        # membuat orang berhenti curiga.
+        return True, (f'{slug}: {p.suffix[1:]} {n // 1024} KiB — '
+                      f'ISI TIDAK DIPERIKSA (tidak ada pembaca video di sini; '
+                      f'pakai .webp animasi kalau ingin diperiksa)')
+
+    try:
+        from PIL import Image
+        with Image.open(p) as im:
+            w, h = im.size
+            n_frame = int(getattr(im, 'n_frames', 1))
+    except Exception as e:
+        return False, f'{slug}: klip tidak bisa dibuka ({e})'
+    if n_frame < MIN_FRAME_KLIP:
+        return False, (f'{slug}: cuma {n_frame} frame — minimal '
+                       f'{MIN_FRAME_KLIP}, satu ayunan tidak muat')
+    if min(w, h) < MIN_SISI:
+        return False, f'{slug}: {w}x{h} terlalu kecil untuk dibandingkan'
+    return True, f'{slug}: {w}x{h}, {n_frame} frame, {n // 1024} KiB'
+
+
 def _periksa_satu(item):
-    """Kembalikan (ok, catatan) untuk satu entri patokan."""
+    """Kembalikan (ok, catatan) untuk satu entri patokan.
+
+    `jenis` di MANIFEST memilih aturannya: 'gambar' (bawaan) atau 'klip'.
+    Dibedakan karena delapan potongan asli menilai TAMPILAN dan bisa dijawab
+    gambar diam, sementara menaiki kuda dan tiap animasi menilai GERAK dan
+    tidak bisa — gambar diam pertama dari klip apa pun akan selalu lolos
+    ambang gambar, dan selalu gagal menjawab pertanyaannya.
+    """
     slug = item.get('slug')
     if not slug:
         return False, 'entri tanpa `slug`'
-    kandidat = [REFS / f'{slug}{ext}' for ext in ('.png', '.jpg', '.jpeg', '.webp')]
+
+    klip = item.get('jenis') == 'klip'
+    eksten = ((EKS_KLIP_PERIKSA + EKS_KLIP_WADAH) if klip
+              else ('.png', '.jpg', '.jpeg', '.webp'))
+    kandidat = [REFS / f'{slug}{ext}' for ext in eksten]
     ada = [p for p in kandidat if p.exists()]
     if not ada:
-        return False, f'{slug}: berkas tidak ada'
+        jenis = 'klip' if klip else 'berkas'
+        return False, f'{slug}: {jenis} tidak ada'
     p = ada[0]
+
+    if klip:
+        return _periksa_klip(slug, p)
+
     n = p.stat().st_size
     if n < MIN_BYTES:
         return False, f'{slug}: cuma {n} B — placeholder, bukan patokan'

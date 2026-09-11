@@ -17,6 +17,7 @@ import base64
 import html
 import io
 import json
+import pathlib
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -107,15 +108,49 @@ def newest(pattern: str) -> Path | None:
 _BUKAN_POTONGAN = {'REGRESI', 'REGRESS', 'PROFIL'}
 
 
+def _bar_gate():
+    """Muat bar_gate sebagai modul, apa pun cara skrip ini dipanggil."""
+    import importlib.util
+    jalur = pathlib.Path(__file__).resolve().parent / 'bar_gate.py'
+    spec = importlib.util.spec_from_file_location('_bar_gate', jalur)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def _ref_ada(slug: str) -> bool:
-    """Frame patokan untuk potongan ini benar-benar ada dan bukan placeholder?"""
+    """Patokan untuk potongan ini ada DAN lolos syarat gerbang?
+
+    Dulu fungsi ini punya aturannya sendiri — empat ekstensi gambar dan ambang
+    20 KiB, disalin dari bar_gate. Menyalin berarti dua sumber kebenaran untuk
+    satu pertanyaan, dan keduanya langsung berselisih begitu klip masuk: klip
+    .webp berisi SATU frame lolos ambang gambar di sini sementara gerbangnya
+    menolaknya karena satu ayunan tidak muat di satu frame. Halaman yang
+    berkata "siap" sementara gerbangnya tertutup adalah persis jenis bukti
+    palsu yang alat-alat ini dibuat untuk mencegah.
+
+    Sekarang ia bertanya ke bar_gate. Satu aturan, satu tempat.
+    """
     if not slug:
         return False
-    for ext in ('.png', '.jpg', '.jpeg', '.webp'):
-        f = BENCH / 'refs' / f'{slug}{ext}'
-        if f.exists() and f.stat().st_size >= 20_000:
-            return True
-    return False
+    try:
+        bg = _bar_gate()
+        for it in (_manifest_frames() or []):
+            if it.get('slug') == slug:
+                return bool(bg._periksa_satu(it)[0])
+        return bool(bg._periksa_satu({'slug': slug})[0])
+    except Exception:
+        return False
+
+
+def _manifest_frames() -> list:
+    man = BENCH / 'refs' / 'MANIFEST.json'
+    if not man.exists():
+        return []
+    try:
+        return json.loads(man.read_text(encoding='utf-8')).get('frames') or []
+    except Exception:
+        return []
 
 
 def baca_patokan() -> dict:
@@ -128,16 +163,11 @@ def baca_patokan() -> dict:
     except Exception:
         return {'bar': None, 'ada': 0, 'total': 0}
     frames = data.get('frames') or []
-    ada = 0
-    for it in frames:
-        slug = it.get('slug')
-        if not slug:
-            continue
-        for ext in ('.png', '.jpg', '.jpeg', '.webp'):
-            f = BENCH / 'refs' / f'{slug}{ext}'
-            if f.exists() and f.stat().st_size >= 20_000:
-                ada += 1
-                break
+    try:
+        bg = _bar_gate()
+        ada = sum(1 for it in frames if bg._periksa_satu(it)[0])
+    except Exception:
+        ada = 0
     return {'bar': data.get('bar'), 'ada': ada, 'total': len(frames)}
 
 

@@ -335,3 +335,86 @@ def build_animal(parent, species: str) -> float:
     """
     fn = _BUILDERS.get(species, _kambing)
     return fn(parent)
+
+# ─── UKURAN BADAN ────────────────────────────────────────────────────────────
+# (setengah_lebar, setengah_panjang, tinggi_punggung) dalam meter, dibaca dari
+# kotak `badan` tiap rig di atas. Dipakai aksi perawatan untuk memutuskan
+# SEBERAPA DEKAT pemain harus berdiri dan SEBERAPA RENDAH ia harus menunduk.
+#
+# Kenapa ini perlu ada: jarak berdiri tetap 1,15 m dari titik tengah hewan
+# terbaca benar pada sapi (setengah-lebar 0,36 — tangan sampai ke lambungnya)
+# dan salah total pada ayam (setengah-lebar 0,11 — sikat berhenti 73 cm dari
+# burungnya, menyapu udara). Diukur, bukan ditebak: probe jarak ujung-alat ke
+# kotak badan memberi min 0,04 m untuk sapi dan 0,73 m untuk ayam pada kode
+# yang sama.
+UKURAN = {
+    'ayam':    (0.11, 0.15, 0.44),
+    'bebek':   (0.12, 0.18, 0.42),
+    'kucing':  (0.10, 0.22, 0.38),
+    'kelinci': (0.10, 0.16, 0.30),
+    'rubah':   (0.12, 0.25, 0.42),
+    'kambing': (0.16, 0.36, 0.74),
+    'domba':   (0.23, 0.39, 0.77),   # diverifikasi lewat getTightBounds torso
+    'sapi':    (0.36, 0.68, 1.37),
+    'kuda':    (0.29, 0.65, 1.56),
+}
+UKURAN_BAKU = (0.20, 0.35, 0.80)
+
+
+def ukuran(species: str) -> tuple[float, float, float]:
+    return UKURAN.get(species, UKURAN_BAKU)
+
+
+def jari_jari_arah(species: str, dx: float, dz: float,
+                   rotasi_y: float = 0.0) -> float:
+    """Jari-jari badan hewan ke arah (dx,dz) dunia — elips, bukan lingkaran.
+
+    Hewan berkaki empat jauh lebih panjang daripada lebar. Memakai satu
+    jari-jari bulat membuat pemain berdiri terlalu jauh saat mendekat dari
+    samping, dan menembus badannya saat mendekat dari depan.
+
+    `rotasi_y` WAJIB diisi arah hadap hewan. Versi pertama fungsi ini
+    memakai elips yang selaras sumbu DUNIA dan tidak pernah menerima rotasi
+    sama sekali — jadi begitu hewannya menoleh, sumbu panjang dan sumbu
+    lebarnya tertukar. Terukur pada sapi (0,36 x 0,68 m): aksi yang sama
+    berhenti 0,30 m di udara saat sapi menghadap 90 derajat, dan menembus
+    0,10 m ke dalam badannya saat menghadap 45 derajat. Galat sebesar itu
+    setengah dari jangkauan alatnya sendiri.
+    """
+    import math
+    hw, hl, _ = ukuran(species)
+    d = math.hypot(dx, dz) or 1.0
+    ux, uz = dx / d, dz / d
+    a = math.radians(rotasi_y)
+    ca, sa = math.cos(a), math.sin(a)
+    lx, lz = ux * ca - uz * sa, ux * sa + uz * ca      # arah dalam ruang hewan
+    denom = (lx / hw) ** 2 + (lz / hl) ** 2
+    return (1.0 / denom) ** 0.5 if denom > 0 else hw
+
+
+def titik_rusuk(cx: float, cz: float, species: str, rotasi_y: float,
+                px: float, pz: float, jangkau: float):
+    """Titik berdiri di RUSUK hewan, dihitung di ruang hewan.
+
+    Sebelum ini tidak ada yang memilih sisi: `_langkah_masuk` menaruh pemain
+    di sinar dari pusat hewan ke tempat pemain kebetulan berdiri. Diukur pada
+    8 arah datang x 4 arah hadap x 5 aksi, sudut sisinya tersebar rata
+    0-180 derajat — seperempat pemerahan terjadi dalam 45 derajat dari moncong
+    sapi, dan mencukur mendarat tepat di depan kepala domba. Tidak ada
+    peternak yang memerah sapi dari depan mukanya.
+
+    Sekarang titiknya dipilih di ruang lokal hewan: lurus di samping badan,
+    setengah badan ke arah pemain, lalu diputar balik ke dunia. Hewan boleh
+    menghadap ke mana saja; pemain selalu berakhir di rusuknya.
+    """
+    import math
+    a = math.radians(rotasi_y)
+    ca, sa = math.cos(a), math.sin(a)
+    dx, dz = px - cx, pz - cz
+    lx = dx * ca - dz * sa
+    hw, _hl, _t = ukuran(species)
+    sisi = 1.0 if lx >= 0.0 else -1.0
+    ox = sisi * (hw + jangkau)
+    # kembali ke dunia (rotasi balik)
+    return cx + ox * ca, cz - ox * sa
+

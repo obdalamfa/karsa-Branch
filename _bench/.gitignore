@@ -2,3 +2,11 @@
 # Not part of the shipped game.
 *
 !.gitignore
+
+# ...KECUALI dua berkas teks yang harus selamat dari kontainer ini: briefing
+# yang dibaca tiap pembangun dan kritikus, dan log progres yang jadi sumber
+# halaman pantauan. Halaman .html-nya sendiri tetap diabaikan — 7,5 MB karena
+# menyisipkan gambar, dan ia bisa dibangun ulang dari log dengan
+# `python tools/progress_page.py`.
+!BRIEF.md
+!progress.jsonl

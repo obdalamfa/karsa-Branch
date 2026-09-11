@@ -1,0 +1,9 @@
+# Berkas hasil olahan Python. Tidak pernah jadi masukan bagi siapa pun, tapi
+# ditulis ulang tiap kali game atau tools/regress.py jalan — tanpa baris ini
+# setiap diff penuh derau dan pohon kerja tidak pernah bersih.
+__pycache__/
+*.py[cod]
+
+# Indeks aset Vitaboy: cache yang dibangun ulang dari assets/vitaboy/ saat
+# boot. Isinya berubah tiap jalan, jadi melacaknya cuma bikin konflik.
+game/vitaboy/.vitaboy_index.pkl

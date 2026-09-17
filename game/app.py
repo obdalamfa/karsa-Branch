@@ -657,7 +657,14 @@ class Game3D:
                 self.panels.open_panel('relations')
             elif key == 'n':
                 self.panels.open_panel('catatan')
-            elif key == 'l':
+            elif key == 'p':
+                self.panels.open_panel('papan')
+            elif key == 'f4':
+                # Ekosistem sempat dipasang di 'l' dan itu BENTROK dengan
+                # Bangun/Beli yang sudah lebih dulu memakai huruf itu. Python
+                # mengambil cabang `elif` pertama yang cocok, jadi panelnya
+                # tidak pernah bisa dibuka — dan tidak ada error apa pun yang
+                # memberi tahu. Huruf sudah habis; F4 masih kosong.
                 self.panels.open_panel('ekosistem')
             elif key == 'k':
                 if self.state.scene_name == 'shop':

@@ -1998,6 +1998,7 @@ class UIManager:
             'help':      'Panduan Kontrol',
             'catatan':   'Catatan Lembah',
             'ekosistem': 'Ekosistem Lembah',
+            'papan':     'Papan Permintaan Warga',
         }
         self._panel_title.text = titles.get(name, name.capitalize())
         # Grid inventory hanya muncul di panel inventory
@@ -2011,6 +2012,9 @@ class UIManager:
             self._panel_hint.text = '[1-9: Olah]   [Q/R: halaman]   [ESC: Tutup]'
         elif name == 'crafting':
             self._panel_hint.text = '[1-5: Pickaxe]   [6-9: Pedang]   [ESC: Tutup]'
+        elif name == 'papan':
+            self._panel_hint.text = ('[1-3: setor permintaan]   [F4: lihat ekosistem]'
+                                     '   [ESC: tutup]')
         else:
             self._panel_hint.text = '[ESC: tutup]'
 
@@ -2042,6 +2046,10 @@ class UIManager:
             else:
                 lines.append("  (Kosong)")
             self._panel_body.text = '\n'.join(lines[:28])
+
+        elif name == 'papan':
+            from .jobs import lines as papan_lines
+            self._panel_body.text = '\n'.join(papan_lines(s)[:30])
 
         elif name == 'ekosistem':
             # Satu-satunya layar yang menjelaskan kenapa hasil memancing hari
@@ -2234,6 +2242,8 @@ class UIManager:
                 "  I: Inventori   M: Peta\n"
                 "  J: Quest       H: Relasi NPC\n"
                 "  N: Catatan Lembah (lore)\n"
+                "  P: Papan Permintaan warga (kerja sampingan)\n"
+                "  L: Bangun/Beli   F4: Ekosistem & harga pasar\n"
                 "  K: Warung, beli & JUAL (di Warung)\n"
                 "  O: Dapur, olah hasil panen (di Rumah)\n"
                 "  Peti Kirim di kebun: jual cepat 85% harga\n"
@@ -2404,6 +2414,11 @@ class UIManager:
             return self._process_item(idx)
         elif self._panel_name == 'crafting':
             return self._craft_item(idx)
+        elif self._panel_name == 'papan':
+            from .jobs import aksi as papan_aksi
+            pesan = papan_aksi(self.state, idx)
+            self._render_panel('papan')
+            return pesan
         return ''
 
     def _buy_shop_item(self, idx: int) -> str:

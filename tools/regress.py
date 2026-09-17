@@ -214,7 +214,14 @@ _HUD_TUNGGAL = (
     '_buff_txt', '_queue_txt', '_control_hint',
     '_motive_panel_bg', '_mood_lbl', '_mood_bg', '_mood_fill',
 )
-_HUD_DERET = ('_need_lbl_ents', '_need_bg_ents', '_need_fill_ents')
+_HUD_DERET = ('_need_lbl_ents', '_need_bg_ents', '_need_fill_ents',
+              '_hud_lain')
+
+# Palang HUD: kotak kejar yang boleh menimpa LATAR, tapi tidak boleh menimpa
+# satu pun teks. Dipisah dari daftar di atas supaya pemeriksaan tindih tahu
+# mana yang palang dan mana yang tulisan tanpa menebak dari namanya.
+_HUD_PALANG = ('_hp_bar', '_en_bar', '_mood_bg', '_mood_fill')
+_HUD_PALANG_DERET = ('_need_bg_ents', '_need_fill_ents')
 
 
 def cek_hud_muat(g):
@@ -289,9 +296,46 @@ def cek_hud_muat(g):
             if lewat > EPS:
                 luber.append(f'{nama} keluar panel {lewat:+.3f}')
 
+    # Tidak satu pun TULISAN boleh tertimpa PALANG.
+    #
+    # Ini kegagalan yang benar-benar terkirim, dan dua pemeriksaan HUD yang
+    # sudah ada tidak bisa melihatnya: hud_muat cuma menanyakan apakah elemen
+    # masih di dalam layar dan panelnya, hud_kontras cuma menanyakan apakah
+    # ada sesuatu yang gelap di belakang teks. Angka "100/100" dijangkar di
+    # tepi ATAS teks (origin bawaan Ursina -0.5, 0.5) pada 0,015 di atas sumbu
+    # palang setinggi 0,015 — jadi teksnya tumbuh KE BAWAH masuk ke palangnya
+    # sendiri, dua pertiga tingginya tertutup, di tiap frame sejak HUD dibuat.
+    # Judul SUASANA HATI kena hal yang sama dari palang Mood.
+    def _palang():
+        for nama in _HUD_PALANG:
+            yield nama, getattr(pan, nama, None)
+        for nama in _HUD_PALANG_DERET:
+            for i, e in enumerate(getattr(pan, nama, []) or []):
+                yield f'{nama}[{i}]', e
+
+    from ursina import Text
+    kotak_palang = [(n, kotak(e)) for n, e in _palang()]
+    kotak_palang = [(n, k) for n, k in kotak_palang if k]
+    tindih = []
+    for nama, e in elemen():
+        if not isinstance(e, Text):
+            continue
+        k = kotak(e)
+        if k is None:
+            continue
+        tx0, tx1, ty0, ty1 = k
+        for pnama, (bx0, bx1, by0, by1) in kotak_palang:
+            lebar  = min(tx1, bx1) - max(tx0, bx0)
+            tinggi = min(ty1, by1) - max(ty0, by0)
+            if lebar > EPS and tinggi > EPS:
+                tindih.append(f'{nama} tertimpa {pnama} '
+                              f'({lebar:.3f}x{tinggi:.3f})')
+                break
+    luber.extend(tindih)
+
     if luber:
         return _fail(f'{len(luber)} elemen terpotong ({"; ".join(luber[:3])})')
-    return _ok(f'tepi ±{ex:.3f}')
+    return _ok(f'tepi ±{ex:.3f}, {len(kotak_palang)} palang bebas teks')
 
 
 def cek_hud_terbaca(g, png):

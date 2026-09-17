@@ -57,6 +57,14 @@ class GameState:
     # rubah, dan kelinci tetap muncul apa adanya: mereka bukan ternak, mereka
     # penghuni, dan tidak ada yang dijual atau dihasilkan dari mereka.
     owned_animals:   list = field(default_factory=list)
+
+    # id hewan yang SEDANG ditunggangi, '' kalau pemain berjalan kaki.
+    # Ditaruh di state, bukan di Player3D, karena tiga sistem lain
+    # harus tahu: entities.py membekukan AI hewan itu dan menempelkannya
+    # ke pemain, _update_npc_schedules berhenti menariknya pulang ke
+    # jadwalnya, dan penyimpanan ikut membawanya sehingga memuat game
+    # tidak menurunkan pemain di tengah jalan.
+    menunggang:      str = ''
     soil:            dict = field(default_factory=dict)
     npc_hearts:      dict = field(default_factory=dict)
     npc_dialog_index:dict = field(default_factory=dict)

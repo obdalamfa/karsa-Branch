@@ -183,6 +183,16 @@ class InteractionController:
         s = self.player.state
         tx, ty = self.player.get_tile_pos()
 
+        # Menunggang mengambil alih [E] seluruhnya. Tombol yang menaikkanmu
+        # adalah tombol yang menurunkanmu — itu satu-satunya cara turun yang
+        # tidak perlu diajarkan. Ia dicek PALING AWAL karena selagi menunggang
+        # pemain berdiri di tile yang sama dengan kudanya: kalau menu radial
+        # hewan sempat terbuka lebih dulu, pilihan "Turun" berada di dalam menu
+        # yang cuma bisa dibuka dari atas kuda, dan pemain terkunci di sana.
+        if getattr(s, 'menunggang', ''):
+            self.naik_turun_kuda(s.menunggang, entities_mgr, panels)
+            return
+
         if s.scene_name == 'beach' and self.try_repair_lighthouse(panels):
             return
         if s.scene_name == 'lake' and self.try_fishing(panels):
@@ -626,10 +636,25 @@ class InteractionController:
             # satu-satunya tempat pemain bisa melihat kenapa sapinya belum
             # menghasilkan tanpa harus menebak takaran mana yang kurang.
             from ..economy import item_name, sell_price
+            from ..player import LAJU_KUDA
             from ..husbandry import (care_of, care_rules, feed_item,
                                      EN_MAKAN, EN_MINUM, EN_GOSOK, EN_AMBIL,
                                      MIN_KENYANG_PRODUKSI, MIN_AIR_PRODUKSI,
                                      MIN_BERSIH_PRODUKSI)
+            # Kuda bukan ternak penghasil — ia tidak ada di care_rules dan
+            # tidak ada di LIVESTOCK_FOR_SALE. Sebelum ini ia jatuh ke cabang
+            # "tidak punya aturan" dan satu-satunya yang bisa dilakukan
+            # padanya adalah membelainya: Pegasus berdiri di padang rumput
+            # selama sebelas tahap quest tanpa satu pun fungsi.
+            if npc.get('type') == 'kuda':
+                sedang = getattr(s, 'menunggang', '') == npc_id
+                return [
+                    ('belai', 'Belai', not sedang, '+8 Senang'),
+                    ('naik_kuda', 'Turun' if sedang else 'Naik Kuda', True,
+                     'kembali berjalan kaki' if sedang else
+                     f'{LAJU_KUDA:.1f}x kecepatan, [E] untuk turun'),
+                ]
+
             r   = care_rules(npc_id)
             rec = care_of(s, npc_id)
             if not r:
@@ -693,6 +718,10 @@ class InteractionController:
                       'arya_tanya', 'sari_gossip', 'budi_riddle',
                       'naga_riddle', 'maya_quest'):
             self.player._play_tool_anim('bicara', 700)
+
+        if action == 'naik_kuda':
+            self.naik_turun_kuda(npc_id, entities_mgr, panels)
+            return
 
         if action == 'sapa':
             s.sosial = min(NEED_MAX, s.sosial + 5)
@@ -811,6 +840,56 @@ class InteractionController:
         for (pos, _pri) in queue_copy:
             self.use_tool_at(tool_idx, pos[0], pos[1], entities_mgr, panels)
         panels.flash_msg(f"{len(queue_copy)} aksi antrian selesai!", 1.2)
+
+    def naik_turun_kuda(self, npc_id: str, entities_mgr=None, panels=None):
+        """Naik ke punggung kuda, atau turun darinya.
+
+        Tunggangan disimpan sebagai `state.menunggang`, bukan sebagai bendera
+        di Player3D, karena tiga sistem lain harus ikut tahu (lihat state.py).
+        Yang dikerjakan di sini cuma peralihannya sendiri.
+        """
+        s = self.player.state
+
+        if getattr(s, 'menunggang', ''):
+            turun_dari = s.menunggang
+            s.menunggang = ''
+            # Kuda digeser satu tile ke BELAKANG pemain, kalau tile itu bisa
+            # diinjak. Tanpa ini pemain mendarat persis di dalam badan kudanya
+            # dan keduanya saling menembus sampai kuda itu kebetulan berjalan.
+            actor = (entities_mgr.actors.get(turun_dari)
+                     if entities_mgr is not None else None)
+            if actor is not None:
+                rad = math.radians(self.player.rotation_y)
+                nx = int(round(actor.logical_x - math.sin(rad)))
+                ny = int(round(actor.logical_y - math.cos(rad)))
+                try:
+                    from ..entities import _can_walk
+                    bisa = _can_walk(nx, ny, s.scene_name, s.dungeon_tiles)
+                except Exception:
+                    bisa = False
+                if bisa:
+                    actor.logical_x, actor.logical_y = float(nx), float(ny)
+                    actor.target_x, actor.target_y = float(nx), float(ny)
+            sound_play('menu_select', 0.7)
+            if panels:
+                panels.flash_msg("Turun dari kuda.", 1.0)
+            return
+
+        # Sapu terbang dan kuda dua-duanya mengangkat pemain dari tanah dan
+        # dua-duanya mengalikan kecepatan; dinyalakan bersamaan, pemain
+        # melayang 1,25 m DI ATAS kuda dengan laju 4,2x. Sapu dimatikan dulu.
+        if getattr(self.player, '_is_flying', False):
+            self.toggle_broom_flying(panels)
+
+        s.menunggang = npc_id
+        # Naik ke kuda menaikkan hati dan senang: ini satu-satunya hal yang
+        # bisa dilakukan dengan Pegasus (produk None), jadi ia harus membayar
+        # sesuatu, atau hewan ini tidak punya alasan untuk ada.
+        s.senang = min(NEED_MAX, getattr(s, 'senang', 100) + 10)
+        s.npc_hearts[npc_id] = min(10.0, s.npc_hearts.get(npc_id, 0) + 0.2)
+        sound_play('quest', 0.9)
+        if panels:
+            panels.flash_msg("Naik kuda! [E] untuk turun.", 1.6)
 
     def toggle_broom_flying(self, panels=None):
         self.player._is_flying = not getattr(self.player, '_is_flying', False)

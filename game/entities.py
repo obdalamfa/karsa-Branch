@@ -16,6 +16,11 @@ from .animal import FarmAnimal
 TS = TILE_SIZE
 GH = GROUND_H
 
+# Tinggi sadel dipakai untuk menaruh kuda tepat DI BAWAH penunggangnya.
+# Diimpor lewat modul, bukan disalin angkanya: menyalin berarti suatu
+# hari salah satu berubah dan pemain melayang di atas pelananya.
+from .player import TINGGI_SADEL as _TINGGI_SADEL
+
 _MODELS_DIR = Path(__file__).resolve().parent.parent / 'assets' / 'models'
 _ASSET_DIR = Path(__file__).resolve().parent.parent / 'assets' / 'textures'
 
@@ -146,6 +151,13 @@ class EntitiesManager:
         s = self.state
         hour = s.get_hour()
         for npc_id in all_npcs():
+            # Hewan yang sedang ditunggangi dikendalikan pemain, bukan
+            # jadwalnya. Jadwal kuda cuma satu baris — (0, 20, 5, 'farm') —
+            # jadi tanpa baris ini, 30 detik setelah pemain menunggangnya ke
+            # kota, `pos['scene'] != target_scene` menyetel ulang scene-nya ke
+            # 'farm' dan memindahkannya ke petak 20,5: kudanya lenyap dari
+            # bawah penunggangnya dan muncul lagi di kandang.
+            if npc_id == getattr(s, 'menunggang', ''): continue
             sched = SCHEDULES.get(npc_id, [])
             if not sched: continue
             current = sched[0]
@@ -513,6 +525,40 @@ class EntitiesManager:
                     actor.y = 0
                     
             elif isinstance(actor, FarmAnimal):
+                if actor_id == getattr(s, 'menunggang', ''):
+                    # Hewan tunggangan: posisi dan arahnya DISALIN dari pemain,
+                    # bukan dihitung. AI-nya dilewati (ia tidak boleh mengembara
+                    # sendiri sambil ditunggangi) dan sync_visuals juga —
+                    # metode itu me-lerp ke posisi logis dan membulatkan arah
+                    # hadap ke empat mata angin, jadi kuda akan tertinggal
+                    # setengah petak di belakang penunggangnya dan berputar
+                    # patah-patah 90 derajat sementara pemain berputar mulus.
+                    if pl is not None:
+                        actor.x, actor.z = pl.x, pl.z
+                        actor.y = pl.y - _TINGGI_SADEL
+                        actor.rotation_y = pl.rotation_y
+                    actor.logical_x, actor.target_x = s.player_x, s.player_x
+                    actor.logical_y, actor.target_y = s.player_y, s.player_y
+                    actor._walk_t += dt * 14.0
+                    # Papan nama hewan duduk 0,45 m di atas kepalanya, yaitu
+                    # tepat di depan dada dan leher penunggangnya: terpotret,
+                    # ia menutup sambungan kepala-badan pemain sehingga
+                    # kepalanya tampak melayang lepas. Selagi ditunggangi,
+                    # nama itu juga tidak memberi tahu apa pun yang belum
+                    # diketahui pemain — ia sedang duduk di atasnya.
+                    if getattr(actor, '_lbl', None) is not None:
+                        actor._lbl.enabled = False
+                    if actor_id in s.npc_positions:
+                        pos = s.npc_positions[actor_id]
+                        pos['x'], pos['y'] = actor.logical_x, actor.logical_y
+                        pos['target_x'], pos['target_y'] = actor.target_x, actor.target_y
+                        # Ikut pindah scene bersama penunggangnya, kalau tidak
+                        # load_scene() menolak memunculkannya di tujuan.
+                        pos['scene'] = s.scene_name
+                    continue
+
+                if getattr(actor, '_lbl', None) is not None and not actor._lbl.enabled:
+                    actor._lbl.enabled = True
                 actor.update_ai(dt, can_walk_fn)
                 if actor_id in s.npc_positions:
                     s.npc_positions[actor_id]['x'] = actor.logical_x

@@ -20,6 +20,8 @@ dan `main.py`, jadi rekamannya bukti, bukan mockup.
         --anim gosok:900 --detik 1.6
     python tools/rekam.py --out _bench/klip/panen.webp --scene farm \\
         --anim bend --detik 1.2 --dist 7 --pitch 16
+    python tools/rekam.py --out _bench/klip/naik_kuda.webp --scene farm \\
+        --naik kuda_pegasus --keys d --detik 2.0 --dist 8 --pitch 12
 
 Catatan kecepatan: tidak ada GPU di container ini (Mesa llvmpipe), jadi
 merekam 2 detik pada 20 fps berarti 40 frame yang tiap satunya butuh
@@ -82,6 +84,12 @@ def main():
     ap.add_argument('--anim', default=None,
                     help='mode animasi pemain, mis. gosok atau gosok:900')
     ap.add_argument('--keys', default='', help='daftar tombol, dipisah koma')
+    ap.add_argument('--naik', default=None, metavar='ID_HEWAN',
+                    help='naikkan pemain ke hewan ini sebelum merekam, mis. '
+                         'kuda_pegasus. Tanpa ini klip naik_kuda di '
+                         '_bench/refs/MANIFEST.json tidak punya padanan dari '
+                         'sisi kita, karena tidak ada tombol yang menaiki kuda '
+                         '— menunggang dimulai dari menu radial [E].')
     ap.add_argument('--at', default=None, help='taruh pemain di x,y')
     ap.add_argument('--pitch', type=float, default=None)
     ap.add_argument('--yaw', type=float, default=None)
@@ -150,6 +158,28 @@ def main():
 
     for _ in range(args.warmup):
         base.taskMgr.step()
+
+    if args.naik:
+        # Pemain ditaruh di petak hewannya dulu; naik_turun_kuda tidak
+        # memeriksa jarak (pemeriksaan jarak ada di pembuka menu radialnya),
+        # tapi klip yang merekam pemain menunggang kuda di seberang layar
+        # tidak membuktikan apa pun.
+        try:
+            hewan = g.entities.actors.get(args.naik)
+            if hewan is None:
+                print(f'REKAM_WARN: hewan {args.naik} tidak ada di scene '
+                      f'{g.world.scene_name}', file=sys.stderr)
+            else:
+                g.player.set_tile_pos(hewan.logical_x, hewan.logical_y)
+                for _ in range(4):
+                    base.taskMgr.step()
+                g.player.interaction_controller.naik_turun_kuda(
+                    args.naik, g.entities, g.panels)
+                for _ in range(20):
+                    base.taskMgr.step()
+                g._snap_camera_to_player()
+        except Exception:
+            traceback.print_exc()
 
     for k in [x for x in args.keys.split(',') if x]:
         try:

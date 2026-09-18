@@ -391,7 +391,8 @@ class EntitiesManager:
                 # get_npc_model_name() mengembalikan 'humanoid' untuk SEMUA
                 # hewan — sapi, ayam dan kucing memakai mesh manusia yang sama.
                 from .animal_models import build_animal
-                h = build_animal(actor, ANIMAL_NPCS[actor_id].get('type', ''))
+                h = build_animal(actor, ANIMAL_NPCS[actor_id].get('type', ''),
+                                 kunci=actor_id)
                 # Hewan dibangun menghadap +Z (konvensi base_actor.sync_visuals),
                 # dan kamera default juga memandang ke +Z — jadi pada rotation_y
                 # 0 pemain selalu melihat PUNGGUNG hewan, sementara kepala,

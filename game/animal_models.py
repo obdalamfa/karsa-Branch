@@ -31,7 +31,7 @@ ke variabel lalu memakainya untuk dua Entity.
 """
 from ursina import Entity, color
 
-from .meshes import creature_body_mesh, low_cone_mesh
+from .meshes import creature_body_mesh, low_cone_mesh, mata_mesh
 from .smooth_shader import apply_smooth
 
 
@@ -65,7 +65,17 @@ _C = {
     'putih':       color.rgb(206, 202, 194),   # L 79 — dada/ujung ekor
     'kelinci':     color.rgb(196, 190, 180),   # L 74 — kelinci
     'telinga_dlm': color.rgb(180, 138, 134),   # L 58 — dalam telinga kelinci
-    'hidung':      color.rgb( 46,  40,  40),   # L 16 — hidung/mata
+    'hidung':      color.rgb( 46,  40,  40),   # L 16 — hidung/moncong
+    # Mata. Pupil sedikit HANGAT, bukan hitam netral: hitam murni pada bidang
+    # sekecil ini terbaca sebagai lubang, bukan sebagai bola mata.
+    'mata':        color.rgb( 38,  32,  36),   # L 13 — pupil
+    # Sklera adalah satu-satunya warna di modul ini yang sengaja melewati batas
+    # atas 205. Batas itu ada supaya BENTUK DI DALAM sebuah bidang terang tidak
+    # terjepit jadi putih rata; sklera tidak punya bentuk di dalamnya — pupilnya
+    # adalah entity terpisah di depannya — jadi "putih rata" justru yang dicari.
+    # Tanpa sklera, mata gelap di atas kepala gelap (bebek L 23, muka domba
+    # L 23, kambing L 36, kuda L 35) hilang sama sekali.
+    'sklera':      color.rgb(228, 224, 216),   # L 88 — putih mata
 }
 
 
@@ -84,6 +94,116 @@ def _cone(parent, pos, scale, col, rot=(0, 0, 0)):
                position=pos, scale=scale, rotation=rot, color=col)
     apply_smooth(e)
     return e
+
+
+def _mata(akar, kepala, *, d, naik=0.0, maju=0.0, pisah=0.62, arah='samping',
+          pupil=None):
+    """Sepasang mata menempel di `kepala`. Tiga bola per mata.
+
+    Kenapa modul ini sempat TIDAK punya mata sama sekali: sembilan spesies,
+    semuanya lengkap dengan moncong, tanduk, telinga, ambing, ekor dan kuku —
+    dan tidak satu pun punya mata. Padahal hewan-hewan inilah pokok seluruh
+    aksi perawatan; pemain berdiri 60 cm dari kepala sapi selama 1,9 detik
+    tiap kali memerah.
+
+    Empat keputusan yang membentuk resep ini, tiga di antaranya datang dari
+    memotret hasilnya dan melihat yang salah, bukan dari merencanakannya:
+
+      * LETAK menentukan spesies. Mangsa (ayam, bebek, kelinci, kambing,
+        domba, sapi, kuda) bermata di SISI kepala — dua mata yang tidak pernah
+        terlihat bersamaan, dan itulah yang membuat siluetnya terbaca sebagai
+        ternak. Pemangsa (kucing, rubah) bermata di DEPAN, berpasangan.
+      * BULAT. Ronde pertama memakai creature_body_mesh seperti bagian lain,
+        dan bentuk itu eksponen 0,10 — hampir kubus. Terpotret dari depan,
+        mata kucing keluar sebagai dua PERSEGI putih bertambal kotak hitam:
+        terbaca sebagai kacamata las. `mata_mesh()` ada khusus untuk ini dan
+        satu-satunya bentuk bulat sejati di proyek ini.
+      * SKLERA HARUS TETAP TERLIHAT DARI SUDUT MIRING, TAPI TIPIS SAJA. Ronde
+        pertama menaruh pupil jauh lebih menonjol daripada sklera dan dari
+        sudut tiga-perempat pupil menutupi sklera sepenuhnya: mata sapi
+        terbaca sebagai LUBANG gelap. Ronde kedua membalikkannya terlalu jauh —
+        pupil 0,55 d di atas bola pucat, dan mata sapi terpotret sebagai BOLA
+        PINGPONG yang ditempel di pipi. Ternak bermata sisi hampir seluruhnya
+        iris gelap dengan pelipit pucat setipis benang, jadi pupilnya 0,76 d;
+        pemangsa bermata depan memang berputih-mata lebar, jadi 0,55 d.
+        Offsetnya dihitung dari rasio itu, bukan dipatok, supaya pupil selalu
+        duduk PERSIS menyembul di atas bola sklera berapa pun besarnya.
+      * UKURAN mengikuti bahasa game kehidupan Jepang, bukan anatomi. Mata sapi
+        asli berdiameter ~3,5 cm — persis di bawah ambang ~3 cm yang docstring
+        modul ini sendiri sebut tidak pernah sampai ke layar.
+
+    Mata dikaitkan ke ENTITY KEPALA, bukan ke akar rig, supaya ia ikut kalau
+    kepala itu dirotasi — kepala kuda miring 26°. Karena kepala berskala
+    tak-seragam (kuda 0,27 x 0,32 x 0,56), tiap ukuran DIBAGI skala kepala:
+    tanpa itu bola matanya ikut lonjong dua kali panjang.
+
+    `d` diameter sklera dalam meter; `naik`/`maju` pecahan setengah-ukuran
+    kepala; `pisah` jarak antar-mata (hanya `arah='depan'`); `pupil` pecahan
+    diameter sklera (baku 0,76 untuk mata sisi, 0,55 untuk mata depan).
+    """
+    if pupil is None:
+        pupil = 0.76 if arah == 'samping' else 0.55
+    # Pupil harus MENYEMBUL dari bola sklera, dan rumus pertama gagal persis di
+    # situ: (0,5 - 0,38) * 0,9 = 0,108 menaruh titik terluar pupil di 0,488 d,
+    # yaitu DI DALAM bola sklera berjari 0,5 d. Terpotret: mata domba keluar
+    # sebagai bola putih polos tanpa pupil sama sekali. Sekarang pusat pupil
+    # ditaruh sedalam 0,80 jari-jarinya sendiri dari permukaan sklera, jadi
+    # tutupnya selalu tembus: cakram gelap selebar ~68% mata pada ternak
+    # bermata sisi, ~43% pada pemangsa bermata depan yang memang berputih lebar.
+    maju_pupil = 0.5 - 0.40 * pupil
+    # Seberapa dalam bola sklera tertanam di kepala. Mata SISI duduk di bidang
+    # datar dan boleh menyembul penuh — terpotret, sapi/kambing/kuda terbaca
+    # benar begitu. Mata DEPAN tidak: bola yang menyembul dari muka rata
+    # terlihat siluetnya menonjol keluar dari kepala, dan kucing terpotret
+    # jadi belo. Jadi mata depan ditanam 0,12 d ke dalam — lebarnya nyaris
+    # tidak berkurang (0,485 d dari 0,5 d) tapi tonjolannya hilang.
+    tanam = 0.04 if arah == 'samping' else -0.12
+    sx_, sy_, sz_ = float(kepala.scale_x), float(kepala.scale_y), float(kepala.scale_z)
+    bola = getattr(akar, '_mata_bola', None)
+    if bola is None:
+        bola = []
+        akar._mata_bola = bola
+    kilau = getattr(akar, '_mata_kilau', None)
+    if kilau is None:
+        kilau = []
+        akar._mata_kilau = kilau
+
+    def bagian(pos, diameter, col):
+        e = Entity(parent=kepala, model=mata_mesh(), position=pos,
+                   scale=(diameter / sx_, diameter / sy_, diameter / sz_),
+                   color=col)
+        apply_smooth(e)
+        return e
+
+    for s in (-1, 1):
+        # Pusat bola sklera duduk di permukaan kepala, digeser `tanam`. Ronde
+        # kedua memakai 0,18 d untuk semua dan bolanya terlihat ditempel dari
+        # luar, bukan duduk di tengkorak.
+        if arah == 'samping':
+            # Bidang sisi kepala datar sempurna sampai ~0,8 setengah-lebar
+            # (superelipsoid e=0,10), jadi mata di |naik| <= 0,5 duduk persis
+            # di x = +-0,5 lokal.
+            pusat = (s * (0.5 + d * tanam / sx_), naik * 0.5, maju * 0.5)
+            keluar = (s * d / sx_, 0.0, 0.0)          # arah menonjol
+            # Kilau di arah yang SAMA pada kedua mata — satu sumber cahaya dari
+            # depan-atas. Kilau simetris cermin terbaca sebagai dua bola kaca.
+            sudut = (0.0, d * 0.21 / sy_, d * 0.21 / sz_)
+        else:
+            pusat = (s * pisah * 0.5, naik * 0.5, 0.5 + d * tanam / sz_)
+            keluar = (0.0, 0.0, d / sz_)
+            sudut = (-d * 0.21 / sx_, d * 0.21 / sy_, 0.0)
+
+        def geser(f, tambah=(0.0, 0.0, 0.0)):
+            return (pusat[0] + keluar[0] * f + tambah[0],
+                    pusat[1] + keluar[1] * f + tambah[1],
+                    pusat[2] + keluar[2] * f + tambah[2])
+
+        bola.append(bagian(pusat,                    d,         _C['sklera']))
+        bola.append(bagian(geser(maju_pupil),        d * pupil, _C['mata']))
+        # Kilau duduk di luar bola sklera (0,46 d + geser sudut 0,21 d), jadi
+        # ia tidak pernah tenggelam berapa pun besar pupilnya.
+        kilau.append(bagian(geser(0.46, sudut), d * 0.17,
+                            color.rgb(255, 255, 255)))
 
 
 def _legs(parent, col, x, z, top_y, h, thick):
@@ -123,7 +243,8 @@ def _ayam(r):
     _box(r,  (0, 0.31,  0.00), (0.22, 0.25, 0.30), _C['bulu_krem'])       # badan
     _box(r,  (0, 0.44, -0.16), (0.15, 0.21, 0.13), _C['bulu_krem'], (-48, 0, 0))  # ekor
     _box(r,  (0, 0.40,  0.09), (0.11, 0.15, 0.11), _C['bulu_krem'])       # leher
-    _box(r,  (0, 0.49,  0.10), (0.16, 0.15, 0.16), _C['bulu_krem'])       # kepala
+    k = _box(r, (0, 0.49, 0.10), (0.16, 0.15, 0.16), _C['bulu_krem'])     # kepala
+    _mata(r, k, d=0.052, naik=0.18, maju=0.30)
     _box(r,  (0, 0.585, 0.09), (0.035, 0.09, 0.12), _C['jengger'])        # jengger
     _box(r,  (0, 0.425, 0.16), (0.045, 0.08, 0.035), _C['jengger'])       # pial
     _cone(r, (0, 0.485, 0.20), (0.065, 0.10, 0.065), _C['paruh'], (90, 0, 0))
@@ -141,7 +262,8 @@ def _bebek(r):
     _box(r,  (0, 0.26,  0.00), (0.24, 0.22, 0.38), _C['bulu_putih'])      # badan
     _box(r,  (0, 0.32, -0.22), (0.14, 0.11, 0.17), _C['bulu_putih'], (-26, 0, 0))
     _box(r,  (0, 0.41,  0.11), (0.12, 0.24, 0.12), _C['kepala_gelap'])    # leher
-    _box(r,  (0, 0.53,  0.13), (0.16, 0.15, 0.18), _C['kepala_gelap'])    # kepala
+    k = _box(r, (0, 0.53, 0.13), (0.16, 0.15, 0.18), _C['kepala_gelap'])  # kepala
+    _mata(r, k, d=0.050, naik=0.20, maju=0.24)
     _box(r,  (0, 0.505, 0.26), (0.14, 0.055, 0.16), _C['paruh'])          # paruh pipih
     return 0.60
 
@@ -159,7 +281,13 @@ def _kucing(r):
             _box(r, (sx, 0.03, sz), (0.075, 0.06, 0.10), _C['putih'])     # kaus kaki
     _box(r,  (0, 0.31,  0.00), (0.18, 0.18, 0.38), _C['kucing'])          # badan
     _box(r,  (0, 0.25,  0.19), (0.15, 0.12, 0.12), _C['putih'])           # dada putih
-    _box(r,  (0, 0.42,  0.25), (0.18, 0.17, 0.16), _C['kucing'])          # kepala
+    k = _box(r, (0, 0.42, 0.25), (0.18, 0.17, 0.16), _C['kucing'])        # kepala
+    # Terpotret dan diperbaiki: d 0,062 / naik 0,60 / pisah 0,80 menaruh dua
+    # persegi putih di SUDUT ATAS kepala, setengahnya menggantung keluar dari
+    # siluet — terbaca sebagai kacamata, bukan mata. Yang menahan mata ini
+    # tidak bisa turun lebih jauh adalah kotak moncong (puncaknya y 0,435,
+    # dan ia duduk 3,5 cm lebih depan daripada muka).
+    _mata(r, k, d=0.050, naik=0.46, pisah=0.64, arah='depan')
     _box(r,  (0, 0.39,  0.33), (0.11, 0.09, 0.07), _C['putih'])           # moncong
     _box(r,  (0, 0.405, 0.375),(0.045, 0.04, 0.035), _C['hidung'])
     for sx in (-0.06, 0.06):
@@ -181,7 +309,8 @@ def _kelinci(r):
         _box(r, (sx, 0.075, -0.09),(0.085, 0.15, 0.18), _C['kelinci'])    # kaki belakang
     _box(r,  (0, 0.24,  0.02), (0.19, 0.22, 0.28), _C['kelinci'])         # badan
     _box(r,  (0, 0.28, -0.10), (0.21, 0.25, 0.19), _C['kelinci'])         # pinggul
-    _box(r,  (0, 0.37,  0.16), (0.16, 0.16, 0.17), _C['kelinci'])         # kepala
+    k = _box(r, (0, 0.37, 0.16), (0.16, 0.16, 0.17), _C['kelinci'])       # kepala
+    _mata(r, k, d=0.054, naik=0.24, maju=0.08)
     _box(r,  (0, 0.34,  0.25), (0.10, 0.09, 0.07), _C['kelinci'])
     _box(r,  (0, 0.35,  0.285),(0.045, 0.04, 0.035), _C['telinga_dlm'])   # hidung
     for sx in (-0.055, 0.055):
@@ -199,7 +328,8 @@ def _rubah(r):
     _legs(r, _C['kaki_hitam'], 0.10, 0.18, 0.26, 0.26, 0.075)
     _box(r,  (0, 0.36,  0.00), (0.22, 0.21, 0.46), _C['rubah'])           # badan
     _box(r,  (0, 0.31,  0.20), (0.18, 0.14, 0.18), _C['putih'])           # dada
-    _box(r,  (0, 0.48,  0.31), (0.20, 0.19, 0.19), _C['rubah'])           # kepala
+    k = _box(r, (0, 0.48, 0.31), (0.20, 0.19, 0.19), _C['rubah'])         # kepala
+    _mata(r, k, d=0.052, naik=0.36, pisah=0.58, arah='depan')
     _cone(r, (0, 0.44,  0.45), (0.115, 0.19, 0.115), _C['rubah'], (90, 0, 0))
     _box(r,  (0, 0.445, 0.535),(0.055, 0.045, 0.045), _C['hidung'])
     for sx in (-0.08, 0.08):
@@ -217,7 +347,11 @@ def _kambing(r):
     _shadow(r, 0.50, 1.00)
     _box(r,  (0, 0.56,  0.00), (0.31, 0.35, 0.72), _C['kambing'])         # badan
     _box(r,  (0, 0.69,  0.34), (0.19, 0.24, 0.22), _C['kambing'], (-28, 0, 0))
-    _box(r,  (0, 0.81,  0.47), (0.20, 0.20, 0.31), _C['kambing'])         # kepala
+    k = _box(r, (0, 0.81, 0.47), (0.20, 0.20, 0.31), _C['kambing'])       # kepala
+    # Maju 0,32: di 0,16 mata duduk tepat di belakang pangkal telinga (z 0,37
+    # sampai 0,47) dan tertutup olehnya dari samping — arah tatap satu-satunya
+    # yang penting pada hewan bermata sisi.
+    _mata(r, k, d=0.062, naik=0.12, maju=0.32)
     _box(r,  (0, 0.76,  0.62), (0.14, 0.12, 0.09), _C['tanduk'])          # moncong
     _box(r,  (0, 0.70,  0.55), (0.07, 0.15, 0.06), _C['tanduk'], (22, 0, 0))  # jenggot
     for sx in (-0.07, 0.07):
@@ -240,7 +374,11 @@ def _domba(r):
     _box(r,  (0, 0.55,  0.00), (0.46, 0.44, 0.78), _C['wol'])             # badan berbulu
     _box(r,  (0, 0.74,  0.02), (0.39, 0.22, 0.62), _C['wol'])             # punuk bulu
     _box(r,  (0, 0.66,  0.38), (0.20, 0.22, 0.24), _C['wol'])             # leher berbulu
-    _box(r,  (0, 0.70,  0.50), (0.19, 0.21, 0.26), _C['kepala_gelap'])    # muka gelap
+    k = _box(r, (0, 0.70, 0.50), (0.19, 0.21, 0.26), _C['kepala_gelap'])  # muka gelap
+    # Muka domba L 23 — ini kepala paling gelap di kandang, dan di sinilah
+    # sklera membayar dirinya: pupil tanpa cakram pucat di belakangnya tidak
+    # terlihat sama sekali di sini.
+    _mata(r, k, d=0.062, naik=0.16, maju=0.34)
     _box(r,  (0, 0.65,  0.62), (0.13, 0.12, 0.09), _C['kepala_gelap'])
     for sx in (-0.135, 0.135):
         _box(r, (sx, 0.745, 0.46), (0.15, 0.05, 0.10), _C['kepala_gelap'],
@@ -258,7 +396,12 @@ def _sapi(r):
     _shadow(r, 0.95, 2.00)
     _box(r,  (0, 1.00,  0.00), (0.72, 0.74, 1.36), _C['sapi_terang'])     # badan
     _box(r,  (0, 1.10,  0.74), (0.46, 0.48, 0.34), _C['sapi_terang'])     # leher
-    _box(r,  (0, 1.06,  1.02), (0.38, 0.38, 0.46), _C['sapi_terang'])     # kepala
+    k = _box(r, (0, 1.06, 1.02), (0.38, 0.38, 0.46), _C['sapi_terang'])   # kepala
+    # Sapi adalah hewan yang paling lama dilihat dari dekat: pemain berdiri
+    # 0,6 m dari kepalanya selama 1,9 detik tiap kali memerah. Matanya dibuat
+    # paling besar di kandang, 13 cm — 34% tinggi kepala, ukuran sapi Story of
+    # Seasons, bukan 3,5 cm ukuran sapi asli yang tidak akan pernah terlihat.
+    _mata(r, k, d=0.120, naik=0.34, maju=0.05)
     _box(r,  (0, 0.98,  1.28), (0.30, 0.24, 0.14), _C['moncong'])         # moncong
     for sx in (-0.185, 0.185):
         _cone(r, (sx, 1.28, 0.94), (0.08, 0.18, 0.08), _C['tanduk'],
@@ -294,7 +437,12 @@ def _kuda(r):
     # tanda yang membedakan kuda dari sapi.
     _box(r,  (0, 1.44,  0.56), (0.36, 0.76, 0.40), _C['kuda'], (-30, 0, 0))  # leher
     _box(r,  (0, 1.46,  0.42), (0.13, 0.74, 0.22), _C['surai'], (-30, 0, 0))  # surai
-    _box(r,  (0, 1.70,  0.84), (0.27, 0.32, 0.56), _C['kuda'], (26, 0, 0))   # kepala
+    k = _box(r, (0, 1.70, 0.84), (0.27, 0.32, 0.56), _C['kuda'], (26, 0, 0))  # kepala
+    # Kepala kuda miring 26° DAN dua kali lebih panjang daripada lebar. Kedua
+    # hal itulah alasan _mata() mengait ke entity kepala lalu membagi tiap
+    # ukuran dengan skala kepala: dipasang di koordinat akar, mata ini akan
+    # menggantung di luar pipi dan lonjong dua kali panjangnya.
+    _mata(r, k, d=0.092, naik=0.26, maju=0.02)
     _box(r,  (0, 1.55,  1.04), (0.23, 0.21, 0.20), _C['kuda'])            # pipi/moncong
     _box(r,  (0, 1.50,  1.13), (0.19, 0.13, 0.10), _C['surai'])           # ujung moncong
     for sx in (-0.09, 0.09):
@@ -327,14 +475,39 @@ HEIGHTS = {
 }
 
 
-def build_animal(parent, species: str) -> float:
+def build_animal(parent, species: str, kunci: str = '') -> float:
     """Pasang rig hewan `species` sebagai anak `parent`. Return tinggi meter.
 
     Spesies tak dikenal jatuh ke kambing — bentuk berkaki empat generik masih
     terbaca sebagai hewan, sedangkan mesh manusia (perilaku lama) tidak.
+
+    Di ujungnya mata yang dipasang tiap builder dikumpulkan jadi satu pengendali
+    `Wajah` di `parent._wajah` — pengendali yang sama persis dengan yang dipakai
+    pemain dan warga, jadi hewan ikut berkedip tanpa jalur kode kedua. Loop
+    entitas sudah men-tick `actor._wajah` untuk SETIAP actor, jadi tidak ada
+    yang perlu ditambahkan di sana.
+
+    `kunci` menyebar fase kedipan. Tanpa itu sekandang sapi berkedip serempak —
+    cacat "pasukan" yang sama yang sudah ditutup di warga. Ia jatuh ke nama
+    spesies kalau pemanggil tidak punya id, yang setidaknya membuat ayam tidak
+    berkedip bersama sapi.
     """
     fn = _BUILDERS.get(species, _kambing)
-    return fn(parent)
+    parent._mata_bola, parent._mata_kilau = [], []
+    h = fn(parent)
+    bola = getattr(parent, '_mata_bola', None) or []
+    if bola:
+        from .wajah import Wajah
+        w = Wajah(bola, getattr(parent, '_mata_kilau', None) or [], None,
+                  bola + (getattr(parent, '_mata_kilau', None) or []))
+        # Hewan berkedip lebih sering daripada manusia, dan kedipannya lebih
+        # cepat — sapi ~1 kedipan tiap 4 detik, unggas jauh lebih rapat.
+        # Angkanya diperketat di sini, bukan di kelasnya, supaya wajah manusia
+        # tidak ikut berubah.
+        w.JEDA_MIN, w.JEDA_MAKS = 1.8, 4.6
+        w.fase_awal(kunci or species)
+        parent._wajah = w
+    return h
 
 # ─── UKURAN BADAN ────────────────────────────────────────────────────────────
 # (setengah_lebar, setengah_panjang, tinggi_punggung) dalam meter, dibaca dari

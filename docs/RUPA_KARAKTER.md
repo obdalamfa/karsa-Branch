@@ -239,6 +239,8 @@ yang sama seperti di 5.1.
 - Ekspresi masih hampir satu. **Kedipan dan mata lelah sudah ada** (§7);
   senang dan sakit belum. Mata dan mulut sudah entity terpisah, jadi
   menambahnya murah.
+- Ternak sekarang bermata dan ikut berkedip (§8), tapi mulut, telinga yang
+  bergerak, dan ekor yang mengibas masih statis.
 
 ---
 
@@ -287,3 +289,152 @@ string tiap proses, jebakan yang sudah dua kali memakan proyek ini. Tanpa fase
 per-karakter sekampung akan berkedip serempak seperti pasukan. Diperiksa: dua
 proses terpisah memberi deret jarak yang sama persis, dan empat warga memberi
 fase awal 4,033 / 5,200 / 1,900 / 5,267.
+
+---
+
+## 8. Ternak yang tidak punya mata sama sekali
+
+Ditemukan tepat setelah §7 selesai, dan ini cacat yang **sama persis** dengan
+yang baru ditutup di manusia — pada hewan yang jadi pokok seluruh pekerjaan
+perawatan ini. Sembilan spesies di `animal_models.py`, semuanya lengkap dengan
+badan, moncong, tanduk, telinga, ambing, ekor dan kuku:
+
+```
+$ grep -n "mata" game/animal_models.py
+47:    'hidung': color.rgb(46,40,40),   # L 16 — hidung/mata
+```
+
+Satu komentar warna. Tidak satu baris geometri. Padahal pemain berdiri **60 cm
+dari kepala sapi selama 1,9 detik** tiap kali memerah.
+
+### Empat keputusan, tiga di antaranya datang dari memotret hasilnya
+
+**1. Letak menentukan spesies.** Mangsa (ayam, bebek, kelinci, kambing, domba,
+sapi, kuda) bermata di **sisi** kepala — dua mata yang tidak pernah terlihat
+bersamaan. Pemangsa (kucing, rubah) bermata di **depan**, berpasangan. Satu
+resep melayani keduanya lewat `arah=`.
+
+**2. Bulat — dan ini satu-satunya bentuk bulat di seluruh proyek.** Ronde
+pertama memakai `creature_body_mesh()` seperti bagian lain, dan bentuk itu
+eksponen 0,10: hampir kubus. Terpotret dari depan, mata kucing keluar sebagai
+dua **persegi** putih bertambal kotak hitam — terbaca sebagai kacamata las.
+`mata_mesh()` (eksponen 1,0, elipsoid sejati) ada khusus untuk ini.
+
+**3. Pelipit sklera setipis benang pada ternak, lebar pada pemangsa.** Ronde
+pertama menaruh pupil jauh lebih menonjol daripada sklera dan dari sudut
+tiga-perempat pupil menutupi sklera sepenuhnya: mata sapi terbaca sebagai
+**lubang** gelap. Ronde kedua membalikkannya terlalu jauh — mata sapi
+terpotret sebagai **bola pingpong yang ditempel di pipi**. Ternak bermata sisi
+hampir seluruhnya iris gelap, jadi pupilnya 0,76 d; pemangsa memang
+berputih-mata lebar, jadi 0,55 d.
+
+**4. Ukuran mengikuti bahasa game kehidupan Jepang, bukan anatomi.** Mata sapi
+asli berdiameter ~3,5 cm — persis di bawah ambang ~3 cm yang docstring
+`animal_models.py` sendiri sebut tidak pernah sampai ke layar. Mata sapi di
+sini 12 cm, ~32% tinggi kepala. Seperti sapi Story of Seasons, bukan sapi asli.
+
+### Aritmetika yang salah dan potret yang menangkapnya
+
+Offset pupil ronde kedua ditulis `(0,5 - pupil*0,5) * 0,9`. Untuk pupil 0,76
+itu `(0,5 - 0,38) * 0,9 = 0,108`, jadi titik terluar pupil ada di
+`0,108 + 0,38 = 0,488 d` — **di dalam** bola sklera berjari 0,5 d. Terpotret:
+mata domba keluar sebagai bola putih polos tanpa pupil sama sekali. Rumusnya
+sekarang `0,5 - 0,40 * pupil`, dan hasilnya diperiksa dengan hitungan, bukan
+dengan mata:
+
+```
+pupil 0,76 -> pusat 0,196, terluar 0,576 (sklera 0,500), cakram terlihat 68%
+pupil 0,55 -> pusat 0,280, terluar 0,555 (sklera 0,500), cakram terlihat 43%
+```
+
+### Kenapa sklera dibiarkan melewati batas terang 205
+
+`animal_models.py` memasang batas atas nilai ~205 karena cel shader menjepit
+warna di atas itu jadi putih rata dan **bentuk di dalamnya hilang**. Sklera
+(L 88) sengaja melanggarnya: ia tidak punya bentuk di dalamnya — pupilnya
+entity terpisah di depannya — jadi "putih rata" justru yang dicari. Tanpa
+sklera, mata gelap di atas kepala gelap (bebek L 23, muka domba L 23, kambing
+L 36, kuda L 35) hilang sama sekali.
+
+### Mata dikaitkan ke kepala, bukan ke akar rig
+
+Kepala kuda miring 26° dan dua kali lebih panjang daripada lebar. Mata yang
+dipasang di koordinat akar akan menggantung lepas dari pipinya dan lonjong dua
+kali panjangnya. Jadi `_mata()` mengait ke entity kepala lalu **membagi** tiap
+ukuran dengan skala kepala.
+
+### Kedipan ikut gratis, dan malam memejamkannya
+
+`build_animal()` mengumpulkan mata jadi satu `Wajah` — pengendali yang sama
+persis dengan yang dipakai pemain dan warga — di `parent._wajah`. Loop entitas
+sudah men-tick `actor._wajah` untuk setiap actor, jadi tidak ada jalur kode
+kedua. Jedanya diperketat ke 1,8–4,6 detik (hewan berkedip lebih rapat
+daripada manusia) pada instance-nya, bukan pada kelasnya, supaya wajah manusia
+tidak ikut berubah.
+
+Yang **tidak** bisa datang dari loop itu: hewan tidur dibaca dari jam dunia,
+bukan dari jadwal actor seperti warga. Jadi `FarmAnimal.update_ai()` memanggil
+`set_tidur(self.state.is_night())` sendiri. Tanpa satu baris itu, sapi tidur
+membelalak semalaman.
+
+Terukur, 60 detik siang di kandang farm:
+
+```
+hewan            kedip  jeda rata2   sd       kedipan pertama
+  ayam_kuning       19    3,16 s    0,88 s        1,20 s
+  domba_woolly      18    3,32 s    0,81 s        1,40 s
+  kambing_jenggot   17    3,38 s    0,77 s        2,20 s
+  kucing_oren       18    3,30 s    0,93 s        2,83 s
+  kuda_pegasus      19    3,13 s    0,74 s        0,03 s
+  sapi_betsy        19    3,12 s    0,81 s        3,83 s
+```
+
+Simpangan baku terkecil 0,74 detik — bukan nol, jadi bukan metronom — dan
+enam kedipan pertama di enam waktu berbeda, jadi kawanan tidak berkedip
+serempak. Pukul 20:00 keenamnya turun ke skala 0,02 (6–7% tinggi penuh):
+terpejam, tapi tetap segaris tipis, bukan hilang.
+
+### Dua "cacat" yang ternyata cacat probe-nya
+
+Pengukur kedipan versi pertama melaporkan **kuda tidak pernah berkedip** (0
+dari 60 detik) dan **mata 5,000 kali terbuka saat malam**. Keduanya palsu:
+
+- Tinggi acuan tiap mata diambil sesudah `step(40)`, dan kuda kebetulan sedang
+  **di tengah kedipan** saat itu — acuannya terekam 0,0575 dan bukan 0,2875,
+  jadi rasionya tidak pernah turun ke ambang 0,35 dan puncaknya jadi 5,0.
+  Tabel di atas menunjukkan kenapa justru kuda yang kena: kedipan pertamanya
+  jatuh di detik 0,03, satu-satunya yang mendarat tepat di saat pengintipan.
+- Uji malamnya memasang jam ke 23:00, yaitu `FORCE_SLEEP_HOUR`. Satu `step()`
+  memicu tidur paksa dan jam melompat ke 06:01, jadi yang terbaca `_tidur`
+  siang hari — benar, hanya bukan yang sedang diuji.
+
+Diperiksa ulang dengan acuan dari `Wajah._tinggi0` (nilai saat dibangun, bukan
+saat diintip) dan jam 20:00: keenam ekor berkedip 17–19 kali, dan keenamnya
+terpejam saat malam.
+
+### Catatan probe: enam ronde sebelum satu gambar bisa dipercaya
+
+Lima percobaan berturut-turut memindahkan `camera.position` ke depan kepala
+hewan, dan semuanya gagal dengan cara yang **sama dan menyesatkan**: kubus
+penanda `unlit=True` muncul persis di tengah frame pada jarak yang terukur
+benar (5 cm pada 1,04 m = 7,6% lebar frame, cocok sampai desimal dengan fov
+35), dan **hewannya tidak muncul sama sekali**. Dua sebab terpisah:
+
+- Rig yang dipasang sendiri lewat `Entity(...)` + `build_animal(...)` tidak
+  pernah terlihat di dalam scene — bagian hewan memakai `apply_smooth`, dan
+  shader itu butuh input per-frame yang hanya dipasang app untuk actor yang
+  dibuat app sendiri.
+- `app.update()` menulis ulang kamera dari `_camera_offset()` tiap frame, jadi
+  yang terpotret selalu frame hasil tulis-ulangnya.
+
+Yang akhirnya dipakai: **actor `ANIMAL_NPCS` milik game**, difoto lewat kendali
+kamera game sendiri (`camera_yaw` / `camera_pitch` / `camera_dist` — kendali
+yang sama yang dipakai pemain lewat klik-kanan), dengan titik kepala
+**diproyeksikan** ke koordinat layar lewat lensa Panda3D untuk menentukan
+potongan. Tidak ada tebakan framing yang tersisa, dan sudut yang terlihat
+benar-benar sudut yang bisa dilihat pemain.
+
+Panggung telanjang (Ursina kosong + lampu sendiri) sempat dicoba dan **bohong
+soal warna**: pupil L 13 tampil merah muda pucat, karena cel shader mengambil
+cahayanya dari app, bukan dari node lampu Panda. Panggung itu hanya dipakai
+untuk menilai bentuk, tidak pernah untuk menilai warna.

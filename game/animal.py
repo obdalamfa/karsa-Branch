@@ -217,6 +217,15 @@ class FarmAnimal(BaseActor):
         self.rotation_x = besar * math.cos(arah) * 0.45 + napas * 0.6
 
     def update_ai(self, dt: float, can_walk_fn):
+        # Mata terpejam selama malam. Kedipannya sendiri sudah di-tick oleh
+        # loop entitas (entities.py) bersama warga; yang TIDAK bisa diketahui
+        # dari sana adalah bahwa hewan ini sedang tidur, karena tidur hewan
+        # dibaca dari jam dunia, bukan dari jadwal actor seperti warga.
+        # Tanpa baris ini seekor sapi tidur membelalak semalaman.
+        _w = getattr(self, '_wajah', None)
+        if _w is not None:
+            _w.set_tidur(self.state.is_night())
+
         # Minum menang atas jadwal tidur dan atas jalan-jalan: hewan yang
         # dipanggil ke palung harus sampai ke palung.
         if self._tick_minum(dt, can_walk_fn):

@@ -153,6 +153,7 @@ class Wajah:
         self._jeda = self.JEDA_MIN
         self._kedip_t = None
         self._lelah = 0.0
+        self._tidur = False
         self._n = 0                 # nomor kedipan, umpan derau
 
     def fase_awal(self, kunci: str) -> None:
@@ -182,6 +183,15 @@ class Wajah:
         """0 = segar, 1 = habis. Mata menyipit, tidak menutup."""
         self._lelah = max(0.0, min(1.0, float(lelah)))
 
+    def set_tidur(self, tidur: bool) -> None:
+        """Mata terpejam penuh selama yang punya sedang tidur.
+
+        Dipakai hewan ternak, yang memang tidur di kandang tiap malam dan
+        sebelum ini tetap membelalak sepanjang malam. Beda dari `set_lelah`:
+        lelah MENYIPIT (0,55 terbuka), tidur MENUTUP.
+        """
+        self._tidur = bool(tidur)
+
     def tick(self, dt: float) -> None:
         self._t += dt
         if self._kedip_t is None:
@@ -206,6 +216,8 @@ class Wajah:
             else:
                 buka = (ms - self.TUTUP_MS - self.TAHAN_MS) / self.BUKA_MS
         buka *= 1.0 - (1.0 - self.LELAH_BUKA) * self._lelah
+        if getattr(self, '_tidur', False):
+            buka = 0.0
         for e, h0 in zip(self.mata, self._tinggi0):
             try:
                 e.scale_y = max(0.02, h0 * buka)

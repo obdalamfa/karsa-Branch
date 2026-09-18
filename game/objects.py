@@ -61,8 +61,28 @@ def _i(name, adverts, duration=60.0, atten=0.3, autonomous=True, auto_first=Fals
 OBJECT_INTERACTIONS: dict[int, list[Interaction]] = {
 
     BD: [
-        _i('Tidur', [Advert('energi', 110, minimum=30),
-                     Advert('nyaman', 40)], duration=420, auto_first=True),
+        # Gerbang energi diturunkan 30 -> -40, dan itu perbaikan cacat yang
+        # bisa diukur. `score_interaction` tidak pernah membaca `duration`, jadi
+        # Tidur menang lewat delta +110 tanpa ada yang menghitung bahwa ia makan
+        # 420 menit — tujuh jam. Dengan gerbang 30 dan energi cuma -20 (baru
+        # agak lelah), terukur: 400 dari 400 pilihan otonom jatuh ke Tidur,
+        # kapan pun siangnya. Bikin Kopi (20 menit, +25) tidak pernah terpilih
+        # satu kali pun, dan Rebahan juga tidak.
+        #
+        # Gerbangnya, bukan skornya, yang diperbaiki: warga yang AGAK lelah
+        # sekarang tidak melihat kasur sama sekali dan mengambil kopi; yang
+        # benar-benar habis (di bawah -40) melihatnya dan tidur. Memperbaiki
+        # mesin skornya supaya menghitung durasi adalah perkara tersendiri dan
+        # menyentuh setiap pilihan di permainan — lihat tiket durasi-buta.
+        # Nyaman ikut digerbangi, dengan alasan yang sama. `minimum` hanya
+        # mempengaruhi PEMILIHAN — `ActionQueue._apply` membayar tiap advert
+        # tanpa memeriksa gerbangnya — jadi tidur tetap terasa nyaman, ia cuma
+        # berhenti menjadi ALASAN untuk tidur. Tanpa ini, warga yang cuma agak
+        # lelah masih memilih Tidur 13% dari waktunya lewat jalur Nyaman, dan
+        # tujuh jam adalah harga yang mahal untuk sebuah bantal.
+        _i('Tidur', [Advert('energi', 110, minimum=-40),
+                     Advert('nyaman', 40, minimum=-50)],
+           duration=420, auto_first=True),
         _i('Rebahan', [Advert('nyaman', 35, minimum=40),
                        Advert('energi', 20, minimum=60)], duration=60),
     ],

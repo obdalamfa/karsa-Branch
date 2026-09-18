@@ -222,7 +222,8 @@ def _dandani_manekin(actor, actor_id: str) -> float:
         # ada mulut, cuma bola kulit polos.
         # Kepalanya kotak-membulat sekarang, jadi bidang mukanya datar dan
         # `bola_r` tidak dipakai lagi.
-        bangun_wajah(kepala, R, R * 1.16, R * 1.005)
+        actor._wajah = bangun_wajah(kepala, R, R * 1.16, R * 1.005)
+        actor._wajah.fase_awal(actor_id)
         actor._kepala = kepala
         return _MANEKIN_TINGGI + 0.45
     except Exception:
@@ -534,6 +535,11 @@ class EntitiesManager:
 
         # Update all OOP actors
         for actor_id, actor in list(self.actors.items()):
+            # Kedipan warga. Fase tiap orang disebar dari huruf namanya, jadi
+            # sekampung tidak berkedip serempak seperti pasukan.
+            _w = getattr(actor, '_wajah', None)
+            if _w is not None:
+                _w.tick(dt)
             if isinstance(actor, Monster):
                 if actor.hp <= 0:
                     if actor.is_boss: s.naga_defeated = True

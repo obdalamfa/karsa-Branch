@@ -427,7 +427,8 @@ class Player3D(Entity):
         n = self._pivot_neck
         HW, HT = 0.175, 0.225          # kepala 0,35 x 0,45
         self._rambut = bangun_rambut(n, HW, HT, self._warna_rambut())
-        bangun_wajah(n, HW, HT, HW * 1.005)
+        self._wajah = bangun_wajah(n, HW, HT, HW * 1.005)
+        self._wajah.fase_awal('pemain')
 
     # ─── POSITION HELPERS ────────────────────────────────
     def set_tile_pos(self, tx: float, ty: float):
@@ -989,6 +990,15 @@ class Player3D(Entity):
         # saat pemain diam. Kalau aksi perawatan menulis posenya lebih dulu,
         # lerp itu akan menghapusnya di frame yang sama dan tidak ada yang
         # pernah terlihat bergerak. Menulis terakhir = menang.
+        # Kedipan. Mata yang tidak pernah menutup adalah tanda uncanny yang
+        # paling murah dihilangkan, dan `lelah` memakai energi yang sudah ada:
+        # di bawah 30 matanya mulai menyipit, dan itu memberi tahu pemain
+        # keadaannya tanpa satu pun angka di HUD.
+        w = getattr(self, '_wajah', None)
+        if w is not None:
+            w.set_lelah(max(0.0, (30.0 - float(getattr(s, 'energy', 100)))) / 30.0)
+            w.tick(dt)
+
         if self._care_anim is not None:
             self._care_anim.update(dt)
             if self._care_anim.selesai:

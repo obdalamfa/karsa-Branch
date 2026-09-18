@@ -96,3 +96,6 @@
 {"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
 {"slice":"rupa","round":0,"role":"note","note":"docs/RUPA_KARAKTER.md ditulis: lima sebab karakter terbaca creepy, tiga di antaranya bukan modelnya melainkan shader dan skala. Termasuk catatan kegagalan tiap langkah, bukan cuma hasilnya."}
 {"slice": "REGRESI", "round": 0, "role": "note", "note": "Gerbang akhir: 14/14 scene; 12/12 aksi lulus ambang; swauji jeda SEMUA LULUS; 7 aksi tuntas 0 error; kontak <=2/90 frame menembus di semua baris"}
+{"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus, 0 pemeriksaan gagal"}
+{"slice":"kedip","round":1,"role":"build","note":"Wajah berkedip. 100 ms (60 tutup + 25 tahan + 75 buka), 8 kedipan per 30 detik = 16/menit, jarak 2,70-5,07 detik simpangan baku 0,89. Uji menangkap cacat saya sendiri: derau jarak memakai sin(self._t) sementara _t di-nol-kan tepat sebelumnya, jadi selalu sin(0) dan jaraknya 2,40 detik persis tiap kali - simpangan baku 0,00, metronom. Umpan diganti ke nomor kedipan. Fase dari sum(ord), bukan hash(). set_lelah() menyipitkan mata ke 0,55 saat energi habis."}
+{"slice": "REGRESI", "round": 0, "role": "note", "note": "14/14 scene lulus; 12/12 aksi lulus ambang; 7 aksi tuntas 0 error"}

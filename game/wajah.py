@@ -86,25 +86,24 @@ def bangun_wajah(induk, hw: float, ht: float, muka_z: float):
     pada ambang keras, jadi batas bayangannya membentuk tangga yang terlihat
     di pipi dari jarak dekat.
     """
-    out = []
-    z = muka_z
+    out, mata, kilau = [], [], []
 
     def kedalaman(x, y, maju):
         return muka_z + maju
     for sx in (-1, 1):
         x, y = sx * hw * 0.41, -ht * 0.26
-        out.append(_kotak(induk, (x, y, kedalaman(x, y, 0.0)),
-                          (hw * 0.34, ht * 0.28, hw * 0.08),
-                          color.rgb(*MATA_WARNA)))
+        e = _kotak(induk, (x, y, kedalaman(x, y, 0.0)),
+                   (hw * 0.34, ht * 0.28, hw * 0.08), color.rgb(*MATA_WARNA))
+        mata.append(e); out.append(e)
         # Kilau di sudut yang SAMA pada kedua mata: satu arah cahaya.
         kx, ky = x - hw * 0.09, -ht * 0.19
-        out.append(_kotak(induk, (kx, ky, kedalaman(kx, ky, hw * 0.046)),
-                          (hw * 0.10, ht * 0.08, hw * 0.046),
-                          color.rgb(255, 255, 255)))
+        k = _kotak(induk, (kx, ky, kedalaman(kx, ky, hw * 0.046)),
+                   (hw * 0.10, ht * 0.08, hw * 0.046), color.rgb(255, 255, 255))
+        kilau.append(k); out.append(k)
     my = -ht * 0.71
-    out.append(_kotak(induk, (0.0, my, kedalaman(0.0, my, 0.0)),
-                      (hw * 0.22, ht * 0.07, hw * 0.069),
-                      color.rgb(*MULUT_WARNA)))
+    mulut = _kotak(induk, (0.0, my, kedalaman(0.0, my, 0.0)),
+                   (hw * 0.22, ht * 0.07, hw * 0.069), color.rgb(*MULUT_WARNA))
+    out.append(mulut)
     for sx in (-1, 1):
         # 0,60 bukan 0,71: pada kepala yang dibingkai rambut di kedua sisi,
         # 0,71 mendarat tepat di batas rambut dan separuh rona menggantung
@@ -113,7 +112,110 @@ def bangun_wajah(induk, hw: float, ht: float, muka_z: float):
         out.append(_kotak(induk, (px, py, kedalaman(px, py, -hw * 0.023)),
                           (hw * 0.30, ht * 0.12, hw * 0.046),
                           color.rgb(*PIPI_WARNA)))
-    return out
+    return Wajah(mata, kilau, mulut, out)
+
+
+class Wajah:
+    """Pengendali wajah: kedipan, dan mata lelah.
+
+    Wajah yang TIDAK PERNAH BERKEDIP adalah salah satu tanda uncanny yang
+    paling tua dan paling murah dihilangkan — dan ia tersisa persis setelah
+    karakter di sini akhirnya punya mata. Mata dan kilau sudah entity
+    terpisah sejak awal, jadi kedipan cuma soal menyekakan tingginya.
+
+    Tiga hal yang membuat kedipan terbaca sebagai kedipan, bukan kedutan:
+
+      * CEPAT. Mata manusia menutup-membuka dalam 100-150 ms. Kedipan yang
+        lebih lambat terbaca sebagai mengantuk, bukan berkedip.
+      * TIDAK BERIRAMA. Jarak antar-kedip diacak 2,4-5,8 detik. Kedipan
+        berjarak tetap adalah metronom, dan metronom terbaca sebagai mesin —
+        cacat yang sama persis dengan `irama_sd_ms = 0` pada animasi aksi.
+      * KILAU IKUT HILANG. Kilau yang tetap melayang saat mata tertutup
+        terbaca sebagai dua titik putih di atas kelopak.
+
+    Fase awalnya diambil dari `sum(ord(id))`, BUKAN `hash()` — Python mengacak
+    hash string tiap proses, dan jebakan itu sudah dua kali memakan proyek ini
+    (entities.py:262, lalu fase anggukan NPC dan napas hewan). Tanpa fase
+    per-karakter, semua orang di layar berkedip serempak seperti pasukan.
+    """
+
+    TUTUP_MS   = 60.0      # menutup
+    TAHAN_MS   = 25.0      # tertutup penuh
+    BUKA_MS    = 75.0      # membuka, sedikit lebih lambat daripada menutup
+    JEDA_MIN   = 2.4
+    JEDA_MAKS  = 5.8
+    LELAH_BUKA = 0.55      # tinggi mata saat energi habis
+
+    def __init__(self, mata, kilau, mulut, semua):
+        self.mata, self.kilau, self.mulut, self.semua = mata, kilau, mulut, semua
+        self._tinggi0 = [float(e.scale_y) for e in mata]
+        self._t = 0.0
+        self._jeda = self.JEDA_MIN
+        self._kedip_t = None
+        self._lelah = 0.0
+        self._n = 0                 # nomor kedipan, umpan derau
+
+    def fase_awal(self, kunci: str) -> None:
+        """Sebar fase dari id karakter supaya tidak berkedip serempak."""
+        self._benih = sum(map(ord, kunci)) % 997
+        u = self._benih / 997.0
+        self._t = u * self.JEDA_MAKS
+        self._acak_jeda()
+
+    def _acak_jeda(self) -> None:
+        """Jarak ke kedipan berikutnya: deterministik, tapi tidak berirama.
+
+        Versi pertama memakai `sin(self._t * 12,9898)` — dan `self._t` di-nol-kan
+        TEPAT SEBELUM fungsi ini dipanggil, jadi deraunya selalu dievaluasi di
+        sin(0) = 0 dan jaraknya selalu JEDA_MIN. Terukur: 12 kedipan dalam 30
+        detik, semuanya berjarak 2,40 detik, simpangan baku 0,00 — metronom,
+        yaitu persis cacat yang tabel ambang proyek ini sendiri sebut mesin.
+        Umpannya sekarang NOMOR kedipan, yang memang berubah tiap kali.
+        """
+        import math
+        self._n += 1
+        u = (math.sin((self._n + getattr(self, '_benih', 0)) * 12.9898)
+             * 43758.5453) % 1.0
+        self._jeda = self.JEDA_MIN + abs(u) * (self.JEDA_MAKS - self.JEDA_MIN)
+
+    def set_lelah(self, lelah: float) -> None:
+        """0 = segar, 1 = habis. Mata menyipit, tidak menutup."""
+        self._lelah = max(0.0, min(1.0, float(lelah)))
+
+    def tick(self, dt: float) -> None:
+        self._t += dt
+        if self._kedip_t is None:
+            if self._t >= self._jeda:
+                self._kedip_t = 0.0
+                self._t = 0.0
+                self._acak_jeda()
+        else:
+            self._kedip_t += dt
+            ms = self._kedip_t * 1000.0
+            total = self.TUTUP_MS + self.TAHAN_MS + self.BUKA_MS
+            if ms >= total:
+                self._kedip_t = None
+        # Bagian mata yang terbuka: 1 = penuh, 0 = tertutup.
+        buka = 1.0
+        if self._kedip_t is not None:
+            ms = self._kedip_t * 1000.0
+            if ms < self.TUTUP_MS:
+                buka = 1.0 - ms / self.TUTUP_MS
+            elif ms < self.TUTUP_MS + self.TAHAN_MS:
+                buka = 0.0
+            else:
+                buka = (ms - self.TUTUP_MS - self.TAHAN_MS) / self.BUKA_MS
+        buka *= 1.0 - (1.0 - self.LELAH_BUKA) * self._lelah
+        for e, h0 in zip(self.mata, self._tinggi0):
+            try:
+                e.scale_y = max(0.02, h0 * buka)
+            except Exception:
+                pass
+        for k in self.kilau:
+            try:
+                k.enabled = buka > 0.45
+            except Exception:
+                pass
 
 
 def warna_rambut(state, indeks_default: int = 0):

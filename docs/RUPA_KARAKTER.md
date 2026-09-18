@@ -236,5 +236,54 @@ yang sama seperti di 5.1.
 - Rig Vitaboy tetap ranjau — lihat `ANIMASI_PERAWATAN.md` §10. Kalau asetnya
   suatu saat di-bake, seluruh rupa di dokumen ini tidak terpakai dan yang
   dipakai adalah avatar TSO.
-- Ekspresi masih satu: tidak ada perubahan wajah saat senang, lelah, atau
-  sakit. Mata dan mulut sudah entity terpisah, jadi menggantinya murah.
+- Ekspresi masih hampir satu. **Kedipan dan mata lelah sudah ada** (§7);
+  senang dan sakit belum. Mata dan mulut sudah entity terpisah, jadi
+  menambahnya murah.
+
+---
+
+## 7. Wajah yang tidak pernah berkedip
+
+Ditambahkan setelah semua di atas, karena baru terlihat begitu karakter punya
+mata: **tidak ada satu pun dari mereka yang berkedip.** Itu tanda uncanny yang
+paling tua dan paling murah dihilangkan, dan mata sudah entity terpisah sejak
+awal, jadi kedipan cuma soal menyekakan tingginya.
+
+Tiga hal yang membuat kedipan terbaca sebagai kedipan, bukan kedutan:
+
+- **Cepat.** Mata manusia menutup-membuka dalam 100–150 ms. Terukur di sini
+  100 ms (60 menutup + 25 tertutup + 75 membuka, membuka sengaja lebih lambat
+  daripada menutup). Lebih lambat dari itu terbaca sebagai mengantuk.
+- **Tidak berirama.** Jarak antar-kedip 2,4–5,8 detik.
+- **Kilau ikut hilang.** Kilau yang tetap melayang saat mata tertutup terbaca
+  sebagai dua titik putih di atas kelopak.
+
+Ditambah: `set_lelah()` menyipitkan mata ke 0,55 tinggi penuh saat energi
+habis — memberi tahu pemain keadaannya tanpa satu pun angka di HUD.
+
+### Uji itu menangkap cacat saya sendiri
+
+Percobaan pertama memakai `sin(self._t * 12,9898)` sebagai derau jarak — dan
+`self._t` di-nol-kan **tepat sebelum** fungsi itu dipanggil, jadi deraunya
+selalu dievaluasi di `sin(0) = 0` dan jaraknya selalu `JEDA_MIN`. Terukur:
+
+```
+12 kedipan dalam 30 detik, semuanya berjarak 2,40 detik
+simpangan baku 0,00 detik
+```
+
+Nol adalah metronom, dan metronom adalah persis cacat yang tabel ambang
+proyek ini sendiri sebut mesin (`irama_sd_ms > 8` pada aksi berulang). Umpan
+deraunya diganti ke **nomor kedipan**, yang memang berubah tiap kali:
+
+```
+8 kedipan dalam 30 detik  (16/menit — rentang normal manusia)
+jarak 2,70 / 3,43 / 5,07 / 3,37 / 2,83 / 5,03 / 3,83 detik
+simpangan baku 0,89 detik
+```
+
+Dan fasenya dari `sum(ord(id))`, **bukan** `hash()` — Python mengacak hash
+string tiap proses, jebakan yang sudah dua kali memakan proyek ini. Tanpa fase
+per-karakter sekampung akan berkedip serempak seperti pasukan. Diperiksa: dua
+proses terpisah memberi deret jarak yang sama persis, dan empat warga memberi
+fase awal 4,033 / 5,200 / 1,900 / 5,267.

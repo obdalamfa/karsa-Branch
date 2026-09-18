@@ -168,6 +168,15 @@ class NPCBrains:
             # sebenarnya berlangsung 420 detik real, bukan 7 jam dalam game.
             menit = dt * INGAME_MINUTES_PER_REAL_SECOND
             if mv is not None:
+                # Warga ikut tidur, dan datanya sudah ada sejak lama: SCHEDULES
+                # menandai dua belas baris dengan aktivitas 'sleeping', dan
+                # _update_npc_schedules menyalin aktivitas itu ke
+                # npc_positions tiap 30 detik. Yang tidak pernah ada adalah
+                # yang membaca tanda itu — `asleep` tetap False seumur hidup
+                # mereka, jadi energi warga cuma bisa turun dan satu-satunya
+                # jalan naiknya adalah aksi *Istirahat* di _CADANGAN.
+                pos = getattr(self.state, 'npc_positions', {}).get(npc_id)
+                mv.asleep = bool(pos and pos.get('activity') == 'sleeping')
                 mv.tick(menit)
             self._maju_interaksi(npc_id, menit)
             # Auto-queue aksi paling urgent kalau idle DAN tidak sedang

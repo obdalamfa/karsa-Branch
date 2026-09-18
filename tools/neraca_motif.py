@@ -30,7 +30,8 @@ from game.objects import OBJECT_INTERACTIONS, OBJECT_NAMES        # noqa: E402
 MENIT_SEHARI = 1440.0
 
 
-def permintaan(jam_tidur: float) -> dict:
+def permintaan(jam_tidur: float, faktor: float = 1.0,
+               nyaman_moodlet: bool = False) -> dict:
     """Poin per hari yang HILANG tiap motif, terjaga dan tidur dijumlahkan.
 
     Diukur pada motif = 0 (tengah rentang -100..+100). Itu penting untuk
@@ -53,7 +54,16 @@ def permintaan(jam_tidur: float) -> dict:
         ticks = menit / SIM_MINUTES_PER_TICK
         for m in MOTIVES:
             out.setdefault(m, 0.0)
-            out[m] += mv._decay_rate(m) * ticks
+            laju = mv._decay_rate(m)
+            if nyaman_moodlet and m == 'nyaman':
+                laju = 0.0
+            elif laju > 0:
+                # Faktor hanya mengecilkan LURUH, bukan pemulihan: energi saat
+                # tidur bertanda negatif di sini, dan mengalikannya berarti
+                # "tidur jadi kurang memulihkan", yang bukan yang ditawarkan
+                # knop B.
+                laju *= faktor
+            out[m] += laju * ticks
     return out
 
 
@@ -82,13 +92,28 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--tidur', type=float, default=6.0,
                     help='jam tidur per hari (pilihan #4: 6)')
+    ap.add_argument('--luruh', type=float, default=1.0, metavar='FAKTOR',
+                    help='kalikan SEMUA laju luruh (knop B di #6). '
+                         '0.7 = luruh 30%% lebih lambat.')
+    ap.add_argument('--nyaman-moodlet', action='store_true',
+                    help='perlakukan Nyaman sebagai moodlet: tidak meluruh '
+                         'sama sekali. objects.py sudah menyatakan ini niatnya '
+                         '("Nyaman dan ruang ... akan menjadi moodlet") tapi '
+                         'mesinnya masih meluruhkannya seperti kebutuhan, dan '
+                         'itu permintaan TERBESAR di seluruh neraca.')
     args = ap.parse_args()
 
-    dem = permintaan(args.tidur)
+    dem = permintaan(args.tidur, args.luruh, args.nyaman_moodlet)
     sup = suplai()
     menit_jaga = MENIT_SEHARI - args.tidur * 60.0
 
-    print(f'Tidur {args.tidur:.1f} jam; terjaga {menit_jaga:.0f} menit-sim.\n')
+    ubah = []
+    if args.luruh != 1.0:
+        ubah.append(f'luruh x{args.luruh:g}')
+    if args.nyaman_moodlet:
+        ubah.append('Nyaman = moodlet')
+    print(f'Tidur {args.tidur:.1f} jam; terjaga {menit_jaga:.0f} menit-sim'
+          + (f'; {", ".join(ubah)}.' if ubah else '.') + '\n')
     print(f'{"motif":>8} {"permintaan/hari":>16} {"suplai terbaik":>15} '
           f'{"menit/hari":>11}  sumber terbaik')
     print('-' * 86)

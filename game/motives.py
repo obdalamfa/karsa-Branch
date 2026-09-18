@@ -97,17 +97,27 @@ def contribution(motive: str, value: float) -> float:
 # Dari VMTS1MotiveDecay.Constants.
 HUNGER_RATIO       = 0.0021   # dikali (100 + lapar) → non-linear
 HUNGER_TO_BLADDER  = 0.3
-COMFORT_ACTIVE     = 0.4      # sim aktif
+# ── NYAMAN ADALAH MOODLET, BUKAN KEBUTUHAN ──────────────────────────────────
+# Ketiga konstanta TS1 di bawah menguras Nyaman tanpa dasar, seperti lapar.
+# Diukur di tools/neraca_motif.py, itu membuat Nyaman permintaan TERBESAR di
+# seluruh neraca: 324 poin/hari, 31% dari total, 456 dari 1.080 menit bangun
+# hanya untuk menjaganya. Padahal docstring objects.py sudah menyatakan
+# niatnya sejak lama — "Nyaman dan ruang tetap ada di mesin tapi tidak lagi
+# menjadi kebutuhan yang ditampilkan; keduanya akan menjadi moodlet" — dan
+# mesinnya tidak pernah diberi tahu.
+#
+# Moodlet artinya: ia LUNTUR KEMBALI KE NETRAL, bukan jatuh tanpa dasar.
+# Duduk di kursi memberi +40, dan bonus itu memudar dalam ~2,7 jam-sim; berdiri
+# kelamaan menariknya kembali naik ke 0 dengan laju yang sama. Jadi Nyaman
+# tetap mewarnai mood dan tetap memberi alasan memakai perabot, tapi ia tidak
+# pernah menjadi pekerjaan yang harus diurus.
+#
+# Ketiga konstanta lama DISIMPAN, tidak dihapus: kalau suatu saat Nyaman
+# dikembalikan jadi kebutuhan, angkanya tidak perlu digali ulang dari TS1.
+COMFORT_ACTIVE     = 0.4      # (tidak dipakai selagi Nyaman moodlet)
 COMFORT_NEUTRAL    = 0.5
-COMFORT_LAZY       = 0.6      # sim malas kehilangan comfort lebih cepat
-# Nyaman tidak meluruh selama tidur. Ketiga laju di atas mengandaikan sim yang
-# BERDIRI atau duduk seadanya; yang sedang berbaring di kasur tidak sedang
-# kehilangan kenyamanan. Terukur begitu malam mulai disimulasikan: dengan laju
-# terjaga dipakai semalaman, tidur 10 jam menghabiskan 180 poin Nyaman, jadi
-# pemain bangun dengan Nyaman terjepit di -100 SETIAP pagi dan mood — yang
-# rata-rata delapan motif — ikut tertahan ke bawah seumur permainan. Nolnya
-# mengikuti pola yang sudah ada di berkas ini untuk `senang` (FUN_AWAKE hanya
-# berlaku saat terjaga), bukan konstanta baru yang dikarang.
+COMFORT_LAZY       = 0.6
+COMFORT_LUNTUR     = 0.5      # 40 poin memudar dalam 160 menit-sim
 COMFORT_ASLEEP     = 0.0
 HYGIENE_AWAKE      = 0.17
 HYGIENE_ASLEEP     = 0.08
@@ -201,15 +211,12 @@ class Motives:
         if name == 'nyaman':
             if self.asleep:
                 return COMFORT_ASLEEP
-            # Konstanta TS1 diindeks oleh sifat Active, bukan "malas". Sim
-            # dengan Active RENDAH (malas) kehilangan Nyaman lebih CEPAT, jadi
-            # ia lebih sering mencari kursi. Kepribadian masuk ke laju
-            # peluruhan, bukan cuma ke pilihan aksi.
-            if self.active > 666:
-                return COMFORT_ACTIVE
-            if self.active < 666:
-                return COMFORT_LAZY
-            return COMFORT_NEUTRAL
+            # Laju BERTANDA: positif menurunkan, negatif menaikkan (tick()
+            # menambahkan -rate). Jadi ini menarik Nyaman ke 0 dari arah mana
+            # pun, bukan menguras ke bawah. Itu bedanya moodlet dan kebutuhan.
+            if abs(self.nyaman) < COMFORT_LUNTUR:
+                return 0.0
+            return COMFORT_LUNTUR if self.nyaman > 0 else -COMFORT_LUNTUR
         if name == 'higiene':
             return HYGIENE_ASLEEP if self.asleep else HYGIENE_AWAKE
         if name == 'kandung':

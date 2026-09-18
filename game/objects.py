@@ -31,6 +31,33 @@ def _i(name, adverts, duration=60.0, atten=0.3, autonomous=True, auto_first=Fals
 # `minimum` adalah GERBANG: iklan hanya berlaku kalau motif sim sudah di bawah
 # nilai itu. Itulah yang mencegah sim tidur saat segar atau makan saat kenyang,
 # tanpa satu pun aturan prioritas khusus.
+#
+# LAJU EFEKTIF sebuah interaksi adalah delta/duration, poin per menit-sim —
+# `ActionQueue` membayar `ad.delta * frac` seiring aksinya berjalan, dan
+# `attenuation` hanya mempengaruhi PEMILIHAN (falloff jarak di
+# score_interaction), bukan bayarannya. Jadi durasi sama pentingnya dengan
+# delta, dan menaikkan delta sambil memanjangkan durasi tidak mengubah apa pun.
+#
+# Knop C (#6): sebelum putaran ini, empat kegiatan santai yang memang DIRANCANG
+# sebagai kegiatan semuanya membayar di bawah median katalog 0,47 — Nonton TV
+# 0,42, Duduk di Dermaga 0,33, Baca Buku 0,29, Berdoa 0,13 — sementara tiga
+# interaksi SAMBIL LALU membayar paling baik: Buka Peti 0,80, Ambil Barang
+# 0,67, Lihat Jam 0,50. Sumber Senang paling efisien di seluruh permainan
+# adalah membuka peti berulang kali, dan pemain yang memilih bersantai membayar
+# lebih banyak WAKTU untuk poin yang sama. Keempatnya dinaikkan ke puncak
+# katalog dan ketiganya diturunkan — bukan supaya bersantai jadi optimal, tapi
+# supaya ia berhenti jadi pilihan yang merugikan.
+#
+# Yang TIDAK berubah karenanya, dan ini perlu ditulis supaya tidak ada yang
+# mengklaim lebih: pilihan otonom warga hampir tidak bergeser. Diukur dengan
+# sim ber-Senang -60 dan peti diletakkan paling dekat, 400 pilihan berturut:
+# sebelum TV 155 / Baca 105 / Dermaga 81 / Peti 59; sesudah 157 / 123 / 89 / 31.
+# Sebabnya `score_interaction` tidak pernah membaca `duration` sama sekali —
+# ia menilai DELTA setelah falloff jarak, jadi Nonton TV +38 sudah mengalahkan
+# Buka Peti +12 sejak dulu. Knop C memperbaiki ongkos WAKTU yang dibayar
+# pemain, bukan pilihan mesinnya. Bahwa mesin itu buta terhadap durasi —
+# sehingga aksi 420 menit bisa dipilih di atas aksi 12 menit demi delta yang
+# sedikit lebih besar — adalah cacat tersendiri, belum diperbaiki di sini.
 OBJECT_INTERACTIONS: dict[int, list[Interaction]] = {
 
     BD: [
@@ -76,12 +103,12 @@ OBJECT_INTERACTIONS: dict[int, list[Interaction]] = {
     ],
 
     TV: [
-        _i('Nonton TV', [Advert('senang', 38, minimum=70),
-                         Advert('nyaman', 12)], duration=90),
+        _i('Nonton TV', [Advert('senang', 60, minimum=70),
+                         Advert('nyaman', 12)], duration=75),
     ],
 
     BS: [
-        _i('Baca Buku', [Advert('senang', 26, minimum=60)], duration=90),
+        _i('Baca Buku', [Advert('senang', 48, minimum=60)], duration=70),
     ],
 
     MR: [
@@ -99,11 +126,11 @@ OBJECT_INTERACTIONS: dict[int, list[Interaction]] = {
     ],
 
     SH: [
-        _i('Ambil Barang', [Advert('senang', 10, minimum=40)], duration=15),
+        _i('Ambil Barang', [Advert('senang', 6, minimum=40)], duration=18),
     ],
 
     CH: [
-        _i('Buka Peti', [Advert('senang', 12, minimum=50)], duration=15),
+        _i('Buka Peti', [Advert('senang', 8, minimum=50)], duration=20),
     ],
 
     PP: [
@@ -112,12 +139,12 @@ OBJECT_INTERACTIONS: dict[int, list[Interaction]] = {
     ],
 
     CL: [
-        _i('Lihat Jam', [Advert('senang', 4, minimum=20)], duration=8),
+        _i('Lihat Jam', [Advert('senang', 2, minimum=20)], duration=10),
     ],
 
     DCK: [
-        _i('Duduk di Dermaga', [Advert('senang', 30, minimum=60),
-                                Advert('nyaman', 18)], duration=90),
+        _i('Duduk di Dermaga', [Advert('senang', 52, minimum=60),
+                                Advert('nyaman', 18)], duration=70),
     ],
 
     W: [
@@ -127,7 +154,7 @@ OBJECT_INTERACTIONS: dict[int, list[Interaction]] = {
 
     GR: [
         # Bukan penambah motif — pemicu cerita. Tidak pernah dipilih otonom.
-        _i('Berdoa', [Advert('senang', 6, minimum=30)], duration=45,
+        _i('Berdoa', [Advert('senang', 24, minimum=30)], duration=45,
            autonomous=False),
     ],
 }

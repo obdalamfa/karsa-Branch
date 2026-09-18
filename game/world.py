@@ -22,7 +22,8 @@ from .config import (TILE_SIZE, GROUND_H, WALL_H, TREE_H, HOUSE_H, OBJ_H, SMALL_
                      G, D, P, W, FL, WL, TR, H, MB, DR, FN, GT, BD, ST, TB, BS,
                      MR, FP, CL, PP, CH, CT, SH, GR, LN, DT, CV_W, CV_F, PEN, STR_T,
                      DCK, BOT, LLY, CRYS, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH,
-                     STAIRS_DOWN, STAIRS_UP, MINED, SD, LGH_B, LGH_F, CLOUD, GOLD_W, PALM, TV, CHR, CAL)
+                     STAIRS_DOWN, STAIRS_UP, MINED, SD, LGH_B, LGH_F, CLOUD, GOLD_W, PALM, TV, CHR, CAL,
+                     WC)
 from .scenes import SCENES
 from .data import CROPS
 # Impor ini BUKAN sekadar dekorasi: game/crops.py mendaftarkan katalog palawija,
@@ -260,6 +261,11 @@ OBJ_COLORS = {
     TB:  _c(96, 130, 122),  # warm table
     BS:  _c(72, 96, 140),
     MR:  _c(165, 225, 255),  # brighter mirror
+    # Porselen, ditahan di L~78 dan bukan putih murni: cel shader
+    # menambah cahaya di tier terang, jadi dasar di atas ~210 terjepit
+    # jadi putih rata dan bentuknya hilang (lihat catatan plester
+    # dinding di bawah, dan palet hewan di animal_models.py).
+    WC:  _c(198, 200, 196),
     FP:  _c(255, 148, 55),   # vivid fireplace
     CL:  _c(105, 85, 68),
     PP:  _c(88, 215, 88),    # vivid plant
@@ -806,6 +812,7 @@ class World3D:
                   BD: 0.62, TB: 0.82, BS: OBJ_H * 1.4, MR: OBJ_H * 1.2,
                   CL: OBJ_H * 1.35, PP: 0.70, CH: 0.80, CT: 0.90, SH: OBJ_H * 1.5,
                   GR: OBJ_H * 0.90, BOT: 0.60, MB: 0.85, ST: 0.95,
+                  WC: 0.72,
                   DR: WALL_H}.get(tid, OBJ_H)
             tex = OBJ_TEX.get(tid, None)
             

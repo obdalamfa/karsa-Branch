@@ -5,7 +5,8 @@ import math
 
 def build_shop():
     return _build_indoor_room('shop', 'Warung Bu Sari',
-        [(x, 4, CT) for x in range(1,14)] + [(x, 1, SH) for x in range(1,14)],
+        [(x, 4, CT) for x in range(1,13)] + [(x, 1, SH) for x in range(1,14)]
+        + [(13, 4, WC)],
         ('town', 4, 9))
 
 

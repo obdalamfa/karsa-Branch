@@ -5,7 +5,7 @@ import math
 
 def build_smith():
     return _build_indoor_room('smith', 'Bengkel Budi', [
-        (6,1,TB),(1,2,SH),(12,1,FP),(8,1,SH),(9,1,SH),
+        (6,1,TB),(1,2,SH),(12,1,FP),(8,1,SH),(9,1,SH),(13,3,WC),
     ], ('town', 7, 22))
 
 

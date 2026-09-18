@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from .motives import Advert, Interaction
 from .config import (BD, ST, TB, CHR, TV, CH, BS, MR, FP, CT, SH, PP, CL,
-                     DCK, W, GR, CRYS)
+                     DCK, W, GR, CRYS, WC)
 
 
 def _i(name, adverts, duration=60.0, atten=0.3, autonomous=True, auto_first=False):
@@ -38,6 +38,24 @@ OBJECT_INTERACTIONS: dict[int, list[Interaction]] = {
                      Advert('nyaman', 40)], duration=420, auto_first=True),
         _i('Rebahan', [Advert('nyaman', 35, minimum=40),
                        Advert('energi', 20, minimum=60)], duration=60),
+    ],
+
+    WC: [
+        # Kamar Kecil adalah satu-satunya motif yang meluruh SETIAP HARI tanpa
+        # satu pun interaksi yang mengiklankannya — 234,4 poin/hari terhadap
+        # suplai nol, terukur di tools/neraca_motif.py. Motif dengan permintaan
+        # tapi tanpa suplai bukan tekanan, ia cuma pajak: mesin iklan tidak
+        # punya apa pun untuk ditawarkan, jadi warga tidak pernah bisa
+        # mengurusnya dan mood mereka tertahan ke bawah selamanya.
+        #
+        # +60 dalam 12 menit = 5,0 poin/menit, jadi 234,4 poin/hari terbayar
+        # dalam 47 menit-sim — sekitar empat kali pakai sehari. Itu sengaja
+        # jauh di atas laju katalog lain: mengurus kamar kecil harus CEPAT,
+        # kalau tidak ia memakan hari yang seharusnya dipakai bertani.
+        _i('Pakai Kamar Kecil', [Advert('kandung', 60, minimum=60)],
+           duration=12, auto_first=True),
+        _i('Bersihkan', [Advert('ruang', 14, minimum=40),
+                         Advert('higiene', -6)], duration=30),
     ],
 
     ST: [
@@ -174,6 +192,7 @@ OBJECT_NAMES: dict[int, str] = {
     TV: 'Televisi',   BS: 'Rak Buku',  MR: 'Cermin',     FP: 'Tungku',
     CT: 'Konter',     SH: 'Rak',       CH: 'Peti',       PP: 'Pot Tanaman',
     CL: 'Jam',        DCK: 'Dermaga',  W: 'Air',         GR: 'Nisan',
+    WC: 'Kamar Kecil',
 }
 
 

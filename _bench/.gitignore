@@ -1,4 +1,32 @@
-# Benchmark scratch: reference imagery, renders, comparison sheets.
-# Not part of the shipped game.
+# Benchmark scratch: render, lembar perbandingan, keluaran regresi.
+# Bukan bagian dari game yang dikirim.
 *
 !.gitignore
+!slices.json
+!temuan.json
+!refs/
+!refs/MANIFEST.json
+
+# Kenapa refs/ diabaikan lagi, padahal sempat dibuka.
+#
+# Dibuka supaya patokan tidak hilang tiap container ditarik. Itu memang
+# masalahnya, tapi jalan keluarnya salah: REPO INI PUBLIK. Meng-commit
+# tangkapan layar Story of Seasons ke repo publik adalah redistribusi karya
+# orang lain — beda urusan dengan menyimpannya lokal untuk pembandingan
+# internal, yang justru dituliskan MANIFEST-nya sendiri.
+#
+# Konsekuensinya diterima dengan sadar: patokan hilang tiap container ditarik,
+# jadi gauntlet loop hanya bisa dijalankan di mesin pemilik, bukan di sesi web.
+#
+# MANIFEST.json tetap ter-commit. Ia bukan karya orang lain — ia daftar frame
+# apa yang dibutuhkan, dan tanpanya gerbang tidak punya apa pun untuk diperiksa.
+
+# progress.html juga tidak di-commit, dan ini bukan kelalaian.
+#
+# progress_page.py meng-embed _bench/sheets/*.png sebagai data URI. Lembar itu
+# berisi frame patokan. Jadi begitu satu ronde loop berjalan, meng-commit
+# progress.html akan menyelundupkan tangkapan layar AWL ke repo publik lewat
+# pintu belakang — persis hal yang baru saja diputuskan untuk tidak dilakukan.
+#
+# Tidak ada yang hilang: halaman itu turunan. `bash tools/bench.sh` membangunnya
+# ulang dalam ~3,5 menit dari slices.json, temuan.json, dan game itu sendiri.

@@ -97,9 +97,28 @@ def contribution(motive: str, value: float) -> float:
 # Dari VMTS1MotiveDecay.Constants.
 HUNGER_RATIO       = 0.0021   # dikali (100 + lapar) → non-linear
 HUNGER_TO_BLADDER  = 0.3
-COMFORT_ACTIVE     = 0.4      # sim aktif
+# ── NYAMAN ADALAH MOODLET, BUKAN KEBUTUHAN ──────────────────────────────────
+# Ketiga konstanta TS1 di bawah menguras Nyaman tanpa dasar, seperti lapar.
+# Diukur di tools/neraca_motif.py, itu membuat Nyaman permintaan TERBESAR di
+# seluruh neraca: 324 poin/hari, 31% dari total, 456 dari 1.080 menit bangun
+# hanya untuk menjaganya. Padahal docstring objects.py sudah menyatakan
+# niatnya sejak lama — "Nyaman dan ruang tetap ada di mesin tapi tidak lagi
+# menjadi kebutuhan yang ditampilkan; keduanya akan menjadi moodlet" — dan
+# mesinnya tidak pernah diberi tahu.
+#
+# Moodlet artinya: ia LUNTUR KEMBALI KE NETRAL, bukan jatuh tanpa dasar.
+# Duduk di kursi memberi +40, dan bonus itu memudar dalam ~2,7 jam-sim; berdiri
+# kelamaan menariknya kembali naik ke 0 dengan laju yang sama. Jadi Nyaman
+# tetap mewarnai mood dan tetap memberi alasan memakai perabot, tapi ia tidak
+# pernah menjadi pekerjaan yang harus diurus.
+#
+# Ketiga konstanta lama DISIMPAN, tidak dihapus: kalau suatu saat Nyaman
+# dikembalikan jadi kebutuhan, angkanya tidak perlu digali ulang dari TS1.
+COMFORT_ACTIVE     = 0.4      # (tidak dipakai selagi Nyaman moodlet)
 COMFORT_NEUTRAL    = 0.5
-COMFORT_LAZY       = 0.6      # sim malas kehilangan comfort lebih cepat
+COMFORT_LAZY       = 0.6
+COMFORT_LUNTUR     = 0.5      # 40 poin memudar dalam 160 menit-sim
+COMFORT_ASLEEP     = 0.0
 HYGIENE_AWAKE      = 0.17
 HYGIENE_ASLEEP     = 0.08
 BLADDER_AWAKE      = 0.3
@@ -190,15 +209,14 @@ class Motives:
         if name == 'lapar':
             return HUNGER_RATIO * (100.0 + self.lapar)
         if name == 'nyaman':
-            # Konstanta TS1 diindeks oleh sifat Active, bukan "malas". Sim
-            # dengan Active RENDAH (malas) kehilangan Nyaman lebih CEPAT, jadi
-            # ia lebih sering mencari kursi. Kepribadian masuk ke laju
-            # peluruhan, bukan cuma ke pilihan aksi.
-            if self.active > 666:
-                return COMFORT_ACTIVE
-            if self.active < 666:
-                return COMFORT_LAZY
-            return COMFORT_NEUTRAL
+            if self.asleep:
+                return COMFORT_ASLEEP
+            # Laju BERTANDA: positif menurunkan, negatif menaikkan (tick()
+            # menambahkan -rate). Jadi ini menarik Nyaman ke 0 dari arah mana
+            # pun, bukan menguras ke bawah. Itu bedanya moodlet dan kebutuhan.
+            if abs(self.nyaman) < COMFORT_LUNTUR:
+                return 0.0
+            return COMFORT_LUNTUR if self.nyaman > 0 else -COMFORT_LUNTUR
         if name == 'higiene':
             return HYGIENE_ASLEEP if self.asleep else HYGIENE_AWAKE
         if name == 'kandung':
@@ -233,6 +251,47 @@ class Motives:
             self._acc[name] = acc - whole * 1000.0
             if whole:
                 self.add(name, -whole)
+
+    def lewati_malam(self, sim_minutes: float, langkah: float = 30.0) -> dict:
+        """Jalankan satu malam TIDUR dan kembalikan selisih tiap motif.
+
+        Sebelum ini `asleep` tidak pernah bernilai True di sepanjang permainan:
+        `grep -rn "\.asleep"` di luar berkas ini tidak mengembalikan apa pun,
+        dan satu-satunya yang bisa menyalakannya adalah save lama. Jadi keempat
+        laju yang ditulis khusus untuk keadaan tidur — energi, kandung kemih,
+        higiene, senang — tidak pernah sekali pun dieksekusi, dan
+        ENERGY_SLEEP_GAIN tidak pernah dipakai. Menekan T memindahkan jam ke
+        06:00 dan tidak mengubah satu pun motif.
+
+        Malamnya DISIMULASIKAN, bukan dilompati. Bedanya bukan gaya:
+          - laju `lapar` bergantung pada `lapar` itu sendiri
+            (HUNGER_RATIO * (100 + lapar)), jadi satu panggilan tick() raksasa
+            memakai laju awal untuk seluruh malam dan melebih-lebihkan
+            peluruhannya. Dipotong per 30 menit-sim, lajunya ikut turun
+            bersama laparnya, seperti saat terjaga.
+          - tidur yang lebih pendek memulihkan lebih sedikit, dengan sendirinya,
+            tanpa perlu tabel hukuman terpisah. Pada laju yang sudah ada:
+            terjaga 16 jam menghabiskan 180 poin energi, tidur memulihkan 38,6
+            poin per jam, jadi titik impasnya 4,66 jam. Enam jam — angka yang
+            dipilih pemilik untuk #4 — duduk nyaman di atas impas, yang memang
+            arti "longgar".
+
+        `asleep` dikembalikan ke nilai semula, bukan dipaksa False: yang
+        memanggil boleh saja sedang mensimulasikan warga yang tetap tidur.
+        """
+        sebelum = {m: self.get(m) for m in MOTIVES}
+        dulu = self.asleep
+        self.asleep = True
+        try:
+            sisa = max(0.0, float(sim_minutes))
+            langkah = max(1.0, float(langkah))
+            while sisa > 0.0:
+                n = min(langkah, sisa)
+                self.tick(n)
+                sisa -= n
+        finally:
+            self.asleep = dulu
+        return {m: self.get(m) - sebelum[m] for m in MOTIVES}
 
     def wants_to_wake(self, hour: float) -> bool:
         """Sim bangun otomatis jam 7 kalau energinya sudah cukup."""

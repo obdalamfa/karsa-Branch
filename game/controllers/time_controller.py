@@ -1,7 +1,7 @@
-from ..config import (
-    FORCE_SLEEP_HOUR, INGAME_MINUTES_PER_REAL_SECOND, 
-    NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG, NEED_MAX
-)
+# NEED_DECAY_* dan NEED_MAX tidak diimpor lagi: setelah peluruhan pindah ke
+# mesin motif dan dua tulisan mati di advance_day dihapus, tidak ada satu pun
+# yang memakainya di berkas ini.
+from ..config import FORCE_SLEEP_HOUR, INGAME_MINUTES_PER_REAL_SECOND
 from ..data import CROPS
 
 class TimeController:
@@ -63,11 +63,46 @@ class TimeController:
             import logging
             logging.warning(f"[TERNAK] daily_tick gagal: {e}")
             self._ternak_pagi = None
+        # ── MALAM DISIMULASIKAN, BUKAN DILOMPATI ──────────────────────────
+        # Baris lama cuma memindahkan jam ke 06:00 dan mengisi ulang stat lama.
+        # Terukur: motif SEBELUM dan SESUDAH tidur identik sampai satu desimal.
+        # Tidur — satu-satunya sumber pemulihan energi yang bukan interaksi —
+        # tidak berakibat apa pun pada mesin yang menggerakkan mood, panel
+        # SUASANA HATI, dan seluruh pilihan otonomi warga.
+        #
+        # Panjang malam dihitung dari jam BERAPA pemain tidur sampai 06:00,
+        # jadi tidur jam 20:00 memulihkan lebih banyak daripada roboh jam 23:00
+        # lewat FORCE_SLEEP_HOUR — tanpa satu pun tabel hukuman terpisah.
+        menit_tidur = ((1440.0 - s.time_minutes) + 360.0
+                       if s.time_minutes > 360.0 else 360.0 - s.time_minutes)
+        self._tidur_menit = menit_tidur
+        self._tidur_delta = s.mv.lewati_malam(menit_tidur)
+
         s.time_minutes   = 360.0
-        s.energy         = s.max_energy
+
+        # Dua sistem energi paralel disambungkan DI SINI, di satu-satunya
+        # tempat yang penting. `s.energy` (stamina bertani) dan `s.mv.energi`
+        # (mood dan otonomi) selama ini tidak saling tahu: yang pertama diisi
+        # penuh tiap pagi apa pun yang terjadi, yang kedua tidak pernah diisi
+        # sama sekali. Sekarang bangun tidur menurunkan stamina pagi dari
+        # energi motif yang benar-benar didapat semalam.
+        #
+        # Lantai 35% disengaja, dan itu pilihan "longgar" yang diminta pemilik:
+        # malam yang buruk membuat harinya berat, bukan membuat harinya mustahil.
+        frac = (s.mv.energi + 100.0) / 200.0
+        s.energy = max(int(s.max_energy * 0.35),
+                       min(s.max_energy, int(round(s.max_energy * frac))))
         s.hp             = s.max_hp
-        s.lapar  = min(NEED_MAX, s.lapar  + 25)
-        s.senang = min(NEED_MAX, s.senang + 20)
+
+        # `s.lapar += 25` dan `s.senang += 20` DIHAPUS, dan itu bukan
+        # penghilangan fitur: keduanya tulisan mati. `update()` memanggil
+        # `s.sync_motives()` tiap frame, yang menulis ulang kedua angka itu
+        # dari `s.mv`. Terukur: naik ke 50,0 lalu kembali ke 25,0 dalam TIGA
+        # frame. Yang menggantikannya adalah peluruhan malam yang sungguhan —
+        # lapar memang turun semalaman (senang tidak, lajunya nol saat tidur),
+        # jadi sarapan akhirnya punya alasan untuk ada.
+        s.sync_motives()
+
         s.naga_fountain_used_today = False
         s.buffs.clear()
 
@@ -86,12 +121,16 @@ class TimeController:
                 soil['age'] = soil.get('age', 0) + growth
                 soil['watered'] = False
 
-        # Ternak maju semalam persis seperti tanaman: yang kenyang mendekat
-        # satu hari ke hasilnya, yang lapar diam di tempat. Diletakkan tepat
-        # di bawah pertumbuhan tanaman supaya kedua siklus hidup di satu tempat
-        # dan tidak bisa lagi menyimpang satu sama lain.
-        from ..economy import tick_animals_daily
-        tick_animals_daily(s)
+        # `economy.tick_animals_daily` DIHAPUS dari sini, dan itu perbaikan
+        # bukan penghilangan fitur. Dulu DUA tick ternak jalan tiap malam:
+        # yang ini di atas catatan economy {kenyang, siap}, dan
+        # `husbandry.daily_tick` di atas catatan {kenyang, air, bersih, lalai,
+        # sakit}. Keduanya mensimulasikan hewan yang sama, di dua tempat, tanpa
+        # saling tahu. Yang dibaca pie menu cuma milik economy — jadi air dan
+        # bersih meluruh tanpa satu pun cara menaikkannya, dan terukur pada
+        # hari ke-4 setiap hewan sakit permanen karena syarat sembuh menuntut
+        # ketiganya >= 60. Sekarang husbandry satu-satunya yang memegang
+        # ternak, dan aksinya sudah tersambung ke pie menu.
 
         if s.day_in_season > DAYS_PER_SEASON:
             s.day_in_season = 1
@@ -127,8 +166,36 @@ class TimeController:
             if getattr(player, '_is_flying', False):
                 player.toggle_broom_flying(panels)
             sound_play('sleep', 0.8)
-            panels.flash_msg("Tidur... Hari baru dimulai!", 2.0)
             self.advance_day(player)
+            # Pesannya menyebut ANGKA, bukan cuma "hari baru". Sistem yang
+            # akibatnya tidak terlihat sama saja dengan sistem yang tidak ada —
+            # itu persis kenapa tidur bisa mati bertahun-tahun tanpa ada yang
+            # menyadarinya. Sekarang pemain melihat lama tidurnya dan stamina
+            # yang ia dapat darinya, jadi tidur jam 20:00 lawan roboh jam 23:00
+            # adalah dua angka yang berbeda di layar.
+            jam = getattr(self, '_tidur_menit', 0.0) / 60.0
+            panels.flash_msg(
+                f"Tidur {jam:.1f} jam. Bangun dengan {int(self.state.energy)}"
+                f"/{self.state.max_energy} stamina.", 2.4)
+            # Laporan kandang. `daily_tick` sudah mengembalikan ringkasan ini
+            # sejak lama dan `advance_day` menyimpannya di `_ternak_pagi` —
+            # tapi tidak ada satu pun yang menampilkannya, jadi hewan bisa
+            # kelaparan sampai sakit tanpa pemain pernah diberi tahu. Ternak
+            # yang sakit berhenti menghasilkan sama sekali, jadi diamnya mahal.
+            lap = getattr(self, '_ternak_pagi', None)
+            if lap:
+                if lap.get('sakit'):
+                    invoke(panels.flash_msg,
+                           f"SAKIT: {', '.join(lap['sakit'])} — beri makan, "
+                           f"minum, dan bersihkan kandangnya.", 4.0, delay=2.2)
+                elif lap.get('lapar'):
+                    invoke(panels.flash_msg,
+                           f"Kelaparan: {', '.join(lap['lapar'])}", 3.0,
+                           delay=2.2)
+                elif lap.get('siap'):
+                    invoke(panels.flash_msg,
+                           f"Siap dipanen: {', '.join(lap['siap'])}", 3.0,
+                           delay=2.2)
             # Deliver pending story messages after sleep
             if getattr(player, '_pending_seasonal_event', None):
                 invoke(panels.flash_msg,

@@ -16,6 +16,11 @@ from .animal import FarmAnimal
 TS = TILE_SIZE
 GH = GROUND_H
 
+# Tinggi sadel dipakai untuk menaruh kuda tepat DI BAWAH penunggangnya.
+# Diimpor lewat modul, bukan disalin angkanya: menyalin berarti suatu
+# hari salah satu berubah dan pemain melayang di atas pelananya.
+from .player import TINGGI_SADEL as _TINGGI_SADEL
+
 _MODELS_DIR = Path(__file__).resolve().parent.parent / 'assets' / 'models'
 _ASSET_DIR = Path(__file__).resolve().parent.parent / 'assets' / 'textures'
 
@@ -146,6 +151,13 @@ class EntitiesManager:
         s = self.state
         hour = s.get_hour()
         for npc_id in all_npcs():
+            # Hewan yang sedang ditunggangi dikendalikan pemain, bukan
+            # jadwalnya. Jadwal kuda cuma satu baris — (0, 20, 5, 'farm') —
+            # jadi tanpa baris ini, 30 detik setelah pemain menunggangnya ke
+            # kota, `pos['scene'] != target_scene` menyetel ulang scene-nya ke
+            # 'farm' dan memindahkannya ke petak 20,5: kudanya lenyap dari
+            # bawah penunggangnya dan muncul lagi di kandang.
+            if npc_id == getattr(s, 'menunggang', ''): continue
             sched = SCHEDULES.get(npc_id, [])
             if not sched: continue
             current = sched[0]
@@ -220,10 +232,19 @@ class EntitiesManager:
         
         # Spawn NPCs and Animals
         s = self.state
+        from .data import LIVESTOCK_FOR_SALE
         for actor_id, pos in s.npc_positions.items():
             if pos.get('scene') != self.scene_name: continue
             if pos.get('x', -1) < 0: continue
-            
+
+            # Ternak penghasil hanya muncul kalau sudah dibeli. Tanpa baris ini
+            # kandang penuh sejak hari pertama dan transaksi di Warung tidak
+            # mengubah apa pun yang terlihat. Hewan bukan-ternak tidak lewat
+            # sini sama sekali — mereka penghuni, bukan barang dagangan.
+            if actor_id in LIVESTOCK_FOR_SALE and \
+                    actor_id not in getattr(s, 'owned_animals', []):
+                continue
+
             # Determine class
             if actor_id in ANIMAL_NPCS:
                 actor = FarmAnimal(s, actor_id)
@@ -292,16 +313,44 @@ class EntitiesManager:
             if not apr_list and not is_animal:
                 model_name = get_npc_model_name(actor_id)
                 panda_model = load_model_file(model_name)
+                if not panda_model:
+                    model_name = 'humanoid'
+                    panda_model = load_model_file(model_name)
                 if panda_model:
+                    # Mesh humanoid tidak punya warna sama sekali, dan satu
+                    # mesh cuma punya satu entity.color. Tanpa ini setiap
+                    # warga desa sampai ke layar sebagai gumpalan PUTIH POLOS
+                    # di mesin tanpa instalasi TSO — bukan karena avatarnya
+                    # hilang, tapi karena tidak ada yang pernah memberitahu
+                    # warnanya. Diwarnai per-vertex, jadi kulit, baju, celana
+                    # dan rambut muat dalam SATU entity. Lihat human_paint.py
+                    # untuk kenapa bukan lima entity.
+                    warnai = (model_name == 'humanoid')
+                    if warnai:
+                        try:
+                            from .human_paint import paint_humanoid, palet_untuk
+                            warnai = paint_humanoid(panda_model, palet_untuk(actor_id))
+                        except Exception as e:
+                            import logging
+                            logging.warning(f"human_paint gagal untuk '{actor_id}': {e}")
+                            warnai = False
                     actor.model = panda_model
                     actor.scale = 1.0
+                    if warnai:
+                        # WAJIB, dan bukan sekadar hiasan. Lampu di scene ini
+                        # memicu setShaderAuto() Panda3D (lihat app.py:74), dan
+                        # shader hasil generator itu MENGABAIKAN kolom warna
+                        # vertex — diuji: mesh yang sudah diwarnai tetap keluar
+                        # putih pucat sampai smooth_shader dipasang. Yang membaca
+                        # p3d_Color cuma smooth_shader, jadi tanpa baris ini
+                        # seluruh kerja pewarnaan tidak sampai ke layar.
+                        try:
+                            from .smooth_shader import apply_smooth
+                            apply_smooth(actor, has_texture=False)
+                        except Exception:
+                            pass
                 else:
-                    # Fallback model if missing
-                    panda_fallback = load_model_file('humanoid')
-                    if panda_fallback:
-                        actor.model = panda_fallback
-                    else:
-                        actor.model = 'cube'
+                    actor.model = 'cube'
                     
             # Setup Label
             all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
@@ -476,6 +525,40 @@ class EntitiesManager:
                     actor.y = 0
                     
             elif isinstance(actor, FarmAnimal):
+                if actor_id == getattr(s, 'menunggang', ''):
+                    # Hewan tunggangan: posisi dan arahnya DISALIN dari pemain,
+                    # bukan dihitung. AI-nya dilewati (ia tidak boleh mengembara
+                    # sendiri sambil ditunggangi) dan sync_visuals juga —
+                    # metode itu me-lerp ke posisi logis dan membulatkan arah
+                    # hadap ke empat mata angin, jadi kuda akan tertinggal
+                    # setengah petak di belakang penunggangnya dan berputar
+                    # patah-patah 90 derajat sementara pemain berputar mulus.
+                    if pl is not None:
+                        actor.x, actor.z = pl.x, pl.z
+                        actor.y = pl.y - _TINGGI_SADEL
+                        actor.rotation_y = pl.rotation_y
+                    actor.logical_x, actor.target_x = s.player_x, s.player_x
+                    actor.logical_y, actor.target_y = s.player_y, s.player_y
+                    actor._walk_t += dt * 14.0
+                    # Papan nama hewan duduk 0,45 m di atas kepalanya, yaitu
+                    # tepat di depan dada dan leher penunggangnya: terpotret,
+                    # ia menutup sambungan kepala-badan pemain sehingga
+                    # kepalanya tampak melayang lepas. Selagi ditunggangi,
+                    # nama itu juga tidak memberi tahu apa pun yang belum
+                    # diketahui pemain — ia sedang duduk di atasnya.
+                    if getattr(actor, '_lbl', None) is not None:
+                        actor._lbl.enabled = False
+                    if actor_id in s.npc_positions:
+                        pos = s.npc_positions[actor_id]
+                        pos['x'], pos['y'] = actor.logical_x, actor.logical_y
+                        pos['target_x'], pos['target_y'] = actor.target_x, actor.target_y
+                        # Ikut pindah scene bersama penunggangnya, kalau tidak
+                        # load_scene() menolak memunculkannya di tujuan.
+                        pos['scene'] = s.scene_name
+                    continue
+
+                if getattr(actor, '_lbl', None) is not None and not actor._lbl.enabled:
+                    actor._lbl.enabled = True
                 actor.update_ai(dt, can_walk_fn)
                 if actor_id in s.npc_positions:
                     s.npc_positions[actor_id]['x'] = actor.logical_x

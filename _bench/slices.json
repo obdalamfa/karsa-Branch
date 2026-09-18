@@ -1,0 +1,43 @@
+{
+  "slices": [
+    {"id": "TANAH", "title": "Permukaan tanah dan rumput", "kind": "tampilan",
+     "bar_image": "farm_wide",
+     "goal": "Ladang dari jarak main biasa harus terbaca sebagai tanah yang ditanami, bukan sebagai kisi.",
+     "judge_question": "Mana yang lebih terbaca sebagai tanah pertanian sungguhan?"},
+
+    {"id": "DEKAT", "title": "Tanah dan tanaman dari dekat", "kind": "tampilan",
+     "bar_image": "farm_closeup",
+     "goal": "Pada jarak dekat, tekstur ubin paling mudah ketahuan mengulang. Di sinilah permukaan biasanya runtuh.",
+     "judge_question": "Mana yang teksturnya tidak ketahuan mengulang?"},
+
+    {"id": "HUD", "title": "Antarmuka dalam permainan", "kind": "tampilan",
+     "bar_image": "hud_default",
+     "goal": "HUD harus terbaca sekilas tanpa memakan layar, dan tidak boleh ada yang terpotong di tepi mana pun.",
+     "judge_question": "Mana yang lebih mudah dibaca sekilas tanpa memakan layar?"},
+
+    {"id": "WAJAH", "title": "Warga desa dari jarak percakapan", "kind": "tampilan",
+     "bar_image": "character_closeup",
+     "goal": "Proporsi, warna kulit dan pakaian, dan seberapa jauh wajah dibaca sebagai wajah.",
+     "judge_question": "Mana yang lebih terbaca sebagai orang, bukan sebagai boneka?"},
+
+    {"id": "WARGA", "title": "Warga desa dari jarak main", "kind": "tampilan",
+     "bar_image": "character_midshot",
+     "goal": "Jarak inilah yang menentukan apakah orang terbaca sebagai orang, dan di jarak inilah avatar kita paling sering gagal.",
+     "judge_question": "Pada jarak main biasa, mana yang sosoknya lebih jelas?"},
+
+    {"id": "DESA", "title": "Pemandangan desa", "kind": "tata letak",
+     "bar_image": "village_wide",
+     "goal": "Kepadatan, jarak antar-bangunan, dan bagaimana banyak benda tetap terbaca dalam satu frame.",
+     "judge_question": "Mana yang lebih terbaca sebagai tempat yang dihuni orang?"},
+
+    {"id": "KANDANG", "title": "Pencahayaan dalam ruangan", "kind": "tampilan",
+     "bar_image": "barn_interior",
+     "goal": "Lantai, cahaya dalam ruang, dan skala isi ruangan terhadap pemain.",
+     "judge_question": "Mana yang ruangannya lebih meyakinkan sebagai ruangan?"},
+
+    {"id": "SENJA", "title": "Pergantian waktu", "kind": "tampilan",
+     "bar_image": "evening_light",
+     "goal": "Warna langit, arah bayangan, dan seberapa jauh warna dunia bergeser mengikuti waktu.",
+     "judge_question": "Mana yang pergantian waktunya lebih terasa?"}
+  ]
+}

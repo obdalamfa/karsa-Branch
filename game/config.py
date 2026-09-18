@@ -62,7 +62,12 @@ CT, SH, GR, LN, DT, CV_W, CV_F, PEN, STR_T, \
 DCK, BOT, LLY, CRYS, \
 ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, \
 STAIRS_DOWN, STAIRS_UP, MINED, \
-SD, LGH_B, LGH_F, CLOUD, GOLD_W, PALM, TV, CHR, CAL = range(51)
+SD, LGH_B, LGH_F, CLOUD, GOLD_W, PALM, TV, CHR, CAL, \
+WC = range(52)
+# WC ditambahkan DI AKHIR, dan itu wajib: scene menaruh perabot lewat nama
+# konstanta, tapi save lama menyimpan angka. Menyisipkan id baru di tengah
+# menggeser semua id sesudahnya, jadi kasur di save kemarin akan terbuka
+# sebagai meja hari ini.
 
 TILE_NAMES = {
     G:'grass', D:'dirt', P:'path', W:'water', FL:'floor', WL:'wall',
@@ -78,13 +83,14 @@ TILE_NAMES = {
     STAIRS_DOWN:'stairs_down', STAIRS_UP:'stairs_up', MINED:'mined_floor',
     SD:'sand', LGH_B:'lighthouse_broken', LGH_F:'lighthouse_fixed',
     CLOUD:'cloud_floor', GOLD_W:'gold_wall', PALM:'palm_tree',
-    TV:'tv', CHR:'chair', CAL:'calendar'
+    TV:'tv', CHR:'chair', CAL:'calendar', WC:'toilet'
 }
 
 WALKABLE  = [G, D, P, FL, DR, GT, CV_F, STR_T, DCK, LLY, MINED, STAIRS_DOWN, STAIRS_UP, SD, CLOUD]
 TILLABLE  = [G, D]
 BLOCKING  = [WL, TR, H, FN, BD, ST, TB, BS, MR, FP, CL, PP, CH, CT, SH, GR, LN, DT,
-             CV_W, PEN, BOT, CRYS, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, MB, LGH_B, LGH_F, GOLD_W, PALM, TV, CAL]
+             CV_W, PEN, BOT, CRYS, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, MB, LGH_B, LGH_F, GOLD_W, PALM, TV, CAL,
+             WC]
 MINEABLE  = [CV_W, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS]
 
 SEASONS      = ['Semi', 'Panas', 'Gugur', 'Dingin']

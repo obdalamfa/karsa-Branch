@@ -553,6 +553,35 @@ SEASONAL_EVENTS = {
 # tidak ada yang menjaga keduanya sama; sekarang mustahil menyimpang.
 # Harga jual-kembali setiap barang ada di game/economy.py — selalu di bawah
 # harga beli, supaya beli-lalu-jual-ulang tidak jadi mesin uang.
+# ─── TERNAK YANG BISA DIBELI ─────────────────────────────
+# Sebelum ini kesembilan hewan di ANIMAL_NPCS muncul gratis sejak hari pertama,
+# jadi "membeli ternak" tidak punya arti — kandangnya sudah penuh sebelum
+# pemain melakukan apa pun. Sekarang ternak penghasil harus dibeli dulu; hewan
+# yang tidak menghasilkan (kuda, kucing, rubah, kelinci) tetap ada apa adanya
+# karena mereka bukan ternak, mereka penghuni.
+#
+# HARGANYA DITURUNKAN, BUKAN DIKARANG. Untung harian satu ekor =
+# nilai hasil / siklus - 18G pakan sehari (FEED_DAY_VALUE). Harga = untung
+# harian x 28 hari (DAYS_PER_SEASON), yaitu balik modal tepat satu musim:
+#
+#   ayam    telur 32 / 1 hari = 32,0 - 18 = 14,0/hari  x28 =  392G
+#   bebek   telur 32 / 1 hari = 32,0 - 18 = 14,0/hari  x28 =  392G
+#   sapi    susu  42 / 1 hari = 42,0 - 18 = 24,0/hari  x28 =  672G
+#   kambing wol   58 / 2 hari = 29,0 - 18 = 11,0/hari  x28 =  308G
+#   domba   wol   58 / 2 hari = 29,0 - 18 = 11,0/hari  x28 =  308G
+#
+# Yang terlihat begitu angkanya disusun begini: WOL PALING TIDAK MENGUNTUNGKAN
+# per hari meski nilainya tertinggi, karena siklus 2 hari membelah dua
+# pemasukannya sementara pakan tetap dibayar tiap hari. Itu temuan neraca,
+# bukan keputusan — dicatat di sini supaya terlihat, bukan diam-diam ditambal.
+LIVESTOCK_FOR_SALE = {
+    'kambing_jenggot': 308,
+    'domba_woolly':    308,
+    'ayam_kuning':     392,
+    'bebek_donald':    392,
+    'sapi_betsy':      672,
+}
+
 SHOP_ITEMS = [
     {'id': f'{_k}_seed', 'name': f"Benih {_c['name']}", 'price': int(_c['cost']),
      'season': '/'.join(_c['seasons']) or 'all', 'crop': _k}
@@ -562,6 +591,12 @@ SHOP_ITEMS = [
     # patokan yang dipakai economy.py untuk menilai pakan buatan sendiri.
     {'id': 'jerami', 'name': 'Jerami',  'price': 18, 'season': 'all', 'crop': None},
     {'id': 'kayu',   'name': 'Kayu',    'price': 20, 'season': 'all', 'crop': None},
+] + [
+    # Ternak. `animal` menandai baris ini bukan barang tas: panels._buy_shop_item
+    # memindahkannya ke kandang, bukan ke inventori.
+    {'id': _aid, 'name': ANIMAL_NPCS[_aid]['name'], 'price': _harga,
+     'season': 'all', 'crop': None, 'animal': _aid}
+    for _aid, _harga in LIVESTOCK_FOR_SALE.items()
 ]
 
 # ─── BRANCHING DIALOGUE TREES ────────────────────────────

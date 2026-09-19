@@ -9,6 +9,10 @@ class TimeController:
     
     def __init__(self, state):
         self.state = state
+        # Wish yang baru tuntas, menunggu ditampilkan. Dikuras app.update()
+        # supaya pesannya muncul lewat panels, yang tidak boleh disentuh dari
+        # dalam tick motif.
+        self._wish_tuntas: list = []
 
     def tick(self, dt, player):
         s = self.state
@@ -30,6 +34,18 @@ class TimeController:
             selesai = q.tick(ingame_dt)
             if selesai:
                 self._last_action_done = selesai
+                # Wish berbentuk "lakukan X" membayar SEKETIKA di sini, bukan
+                # menunggu pagi. Itu bagian yang memuaskan, dan predikatnya
+                # sama persis dengan yang dipakai pemeriksaan pagi — tidak ada
+                # jalur kedua yang bisa berselisih.
+                try:
+                    from ..wishes import catat_aksi, periksa
+                    catat_aksi(s, selesai)
+                    for w in periksa(s):
+                        self._wish_tuntas.append(w)
+                except Exception as e:
+                    import logging
+                    logging.warning(f"[WISH] gagal mencatat '{selesai}': {e}")
 
         s.sync_motives()
 
@@ -105,6 +121,24 @@ class TimeController:
 
         s.naga_fountain_used_today = False
         s.buffs.clear()
+
+        # Tidur yang CUKUP dicatat, dan enam jam adalah angka yang dipilih
+        # pemilik di #4. Ia dipakai wish 'tidur cukup tiga malam', jadi angka
+        # itu akhirnya punya akibat yang bisa dikejar pemain, bukan cuma
+        # dipakai sekali di perhitungan neraca.
+        if menit_tidur >= 360.0:
+            s.stats['malam_cukup'] = s.stats.get('malam_cukup', 0) + 1
+
+        # Wish: keadaan dunia diperiksa SEKALI SEHARI di sini, bukan tiap
+        # frame — "punya tiga sapi" tidak berubah di tengah hari tanpa sebuah
+        # aksi, dan aksi punya jalurnya sendiri.
+        try:
+            from ..wishes import periksa as _wish_periksa, undi as _wish_undi
+            self._wish_tuntas.extend(_wish_periksa(s))
+            _wish_undi(s)
+        except Exception as e:
+            import logging
+            logging.warning(f"[WISH] gagal pada pergantian hari: {e}")
 
         # Rain auto-waters tilled soil
         if s.weather in ('Hujan', 'Badai'):

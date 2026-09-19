@@ -805,6 +805,7 @@ class UIManager:
             'crafting':  'Bengkel Pak Budi',
             'help':      'Panduan Kontrol',
             'catatan':   'Catatan Lembah',
+            'wishes':    'Keinginan & Tekad',
         }
         self._panel_title.text = titles.get(name, name.capitalize())
         # Update hint sesuai panel
@@ -815,6 +816,9 @@ class UIManager:
             self._panel_hint.text = '[1-9: Olah]   [Q/R: halaman]   [ESC: Tutup]'
         elif name == 'crafting':
             self._panel_hint.text = '[1-5: Pickaxe]   [6-9: Pedang]   [ESC: Tutup]'
+        elif name == 'wishes':
+            self._panel_hint.text = ('[1-4: janjikan]   [7-8: lepas janji]'
+                                     '   [ESC: tutup]')
         else:
             self._panel_hint.text = '[ESC: tutup]'
 
@@ -1005,6 +1009,29 @@ class UIManager:
                     lines.append('')
             self._panel_body.text = '\n'.join(lines[:28])
 
+        elif name == 'wishes':
+            from .wishes import ringkas, SLOT_JANJI, _papan
+            pap = _papan(s)
+            lines = [
+                f'Tekad: {getattr(s, "tekad", 0)}    '
+                f'Janji terpakai: {len(pap["janji"])}/{SLOT_JANJI}',
+                '',
+                'Tekad tidak pernah meluruh. Ia dibelanjakan untuk perabot',
+                'dan resep — dan perabot yang lebih baik adalah satu-satunya',
+                'hal yang mengurangi waktu yang habis mengurus motif.',
+                '',
+            ]
+            for judul, isi in ringkas(s):
+                lines.append(f'{judul:<44s}{isi}')
+            lines.append('')
+            if pap['janji']:
+                lines.append('  [7/8] lepas janji ke-1 / ke-2 '
+                             '(kemajuannya hilang)')
+            lines.append('  [1-4] janjikan salah satu tawaran di atas')
+            lines.append('  Tawaran diundi ulang tiap pagi; yang sudah')
+            lines.append('  dijanjikan tidak ikut berganti.')
+            self._panel_body.text = '\n'.join(lines[:28])
+
     def _set_body(self, lines):
         self._panel_body.text = chr(10).join(lines)
 
@@ -1129,7 +1156,35 @@ class UIManager:
             return self._process_item(idx)
         elif self._panel_name == 'crafting':
             return self._craft_item(idx)
+        elif self._panel_name == 'wishes':
+            return self._wish_action(idx)
         return ''
+
+    def _wish_action(self, idx: int) -> str:
+        """1-4 menjanjikan dari tawaran, 7-8 melepas janji yang berjalan.
+
+        Angka dipisah dengan sengaja: melepas janji adalah membuang kemajuan
+        yang sudah terkumpul, dan itu tidak boleh berbagi tombol dengan
+        memilih tawaran baru — satu salah tekan akan menghapus dua hari kerja.
+        """
+        from .wishes import janjikan, lepas, _papan, tawaran
+        s = self.state
+        pap = _papan(s)
+        if 1 <= idx <= 4:
+            siap = tawaran(s)
+            if idx > len(siap):
+                return ''
+            ok, pesan = janjikan(s, siap[idx - 1])
+        elif idx in (7, 8):
+            janji = list(pap['janji'].keys())
+            j = idx - 7
+            if j >= len(janji):
+                return ''
+            ok, pesan = lepas(s, janji[j])
+        else:
+            return ''
+        self._render_panel('wishes')
+        return pesan
 
     def _buy_shop_item(self, idx: int) -> str:
         s = self.state

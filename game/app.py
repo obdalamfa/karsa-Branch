@@ -217,6 +217,17 @@ class Game3D:
         from .cutscene import Sinema
         self.sinema = Sinema(self)
 
+        # Papan keinginan diisi sekali di sini. Tanpa ini ia baru terisi pada
+        # pergantian hari PERTAMA, jadi pemain baru membuka panel Keinginan di
+        # hari pertamanya dan melihat papan kosong — mekanik yang terlihat
+        # rusak pada saat satu-satunya ia diperkenalkan.
+        try:
+            from .wishes import undi as _undi_wish, _papan as _papan_wish
+            if not _papan_wish(self.state)['ambang']:
+                _undi_wish(self.state)
+        except Exception as e:
+            logging.warning(f"[WISH] gagal mengisi papan awal: {e}")
+
         # Terapkan penampilan tersimpan (jika sudah pernah chargen)
         if self.state.char_name:
             self.player.apply_appearance(self.state)
@@ -297,6 +308,17 @@ class Game3D:
             msg = self.player.time_controller.tick(dt, self.player)
             if msg:
                 self.panels.flash_msg(msg, 2.5)
+
+            # Wish yang tuntas diumumkan DI SINI, bukan dari dalam tick motif.
+            # TimeController tidak memegang panels, dan memberinya panels
+            # berarti mesin waktu ikut memegang UI — antrean pendek ini
+            # menjaga batasnya tetap satu arah.
+            tuntas = getattr(self.player.time_controller, '_wish_tuntas', None)
+            while tuntas:
+                w = tuntas.pop(0)
+                self.panels.flash_msg(
+                    f"Keinginan tercapai: {w.teks}  (+{w.tekad} Tekad)", 2.8)
+
             self._check_needs_warning()
 
             self.player.tick(dt, self.panels)
@@ -616,6 +638,8 @@ class Game3D:
                 self.panels.open_panel('relations')
             elif key == 'n':
                 self.panels.open_panel('catatan')
+            elif key == 'u':
+                self.panels.open_panel('wishes')
             elif key == 'k':
                 if self.state.scene_name == 'shop':
                     self.panels.open_panel('shop')

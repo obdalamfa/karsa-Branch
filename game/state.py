@@ -117,6 +117,17 @@ class GameState:
     # Sinema yang sudah pernah ditonton, supaya adegan pembuka tidak main lagi
     # tiap kali save dimuat. List, bukan set — save memakai json.dump.
     sinema_selesai: list = field(default_factory=list)
+
+    # ─── WISHES ──────────────────────────────────────────
+    # Tekad tidak pernah meluruh — itu yang membedakannya dari delapan motif,
+    # dan itu sebabnya ia terasa seperti membangun sesuatu alih-alih seperti
+    # hari yang lancar. Dibelanjakan untuk perabot dan resep, karena neraca
+    # motif (#6) diseimbangkan di sekitar suplai perabot: perabot yang lebih
+    # baik adalah satu-satunya hal yang menurunkan 54,5% hidup yang habis
+    # mengurus motif.
+    tekad:       int  = 0
+    wishes:      dict = field(default_factory=dict)   # janji / ambang / selesai
+    aksi_hitung: dict = field(default_factory=dict)   # nama aksi -> jumlah tuntas
     post_game:      bool = False                        # True after quest_stage reaches 11
     side_quests: dict = field(default_factory=dict)
     lighthouse_fixed: bool = False                      # True after repairing lighthouse on the beach

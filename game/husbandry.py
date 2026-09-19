@@ -51,48 +51,56 @@ AMBANG_SEHAT = 60
 # dicoba berurutan dari inventori pemain.
 SPECIES_CARE: dict[str, dict] = {
     'sapi': {
+        'kandang': True,
         'label': 'Sapi', 'produk': 'susu', 'produk_label': 'Susu',
         'tiap': 1, 'jumlah': 1, 'aksi': 'Perah', 'siap_teks': 'Siap diperah',
         'pakan': ['rumput', 'jerami', 'jagung'], 'harga': 40,
         'catatan': 'Sapi perah butuh air paling banyak — susu 87% air.',
     },
     'ayam': {
+        'kandang': True,
         'label': 'Ayam', 'produk': 'telur', 'produk_label': 'Telur',
         'tiap': 1, 'jumlah': 1, 'aksi': 'Ambil Telur', 'siap_teks': 'Ada telur di sarang',
         'pakan': ['jagung', 'dedak', 'kacang_hijau'], 'harga': 30,
         'catatan': 'Ayam berhenti bertelur kalau kandang kotor atau kekurangan pakan.',
     },
     'bebek': {
+        'kandang': True,
         'label': 'Bebek', 'produk': 'telur_bebek', 'produk_label': 'Telur Bebek',
         'tiap': 2, 'jumlah': 1, 'aksi': 'Ambil Telur', 'siap_teks': 'Ada telur bebek',
         'pakan': ['dedak', 'jagung', 'bayam'], 'harga': 38,
         'catatan': 'Bebek perlu air lebih sering daripada unggas lain.',
     },
     'kambing': {
+        'kandang': True,
         'label': 'Kambing', 'produk': 'susu_kambing', 'produk_label': 'Susu Kambing',
         'tiap': 2, 'jumlah': 1, 'aksi': 'Perah', 'siap_teks': 'Siap diperah',
         'pakan': ['rumput', 'jerami', 'ubi_jalar'], 'harga': 45,
         'catatan': 'Kambing paling tahan pakan seadanya, tapi kandang basah bikin sakit.',
     },
     'domba': {
+        'kandang': True,
         'label': 'Domba', 'produk': 'wol', 'produk_label': 'Wol',
         'tiap': 5, 'jumlah': 1, 'aksi': 'Cukur', 'siap_teks': 'Bulu siap dicukur',
         'pakan': ['rumput', 'jerami'], 'harga': 55,
         'catatan': 'Wol tumbuh pelan: sekali cukur per lima hari.',
     },
     'kuda': {
+        'kandang': True,
         'label': 'Kuda', 'produk': None, 'produk_label': None,
         'tiap': 0, 'jumlah': 0, 'aksi': None, 'siap_teks': None,
         'pakan': ['rumput', 'jerami', 'wortel'], 'harga': 0,
         'catatan': 'Kuda tidak menghasilkan apa-apa, tapi tetap harus diberi makan.',
     },
     'kucing': {
+        'kandang': False,
         'label': 'Kucing', 'produk': None, 'produk_label': None,
         'tiap': 0, 'jumlah': 0, 'aksi': None, 'siap_teks': None,
         'pakan': ['ikan', 'telur', 'susu'], 'harga': 0,
         'catatan': 'Kucing menjaga lumbung dari tikus. Beri makan, jangan dikandangkan.',
     },
     'kelinci': {
+        'kandang': False,
         'label': 'Kelinci', 'produk': None, 'produk_label': None,
         'tiap': 0, 'jumlah': 0, 'aksi': None, 'siap_teks': None,
         'pakan': ['wortel', 'bayam', 'rumput'], 'harga': 0,
@@ -120,9 +128,58 @@ def care_rules(animal_id: str) -> dict:
 
 
 def is_livestock(animal_id: str) -> bool:
-    """Hewan ternak yang memang diurus (rubah liar tidak)."""
+    """Hewan yang memang diurus (rubah liar tidak)."""
     r = care_rules(animal_id)
     return bool(r) and not r.get('liar')
+
+
+# Scene yang airnya terbuka. Hewan yang tinggal di sini tidak pernah kehausan:
+# bebek di danau berenang di air minumnya. Tanpa pengecualian ini, air yang
+# sekarang menggerbangi produksi menghukum bebek karena tinggal di tempat yang
+# memang tempatnya — palung hanya ada di kandang kebun, jadi takarannya meluruh
+# sampai nol dan ia PASTI jatuh sakit, tanpa satu pun cara bagi pemain untuk
+# mencegahnya. Aturan yang tidak bisa dipatuhi bukan aturan, itu jebakan.
+SCENE_BERAIR = {'lake', 'beach'}
+
+
+def di_air_terbuka(state, animal_id: str) -> bool:
+    pos = getattr(state, 'npc_positions', {}).get(animal_id) or {}
+    return pos.get('scene') in SCENE_BERAIR
+
+
+def air_mandiri(state, animal_id: str) -> bool:
+    """Hewan yang mencari minumnya sendiri, jadi takaran air tidak berlaku.
+
+    Dua hal masuk ke sini, dan keduanya karena sebab yang sama: palung hanya
+    ada di KANDANG kebun, jadi hewan yang tidak berada di dalamnya tidak punya
+    satu pun cara untuk diberi minum oleh pemain.
+
+      air terbuka   bebek di danau berenang di air minumnya
+      tidak dikandangkan
+                    kucing dan kelinci berkeliaran; catatan spesiesnya sendiri
+                    sudah bilang "Beri makan, jangan dikandangkan". Mereka
+                    minum dari mana saja seperti kucing sungguhan.
+
+    Tanpa ini, air yang sekarang menggerbangi produksi menghukum mereka karena
+    hidup di tempat yang memang tempatnya: takarannya meluruh sampai nol, tiga
+    hari lalai, lalu SAKIT dan hati turun tiap hari — tanpa jalan keluar.
+    Aturan yang tidak bisa dipatuhi bukan aturan, itu jebakan. Bug yang sama
+    ditemukan dua kali: pertama pada bebek, lalu pada kucing dan kelinci.
+    """
+    return di_air_terbuka(state, animal_id) or not is_penned(animal_id)
+
+
+def is_penned(animal_id: str) -> bool:
+    """Hewan yang tinggal di KANDANG, jadi berbagi palung minum yang sama.
+
+    Kucing dan kelinci diurus tapi tidak dikandangkan — catatan spesiesnya
+    sendiri sudah mengatakannya ("Beri makan, jangan dikandangkan"). Tanpa
+    pemisahan ini, mengisi palung sapi memanggil kucing dari seberang kebun
+    ke palung ternak, dan takaran air kucing ikut menentukan tinggi air yang
+    ditampilkan palung.
+    """
+    r = care_rules(animal_id)
+    return bool(r) and not r.get('liar') and bool(r.get('kandang'))
 
 
 # ─── KEADAAN PER HEWAN ───────────────────────────────────────────────────────
@@ -168,7 +225,10 @@ def daily_tick(state) -> dict:
         mult = PENGALI_SUSUT.get(meta.get('type', ''), 1.0)
 
         rec['kenyang'] = _clamp(rec['kenyang'] - SUSUT_KENYANG * mult)
-        rec['air']     = _clamp(rec['air']     - SUSUT_AIR     * mult)
+        if air_mandiri(state, aid):
+            rec['air'] = 100        # mencari minumnya sendiri
+        else:
+            rec['air'] = _clamp(rec['air'] - SUSUT_AIR * mult)
         rec['bersih']  = _clamp(rec['bersih']  - SUSUT_BERSIH  * mult)
 
         # ── Kelalaian. Yang dihitung adalah takaran yang MENYENTUH nol, bukan

@@ -292,6 +292,13 @@ ANIMAL_PRODUCE = {
 # memungut hasil gratis, ternak jadi uang gratis dan bertani kehilangan makna.
 EN_FEED    = 2
 EN_COLLECT = 2
+# Mengangkat seember air dari sumur ke palung. Lebih mahal daripada menabur
+# pakan karena memang lebih berat — dan supaya "isi palung tiap hari" terasa
+# sebagai pekerjaan pagi, bukan sebagai klik gratis.
+EN_WATER   = 3
+# Menyikat: lebih murah daripada mengangkat air, tapi bukan gratis — ia aksi
+# harian yang paling sering diulang, jadi kalau gratis ia berhenti jadi pilihan.
+EN_BRUSH   = 2
 
 # Berapa hari satu kali pemberian makan bertahan.
 FEED_DAYS = 1
@@ -318,10 +325,50 @@ def has_feed(inventory: dict) -> bool:
 
 
 def animal_record(state, animal_id: str) -> dict:
-    """Catatan per ekor: sisa hari kenyang + hari sejak hasil terakhir."""
+    """Catatan SIKLUS HASIL per ekor: berapa hari sejak hasil terakhir.
+
+    Dulu catatan ini juga menyimpan 'kenyang' sebagai hitungan hari, sementara
+    husbandry.py menyimpan kenyang/air/bersih dalam persen di tempat lain — dan
+    KEDUANYA di-tick tiap malam. Dua simulasi kawanan yang sama, cuma satu yang
+    bisa disentuh menu: memberi makan menaikkan angka economy, sedangkan angka
+    husbandry tetap meluruh sampai nol, jadi hewan yang dirawat rajin tetap
+    jatuh sakit di buku yang satunya. Sekarang takaran perawatan hanya ada di
+    husbandry (lihat care_rec) dan yang tinggal di sini murni siklus hasil.
+    """
     if not isinstance(getattr(state, 'animals', None), dict):
         state.animals = {}
-    return state.animals.setdefault(animal_id, {'kenyang': 0, 'siap': 0})
+    rec = state.animals.setdefault(animal_id, {'siap': 0})
+    # Save lama membawa 'kenyang' berbasis hari. Dibuang sekali saat dibaca:
+    # pemiliknya sekarang husbandry, dan dua angka kenyang adalah bug.
+    rec.pop('kenyang', None)
+    return rec
+
+
+def care_rec(state, animal_id: str) -> dict:
+    """Takaran perawatan (kenyang/air/bersih, dalam persen). SATU pemilik."""
+    from .husbandry import care_of
+    return care_of(state, animal_id)
+
+
+def care_block(state, animal_id: str) -> str | None:
+    """Apa yang MENGHENTIKAN hewan ini berproduksi, dalam kata-kata pemain.
+
+    None = tidak ada yang menghalangi. Urutannya paling mendesak lebih dulu,
+    supaya label pie menu menyebut satu hal yang harus dikerjakan sekarang,
+    bukan daftar keluhan.
+    """
+    from .husbandry import (MIN_KENYANG_PRODUKSI, MIN_AIR_PRODUKSI,
+                            MIN_BERSIH_PRODUKSI)
+    rec = care_rec(state, animal_id)
+    if rec.get('sakit'):
+        return 'Sakit — rawat sampai sembuh'
+    if rec.get('kenyang', 0) < MIN_KENYANG_PRODUKSI:
+        return 'Lapar — beri makan dulu'
+    if rec.get('air', 0) < MIN_AIR_PRODUKSI:
+        return 'Haus — isi palung dulu'
+    if rec.get('bersih', 0) < MIN_BERSIH_PRODUKSI:
+        return 'Kandang kotor — bersihkan dulu'
+    return None
 
 
 def animal_status(state, animal_id: str, species: str) -> tuple[bool, str]:
@@ -332,8 +379,9 @@ def animal_status(state, animal_id: str, species: str) -> tuple[bool, str]:
     rec = animal_record(state, animal_id)
     if rec.get('siap', 0) >= prod['cycle']:
         return True, f"{item_name(prod['item'])} siap ({sell_price(prod['item'])}G)"
-    if rec.get('kenyang', 0) <= 0:
-        return False, 'Lapar — beri makan dulu'
+    halangan = care_block(state, animal_id)
+    if halangan:
+        return False, halangan
     sisa = prod['cycle'] - rec.get('siap', 0)
     return False, f"{item_name(prod['item'])} dalam {sisa} hari"
 
@@ -351,12 +399,16 @@ def tick_animals_daily(state) -> int:
         prod = produce_for(meta.get('type', ''))
         if not prod:
             continue
+        # Syaratnya dibaca dari husbandry, bukan dari hitungan hari sendiri:
+        # peluruhan kenyang/air/bersih sudah dijalankan husbandry.daily_tick
+        # tepat sebelum ini. Menghitungnya dua kali membuat memberi makan
+        # berarti satu hal di satu buku dan hal lain di buku satunya.
+        if care_block(state, aid) is not None:
+            continue
         rec = animal_record(state, aid)
-        if rec.get('kenyang', 0) > 0:
-            rec['kenyang'] -= 1
-            if rec.get('siap', 0) < prod['cycle']:
-                rec['siap'] = rec.get('siap', 0) + 1
-                maju += 1
+        if rec.get('siap', 0) < prod['cycle']:
+            rec['siap'] = rec.get('siap', 0) + 1
+            maju += 1
     return maju
 
 

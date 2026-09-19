@@ -328,6 +328,52 @@ def creature_head_mesh():
     return _instance(_creature_head_mesh)
 
 
+# ─── BOLA MATA ───────────────────────────────────────────────────────────────
+# Satu-satunya bentuk BENAR-BENAR BULAT di proyek ini. Semua superelipsoid lain
+# memakai eksponen 0.10 — hampir kubus — dan itu disengaja: siluet Crossy Road
+# dibangun dari kotak. Tapi mata yang dibuat dari kotak tidak terbaca sebagai
+# mata. Terpotret: mata kucing ronde pertama memakai creature_body_mesh dan
+# hasilnya dua PERSEGI putih bertambal kotak hitam — pemain membacanya sebagai
+# kacamata las, bukan mata. Eksponen 1.0 = elipsoid sejati.
+
+_mata_mesh = None
+
+
+def mata_mesh():
+    """Bola mata: elipsoid halus, unit diameter 1.0."""
+    global _mata_mesh
+    if _mata_mesh is not None:
+        return _instance(_mata_mesh)
+
+    nu, nv = 16, 12
+    e1 = e2 = 1.0
+
+    verts, norms, uvs = [], [], []
+    for j in range(nv + 1):
+        v = -math.pi/2 + math.pi * j / nv
+        for i in range(nu + 1):
+            u = -math.pi + 2*math.pi * i / nu
+            x, y, z = _superellipsoid_point(u, v, e1, e2)
+            verts.append(Vec3(x * 0.5, y * 0.5, z * 0.5))
+            ln = math.sqrt(x*x + y*y + z*z) or 1.0
+            norms.append(Vec3(x/ln, y/ln, z/ln))
+            uvs.append((i / nu, j / nv))
+
+    tris = []
+    for j in range(nv):
+        for i in range(nu):
+            a = j * (nu + 1) + i
+            b = a + 1
+            c = a + (nu + 1)
+            d = c + 1
+            tris.append((a, b, c))
+            tris.append((b, d, c))
+
+    _mata_mesh = Mesh(vertices=verts, triangles=tris, normals=norms, uvs=uvs,
+                      mode='triangle', static=True)
+    return _instance(_mata_mesh)
+
+
 # ─── KERUCUT LOW-POLY ────────────────────────────────────────────────────────
 # Dipakai untuk paruh, tanduk, telinga, dan moncong hewan (game/animal_models.py).
 # Kubus tidak pernah terbaca sebagai "runcing" pada siluet sekecil itu — satu

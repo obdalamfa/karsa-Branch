@@ -21,7 +21,7 @@ from ursina import Shader, Vec3
 
 _VERT = """
 #version 140
-// v5 2026-05-17
+// v6 2026-09-09
 uniform mat4 p3d_ModelViewProjectionMatrix;
 uniform mat4 p3d_ModelMatrix;
 uniform mat3 p3d_NormalMatrix;
@@ -44,7 +44,7 @@ void main() {
 
 _FRAG = """
 #version 140
-// v5 2026-05-17
+// v6 2026-09-09
 uniform sampler2D p3d_Texture0;
 uniform vec4 p3d_ColorScale;
 uniform mat4 p3d_ViewMatrixInverse;
@@ -105,6 +105,25 @@ void main() {
 
     lit *= outline_darken; // Tepi sedikit gelap, tidak full hitam
     lit = lift_saturation(lit, sm_saturation * 1.08); // Saturasi ringan — tidak neon
+
+    // Jaga RONA saat pencahayaan melewati 1,0.
+    //
+    // ambient (0,45 0,46 0,50) + sun (1,05 1,02 0,92) = pengganda 1,50 di pita
+    // tersinari, dan tidak ada yang pernah membatasinya. Kanal yang lewat 1,0
+    // dipotong oleh perangkat keras SATU PER SATU, jadi warna terang tidak
+    // menjadi lebih terang — ia kehilangan warnanya. Kulit rgb(230,190,148)
+    // dikali 1,50 jadi (1,35 1,10 0,82) lalu terpotong ke rgb(255,255,210):
+    // cokelat hangat berubah jadi kuning-putih menyala. Itulah kenapa wajah
+    // karakter terbaca seperti bercahaya sendiri di hampir setiap tangkapan.
+    //
+    // Bukan dijepit per kanal, tapi diskalakan bersama-sama: kanal tertinggi
+    // didudukkan di 1,0 dan sisanya ikut turun dengan rasio yang sama, jadi
+    // ronanya utuh dan yang hilang cuma kelebihan terang yang memang tidak
+    // bisa ditampilkan.
+    float puncak = max(lit.r, max(lit.g, lit.b));
+    if (puncak > 1.0) {
+        lit /= puncak;
+    }
 
     fragColor = vec4(lit, base.a);
 }

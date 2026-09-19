@@ -19,6 +19,9 @@ bukan pada kemungkinan yang dikarang:
   save_bolak     format save berubah; save lama tidak boleh merusak loader.
   ms_frame       4-29 FPS dan belum pernah diprofil. Dicatat sebagai angka
                  supaya regresi performa terlihat, bukan cuma terasa.
+  kanal_jenuh    rumput siang terbaca neon: albedo (148,205,105) sampai ke
+                 layar sebagai (230,255,90) dengan kanal hijau MENTOK, jadi
+                 gradasinya hilang. Dicatat sebagai angka, bukan lulus/gagal.
   hud_layar      HUD terpotong tepi layar. Jam, tanggal, cuaca, nama scene dan
                  baris bantuan semuanya lari keluar tepi kanan karena dipatok
                  ke angka tetap (x=0,70) padahal tepi UI mengikuti rasio layar.
@@ -109,6 +112,31 @@ def cek_frame_kosong(png: Path):
     if unik < 12 or dominan > 0.93:
         return _fail(f'frame nyaris polos (warna unik {unik}, dominan {dominan:.0%})')
     return _ok(f'{unik} warna')
+
+
+def cek_kanal_jenuh(png: Path):
+    """Berapa banyak layar yang kanal warnanya mentok 255 (detailnya hilang).
+
+    Diukur karena rumput siang terbaca neon: albedo-nya (148,205,105) tapi yang
+    sampai ke layar (230,255,90) — kanal hijau MENTOK, jadi bayangan dan
+    gradasi di rumput hilang sama sekali dan papan catur di bawahnya berubah
+    jadi dua pita datar. app.py sendiri menulis invarian "ambient + sun x dot
+    <= 100% agar warna tidak overflow putih"; nilai yang dipakai sekarang
+    (amb 95, sun 255) jauh di atas plafon yang dicatat komentarnya (70/185).
+
+    Dicatat sebagai ANGKA, bukan lulus/gagal, seperti ms/frame: yang penting
+    regresinya terlihat. Gagal hanya kalau sudah terang-terangan terbakar.
+    """
+    try:
+        from PIL import Image
+        im = Image.open(png).convert('RGB').resize((160, 90))
+    except Exception as e:
+        return _fail(f'gagal baca png: {e}'), 0.0
+    px = list(im.getdata())
+    jenuh = sum(1 for p in px if max(p) >= 255) / len(px)
+    if jenuh > 0.25:
+        return _fail(f'{jenuh:.0%} layar terbakar (kanal mentok)'), jenuh
+    return _ok(f'{jenuh:.0%}'), jenuh
 
 
 def cek_pemain_valid(g):
@@ -234,18 +262,22 @@ def main():
             hasil['geom_nol'] = cek_geom_nol(nama)
             hasil['frame_kosong'] = cek_frame_kosong(png) if png.exists() \
                 else _fail('tidak ada tangkapan layar')
+            if png.exists():
+                hasil['kanal_jenuh'], jenuh = cek_kanal_jenuh(png)
+            else:
+                jenuh = float('nan')
             hasil['pemain_valid'] = cek_pemain_valid(g)
             hasil['motif_waras'] = cek_motif_waras(g)
             hasil['save_bolak'] = cek_save_bolak(g)
             n_ent = len(uscene.children)
         except Exception as e:
             hasil['boot'] = _fail(f'{type(e).__name__}: {e}')
-            ms, n_ent = float('nan'), 0
+            ms, n_ent, jenuh = float('nan'), 0, float('nan')
             traceback.print_exc()
 
         buruk = [k for k, (ok, _) in hasil.items() if not ok]
         gagal_total += len(buruk)
-        baris.append((nama, hasil, ms, n_ent, buruk))
+        baris.append((nama, hasil, ms, n_ent, buruk, jenuh))
 
     # ── arah WASD (sekali saja; mahal, dan tidak bergantung scene) ──
     arah_baris = []
@@ -274,14 +306,14 @@ def main():
 
     # ── laporan ──
     print()
-    print(f'{"scene":14s} {"hasil":>7s} {"ms/frame":>9s} {"entity":>7s}  catatan')
-    print('-' * 78)
-    for nama, hasil, ms, n_ent, buruk in baris:
+    print(f'{"scene":14s} {"hasil":>7s} {"ms/frame":>9s} {"entity":>7s} {"jenuh":>6s}  catatan')
+    print('-' * 86)
+    for nama, hasil, ms, n_ent, buruk, jenuh in baris:
         tanda = 'LULUS' if not buruk else 'GAGAL'
         catatan = '; '.join(f'{k}: {hasil[k][1]}' for k in buruk) if buruk else \
                   hasil.get('pemain_valid', (True, ''))[1]
-        print(f'{nama:14s} {tanda:>7s} {ms:9.1f} {n_ent:7d}  {catatan[:44]}')
-    print('-' * 78)
+        print(f'{nama:14s} {tanda:>7s} {ms:9.1f} {n_ent:7d} {jenuh:5.0%}  {catatan[:44]}')
+    print('-' * 86)
     tanda_hud = 'LULUS' if not hud_baris else 'GAGAL'
     ring_hud = '; '.join(f'{k} {c}' for k, c in hud_baris) or 'semua di dalam layar'
     print(f'{"HUD di layar":14s} {tanda_hud:>7s} {"":>9s} {"":>7s}  {ring_hud[:44]}')
@@ -289,7 +321,7 @@ def main():
     rangkum = ', '.join(f'{k.upper()}={c.split(" ")[0]}' for k, ok, c in arah_baris)
     print(f'{"arah WASD":14s} {tanda_arah:>7s} {"":>9s} {"":>7s}  {rangkum[:44]}')
     print('-' * 78)
-    n_lulus = sum(1 for _, _, _, _, b in baris if not b)
+    n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)
     print(f'{n_lulus}/{len(baris)} scene lulus, {gagal_total} pemeriksaan gagal, '
           f'boot {boot_s:.1f}s')
 
@@ -297,11 +329,11 @@ def main():
     with open(laporan, 'w', encoding='utf-8') as f:
         f.write('# Laporan regresi\n\n')
         f.write(f'{n_lulus}/{len(baris)} scene lulus, {gagal_total} pemeriksaan gagal.\n\n')
-        f.write('| scene | hasil | ms/frame | entity | catatan |\n|---|---|--:|--:|---|\n')
-        for nama, hasil, ms, n_ent, buruk in baris:
+        f.write('| scene | hasil | ms/frame | entity | jenuh | catatan |\n|---|---|--:|--:|--:|---|\n')
+        for nama, hasil, ms, n_ent, buruk, jenuh in baris:
             tanda = 'LULUS' if not buruk else '**GAGAL**'
             catatan = '; '.join(f'`{k}` {hasil[k][1]}' for k in buruk) or '-'
-            f.write(f'| {nama} | {tanda} | {ms:.1f} | {n_ent} | {catatan} |\n')
+            f.write(f'| {nama} | {tanda} | {ms:.1f} | {n_ent} | {jenuh:.0%} | {catatan} |\n')
         f.write(f'\n## HUD\n\n{ring_hud}\n')
         f.write('\n## Arah WASD\n\n| tombol | hasil | catatan |\n|---|---|---|\n')
         for k, ok, c in arah_baris:

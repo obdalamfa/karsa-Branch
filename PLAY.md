@@ -103,6 +103,16 @@ Tugas pertama otomatis terdaftar di **J** (Quest panel):
 
 ## Troubleshooting
 
+### WASD terbalik / karakter melawan tombolnya sendiri
+**Fixed** di [player.py](game/player.py) — gesekan kecepatan dulu memakai
+`lerp(v, 0, FRICTION * dt)`. Faktor itu melewati 1,0 begitu frame rate turun
+di bawah 14 FPS, sehingga kecepatan justru DIBALIK setiap frame: makin berat
+scene-nya, makin kuat karakter melawan tombol yang ditekan. Sekarang memakai
+peluruhan eksponensial yang tidak bisa berpindah tanda di frame rate mana pun.
+
+Untuk membuktikan sendiri: `python tools/probe_arah.py farm 0 90 215` —
+mengukur arah tiap tombol pada tiga sudut kamera dan menyebut mana yang salah.
+
 ### Game stuck di lake
 **Fixed** di [player.py:610](game/player.py:610) — portal cooldown 0.8s. Kalau masih stuck, lepas WASD sebelum cross portal.
 

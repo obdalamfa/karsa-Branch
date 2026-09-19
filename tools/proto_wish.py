@@ -61,17 +61,23 @@ def kandidat_berskor(mv, peta, ubin):
 
 
 def motif_paling_mendesak(mv):
-    """Motif terendah, TIDAK termasuk `ruang`.
+    """KEBUTUHAN terendah — moodlet tidak ikut.
 
-    `ruang` tidak pernah meluruh — diukur: 0,0 poin per hari-sim, satu-satunya
-    dari delapan. Ia bertahan di 0,0 sementara yang lain mulai positif, jadi
-    `min()` polos selalu menobatkannya sebagai "paling mendesak" padahal ia
-    tidak mendesak apa pun. Temuan sampingan yang layak dicatat: `ruang` adalah
-    motif mati di mesin ini.
+    Ronde pertama alat ini membuang `ruang` saja, dengan alasan yang ternyata
+    berlaku untuk dua motif, bukan satu: ia tidak pernah meluruh, jadi ia
+    bertahan di 0,0 sementara kebutuhan mulai positif dan `min()` polos selalu
+    menobatkannya "paling mendesak" padahal tidak ada yang mendesak.
+
+    Begitu Nyaman diubah jadi moodlet (#6), ia jatuh ke lubang yang sama, dan
+    alat ini melaporkan "mendesak=Nyaman" untuk SETIAP warga — kolom LAKUKAN
+    dan INGIN yang seharusnya berbeda jadi identik, dan seluruh hipotesis yang
+    diuji alat ini tidak bisa lagi diperiksa.
+
+    Daftarnya sekarang dipegang `motives.MOODLET`, bukan disalin ke sini:
+    kalau suatu saat motif ketiga jadi moodlet, alat ini ikut benar sendiri.
     """
-    from game.motives import MOTIVES
-    hidup = [m for m in MOTIVES if m != 'ruang']
-    return min(hidup, key=lambda m: mv.get(m))
+    from game.motives import KEBUTUHAN
+    return min(KEBUTUHAN, key=lambda m: mv.get(m))
 
 
 def main():

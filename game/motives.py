@@ -43,6 +43,27 @@ LABELS = {
 
 MOTIVE_MIN, MOTIVE_MAX = -100.0, 100.0
 
+# ─── KEBUTUHAN LAWAN MOODLET ─────────────────────────────
+# Dua dari delapan motif TIDAK meluruh menuju bawah, jadi memperlakukan
+# kedelapannya sama membuat kode salah menilai keduanya:
+#
+#   nyaman  moodlet: luntur kembali ke 0 dari arah mana pun (lihat
+#           COMFORT_LUNTUR). Ia beristirahat di 0.
+#   ruang   dihitung ulang dari lingkungan, tidak pernah meluruh sendiri —
+#           terukur 0,0 poin per hari-sim, satu-satunya dari delapan.
+#
+# Keduanya beristirahat di 0 sementara KEBUTUHAN mulai positif (lapar 60,
+# higiene 70, energi 80). Jadi `min(MOTIVES, key=mv.get)` polos selalu
+# menobatkan moodlet sebagai "paling mendesak" padahal tidak ada yang mendesak.
+# Itu benar-benar terjadi: tools/proto_wish.py melaporkan "mendesak=Nyaman"
+# untuk SETIAP warga begitu Nyaman jadi moodlet, dan kolom LAKUKAN dan INGIN
+# yang seharusnya berbeda jadi identik.
+#
+# Didaftar di sini, sekali, supaya alat dan kode permainan tidak masing-masing
+# memelihara daftarnya sendiri dan berselisih diam-diam.
+MOODLET = ('nyaman', 'ruang')
+KEBUTUHAN = tuple(m for m in MOTIVES if m not in MOODLET)
+
 # Motif yang dipakai pada perhitungan Happy untuk autonomi. Perhatikan `mood`
 # ikut serta, jadi mood terhitung dua kali — itu disengaja di TS1: sim yang
 # mood-nya jatuh jadi lebih putus asa secara global, bukan hanya pada motif

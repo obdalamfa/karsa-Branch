@@ -59,6 +59,14 @@ class Game3D:
                           borderless=False)
         window.color = color.rgb(30, 20, 40)
         window.fps_counter.enabled = True
+        # Tombol silang bawaan Ursina duduk tepat di pojok kanan atas ruang UI
+        # — persis di atas jam, elemen HUD yang paling sering dibaca. Jendela
+        # ini punya bingkai sendiri (borderless=False), jadi tombol itu tidak
+        # menambah apa pun selain menutupi angka jam.
+        try:
+            window.exit_button.enabled = False
+        except Exception:
+            pass
         
         # Pencahayaan — arah lebih datar agar detail karakter chibi terlihat
         self.sun = DirectionalLight(shadows=False)

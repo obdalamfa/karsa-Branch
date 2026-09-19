@@ -19,6 +19,9 @@ bukan pada kemungkinan yang dikarang:
   save_bolak     format save berubah; save lama tidak boleh merusak loader.
   ms_frame       4-29 FPS dan belum pernah diprofil. Dicatat sebagai angka
                  supaya regresi performa terlihat, bukan cuma terasa.
+  hud_layar      HUD terpotong tepi layar. Jam, tanggal, cuaca, nama scene dan
+                 baris bantuan semuanya lari keluar tepi kanan karena dipatok
+                 ke angka tetap (x=0,70) padahal tepi UI mengikuti rasio layar.
   arah_wasd      arah WASD terbalik. Kegagalan yang PALING sering kembali di
                  proyek ini — tiga kali, dan tiap kali "diperbaiki" dengan
                  membalik tanda sampai terasa benar. Diukur sekali di akhir
@@ -257,6 +260,18 @@ def main():
         arah_baris.append(('?', False, f'probe arah gagal jalan: {e}'))
         gagal_total += 1
 
+    # ── HUD terpotong tepi layar (sekali saja, tidak bergantung scene) ──
+    hud_baris = []
+    try:
+        from probe_hud import uji_hud
+        for nama, ok, catatan in uji_hud(g):
+            if not ok:
+                hud_baris.append((nama, catatan))
+                gagal_total += 1
+    except Exception as e:
+        hud_baris.append(('?', f'probe HUD gagal jalan: {e}'))
+        gagal_total += 1
+
     # ── laporan ──
     print()
     print(f'{"scene":14s} {"hasil":>7s} {"ms/frame":>9s} {"entity":>7s}  catatan')
@@ -267,6 +282,9 @@ def main():
                   hasil.get('pemain_valid', (True, ''))[1]
         print(f'{nama:14s} {tanda:>7s} {ms:9.1f} {n_ent:7d}  {catatan[:44]}')
     print('-' * 78)
+    tanda_hud = 'LULUS' if not hud_baris else 'GAGAL'
+    ring_hud = '; '.join(f'{k} {c}' for k, c in hud_baris) or 'semua di dalam layar'
+    print(f'{"HUD di layar":14s} {tanda_hud:>7s} {"":>9s} {"":>7s}  {ring_hud[:44]}')
     tanda_arah = 'LULUS' if all(ok for _, ok, _ in arah_baris) else 'GAGAL'
     rangkum = ', '.join(f'{k.upper()}={c.split(" ")[0]}' for k, ok, c in arah_baris)
     print(f'{"arah WASD":14s} {tanda_arah:>7s} {"":>9s} {"":>7s}  {rangkum[:44]}')
@@ -284,6 +302,7 @@ def main():
             tanda = 'LULUS' if not buruk else '**GAGAL**'
             catatan = '; '.join(f'`{k}` {hasil[k][1]}' for k in buruk) or '-'
             f.write(f'| {nama} | {tanda} | {ms:.1f} | {n_ent} | {catatan} |\n')
+        f.write(f'\n## HUD\n\n{ring_hud}\n')
         f.write('\n## Arah WASD\n\n| tombol | hasil | catatan |\n|---|---|---|\n')
         for k, ok, c in arah_baris:
             f.write(f'| {k.upper()} | {"LULUS" if ok else "**GAGAL**"} | {c} |\n')

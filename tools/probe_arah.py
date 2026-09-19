@@ -57,8 +57,31 @@ logging.basicConfig(level=logging.ERROR)
 
 W, H = 640, 360
 SETTLE = 12        # frame supaya kamera duduk di tempatnya sebelum diukur
-TEKAN = 18         # frame tombol ditahan
 DIAM = 10          # frame melepas tombol supaya gesekan menghabiskan momentum
+
+# Tombol ditahan sampai pemain menempuh JARAK ini, bukan sampai sekian FRAME.
+#
+# Dulu konstantanya `TEKAN = 18` frame, dan itu membuat pemeriksaan arah — yang
+# dokumennya sendiri sebut "kegagalan yang PALING sering kembali" — berkedip di
+# mesin yang sedang berat. Sebabnya: jarak yang ditempuh bergantung pada WAKTU
+# per frame, bukan jumlahnya. Terukur di mesin ini:
+#
+#     55 ms/frame  -> 18 frame ~ 1,0 detik ~ 4,4 unit  (2,2 petak)  benar
+#    131 ms/frame  -> 18 frame ~ 2,4 detik ~ 14  unit  (7   petak)  menyerempet
+#
+# Tujuh petak cukup jauh untuk menabrak sesuatu, dan menyerempet dinding memutar
+# arah yang terukur. Gejalanya khas dan sempat menipu: sumbu yang gagal BERPINDAH
+# tiap kali dijalankan (W, lalu tidak ada, lalu S) — bug arah yang sungguhan akan
+# selalu salah di tombol yang sama.
+#
+# Marginnya memang setipis itu. Pada jalan yang sehat W terbaca dy=+0.345 dengan
+# dx=+0.000; begitu serempetan menambah dx sedikit saja, "mendatar" menang.
+#
+# Membatasi JARAK, bukan frame, membuat hasilnya sama di mesin cepat maupun
+# lambat, dan menjaga pengukuran tetap di dalam petak yang lapang. Ini bukan
+# melonggarkan gerbang: ambang penilaian di `nilai()` tidak disentuh sama sekali.
+JARAK_UKUR = 4.0   # unit dunia (2 petak) — cukup untuk arah, terlalu pendek untuk menabrak
+TEKAN_MAKS = 90    # batas atas frame, supaya pemain yang benar-benar terjepit tidak menggantung
 
 # Arah yang diharapkan di layar: (nama, sumbu ndc, tanda)
 HARAP = {
@@ -107,8 +130,11 @@ def ukur_satu(g, base, key, kembali_ke):
     p0 = p.getPos(render)
     held_keys[key] = 1
     try:
-        for _ in range(TEKAN):
+        for _ in range(TEKAN_MAKS):
             base.taskMgr.step()
+            kini = p.getPos(render)
+            if (kini - p0).length() >= JARAK_UKUR:
+                break
     finally:
         held_keys[key] = 0
     p1 = p.getPos(render)
@@ -216,6 +242,21 @@ def main():
             g._chargen.destroy_all()
             g._chargen = None
         g.panels.mode = 'hud'
+
+    # Adegan pembuka memicu diri sendiri pada quest_stage 0 lalu menyetel
+    # panels.mode='sinema', yang MEMBEKUKAN pemain. `tools/regress.py` sudah
+    # menumpulkannya, probe manual ini belum — jadi alat diagnosis yang justru
+    # dirujuk saat arah dicurigai salah malah melaporkan keempat arah bergerak
+    # 0,000 unit dan mencetak "4 arah SALAH". Vonis palsu dari alat pemeriksa
+    # lebih berbahaya daripada tidak ada alat sama sekali.
+    #
+    # Dipakai mekanisme yang sama persis dengan regress.py — menandai semua
+    # adegan sudah ditonton — supaya kedua alat mengukur jalur yang sama.
+    try:
+        from game.cutscene import NASKAH as _NASKAH
+        g.state.sinema_selesai = list(_NASKAH)
+    except Exception:
+        pass
 
     g.state.scene_name = scene
     for _ in range(40):

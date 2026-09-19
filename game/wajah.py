@@ -30,6 +30,8 @@ Semua ukuran diberikan sebagai PECAHAN dari setengah-lebar kepala, jadi satu
 resep yang sama pas di kepala pemain (setengah-lebar 0,175) maupun di kepala
 manekin NPC (0,36) tanpa dua tabel angka yang harus dijaga sinkron.
 """
+import math
+
 from ursina import Entity, Vec3, color
 
 
@@ -38,6 +40,20 @@ MATA_WARNA  = (46, 36, 42)
 # luka, bukan mulut.
 MULUT_WARNA = (168, 108, 100)
 PIPI_WARNA  = (243, 176, 172)
+
+
+def derau(n: int, benih: int) -> float:
+    """Derau 0..1 yang deterministik tapi tidak berirama, diumpani NOMOR.
+
+    Diambil ke sini karena dipakai dua tempat (kedipan wajah dan kedutan
+    telinga ternak) dan karena cara memanggilnya yang salah sudah sekali
+    meloloskan metronom: versi pertama `Wajah._acak_jeda` mengumpaninya dengan
+    `self._t`, yang di-nol-kan TEPAT SEBELUM pemanggilan, jadi deraunya selalu
+    dievaluasi di sin(0) = 0 dan jaraknya selalu sama. Umpannya harus sesuatu
+    yang memang berubah tiap kali — nomor kejadian — dan tanda tangan fungsi
+    ini memaksanya.
+    """
+    return abs((math.sin((n + benih) * 12.9898) * 43758.5453) % 1.0)
 
 
 def _kotak(induk, pos, skala, warna):
@@ -173,11 +189,9 @@ class Wajah:
         yaitu persis cacat yang tabel ambang proyek ini sendiri sebut mesin.
         Umpannya sekarang NOMOR kedipan, yang memang berubah tiap kali.
         """
-        import math
         self._n += 1
-        u = (math.sin((self._n + getattr(self, '_benih', 0)) * 12.9898)
-             * 43758.5453) % 1.0
-        self._jeda = self.JEDA_MIN + abs(u) * (self.JEDA_MAKS - self.JEDA_MIN)
+        u = derau(self._n, getattr(self, '_benih', 0))
+        self._jeda = self.JEDA_MIN + u * (self.JEDA_MAKS - self.JEDA_MIN)
 
     def set_lelah(self, lelah: float) -> None:
         """0 = segar, 1 = habis. Mata menyipit, tidak menutup."""

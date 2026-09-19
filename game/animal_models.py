@@ -206,6 +206,44 @@ def _mata(akar, kepala, *, d, naik=0.0, maju=0.0, pisah=0.62, arah='samping',
                             color.rgb(255, 255, 255)))
 
 
+def _sendi(r, jenis, bagian, ujung, sumbu):
+    """Selipkan simpul putar di ujung `bagian[0]`, lalu pindahkan semua part
+    ke bawahnya tanpa mengubah tampilannya sedikit pun.
+
+    Kenapa begini dan bukan menulis koordinat porosnya langsung: part-nya
+    dibuat DULU di koordinat akar — angka yang sama persis seperti sebelum ada
+    simpul ini, jadi masih bisa dibandingkan dengan gambar — lalu letak poros
+    dihitung `getRelativePoint()` milik mesin, bukan oleh saya lewat sin/cos
+    di kepala. Aritmetika tangan seperti itu sudah empat kali salah di proyek
+    ini dan tiap kali baru ketahuan dari gambar, bukan dari membaca kode.
+
+    Simpulnya murni GESERAN (tanpa rotasi, tanpa skala), jadi memindahkan anak
+    ke bawahnya cuma soal mengurangi posisinya; rotasi tiap part tidak berubah.
+    Itu sebabnya reparent di sini tidak perlu wrtReparentTo — yang justru
+    berbahaya karena melewati pembukuan `_parent`/`_children` Ursina dan
+    membuat `destroy()` serta iterasi anak jadi bohong.
+
+    `ujung` titik di ruang lokal part pertama yang jadi poros: (0, 0.5, 0)
+    ujung atas, (0, 0, 0.5) ujung depan. `sumbu` sumbu ayun — 'z' untuk ekor
+    yang menggantung/tegak dan telinga yang menjulur ke samping, 'y' untuk
+    ekor yang memanjang mendatar ke belakang.
+    """
+    from panda3d.core import Point3
+    t = r.getRelativePoint(bagian[0], Point3(*ujung))
+    p = Entity(parent=r, position=(t[0], t[1], t[2]))
+    p._sumbu = sumbu
+    # Disimpan supaya gerbang bisa memeriksa ulang bahwa poros ini memang
+    # ujung yang MENEMPEL ke badan, bukan ujung yang menggantung bebas.
+    p._ujung = tuple(ujung)
+    # Kiri dan kanan harus terangkat BERSAMAAN, bukan satu naik satu turun.
+    p._arah = 1.0 if t[0] >= 0 else -1.0
+    for e in bagian:
+        e.parent = p
+        e.position = (e.x - t[0], e.y - t[1], e.z - t[2])
+    getattr(r, '_pivot_' + jenis).append(p)
+    return p
+
+
 def _legs(parent, col, x, z, top_y, h, thick):
     """Empat kaki simetris. Kaki tipis adalah separuh siluet hewan berkuku —
     tanpa itu badan kotak terbaca sebagai peti, bukan binatang."""
@@ -241,7 +279,9 @@ def _ayam(r):
         _box(r, (sx, 0.09, 0.01), (0.04, 0.18, 0.04), _C['paruh'])
         _box(r, (sx, 0.015, 0.05), (0.06, 0.03, 0.11), _C['paruh'])       # cakar
     _box(r,  (0, 0.31,  0.00), (0.22, 0.25, 0.30), _C['bulu_krem'])       # badan
-    _box(r,  (0, 0.44, -0.16), (0.15, 0.21, 0.13), _C['bulu_krem'], (-48, 0, 0))  # ekor
+    _sendi(r, 'ekor', [_box(r, (0, 0.44, -0.16), (0.15, 0.21, 0.13),
+                            _C['bulu_krem'], (-48, 0, 0))],
+           (0, -0.5, 0), 'z')                                          # ekor
     _box(r,  (0, 0.40,  0.09), (0.11, 0.15, 0.11), _C['bulu_krem'])       # leher
     k = _box(r, (0, 0.49, 0.10), (0.16, 0.15, 0.16), _C['bulu_krem'])     # kepala
     _mata(r, k, d=0.052, naik=0.18, maju=0.30)
@@ -260,7 +300,9 @@ def _bebek(r):
         _box(r, (sx, 0.065, 0.02), (0.045, 0.13, 0.045), _C['paruh'])
         _box(r, (sx, 0.015, 0.08), (0.08, 0.03, 0.14), _C['paruh'])       # selaput
     _box(r,  (0, 0.26,  0.00), (0.24, 0.22, 0.38), _C['bulu_putih'])      # badan
-    _box(r,  (0, 0.32, -0.22), (0.14, 0.11, 0.17), _C['bulu_putih'], (-26, 0, 0))
+    _sendi(r, 'ekor', [_box(r, (0, 0.32, -0.22), (0.14, 0.11, 0.17),
+                            _C['bulu_putih'], (-26, 0, 0))],
+           (0, 0, 0.5), 'y')                                           # ekor
     _box(r,  (0, 0.41,  0.11), (0.12, 0.24, 0.12), _C['kepala_gelap'])    # leher
     k = _box(r, (0, 0.53, 0.13), (0.16, 0.15, 0.18), _C['kepala_gelap'])  # kepala
     _mata(r, k, d=0.050, naik=0.20, maju=0.24)
@@ -291,9 +333,13 @@ def _kucing(r):
     _box(r,  (0, 0.39,  0.33), (0.11, 0.09, 0.07), _C['putih'])           # moncong
     _box(r,  (0, 0.405, 0.375),(0.045, 0.04, 0.035), _C['hidung'])
     for sx in (-0.06, 0.06):
-        _cone(r, (sx, 0.535, 0.245), (0.075, 0.12, 0.055), _C['kucing'])  # telinga
-    _box(r,  (0, 0.50, -0.24), (0.08, 0.34, 0.08), _C['kucing'], (-14, 0, 0))
-    _box(r,  (0, 0.665, -0.28), (0.075, 0.11, 0.075), _C['putih'])        # ujung ekor
+        _sendi(r, 'telinga',
+               [_cone(r, (sx, 0.535, 0.245), (0.075, 0.12, 0.055), _C['kucing'])],
+               (0, -0.5, 0), 'x')                                      # telinga
+    _sendi(r, 'ekor',
+           [_box(r, (0, 0.50, -0.24), (0.08, 0.34, 0.08), _C['kucing'], (-14, 0, 0)),
+            _box(r, (0, 0.665, -0.28), (0.075, 0.11, 0.075), _C['putih'])],
+           (0, -0.5, 0), 'z')                                          # ekor + ujung
     return 0.70
 
 
@@ -314,8 +360,14 @@ def _kelinci(r):
     _box(r,  (0, 0.34,  0.25), (0.10, 0.09, 0.07), _C['kelinci'])
     _box(r,  (0, 0.35,  0.285),(0.045, 0.04, 0.035), _C['telinga_dlm'])   # hidung
     for sx in (-0.055, 0.055):
-        _box(r, (sx, 0.575, 0.12), (0.08, 0.30, 0.045), _C['kelinci'], (-12, 0, 0))
-        _box(r, (sx, 0.575, 0.095),(0.042, 0.23, 0.025), _C['telinga_dlm'], (-12, 0, 0))
+        # Kulit luar dan kulit dalam masuk SATU simpul: dipisah, keduanya
+        # berputar di poros berbeda dan kulit dalam menyembul keluar telinga.
+        _sendi(r, 'telinga',
+               [_box(r, (sx, 0.575, 0.12), (0.08, 0.30, 0.045),
+                     _C['kelinci'], (-12, 0, 0)),
+                _box(r, (sx, 0.575, 0.095), (0.042, 0.23, 0.025),
+                     _C['telinga_dlm'], (-12, 0, 0))],
+               (0, -0.5, 0), 'x')
     _box(r,  (0, 0.27, -0.21), (0.11, 0.11, 0.10), _C['putih'])           # ekor
     return 0.70
 
@@ -333,10 +385,14 @@ def _rubah(r):
     _cone(r, (0, 0.44,  0.45), (0.115, 0.19, 0.115), _C['rubah'], (90, 0, 0))
     _box(r,  (0, 0.445, 0.535),(0.055, 0.045, 0.045), _C['hidung'])
     for sx in (-0.08, 0.08):
-        _cone(r, (sx, 0.62, 0.30), (0.095, 0.16, 0.065), _C['rubah'])     # telinga
+        _sendi(r, 'telinga',
+               [_cone(r, (sx, 0.62, 0.30), (0.095, 0.16, 0.065), _C['rubah'])],
+               (0, -0.5, 0), 'x')                                      # telinga
         _box(r,  (sx * 1.35, 0.45, 0.32), (0.055, 0.11, 0.11), _C['putih'])  # pipi
-    _box(r,  (0, 0.38, -0.36), (0.18, 0.18, 0.36), _C['rubah'], (-12, 0, 0))
-    _box(r,  (0, 0.34, -0.54), (0.15, 0.15, 0.13), _C['putih'])           # ujung ekor
+    _sendi(r, 'ekor',
+           [_box(r, (0, 0.38, -0.36), (0.18, 0.18, 0.36), _C['rubah'], (-12, 0, 0)),
+            _box(r, (0, 0.34, -0.54), (0.15, 0.15, 0.13), _C['putih'])],
+           (0, 0, 0.5), 'y')                                           # ekor + ujung
     return 0.72
 
 
@@ -356,9 +412,13 @@ def _kambing(r):
     _box(r,  (0, 0.70,  0.55), (0.07, 0.15, 0.06), _C['tanduk'], (22, 0, 0))  # jenggot
     for sx in (-0.07, 0.07):
         _cone(r, (sx, 0.97, 0.38), (0.085, 0.31, 0.085), _C['tanduk'], (-46, 0, 0))
-        _box(r, (sx * 2.0, 0.84, 0.42), (0.15, 0.05, 0.10), _C['kambing'],
-             (0, 0, -26 if sx < 0 else 26))                               # telinga
-    _box(r,  (0, 0.64, -0.38), (0.08, 0.14, 0.08), _C['kambing'], (28, 0, 0))
+        _sendi(r, 'telinga',
+               [_box(r, (sx * 2.0, 0.84, 0.42), (0.15, 0.05, 0.10), _C['kambing'],
+                     (0, 0, -26 if sx < 0 else 26))],
+               (-0.5 if sx > 0 else 0.5, 0, 0), 'z')                   # telinga
+    _sendi(r, 'ekor',
+           [_box(r, (0, 0.64, -0.38), (0.08, 0.14, 0.08), _C['kambing'], (28, 0, 0))],
+           (0, 0.5, 0), 'z')                                           # ekor
     _legs(r, _C['kambing'], 0.135, 0.245, 0.40, 0.40, 0.09)
     for sx in (-0.135, 0.135):
         for sz in (-0.245, 0.245):
@@ -381,9 +441,13 @@ def _domba(r):
     _mata(r, k, d=0.062, naik=0.16, maju=0.34)
     _box(r,  (0, 0.65,  0.62), (0.13, 0.12, 0.09), _C['kepala_gelap'])
     for sx in (-0.135, 0.135):
-        _box(r, (sx, 0.745, 0.46), (0.15, 0.05, 0.10), _C['kepala_gelap'],
-             (0, 0, -22 if sx < 0 else 22))                               # telinga
-    _box(r,  (0, 0.60, -0.40), (0.11, 0.11, 0.10), _C['wol'])             # ekor pendek
+        _sendi(r, 'telinga',
+               [_box(r, (sx, 0.745, 0.46), (0.15, 0.05, 0.10), _C['kepala_gelap'],
+                     (0, 0, -22 if sx < 0 else 22))],
+               (-0.5 if sx > 0 else 0.5, 0, 0), 'z')                   # telinga
+    _sendi(r, 'ekor',
+           [_box(r, (0, 0.60, -0.40), (0.11, 0.11, 0.10), _C['wol'])],
+           (0, 0.5, 0), 'z')                                           # ekor pendek
     _legs(r, _C['kepala_gelap'], 0.155, 0.245, 0.36, 0.36, 0.085)
     return 0.86
 
@@ -406,8 +470,10 @@ def _sapi(r):
     for sx in (-0.185, 0.185):
         _cone(r, (sx, 1.28, 0.94), (0.08, 0.18, 0.08), _C['tanduk'],
               (0, 0, -58 if sx < 0 else 58))                              # tanduk
-        _box(r, (sx * 1.45, 1.17, 0.94), (0.21, 0.07, 0.13), _C['sapi_terang'],
-             (0, 0, -20 if sx < 0 else 20))                               # telinga
+        _sendi(r, 'telinga',
+               [_box(r, (sx * 1.45, 1.17, 0.94), (0.21, 0.07, 0.13),
+                     _C['sapi_terang'], (0, 0, -20 if sx < 0 else 20))],
+               (-0.5 if sx > 0 else 0.5, 0, 0), 'z')                   # telinga
     for sx in (-0.365, 0.365):                                            # belang
         _box(r, (sx, 1.16,  0.34), (0.06, 0.34, 0.44), _C['sapi_belang'])
         _box(r, (sx, 0.88, -0.34), (0.06, 0.40, 0.36), _C['sapi_belang'])
@@ -416,8 +482,10 @@ def _sapi(r):
     # terbaca sebagai LUBANG di badan sapi, bukan sebagai corak.
     _box(r,  (0, 1.365, -0.16), (0.34, 0.05, 0.44), color.rgb(92, 84, 78))
     _box(r,  (0, 0.62, -0.28), (0.30, 0.24, 0.32), _C['moncong'])         # ambing
-    _box(r,  (0, 1.02, -0.72), (0.09, 0.56, 0.09), _C['sapi_terang'], (16, 0, 0))
-    _box(r,  (0, 0.72, -0.80), (0.10, 0.16, 0.10), _C['sapi_belang'])     # jumbai ekor
+    _sendi(r, 'ekor',
+           [_box(r, (0, 1.02, -0.72), (0.09, 0.56, 0.09), _C['sapi_terang'], (16, 0, 0)),
+            _box(r, (0, 0.72, -0.80), (0.10, 0.16, 0.10), _C['sapi_belang'])],
+           (0, 0.5, 0), 'z')                                           # ekor + jumbai
     _legs(r, _C['sapi_terang'], 0.265, 0.47, 0.66, 0.66, 0.17)
     for sx in (-0.265, 0.265):
         for sz in (-0.47, 0.47):
@@ -446,8 +514,13 @@ def _kuda(r):
     _box(r,  (0, 1.55,  1.04), (0.23, 0.21, 0.20), _C['kuda'])            # pipi/moncong
     _box(r,  (0, 1.50,  1.13), (0.19, 0.13, 0.10), _C['surai'])           # ujung moncong
     for sx in (-0.09, 0.09):
-        _cone(r, (sx, 1.90, 0.76), (0.085, 0.15, 0.065), _C['kuda'], (-14, 0, 0))
-    _box(r,  (0, 1.12, -0.70), (0.15, 0.62, 0.15), _C['surai'], (22, 0, 0))  # ekor
+        _sendi(r, 'telinga',
+               [_cone(r, (sx, 1.90, 0.76), (0.085, 0.15, 0.065),
+                      _C['kuda'], (-14, 0, 0))],
+               (0, -0.5, 0), 'x')                                      # telinga
+    _sendi(r, 'ekor',
+           [_box(r, (0, 1.12, -0.70), (0.15, 0.62, 0.15), _C['surai'], (22, 0, 0))],
+           (0, 0.5, 0), 'z')                                           # ekor
     _legs(r, _C['kuda'], 0.225, 0.48, 0.90, 0.90, 0.14)
     for sx in (-0.225, 0.225):
         for sz in (-0.48, 0.48):
@@ -482,7 +555,8 @@ def build_animal(parent, species: str, kunci: str = '') -> float:
     terbaca sebagai hewan, sedangkan mesh manusia (perilaku lama) tidak.
 
     Di ujungnya mata yang dipasang tiap builder dikumpulkan jadi satu pengendali
-    `Wajah` di `parent._wajah` — pengendali yang sama persis dengan yang dipakai
+    `Wajah` di `parent._wajah`, dan simpul telinga/ekor jadi satu `GerakTernak`
+    di `parent._gerak` — pengendali yang sama persis dengan yang dipakai
     pemain dan warga, jadi hewan ikut berkedip tanpa jalur kode kedua. Loop
     entitas sudah men-tick `actor._wajah` untuk SETIAP actor, jadi tidak ada
     yang perlu ditambahkan di sana.
@@ -494,6 +568,7 @@ def build_animal(parent, species: str, kunci: str = '') -> float:
     """
     fn = _BUILDERS.get(species, _kambing)
     parent._mata_bola, parent._mata_kilau = [], []
+    parent._pivot_telinga, parent._pivot_ekor = [], []
     h = fn(parent)
     bola = getattr(parent, '_mata_bola', None) or []
     if bola:
@@ -507,6 +582,10 @@ def build_animal(parent, species: str, kunci: str = '') -> float:
         w.JEDA_MIN, w.JEDA_MAKS = 1.8, 4.6
         w.fase_awal(kunci or species)
         parent._wajah = w
+    if parent._pivot_telinga or parent._pivot_ekor:
+        from .gerak_ternak import GerakTernak
+        parent._gerak = GerakTernak(parent._pivot_telinga, parent._pivot_ekor,
+                                    kunci or species)
     return h
 
 # ─── UKURAN BADAN ────────────────────────────────────────────────────────────

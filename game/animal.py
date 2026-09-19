@@ -164,6 +164,12 @@ class FarmAnimal(BaseActor):
         self._sikat_kuat = 1.0
         self._sikat_t = 0.0
         self.ai_state = AnimalState.DISIKAT
+        # Telinga menyentak tiap sapuan. Ini bagian yang benar-benar menjawab
+        # brief: pemain harus melihat hewannya bereaksi terhadap tangannya,
+        # bukan cuma badan yang condong pelan.
+        _g = getattr(self, '_gerak', None)
+        if _g is not None:
+            _g.sentuh()
 
     def selesai_disikat(self) -> None:
         self._sikat_kuat = 0.0
@@ -222,9 +228,17 @@ class FarmAnimal(BaseActor):
         # dari sana adalah bahwa hewan ini sedang tidur, karena tidur hewan
         # dibaca dari jam dunia, bukan dari jadwal actor seperti warga.
         # Tanpa baris ini seekor sapi tidur membelalak semalaman.
+        _malam = self.state.is_night()
         _w = getattr(self, '_wajah', None)
         if _w is not None:
-            _w.set_tidur(self.state.is_night())
+            _w.set_tidur(_malam)
+        # Telinga dan ekor. Disetir oleh kekuatan sapuan yang SAMA yang
+        # memiringkan badan, jadi ketiganya bercerita satu hal: ada tangan di
+        # sini. Ditaruh di sini, bukan di loop entitas, karena kekuatan sapuan
+        # itu milik hewan dan tidak terbaca dari luar.
+        _g = getattr(self, '_gerak', None)
+        if _g is not None:
+            _g.tick(dt, getattr(self, '_sikat_kuat', 0.0) or 0.0, _malam)
 
         # Minum menang atas jadwal tidur dan atas jalan-jalan: hewan yang
         # dipanggil ke palung harus sampai ke palung.

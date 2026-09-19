@@ -239,8 +239,8 @@ yang sama seperti di 5.1.
 - Ekspresi masih hampir satu. **Kedipan dan mata lelah sudah ada** (§7);
   senang dan sakit belum. Mata dan mulut sudah entity terpisah, jadi
   menambahnya murah.
-- Ternak sekarang bermata dan ikut berkedip (§8), tapi mulut, telinga yang
-  bergerak, dan ekor yang mengibas masih statis.
+- Ternak sekarang bermata, berkedip, menggerakkan telinga dan mengibaskan
+  ekor (§8, §9). Yang masih statis cuma mulutnya.
 
 ---
 
@@ -438,3 +438,112 @@ Panggung telanjang (Ursina kosong + lampu sendiri) sempat dicoba dan **bohong
 soal warna**: pupil L 13 tampil merah muda pucat, karena cel shader mengambil
 cahayanya dari app, bukan dari node lampu Panda. Panggung itu hanya dipakai
 untuk menilai bentuk, tidak pernah untuk menilai warna.
+
+---
+
+## 9. Telinga dan ekor yang tidak pernah bergerak
+
+Sisa terakhir daftar §6, dan yang paling menyambung ke brief: seluruh proyek
+ini tentang **interaksi** perawatan ternak, dan hewan yang disikat selama 2,7
+detik tanpa menggerakkan telinga maupun ekor tidak memberi satu pun tanda
+bahwa ia merasakan sikatnya. Badannya memang sudah condong ke arah sikat
+(`FarmAnimal._tick_sikat`), tapi itu satu gerakan untuk satu benda utuh —
+bukan reaksi.
+
+### Simpul putar tanpa satu pun sin/cos yang saya tulis sendiri
+
+Telinga dan ekor dibangun sebagai kotak lepas yang dikaitkan langsung ke akar
+rig, jadi tidak ada yang bisa diputar: memutar kotak ekor memutarnya di
+TENGAHNYA, bukan di pangkalnya. Tiap bagian itu sekarang dibungkus satu simpul
+putar di pangkalnya.
+
+Letak pangkal tidak dihitung tangan. `_sendi()` membuat part-nya DULU di
+koordinat akar — angka yang sama persis seperti sebelumnya, jadi masih bisa
+dibandingkan dengan gambar — lalu meminta `getRelativePoint()` milik mesin
+menghitung di mana ujungnya mendarat sesudah skala dan rotasi. Aritmetika
+tangan seperti itu sudah empat kali salah di proyek ini dan tiap kali baru
+ketahuan dari gambar.
+
+Simpulnya geseran murni, jadi memindahkan anak ke bawahnya cuma soal mengurangi
+posisi; rotasi tiap part tidak berubah. Itu sebabnya reparent di sini **tidak**
+memakai `wrtReparentTo` — yang justru berbahaya karena melewati pembukuan
+`_parent`/`_children` Ursina dan membuat `destroy()` serta iterasi anak bohong.
+
+Diperiksa: kotak batas SETIAP part sembilan spesies, sebelum dan sesudah.
+
+```
+spesies   part  selisih maks (m)
+  ayam       18   0.000000    kambing    25   0.000000
+  bebek      16   0.000000    kelinci    21   0.000000
+  domba      19   0.000000    kucing     24   0.000000
+  kuda       24   0.000010    rubah      22   0.000000
+  sapi       31   0.000000
+```
+
+Sepuluh mikrometer pada kuda, itu pun pembulatan float. Tampilan diamnya sama.
+
+### Tiga hal yang membedakan gerak hidup dari motor, semuanya angka
+
+**Ekor tidak boleh berayun satu sinus.** Satu sinus murni punya jarak
+antar-lintasan-nol yang sama persis tiap kali — simpangan baku nol, cacat
+"metronom" yang tabel ambang proyek ini sendiri sebut mesin dan yang sudah
+sekali memakan kedipan wajah (§7). Ayunannya dua sinus berperiode tidak
+sepadan (0,61x, dekat 1/rasio emas): terukur 25 ayunan dalam 120 detik dengan
+sd 0,415 detik.
+
+**Telinga berkedut, bukan berayun.** Telinga yang berayun terus terbaca sebagai
+kipas. Yang benar: diam lama, lalu satu sentakan cepat — 70 ms keluar, 190 ms
+pulang, dengan sedikit lewat saat pulang supaya tidak berhenti seperti tuas.
+Terukur 30 kedutan per 180 detik, jeda rata-rata 5,85 detik, sd 1,62 detik,
+dan 0 dari 30 bersamaan dengan telinga sebelahnya.
+
+**Menyentuh harus terbaca.** Tiap sapuan memicu sentakan telinga (puncak 24,8°
+pada 67 ms) dan melebarkan ayunan ekor. Di uji unit dengan sapuan terus-menerus
+10,5° → 34,0° (3,2x); di dalam game, dengan `_sikat_kuat` yang meluruh di
+antara sapuan seperti sungguhan, 10,5° → 24,6° (2,3x). Amplitudonya menyusul
+pelan, bukan melompat: lompatan frame pertama 1,81°.
+
+Malam hari ekor menyempit ke 2,4° dan telinga berhenti berkedut sama sekali.
+
+### Gerbangnya sendiri diuji dengan merusak kode
+
+`tools/uji_gerak_ternak.py` menjalankan 12 pemeriksaan; dengan `--rig` ia ikut
+membangun rig sungguhan dan memeriksa 22 poros. Alat ukur yang belum pernah
+gagal biasanya belum pernah diperiksa, jadi empat cacat dipasang dengan sengaja
+lalu gerbangnya dijalankan lagi:
+
+```
+ekor jadi sinus tunggal (metronom)      TERTANGKAP  sd 0.000 s
+sentuhan tidak melebarkan ekor          TERTANGKAP  10.5 -> 11.0 derajat (1.0x)
+dua telinga benar-benar diserempakkan   TERTANGKAP  30 dari 30 bareng
+poros ekor sapi dipindah ke ujung       TERTANGKAP  pangkal 0.118 m vs ujung 0.000 m
+```
+
+Ronde pertama uji mutasi ini **bohong dua kali**, dan keduanya layak dicatat:
+
+- Dua mutasi berturut-turut kebetulan menghasilkan berkas berukuran sama persis
+  dalam detik yang sama, jadi Python memakai `.pyc` basi dari mutasi
+  sebelumnya. Yang dilaporkan gagal adalah cacat yang sudah dikembalikan.
+- Mutasi "dua telinga diberi benih yang sama" lolos, dan itu terbaca seperti
+  gerbang bocor. Bukan: kedua telinga dipisahkan **tiga** mekanisme (jam awal,
+  nomor awal, benih), jadi mencabut satu saja memang tidak menyerempakkannya.
+  Mutasi yang mencabut ketiganya langsung tertangkap.
+
+### Dan pemeriksaan poros versi pertama memang bocor
+
+Versi pertama bertanya "apakah poros lebih dekat ke pusat badan daripada titik
+terjauh part". Uji mutasi membuktikannya tidak cukup: memindahkan poros ekor
+sapi ke ujung bawah tetap lolos, karena ekor yang menggantung ke belakang punya
+dua ujung yang berjarak nyaris sama dari pusat badan — 0,800 m lawan 0,852 m.
+
+Rumusan sekarang memakai definisi yang memang dimaksud: **pangkal adalah ujung
+yang menempel pada bagian lain hewannya.** Pangkal ekor menyentuh pantat; ujung
+ekor tidak menyentuh apa pun. Dua syarat, keduanya perlu — pangkal memang
+menempel (<= 3,5 cm), dan pangkal tidak lebih jauh daripada ujungnya.
+
+Rumusan perantara sempat memakai margin tunggal 2 cm dan itu pun salah: pada
+bagian yang lebih pendek daripada marginnya sendiri, pangkal yang menempel
+SEMPURNA ikut dijatuhkan — telinga kuda gagal dengan pangkal 0,000 m lawan
+ujung 0,015 m. Ekor buntut domba menempel di kedua ujungnya karena terbenam di
+bulu; itu memang tidak bisa dibedakan, dan syarat sekarang meloloskannya tanpa
+berpura-pura tahu.

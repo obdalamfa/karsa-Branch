@@ -236,9 +236,9 @@ yang sama seperti di 5.1.
 - Rig Vitaboy tetap ranjau — lihat `ANIMASI_PERAWATAN.md` §10. Kalau asetnya
   suatu saat di-bake, seluruh rupa di dokumen ini tidak terpakai dan yang
   dipakai adalah avatar TSO.
-- Ekspresi masih hampir satu. **Kedipan dan mata lelah sudah ada** (§7);
-  senang dan sakit belum. Mata dan mulut sudah entity terpisah, jadi
-  menambahnya murah.
+- Ekspresi masih hampir satu. **Kedipan, mata lelah dan mulut bicara sudah
+  ada** (§7, §10); senang dan sakit belum. Mata dan mulut sudah entity
+  terpisah, jadi menambahnya murah.
 - Ternak sekarang bermata, berkedip, menggerakkan telinga dan mengibaskan
   ekor (§8, §9). Yang masih statis cuma mulutnya.
 
@@ -547,3 +547,115 @@ SEMPURNA ikut dijatuhkan — telinga kuda gagal dengan pangkal 0,000 m lawan
 ujung 0,015 m. Ekor buntut domba menempel di kedua ujungnya karena terbenam di
 bulu; itu memang tidak bisa dibedakan, dan syarat sekarang meloloskannya tanpa
 berpura-pura tahu.
+
+---
+
+## 10. "Berbicara": mulut yang tidak pernah bergerak, dan wajah yang membeku
+
+Brief proyek ini menyebut tiga animasi: **panen, menggosok, dan berbicara.**
+Dua yang pertama sudah diukur habis di `ANIMASI_PERAWATAN.md`. Yang ketiga
+belum pernah diperiksa sama sekali, dan begitu diukur, tiga hal salah
+sekaligus — semuanya selama 20 detik kotak dialog terbuka:
+
+```
+                              main biasa   dialog terbuka
+rentang tinggi mata warga       0,09881      0,00000   <- berhenti berkedip
+rentang tinggi mata pemain      0,04300      0,00000   <- berhenti berkedip
+rentang tinggi mulut warga      0,00000      0,00000   <- tidak pernah bergerak
+rentang rotation_x badan        0,00000      6,35967
+rentang rotation_x KEPALA       0,00000      0,00000   <- yang terayun badannya
+```
+
+### 1. Wajah berhenti hidup tepat saat pemain menatapnya
+
+`_tick_percakapan()` sengaja tidak memanggil `player.tick()` maupun
+`entities.update()` — keduanya akan memajukan waktu permainan dan menerima
+input gerak, dua hal yang memang harus berhenti saat modal terbuka. Tapi
+kedipan ikut terbawa berhenti. Orang yang berhenti berkedip **tepat** saat
+diajak bicara adalah tanda uncanny yang paling mudah dilihat pemain, justru
+pada saat ia menatap wajah itu paling lama. Sekarang `_wajah.tick()` dipanggil
+sendiri di dalam modal, terpisah dari waktu permainan.
+
+### 2. Mulutnya tidak pernah bergerak
+
+Salah satu dari tiga animasi yang diminta brief bernama "berbicara", dan
+mulutnya diam. Sekarang mulut warga bergerak selama baris dialog ditampilkan.
+
+Yang dihindari: mulut membuka-menutup satu sinus. Bicara bukan getaran
+berperiode tetap — ia deret **suku kata** yang panjangnya berbeda-beda,
+dikelompokkan jadi **frasa**, dengan jeda di antaranya. Terukur:
+
+```
+226 suku kata / 60 detik  = 3,77 per detik
+jarak rata-rata 0,266 s, jeda terpanjang 0,833 s (napas antar-frasa)
+bukaan tiap suku kata: 162 tinggi puncak berbeda
+```
+
+Siapa yang berbicara tidak ditebak: baris dialog di `panels` berisi ucapan
+**warga**, dan giliran pemain muncul sebagai daftar pilihan. Jadi mulut warga
+bergerak selama baris ditampilkan dan berhenti saat pilihan aktif — pemain
+sedang memilih, bukan berbicara. Mulut pemain memang diam sepanjang itu,
+dan itu disengaja.
+
+### 3. Yang mengangguk badannya, bukan kepalanya
+
+`tick_percakapan()` menaruh seluruh anggukan di `rotation_x` badan, dengan
+alasan yang ditulis di komentarnya sendiri: *"rig NPC di sini satu mesh tanpa
+pivot"*. Alasan itu **sudah kedaluwarsa** sejak warga punya wajah —
+`actor._kepala` ada sebagai simpul tersendiri sejak §4. Yang terlihat bukan
+orang mengangguk, melainkan orang yang seluruh tubuhnya terayun dari mata
+kaki.
+
+Sekarang kepala memikul 78% anggukan dan badan 22%. Karena kepala anak dari
+badan, rotasinya bertambah: kepala bergerak penuh, badan seperlimanya.
+Kepala juga melawan ayunan berat badan sebesar 35% — itu yang membedakan
+orang berdiri dari papan yang digoyang. Terukur sesudahnya: kepala 4,961°
+lawan badan 1,399°.
+
+### Gerbangnya diuji dengan merusak kode, dan satu pemeriksaan ternyata bocor
+
+`tools/uji_bicara.py` menjalankan 10 pemeriksaan irama murni; dengan `--game`
+ia membuka game, menjalankan dialog sungguhan, dan memeriksa 9 hal lagi.
+Lima cacat dipasang sengaja:
+
+```
+wajah tidak di-tick selama dialog          TERTANGKAP
+mulut tidak membuka                        TERTANGKAP
+anggukan dikembalikan ke badan             TERTANGKAP  kepala 0,000 lawan badan 6,360
+suku kata dibuat sepanjang tetap           *** LOLOS ***
+mulut tidak dimatikan saat pilihan aktif   TERTANGKAP
+```
+
+Yang lolos membongkar kelemahan nyata: pemeriksaan "irama tidak tetap" memakai
+simpangan baku **seluruh** jarak antar-suku-kata, dan angka itu didominasi
+jeda antar-frasa yang memang bervariasi. Terukur langsung:
+
+```
+                              sd seluruh jarak   sd DI DALAM frasa
+panjang suku bervariasi            0,1697 s          0,0312 s
+panjang suku TETAP (mutasi)        0,1702 s          0,0122 s
+```
+
+Nol koma tiga persen bedanya pada kolom pertama — pemeriksaan itu buta. Yang
+memisahkan keduanya adalah jarak di dalam frasa saja, dan pemeriksaannya
+sekarang memakai itu. Sesudah diganti, kelima mutasi tertangkap:
+
+```
+suku kata dibuat sepanjang tetap           TERTANGKAP
+    irama di DALAM frasa (sd > 0,022 s)    242 jarak, rata2 0,133 s, sd 0,0103 s
+```
+
+### Tiga cacat lagi, semuanya di alat ukur
+
+- Detektor puncak mulut memakai ambang turun `ambang * 0,55`, yang jatuh **di
+  bawah** tinggi mulut diam. Tinggi mulut tidak pernah turun di bawah tinggi
+  diam, jadi penanda "sudah turun" tidak pernah menyala dan 60 detik bicara
+  terbaca sebagai **satu** suku kata. Tiga uji di bawahnya ikut gagal palsu.
+- Ambang kedipan dipatok angka mati 0,05, yang diambil dari ukuran mata warga,
+  dan menjatuhkan pemain — yang matanya lebih kecil dan rentang penuhnya
+  memang 0,043, sama persis seperti saat main biasa. Ambangnya sekarang
+  relatif terhadap tinggi mata masing-masing.
+- Probe pertama menutup dialog dengan `panels.mode = None`. Gerbang main normal
+  adalah `mode == 'hud'`, jadi `None` membekukan segalanya dan probe itu
+  melaporkan "kedipan tidak kembali sesudah dialog" sebagai cacat game. Bukan.
+  Penutupnya sekarang `panels.close_all()`, jalur yang dipakai game sendiri.

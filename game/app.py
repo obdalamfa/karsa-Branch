@@ -798,6 +798,27 @@ class Game3D:
         if actor is not None and hasattr(actor, 'tick_percakapan'):
             actor.tick_percakapan(dt, p.x, p.z)
 
+        # Wajah harus tetap jalan selama modal terbuka. Loop entitas dan
+        # player.tick() sengaja TIDAK dipanggil di sini (itu akan memajukan
+        # waktu permainan dan menerima input gerak), dan akibatnya terukur:
+        # rentang tinggi mata 0,09881 saat main biasa, 0,00000 begitu kotak
+        # dialog terbuka. Orang yang berhenti berkedip TEPAT saat diajak
+        # bicara adalah tanda uncanny yang paling mudah dilihat pemain,
+        # justru pada saat ia menatap wajah itu paling lama.
+        #
+        # Yang berbicara adalah WARGANYA: baris dialog di sini isinya ucapan
+        # warga, dan giliran pemain muncul sebagai daftar pilihan. Jadi mulut
+        # warga bergerak selama baris ditampilkan, dan berhenti saat pilihan
+        # aktif — pemain sedang memilih, bukan berbicara.
+        pilihan = bool(getattr(self.panels, '_dlg_choices_active', False))
+        for e in (actor, p):
+            w = getattr(e, '_wajah', None) if e is not None else None
+            if w is not None:
+                w.tick(dt)
+        w_actor = getattr(actor, '_wajah', None) if actor is not None else None
+        if w_actor is not None:
+            w_actor.set_bicara(not pilihan)
+
     def mulai_pose_bicara(self, npc_id: str) -> None:
         """Pasang pose bicara pada pemain dan pose dengar pada lawan bicara."""
         from . import care_anim
@@ -824,6 +845,12 @@ class Game3D:
         for actor in self.entities.actors.values():
             if hasattr(actor, 'akhiri_percakapan'):
                 actor.akhiri_percakapan()
+            w = getattr(actor, '_wajah', None)
+            if w is not None:
+                w.set_bicara(False)
+        w = getattr(self.player, '_wajah', None)
+        if w is not None:
+            w.set_bicara(False)
 
     def _snap_camera_to_player(self):
         """Tempatkan kamera langsung di posisi idealnya, tanpa lerp.

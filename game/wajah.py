@@ -162,6 +162,26 @@ class Wajah:
     JEDA_MAKS  = 5.8
     LELAH_BUKA = 0.55      # tinggi mata saat energi habis
 
+    # ── mulut saat bicara ───────────────────────────────────────────────
+    # Sebelum ini mulut tiap karakter TIDAK PERNAH bergerak — terukur, rentang
+    # scale_y-nya 0,00000 sepanjang percakapan 20 detik. Salah satu dari tiga
+    # animasi yang diminta brief ini bernama "berbicara", dan mulutnya diam.
+    #
+    # Yang dihindari: mulut yang membuka-menutup satu sinus. Bicara manusia
+    # bukan getaran berperiode tetap — ia deret SUKU KATA yang panjangnya
+    # berbeda-beda, dikelompokkan jadi frasa, dengan jeda di antaranya.
+    # Sinus murni akan punya simpangan baku jarak nol, cacat metronom yang
+    # sama yang sudah dua kali ditutup di proyek ini (kedipan §7, ekor §9).
+    SUKU_MIN     = 0.115   # detik, suku kata tercepat
+    SUKU_MAKS    = 0.235   # detik, suku kata terlambat  (~4-9 suku/detik)
+    SUKU_BUKA    = 3.1     # kelipatan tinggi mulut diam saat terbuka penuh
+    SUKU_LEBAR   = 1.18    # mulut ikut melebar sedikit, tidak cuma menganga
+    FRASA_MIN    = 4       # suku kata per frasa
+    FRASA_MAKS   = 9
+    FRASA_JEDA_MIN = 0.22  # detik diam di antara frasa — tempat orang menarik
+    FRASA_JEDA_MAKS = 0.58 # napas; tanpa ini bicaranya terbaca sebagai dengung
+    MULUT_PULANG_MS = 90.0 # mulut kembali diam sesudah berhenti bicara
+
     def __init__(self, mata, kilau, mulut, semua):
         self.mata, self.kilau, self.mulut, self.semua = mata, kilau, mulut, semua
         self._tinggi0 = [float(e.scale_y) for e in mata]
@@ -171,6 +191,20 @@ class Wajah:
         self._lelah = 0.0
         self._tidur = False
         self._n = 0                 # nomor kedipan, umpan derau
+        self._bicara = False
+        self._suku_n = 0            # nomor suku kata, umpan derau
+        self._suku_t = 0.0
+        self._suku_lama = self.SUKU_MIN
+        self._suku_tinggi = 1.0
+        self._sisa_frasa = 0
+        self._jeda_t = 0.0
+        self._buka_mulut = 0.0      # 0 = diam, 1 = terbuka penuh
+        self._mulut0 = None
+        if mulut is not None:
+            try:
+                self._mulut0 = (float(mulut.scale_x), float(mulut.scale_y))
+            except Exception:
+                self._mulut0 = None
 
     def fase_awal(self, kunci: str) -> None:
         """Sebar fase dari id karakter supaya tidak berkedip serempak."""
@@ -197,6 +231,74 @@ class Wajah:
         """0 = segar, 1 = habis. Mata menyipit, tidak menutup."""
         self._lelah = max(0.0, min(1.0, float(lelah)))
 
+    def set_bicara(self, aktif: bool) -> None:
+        """Nyalakan/matikan mulut bicara.
+
+        Di tepi naiknya frasa dimulai dari awal: tiap baris dialog baru adalah
+        ucapan baru, dan ucapan yang dimulai di tengah frasa sebelumnya
+        terbaca sebagai potongan.
+        """
+        aktif = bool(aktif)
+        if aktif and not self._bicara:
+            self._suku_t = 0.0
+            self._jeda_t = 0.0
+            self._sisa_frasa = 0
+            self._suku_lama = self.SUKU_MIN
+        self._bicara = aktif
+
+    def _suku_berikut(self) -> None:
+        """Panjang dan bukaan suku kata berikutnya — berbeda-beda, tidak acak.
+
+        Umpannya NOMOR suku kata, bukan waktu: jebakan umpan-waktu sudah sekali
+        meloloskan kedipan metronom di modul ini sendiri.
+        """
+        self._suku_n += 1
+        b = getattr(self, '_benih', 0)
+        u = derau(self._suku_n, b)
+        self._suku_lama = self.SUKU_MIN + u * (self.SUKU_MAKS - self.SUKU_MIN)
+        # Bukaan tiap suku kata berbeda: deret suku kata yang sama tingginya
+        # terbaca sebagai rahang berengsel, bukan orang berbicara.
+        self._suku_tinggi = 0.42 + derau(self._suku_n, b + 517) * 0.58
+        self._suku_t = 0.0
+        if self._sisa_frasa <= 0:
+            n = derau(self._suku_n, b + 823)
+            self._sisa_frasa = int(self.FRASA_MIN
+                                   + n * (self.FRASA_MAKS - self.FRASA_MIN))
+        self._sisa_frasa -= 1
+
+    def _tick_mulut(self, dt: float) -> None:
+        if self.mulut is None or self._mulut0 is None:
+            return
+        if not self._bicara:
+            # Pulang ke diam, tidak memotong: mulut yang menutup dalam satu
+            # frame di akhir kalimat terbaca sebagai gambar yang diganti.
+            self._buka_mulut = max(
+                0.0, self._buka_mulut - dt * 1000.0 / self.MULUT_PULANG_MS)
+        elif self._jeda_t > 0.0:
+            self._jeda_t = max(0.0, self._jeda_t - dt)
+            self._buka_mulut = max(0.0, self._buka_mulut - dt * 6.0)
+        else:
+            self._suku_t += dt
+            if self._suku_t >= self._suku_lama:
+                if self._sisa_frasa <= 0:
+                    j = derau(self._suku_n, getattr(self, '_benih', 0) + 311)
+                    self._jeda_t = (self.FRASA_JEDA_MIN
+                                    + j * (self.FRASA_JEDA_MAKS
+                                           - self.FRASA_JEDA_MIN))
+                self._suku_berikut()
+            v = self._suku_t / max(1e-6, self._suku_lama)
+            # Kosinus terangkat: tertutup -> terbuka -> tertutup tanpa sudut
+            # tajam di kedua ujungnya.
+            self._buka_mulut = self._suku_tinggi * (
+                0.5 - 0.5 * math.cos(math.tau * v))
+        x0, y0 = self._mulut0
+        b = self._buka_mulut
+        try:
+            self.mulut.scale_y = y0 * (1.0 + (self.SUKU_BUKA - 1.0) * b)
+            self.mulut.scale_x = x0 * (1.0 + (self.SUKU_LEBAR - 1.0) * b)
+        except Exception:
+            pass
+
     def set_tidur(self, tidur: bool) -> None:
         """Mata terpejam penuh selama yang punya sedang tidur.
 
@@ -207,6 +309,7 @@ class Wajah:
         self._tidur = bool(tidur)
 
     def tick(self, dt: float) -> None:
+        self._tick_mulut(dt)
         self._t += dt
         if self._kedip_t is None:
             if self._t >= self._jeda:

@@ -75,10 +75,22 @@ class NPC(BaseActor):
 
     # ── PERCAKAPAN ──────────────────────────────────────────────────────────
     # Pendengar yang benar-benar beku sama merusaknya dengan pembicara yang
-    # beku. Rig NPC di sini satu mesh tanpa pivot, jadi yang bisa digerakkan
-    # cuma seluruh badannya — dan ternyata itu cukup: menghadap lawan bicara,
-    # anggukan kecil, dan perpindahan berat yang periodenya tidak sinkron
-    # dengan anggukan sudah membuat orang terbaca sedang mendengarkan.
+    # beku: menghadap lawan bicara, anggukan kecil, dan perpindahan berat yang
+    # periodenya tidak sinkron dengan anggukan membuat orang terbaca sedang
+    # mendengarkan.
+    #
+    # Versi pertama menaruh SELURUH anggukan di badan, dengan alasan yang
+    # ditulis di sini juga: "rig NPC di sini satu mesh tanpa pivot". Alasan itu
+    # sudah kedaluwarsa sejak warga punya wajah — `actor._kepala` ada sebagai
+    # simpul tersendiri. Terukur pada kode lama: selama 20 detik percakapan,
+    # rentang rotation_x BADAN 6,36 derajat dan rentang rotation_x KEPALA
+    # 0,00000 derajat. Yang terlihat bukan orang mengangguk, melainkan orang
+    # yang seluruh tubuhnya terayun dari mata kaki.
+    #
+    # Sekarang kepala memimpin dan badan cuma ikut sedikit. Karena kepala anak
+    # dari badan, rotasinya BERTAMBAH: kepala bergerak penuh, badan 22%-nya.
+    KEPALA_BAGIAN   = 0.78     # porsi anggukan yang dipikul kepala sendiri
+    KEPALA_LAWAN    = 0.35     # kepala melawan ayunan badan, seperti aslinya
     ANGGUK_DERAJAT  = 5.2      # dalamnya satu anggukan
     ANGGUK_PERIODE  = 2.35     # detik antar anggukan
     ANGGUK_LEBAR    = 0.34     # bagian periode yang dipakai anggukan itu sendiri
@@ -168,11 +180,23 @@ class NPC(BaseActor):
         else:
             angguk = 0.0
 
-        self.rotation_x = napas + angguk
+        total = napas + angguk
         # Periodenya tidak berkelipatan periode anggukan, jadi keduanya tidak
         # pernah jatuh bersamaan — kalau sinkron, yang terlihat satu getaran,
         # bukan dua kebiasaan tubuh.
-        self.rotation_z = self.SWAY_DERAJAT * math.sin(t * math.tau / self.SWAY_PERIODE)
+        sway = self.SWAY_DERAJAT * math.sin(t * math.tau / self.SWAY_PERIODE)
+        self.rotation_z = sway
+        kepala = getattr(self, '_kepala', None)
+        if kepala is None:
+            # Warga tanpa simpul kepala (jalur Vitaboy) tetap mengangguk
+            # dengan badan — lebih baik daripada tidak mengangguk sama sekali.
+            self.rotation_x = total
+            return
+        self.rotation_x = total * (1.0 - self.KEPALA_BAGIAN)
+        kepala.rotation_x = total * self.KEPALA_BAGIAN
+        # Kepala menstabilkan diri terhadap ayunan badan; itu yang membedakan
+        # orang berdiri dari papan yang digoyang.
+        kepala.rotation_z = -sway * self.KEPALA_LAWAN
 
     def akhiri_percakapan(self) -> None:
         if getattr(self, '_bicara_t', None) is None:
@@ -180,6 +204,13 @@ class NPC(BaseActor):
         self._bicara_t = None
         self.rotation_x = 0.0
         self.rotation_z = 0.0
+        kepala = getattr(self, '_kepala', None)
+        if kepala is not None:
+            kepala.rotation_x = 0.0
+            kepala.rotation_z = 0.0
+        wajah = getattr(self, '_wajah', None)
+        if wajah is not None:
+            wajah.set_bicara(False)
         # `_bicara_rot0` disimpan sejak awal tapi tidak pernah dipakai: lawan
         # bicara tetap menghadap ke tempat pemain berdiri, selamanya, bahkan
         # sesudah pemain pergi. Sekarang ia berpaling kembali — lebih lambat

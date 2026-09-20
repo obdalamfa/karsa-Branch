@@ -53,6 +53,22 @@ class GerakTernak:
 
     TIDUR_REDAM        = 0.22
     TIDUR_LAMBAT       = 1.8
+    TIDUR_TELINGA      = -15.0    # telinga mengendur selama tidur
+
+    # ── keadaan yang harus TERLIHAT pada hewannya ───────────────────────
+    # husbandry.py membuka dengan kalimatnya sendiri: "Aturan yang tidak bisa
+    # dilihat pemain bukan aturan." Ia lalu memberi tiap hewan takaran kenyang,
+    # air, bersih, hitungan lalai dan jalur sakit — dan seluruhnya cuma muncul
+    # sebagai TEKS di panel. Sapi sakit dan sapi yang baru disikat terlihat
+    # sama persis. Dua keadaan itu sekarang terbaca dari telinga dan ekornya,
+    # dan sengaja dibuat BERLAWANAN arah supaya tidak bisa tertukar.
+    SAKIT_TELINGA      = -30.0    # telinga layu ke bawah
+    SAKIT_EKOR_REDAM   = 0.38
+    SAKIT_EKOR_LAMBAT  = 1.55
+    SENANG_TELINGA     = 15.0     # telinga tegak
+    SENANG_EKOR_LEBAR  = 1.55
+    SENANG_EKOR_CEPAT  = 0.72
+    KEADAAN_LERP       = 2.6      # telinga layu/tegak menyusul pelan
 
     def __init__(self, telinga, ekor, kunci: str):
         self.telinga, self.ekor = list(telinga), list(ekor)
@@ -67,6 +83,9 @@ class GerakTernak:
         self._periode = self.EKOR_DIAM_PERIODE
         # Tiap telinga punya jam sendiri: dua telinga yang berkedut berbarengan
         # terbaca sebagai satu engsel, bukan dua telinga.
+        self._sakit = False
+        self._senang = 0.0
+        self._telinga_geser = 0.0   # sudut tetap telinga (layu/tegak) saat ini
         self._kedut = []
         for i, _ in enumerate(self.telinga):
             self._kedut.append({'t': u * self.TELINGA_JEDA_MAKS + i * 1.7,
@@ -87,6 +106,12 @@ class GerakTernak:
         u = derau(k['n'], self._benih + i * 131)
         k['jeda'] = self.TELINGA_JEDA_MIN + u * (self.TELINGA_JEDA_MAKS
                                                  - self.TELINGA_JEDA_MIN)
+
+    def set_keadaan(self, sakit: bool = False, senang: float = 0.0) -> None:
+        """`sakit` dari husbandry.care_of(); `senang` 0..1, meluruh sesudah
+        hewannya dirawat."""
+        self._sakit = bool(sakit)
+        self._senang = max(0.0, min(1.0, float(senang)))
 
     def sentuh(self) -> None:
         """Satu sapuan sikat mendarat: kedua telinga menyentak sekarang.
@@ -139,6 +164,12 @@ class GerakTernak:
                  + (self.EKOR_RAWAT_DERAJAT - self.EKOR_DIAM_DERAJAT) * sikat)
         per_t = (self.EKOR_DIAM_PERIODE
                  + (self.EKOR_RAWAT_PERIODE - self.EKOR_DIAM_PERIODE) * sikat)
+        if self._sakit:
+            amp_t *= self.SAKIT_EKOR_REDAM
+            per_t *= self.SAKIT_EKOR_LAMBAT
+        elif self._senang > 0.0:
+            amp_t *= 1.0 + (self.SENANG_EKOR_LEBAR - 1.0) * self._senang
+            per_t *= 1.0 - (1.0 - self.SENANG_EKOR_CEPAT) * self._senang
         if tidur:
             amp_t *= self.TIDUR_REDAM
             per_t *= self.TIDUR_LAMBAT
@@ -161,12 +192,35 @@ class GerakTernak:
             except Exception:
                 pass
 
+        # Telinga layu (sakit) atau tegak (senang) adalah sudut TETAP yang
+        # ditambahkan ke sentakan, bukan menggantikannya: hewan sakit tetap
+        # sesekali berkedut, cuma dari posisi yang lebih rendah.
+        geser_t = 0.0
+        if self._sakit:
+            geser_t = self.SAKIT_TELINGA
+        elif self._senang > 0.0:
+            geser_t = self.SENANG_TELINGA * self._senang
+        if tidur:
+            # Telinga hewan tidur mengendur setengah layu, dan tidak pernah
+            # lebih tegak daripada itu — hewan yang tertidur dengan telinga
+            # waspada terbaca sebagai hewan yang pura-pura tidur.
+            geser_t = min(geser_t, self.TIDUR_TELINGA)
+        self._telinga_geser += (geser_t - self._telinga_geser) * min(
+            1.0, self.KEADAAN_LERP * dt)
+
         for i, p in enumerate(self.telinga):
             s = self._sudut_kedut(self._kedut[i], dt, not tidur)
             try:
                 if getattr(p, '_sumbu', 'z') == 'z':
-                    p.rotation_z = s * getattr(p, '_arah', 1.0)
+                    p.rotation_z = (s + self._telinga_geser) * getattr(p, '_arah', 1.0)
                 else:
-                    p.rotation_x = -s
+                    # Tanda geser DIBALIK di sini, dan itu bukan kelalaian.
+                    # Pada telinga tegak, sentakan memakai -s karena sentakan
+                    # menyurukkan telinga KE BELAKANG (menjauhi muka). Tapi
+                    # layu juga ke belakang dan waspada ke depan, jadi geseran
+                    # keadaan berjalan di sumbu yang sama dengan tanda kebalikan
+                    # sentakan: kalau ikut -geser, hewan SAKIT justru berdiri
+                    # dengan telinga condong ke depan — telinga waspada.
+                    p.rotation_x = -s + self._telinga_geser
             except Exception:
                 pass

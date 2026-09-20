@@ -45,7 +45,9 @@ def jalan(g, detik, sikat=0.0, tidur=False, ekor=None, telinga=None):
         if ekor is not None:
             de.append(ekor.sudut())
         for i, t in enumerate(telinga or []):
-            dt_[i].append(abs(t.rotation_z) + abs(t.rotation_x))
+            # Bertanda, dan satu sumbu saja: menjumlahkan nilai mutlak dua
+            # sumbu membuat simpangan tidak bisa dihitung terhadap dasarnya.
+            dt_[i].append(t.rotation_z if t._sumbu == 'z' else t.rotation_x)
     return de, dt_
 
 
@@ -62,14 +64,108 @@ def lintas_nol(deret):
 
 
 def kejadian(deret, ambang=4.0):
-    """Waktu mulai tiap sentakan telinga."""
+    """Waktu mulai tiap sentakan telinga.
+
+    Diukur sebagai SIMPANGAN dari sudut duduk telinga, bukan dari nol. Versi
+    pertama memakai |sudut| > ambang, dan itu berhenti benar begitu telinga
+    punya sudut tetap: telinga yang layu 15 derajat saat hewan tidur terbaca
+    sebagai satu kedutan yang tidak pernah selesai, padahal ia diam sempurna.
+    Kedutan adalah gerakan sesaat, jadi yang diukur harus perubahannya.
+    """
+    if not deret:
+        return []
+    dasar = statistics.median(deret)
     out, naik = [], False
     for i, v in enumerate(deret):
-        if v > ambang and not naik:
+        d = abs(v - dasar)
+        if d > ambang and not naik:
             out.append(i * DT); naik = True
-        elif v <= ambang * 0.4:
+        elif d <= ambang * 0.4:
             naik = False
     return out
+
+
+def uji_keadaan(cek):
+    """Sakit dan senang harus TERLIHAT, dan tidak boleh bisa tertukar.
+
+    husbandry.py membuka dengan kalimatnya sendiri: "Aturan yang tidak bisa
+    dilihat pemain bukan aturan." Ia memberi tiap hewan takaran kenyang, air,
+    bersih, hitungan lalai dan jalur sakit — dan seluruhnya cuma muncul sebagai
+    teks di panel. Uji ini menjaga supaya keadaan itu terbaca dari hewannya,
+    dan supaya dua keadaan yang berlawanan arti tidak berakhir mirip.
+    """
+    from game.wajah import Wajah
+
+    def telinga_tetap(**kw):
+        t = Simpul('z', 1.0)
+        g = GerakTernak([t], [], 'sapi_betsy')
+        g.set_keadaan(**kw)
+        for _ in range(int(6.0 / DT)):
+            g.tick(DT, 0.0, False)
+        return t.rotation_z
+
+    def ekor_rentang(**kw):
+        e = Simpul('z')
+        g = GerakTernak([], [e], 'sapi_betsy')
+        g.set_keadaan(**kw)
+        jalan(g, 8.0, ekor=e)
+        de, _ = jalan(g, 60.0, ekor=e)
+        return max(de) - min(de)
+
+    net_t = telinga_tetap()
+    sakit_t = telinga_tetap(sakit=True)
+    senang_t = telinga_tetap(senang=1.0)
+    cek('sakit: telinga layu turun >= 20 derajat', sakit_t <= net_t - 20.0,
+        'netral %+.1f -> sakit %+.1f' % (net_t, sakit_t))
+    cek('senang: telinga tegak naik >= 10 derajat', senang_t >= net_t + 10.0,
+        'netral %+.1f -> senang %+.1f' % (net_t, senang_t))
+    cek('sakit dan senang menggerakkan telinga ke arah BERLAWANAN',
+        (sakit_t - net_t) * (senang_t - net_t) < 0,
+        'sakit %+.1f, senang %+.1f terhadap netral %+.1f'
+        % (sakit_t - net_t, senang_t - net_t, net_t))
+
+    net_e = ekor_rentang()
+    sakit_e = ekor_rentang(sakit=True)
+    senang_e = ekor_rentang(senang=1.0)
+    cek('sakit: ekor melemah <= 60% rentang netral', sakit_e <= net_e * 0.60,
+        '%.1f -> %.1f derajat' % (net_e, sakit_e))
+    cek('senang: ekor menguat >= 1,3x rentang netral', senang_e >= net_e * 1.3,
+        '%.1f -> %.1f derajat' % (net_e, senang_e))
+
+    # ── mata ─────────────────────────────────────────────────────────────
+    class B:
+        def __init__(self, sy=1.0):
+            self.scale_x = 1.0
+            self.scale_y = sy
+            self.enabled = True
+
+    def mata(**kw):
+        m = [B(0.28), B(0.28)]
+        w = Wajah(m, [B(0.05)], None, m)
+        w.fase_awal('sapi_betsy')
+        w.set_keadaan(**kw)
+        tinggi, kedip, tutup = [], [], False
+        for i in range(int(90.0 / DT)):
+            w.tick(DT)
+            v = m[0].scale_y / 0.28
+            tinggi.append(v)
+            if v < 0.35 and not tutup:
+                kedip.append(i * DT); tutup = True
+            elif v > 0.75 * (max(tinggi) or 1):
+                tutup = False
+        buka = max(tinggi)
+        jd = [b - a for a, b in zip(kedip, kedip[1:])]
+        return buka, (statistics.mean(jd) if jd else 0.0)
+
+    net_b, net_j = mata()
+    sakit_b, sakit_j = mata(sakit=True)
+    senang_b, _ = mata(senang=1.0)
+    cek('sakit: kelopak berat (mata <= 70% tinggi netral)',
+        sakit_b <= net_b * 0.70, '%.3f -> %.3f' % (net_b, sakit_b))
+    cek('sakit: kedipan melambat >= 1,8x', sakit_j >= net_j * 1.8,
+        'jeda %.2f s -> %.2f s' % (net_j, sakit_j))
+    cek('senang: mata menyipit lebih rapat daripada sakit',
+        senang_b < sakit_b, 'senang %.3f lawan sakit %.3f' % (senang_b, sakit_b))
 
 
 def uji_rig(cek):
@@ -247,6 +343,8 @@ def main():
         sudut.append(round(e.sudut(), 3))
     cek('fase ekor tiap ekor berbeda', len(set(sudut)) == len(sudut),
         'sudut pada t=2 s: %s' % sudut)
+
+    uji_keadaan(cek)
 
     if '--rig' in sys.argv:
         uji_rig(cek)

@@ -239,8 +239,9 @@ yang sama seperti di 5.1.
 - Ekspresi masih hampir satu. **Kedipan, mata lelah dan mulut bicara sudah
   ada** (§7, §10); senang dan sakit belum. Mata dan mulut sudah entity
   terpisah, jadi menambahnya murah.
-- Ternak sekarang bermata, berkedip, menggerakkan telinga dan mengibaskan
-  ekor (§8, §9). Yang masih statis cuma mulutnya.
+- Ternak sekarang bermata, berkedip, menggerakkan telinga, mengibaskan ekor,
+  dan **keadaan sakit/senangnya terbaca dari hewannya** (§8, §9, §11). Yang
+  masih statis cuma mulutnya.
 
 ---
 
@@ -659,3 +660,84 @@ suku kata dibuat sepanjang tetap           TERTANGKAP
   adalah `mode == 'hud'`, jadi `None` membekukan segalanya dan probe itu
   melaporkan "kedipan tidak kembali sesudah dialog" sebagai cacat game. Bukan.
   Penutupnya sekarang `panels.close_all()`, jalur yang dipakai game sendiri.
+
+---
+
+## 11. Sapi sakit dan sapi yang baru disayang terlihat sama persis
+
+`husbandry.py` membuka dengan kalimatnya sendiri:
+
+> **Aturan yang tidak bisa dilihat pemain bukan aturan.**
+
+Lalu ia memberi tiap hewan takaran kenyang, air dan bersih yang turun tiap
+hari, hitungan lalai, jalur sakit, dan hati 0–10. Seluruhnya benar. Dan
+seluruhnya cuma muncul sebagai **teks**: baris di HUD, tabel di panel Tani &
+Ternak. Sapi yang tiga hari ditelantarkan sampai jatuh sakit dan sapi yang
+baru saja disikat berdiri di kandang yang sama dengan rupa yang sama.
+
+Telinga punya poros sejak §9 dan mata punya pengendali sejak §8, jadi
+menutupnya sekarang murah.
+
+### Dua keadaan, sengaja dibuat berlawanan arah
+
+Kalau sakit dan senang sama-sama cuma "mata lebih pendek", pemain tidak bisa
+membedakan hewan yang bahagia dari hewan yang mau roboh. Jadi tiap tanda
+diberi **arah**, dan arahnya dibalik:
+
+| | telinga | ekor | mata | kedipan |
+|---|---|---|---|---|
+| netral | 0° | 11,0° | penuh | tiap 4,01 s |
+| **sakit** | **−30° (layu)** | **4,1° (lemah)** | 0,62 (kelopak berat) | **tiap 8,45 s** |
+| **senang** | **+15° (tegak)** | **17,0° (kuat)** | 0,38 (menyipit rapat) | normal |
+
+Telinga bergerak ke arah berlawanan, ekor melemah lawan menguat, dan kedipan
+melambat hanya pada yang sakit. Tiga tanda bebas, dan tidak ada satu pun yang
+bisa dibaca dua arti.
+
+`senang` bukan saklar melainkan angka yang **meluruh**: tiap aksi perawatan —
+menyikat, membelai, memanen, mengisi palung — menyalakannya penuh selama 3,6
+detik, lalu ia turun sendiri. Seluruh kawanan yang ikut minum dari satu palung
+ikut terlihat senang, karena palungnya memang diisi untuk mereka semua.
+
+### Dua tanda salah arah, satu ditangkap sebelum dirender
+
+Pada telinga yang menjulur ke samping (sapi, kambing, domba) sumbu ayunnya Z
+dan tandanya lurus. Pada telinga **tegak** (kucing, rubah, kelinci, kuda)
+sentakan memakai `-s`, karena sentakan menyurukkan telinga ke belakang. Tapi
+layu juga ke belakang dan waspada ke depan — jadi geseran keadaan harus
+berjalan dengan tanda **kebalikan** sentakan. Rumus pertama memakai tanda yang
+sama, dan hasilnya hewan SAKIT berdiri dengan telinga condong ke depan:
+telinga waspada. Ditangkap dari membaca ulang rumusnya, bukan dari gambar.
+
+Yang kedua ditangkap gerbang: telinga hewan tidur ikut mengendur setengah
+layu, dan itu tadinya efek samping tak sengaja dari satu `min()`. Sekarang ia
+tetapan bernama sendiri (`TIDUR_TELINGA = -15°`) dengan alasannya ditulis —
+hewan yang tertidur dengan telinga waspada terbaca sebagai hewan yang
+pura-pura tidur.
+
+### Dan gerbang lama ikut ketahuan salah ukur
+
+Begitu telinga punya sudut DUDUK yang bukan nol, pemeriksaan "malam: telinga
+berhenti berkedut" langsung gagal — melaporkan 1 kedutan pada hewan yang diam
+sempurna. Detektornya memakai `|sudut| > ambang`, jadi telinga yang layu 15°
+terbaca sebagai satu kedutan yang tidak pernah selesai.
+
+Kedutan adalah gerakan **sesaat**, jadi yang diukur harus simpangannya
+terhadap sudut duduk, bukan jaraknya dari nol. Detektornya sekarang memakai
+median deret sebagai dasar. Ini pola yang ketiga kalinya di proyek ini:
+pengukur yang benar selama besarannya kebetulan berpusat di nol, dan diam-diam
+salah begitu asumsi itu hilang.
+
+### Gerbang diuji dengan merusak kode
+
+Enam cacat dipasang sengaja di `tools/uji_gerak_ternak.py`, dan keenamnya
+tertangkap:
+
+```
+sakit tidak melayukan telinga        TERTANGKAP  netral +0,0 -> sakit +0,0
+senang dan sakit ke arah SAMA        TERTANGKAP  sakit -30,0, senang -15,0
+sakit tidak melemahkan ekor          TERTANGKAP  11,0 -> 10,8 derajat
+kelopak sakit tidak berat            TERTANGKAP  1,000 -> 1,000
+kedipan sakit tidak melambat         TERTANGKAP  jeda 4,01 s -> 4,01 s
+senang tidak beda dari sakit         TERTANGKAP  senang 0,620 lawan sakit 0,620
+```

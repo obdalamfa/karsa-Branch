@@ -153,6 +153,18 @@ class FarmAnimal(BaseActor):
         self._tahan_t = max(getattr(self, '_tahan_t', 0.0) or 0.0, float(detik))
         self.target_x, self.target_y = self.logical_x, self.logical_y
 
+    SENANG_DETIK = 3.6     # berapa lama hewan terlihat senang sesudah dirawat
+
+    def disayang(self, detik: float = None) -> None:
+        """Hewan baru saja dirawat — ia terlihat senang selama beberapa detik.
+
+        Dipanggil dari tiap aksi perawatan. Sebelum ini satu-satunya tanda
+        bahwa perawatan berhasil adalah baris teks di HUD; hewannya sendiri
+        tidak berubah sedikit pun.
+        """
+        d = self.SENANG_DETIK if detik is None else float(detik)
+        self._senang_t = max(getattr(self, '_senang_t', 0.0) or 0.0, d)
+
     def disikat(self, px: float, pz: float) -> None:
         """Satu sapuan mendarat dari arah (px,pz) dalam koordinat dunia."""
         from .config import TILE_SIZE as _TS
@@ -164,6 +176,7 @@ class FarmAnimal(BaseActor):
         self._sikat_kuat = 1.0
         self._sikat_t = 0.0
         self.ai_state = AnimalState.DISIKAT
+        self.disayang()
         # Telinga menyentak tiap sapuan. Ini bagian yang benar-benar menjawab
         # brief: pemain harus melihat hewannya bereaksi terhadap tangannya,
         # bukan cuma badan yang condong pelan.
@@ -236,8 +249,25 @@ class FarmAnimal(BaseActor):
         # memiringkan badan, jadi ketiganya bercerita satu hal: ada tangan di
         # sini. Ditaruh di sini, bukan di loop entitas, karena kekuatan sapuan
         # itu milik hewan dan tidak terbaca dari luar.
+        # Sakit dan senang. Keduanya dibaca sekali lalu diteruskan ke wajah
+        # dan ke telinga/ekor, supaya satu keadaan tidak pernah terbaca dua
+        # arah berbeda pada hewan yang sama.
+        _senang_t = max(0.0, (getattr(self, '_senang_t', 0.0) or 0.0) - dt)
+        self._senang_t = _senang_t
+        _senang = min(1.0, _senang_t / max(1e-6, self.SENANG_DETIK))
+        _sakit = False
+        try:
+            from .husbandry import care_of, is_livestock
+            if is_livestock(self.actor_id):
+                _sakit = bool(care_of(self.state, self.actor_id).get('sakit'))
+        except Exception:
+            _sakit = False
+        if _w is not None:
+            _w.set_keadaan(_sakit, _senang)
+
         _g = getattr(self, '_gerak', None)
         if _g is not None:
+            _g.set_keadaan(_sakit, _senang)
             _g.tick(dt, getattr(self, '_sikat_kuat', 0.0) or 0.0, _malam)
 
         # Minum menang atas jadwal tidur dan atas jalan-jalan: hewan yang

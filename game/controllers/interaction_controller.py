@@ -856,6 +856,9 @@ class InteractionController:
             self.player._spend_energy(EN_COLLECT)
             s.inventory[item] = s.inventory.get(item, 0) + 1
             animal_record(s, npc_id)['siap'] = 0
+            # Hewannya ikut terlihat senang, bukan cuma baris teks di HUD.
+            if aktor is not None and hasattr(aktor, 'disayang'):
+                aktor.disayang()
             s.stats['produce_collected'] = s.stats.get('produce_collected', 0) + 1
             care_anim.pasang_hasil(self.player)
             sound_play('harvest', 0.8)
@@ -1314,6 +1317,11 @@ class InteractionController:
             s.stats['trough_filled'] = s.stats.get('trough_filled', 0) + 1
             for aid in kawanan:
                 s.npc_hearts[aid] = min(10, s.npc_hearts.get(aid, 0) + 0.5)
+                # Seluruh kawanan yang ikut minum terlihat senang, bukan cuma
+                # yang diklik: palungnya memang diisi untuk mereka semua.
+                _a = entities_mgr.actors.get(aid)
+                if _a is not None and hasattr(_a, 'disayang'):
+                    _a.disayang()
             ekor = '' if len(kawanan) <= 1 else f" ({len(kawanan)} ekor ikut minum)"
             panels.flash_msg(
                 f"Palung diisi untuk {npc.get('name', npc_id)}. "

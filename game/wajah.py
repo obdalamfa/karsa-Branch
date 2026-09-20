@@ -162,6 +162,15 @@ class Wajah:
     JEDA_MAKS  = 5.8
     LELAH_BUKA = 0.55      # tinggi mata saat energi habis
 
+    # Dua keadaan yang harus terbaca dari MATANYA, dan sengaja dibuat berbeda
+    # ke dua arah supaya tidak bisa tertukar: sakit = kelopak berat DAN
+    # kedipan yang melambat; senang = mata menyipit rapat dengan kedipan
+    # normal. Kalau keduanya cuma "mata lebih pendek", pemain tidak bisa
+    # membedakan hewan yang bahagia dari hewan yang mau roboh.
+    SAKIT_BUKA  = 0.62
+    SAKIT_JEDA  = 2.2      # pengali jarak antar-kedipan
+    SENANG_BUKA = 0.38
+
     # ── mulut saat bicara ───────────────────────────────────────────────
     # Sebelum ini mulut tiap karakter TIDAK PERNAH bergerak — terukur, rentang
     # scale_y-nya 0,00000 sepanjang percakapan 20 detik. Salah satu dari tiga
@@ -190,6 +199,8 @@ class Wajah:
         self._kedip_t = None
         self._lelah = 0.0
         self._tidur = False
+        self._sakit = False
+        self._senang = 0.0
         self._n = 0                 # nomor kedipan, umpan derau
         self._bicara = False
         self._suku_n = 0            # nomor suku kata, umpan derau
@@ -299,6 +310,11 @@ class Wajah:
         except Exception:
             pass
 
+    def set_keadaan(self, sakit: bool = False, senang: float = 0.0) -> None:
+        """Keadaan yang terbaca dari mata. `senang` 0..1 dan meluruh sendiri."""
+        self._sakit = bool(sakit)
+        self._senang = max(0.0, min(1.0, float(senang)))
+
     def set_tidur(self, tidur: bool) -> None:
         """Mata terpejam penuh selama yang punya sedang tidur.
 
@@ -312,7 +328,10 @@ class Wajah:
         self._tick_mulut(dt)
         self._t += dt
         if self._kedip_t is None:
-            if self._t >= self._jeda:
+            # Hewan sakit berkedip lebih jarang — kelopak yang berat bergerak
+            # lebih malas, dan itu tanda kedua yang memisahkannya dari senang.
+            jeda = self._jeda * (self.SAKIT_JEDA if self._sakit else 1.0)
+            if self._t >= jeda:
                 self._kedip_t = 0.0
                 self._t = 0.0
                 self._acak_jeda()
@@ -333,6 +352,10 @@ class Wajah:
             else:
                 buka = (ms - self.TUTUP_MS - self.TAHAN_MS) / self.BUKA_MS
         buka *= 1.0 - (1.0 - self.LELAH_BUKA) * self._lelah
+        if getattr(self, '_sakit', False):
+            buka *= self.SAKIT_BUKA
+        elif getattr(self, '_senang', 0.0) > 0.0:
+            buka *= 1.0 - (1.0 - self.SENANG_BUKA) * self._senang
         if getattr(self, '_tidur', False):
             buka = 0.0
         for e, h0 in zip(self.mata, self._tinggi0):

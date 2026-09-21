@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Uji animasi berbicara — mulut, kedipan yang tidak boleh berhenti, dan
-anggukan yang harus dipimpin kepala.
+"""Uji wajah warga saat berinteraksi — mulut bicara, kedipan yang tidak boleh
+berhenti, anggukan yang harus dipimpin kepala, dan kehangatan yang harus
+terbaca dari hati.
 
 "Berbicara" adalah satu dari tiga animasi yang diminta brief proyek ini, dan
 sebelum berkas ini ada, tiga hal terukur salah selama kotak dialog terbuka:
@@ -9,7 +10,7 @@ sebelum berkas ini ada, tiga hal terukur salah selama kotak dialog terbuka:
     rentang tinggi mulut warga    0,00000              (tidak pernah bergerak)
     rentang rotation_x kepala     0,00000              (yang terayun badannya)
 
-Tanpa argumen: irama mulut saja — murni Python, tanpa jendela, sekitar sedetik.
+Tanpa argumen: irama mulut dan kehangatan — murni Python, tanpa jendela.
 Dengan `--game` (perlu xvfb): game dibuka, dialog sungguhan dijalankan, dan
 kabelnya diperiksa.
 
@@ -162,6 +163,36 @@ def uji_irama(cek):
         '%d dari %d frame identik' % (sama, len(da)))
 
 
+def uji_hati(cek):
+    """Hati 0-10 sudah menggerakkan cabang dialog, hadiah dan gerbang aksi —
+    tapi wajah warga tidak pernah menunjukkannya. Warga yang baru dikenal dan
+    warga 10 hati menatap pemain dengan rupa yang sama persis."""
+    w, _ = buat_wajah()
+    pipi = Bagian(0.012, 0.030)
+    w.pipi = [pipi]
+    w._pipi0 = [(pipi.scale_x, pipi.scale_y)]
+
+    w.set_hati(0.0); w.tick(DT)
+    p0, m0 = pipi.scale_x, w.mata[0].scale_y
+    w.set_hati(1.0)
+    for _ in range(4):
+        w.tick(DT)
+    p1, m1 = pipi.scale_x, w.mata[0].scale_y
+    cek('10 hati: rona pipi melebar >= 1,25x', p1 >= p0 * 1.25,
+        '%.4f -> %.4f (%.2fx)' % (p0, p1, p1 / max(p0, 1e-9)))
+    cek('10 hati: mata melembut, tapi tidak menyipit (0,88-0,97x)',
+        0.88 <= m1 / max(m0, 1e-9) <= 0.97,
+        '%.4f -> %.4f (%.3fx)' % (m0, m1, m1 / max(m0, 1e-9)))
+    # Kehangatan tidak boleh sekuat kegembiraan: senyum lebar permanen
+    # terbaca sebagai topeng, bukan sebagai tetangga yang akrab.
+    w.set_hati(1.0); w.set_keadaan(False, 1.0)
+    for _ in range(3):
+        w.tick(DT)
+    m_senang = w.mata[0].scale_y
+    cek('denyut senang jauh lebih kuat daripada kehangatan',
+        m_senang < m1 * 0.6, 'hati %.4f lawan senang %.4f' % (m1, m_senang))
+
+
 def uji_game(cek):
     """Buka game, jalankan dialog sungguhan, periksa kabelnya."""
     import os
@@ -232,6 +263,29 @@ def uji_game(cek):
     _pw = getattr(p, '_wajah', None)
     t_pem = float(_pw._tinggi0[0]) if _pw else 1.0
 
+    # ── kehangatan DI LUAR dialog ───────────────────────────────────────
+    # Diperiksa lebih dulu, tanpa kotak dialog terbuka. Uji mutasi
+    # membuktikan kenapa: mencabut set_hati() dari entities.update() tetap
+    # lolos selama satu-satunya pemeriksaan pipi berjalan saat dialog
+    # terbuka — jalur dialog menambal hilangnya jalur normal. Padahal justru
+    # klaim "hangat juga di luar dialog" yang jadi alasan memasangnya di dua
+    # tempat: warga yang cuma ramah saat kotak dialog terbuka terbaca sebagai
+    # pelayan toko, bukan tetangga.
+    def pipi_lebar_npc():
+        pp = getattr(npc._wajah, 'pipi', None)
+        return float(pp[0].scale_x) if pp else 0.0
+
+    g.state.npc_hearts[nid] = 0
+    step(10)
+    luar0 = pipi_lebar_npc()
+    g.state.npc_hearts[nid] = 10
+    step(10)
+    luar10 = pipi_lebar_npc()
+    cek('DI LUAR dialog: 10 hati melebarkan rona pipi',
+        luar10 > luar0 * 1.25, '%.4f -> %.4f' % (luar0, luar10))
+    g.state.npc_hearts[nid] = 0
+    step(6)
+
     g.panels.start_dialog(nid, g.state)
     g.mulai_pose_bicara(nid)
     step(2)
@@ -256,6 +310,20 @@ def uji_game(cek):
         'rentang %.7f' % r2['mulut_npc'])
     g.panels._dlg_choices_active = False
 
+    # ── kehangatan dan denyut hadiah, di dalam game ─────────────────────
+    def pipi_lebar():
+        pp = getattr(npc._wajah, 'pipi', None)
+        return float(pp[0].scale_x) if pp else 0.0
+
+    g.state.npc_hearts[nid] = 0
+    step(8)
+    lebar0 = pipi_lebar()
+    g.state.npc_hearts[nid] = 10
+    step(8)
+    lebar10 = pipi_lebar()
+    cek('dialog: 10 hati melebarkan rona pipi', lebar10 > lebar0 * 1.25,
+        '%.4f -> %.4f' % (lebar0, lebar10))
+
     # Tutup lewat jalur game sendiri, bukan dengan menyetel mode ke None —
     # gerbang main normal adalah mode == 'hud', jadi None membekukan segalanya
     # dan ronde pertama probe ini sempat melaporkannya sebagai cacat game.
@@ -271,6 +339,40 @@ def uji_game(cek):
         abs(float(npc._kepala.rotation_x)) < 1e-6,
         'rotation_x kepala %.7f' % abs(float(npc._kepala.rotation_x)))
 
+    # ── hadiah: denyut senang yang meluruh sendiri ──────────────────────
+    from game.data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS
+    meta = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}.get(nid, {})
+    hadiah = meta.get('gift')
+    if not hadiah:
+        cek('warga uji punya hadiah kesukaan', False, 'tidak ada di data')
+        return
+    g.state.inventory[hadiah] = g.state.inventory.get(hadiah, 0) + 1
+    t0 = float(npc._wajah._tinggi0[0])
+    p.complete_gift_gifting(nid, g.panels)
+    step(3)
+    # NILAI TENGAH, bukan nilai terendah. Lantai kedipan adalah 0,02 dan satu
+    # kedipan biasa menyentuhnya juga, jadi "terendah <= ambang" akan lulus
+    # bahkan kalau denyut senangnya tidak ada sama sekali. Sipitan senang
+    # BERTAHAN sepanjang jendela; kedipan cuma 160 ms dari 700 ms, jadi ia
+    # tidak menggeser median.
+    jendela = []
+    for _ in range(21):
+        step(1)
+        jendela.append(float(npc._wajah.mata[0].scale_y))
+    tengah = statistics.median(jendela)
+    cek('hadiah diterima: wajah menyipit senang dan BERTAHAN',
+        tengah <= t0 * 0.55, 'tinggi mata (median) %.4f dari %.4f'
+        % (tengah, t0))
+    step(int(4.0 * 30))
+    jendela2 = []
+    for _ in range(41):
+        step(1)
+        jendela2.append(float(npc._wajah.mata[0].scale_y))
+    tengah2 = statistics.median(jendela2)
+    cek('denyut senang meluruh sendiri dalam ~3 detik',
+        tengah2 >= t0 * 0.85, 'tinggi mata (median) kembali ke %.4f dari %.4f'
+        % (tengah2, t0))
+
 
 def main():
     gagal, jumlah = [], []
@@ -284,6 +386,7 @@ def main():
     print('uji animasi berbicara')
     print('-' * 82)
     uji_irama(cek)
+    uji_hati(cek)
     if '--game' in sys.argv:
         uji_game(cek)
     print('-' * 82)

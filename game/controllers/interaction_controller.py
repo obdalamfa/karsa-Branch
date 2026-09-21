@@ -455,6 +455,14 @@ class InteractionController:
 
         s.inventory[gift] -= 1
         s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1.0)
+        # Denyut senang di wajahnya. Ditaruh di state — bukan di actor —
+        # karena jalur hadiah tidak memegang entities_mgr, dan menambahkan
+        # parameter ke seluruh rantai panggilan demi satu angka tidak sepadan.
+        # Atribut bergaris-bawah: ia tidak ikut json.dump, pola yang sama
+        # dengan state.mv.
+        if not hasattr(s, '_npc_senang'):
+            s._npc_senang = {}
+        s._npc_senang[npc_id] = 2.6
         s.stats['gifts'] = s.stats.get('gifts', 0) + 1
         resp = npc.get('gift_r', 'Terima kasih!')
         sound_play('gift', 0.8)

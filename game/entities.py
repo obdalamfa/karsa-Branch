@@ -540,6 +540,21 @@ class EntitiesManager:
             # sekampung tidak berkedip serempak seperti pasukan.
             _w = getattr(actor, '_wajah', None)
             if _w is not None:
+                # Kehangatan warga terhadap pemain, dan denyut senang sesudah
+                # menerima hadiah. Keduanya dipasang di sini, bukan cuma saat
+                # dialog terbuka: hati adalah keadaan yang berlaku terus, dan
+                # warga yang cuma ramah ketika kotak dialog terbuka terbaca
+                # sebagai pelayan toko, bukan tetangga.
+                if actor_id not in ANIMAL_NPCS:
+                    _w.set_hati(min(1.0, s.npc_hearts.get(actor_id, 0) / 10.0))
+                    _sn = getattr(s, '_npc_senang', None)
+                    if _sn:
+                        _sisa = max(0.0, _sn.get(actor_id, 0.0) - dt)
+                        if _sisa <= 0.0:
+                            _sn.pop(actor_id, None)
+                        else:
+                            _sn[actor_id] = _sisa
+                        _w.set_keadaan(False, min(1.0, _sisa / 2.6))
                 _w.tick(dt)
             if isinstance(actor, Monster):
                 if actor.hp <= 0:

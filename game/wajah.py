@@ -102,7 +102,7 @@ def bangun_wajah(induk, hw: float, ht: float, muka_z: float):
     pada ambang keras, jadi batas bayangannya membentuk tangga yang terlihat
     di pipi dari jarak dekat.
     """
-    out, mata, kilau = [], [], []
+    out, mata, kilau, pipi = [], [], [], []
 
     def kedalaman(x, y, maju):
         return muka_z + maju
@@ -125,10 +125,11 @@ def bangun_wajah(induk, hw: float, ht: float, muka_z: float):
         # 0,71 mendarat tepat di batas rambut dan separuh rona menggantung
         # keluar dari pipi.
         px, py = sx * hw * 0.60, -ht * 0.50
-        out.append(_kotak(induk, (px, py, kedalaman(px, py, -hw * 0.023)),
-                          (hw * 0.30, ht * 0.12, hw * 0.046),
-                          color.rgb(*PIPI_WARNA)))
-    return Wajah(mata, kilau, mulut, out)
+        e = _kotak(induk, (px, py, kedalaman(px, py, -hw * 0.023)),
+                   (hw * 0.30, ht * 0.12, hw * 0.046),
+                   color.rgb(*PIPI_WARNA))
+        pipi.append(e); out.append(e)
+    return Wajah(mata, kilau, mulut, out, pipi=pipi)
 
 
 class Wajah:
@@ -171,6 +172,15 @@ class Wajah:
     SAKIT_JEDA  = 2.2      # pengali jarak antar-kedipan
     SENANG_BUKA = 0.38
 
+    # ── kehangatan: seberapa dekat warga ini dengan pemain ──────────────
+    # `npc_hearts` 0-10 sudah menggerakkan cabang dialog, hadiah dan gerbang
+    # aksi — tapi wajah warga tidak pernah menunjukkannya. Warga yang baru
+    # dikenal dan warga yang sudah 10 hati menatap pemain dengan rupa yang
+    # sama persis. Tandanya sengaja dibuat HALUS: rona pipi melebar dan mata
+    # melembut sedikit. Senyum lebar permanen terbaca sebagai topeng.
+    HATI_PIPI   = 1.42     # lebar rona pipi pada 10 hati
+    HATI_MATA   = 0.93     # mata melembut sedikit, bukan menyipit
+
     # ── mulut saat bicara ───────────────────────────────────────────────
     # Sebelum ini mulut tiap karakter TIDAK PERNAH bergerak — terukur, rentang
     # scale_y-nya 0,00000 sepanjang percakapan 20 detik. Salah satu dari tiga
@@ -191,8 +201,16 @@ class Wajah:
     FRASA_JEDA_MAKS = 0.58 # napas; tanpa ini bicaranya terbaca sebagai dengung
     MULUT_PULANG_MS = 90.0 # mulut kembali diam sesudah berhenti bicara
 
-    def __init__(self, mata, kilau, mulut, semua):
+    def __init__(self, mata, kilau, mulut, semua, pipi=None):
         self.mata, self.kilau, self.mulut, self.semua = mata, kilau, mulut, semua
+        self.pipi = list(pipi or [])
+        self._pipi0 = []
+        for e in self.pipi:
+            try:
+                self._pipi0.append((float(e.scale_x), float(e.scale_y)))
+            except Exception:
+                self._pipi0.append((1.0, 1.0))
+        self._hati = 0.0
         self._tinggi0 = [float(e.scale_y) for e in mata]
         self._t = 0.0
         self._jeda = self.JEDA_MIN
@@ -310,6 +328,21 @@ class Wajah:
         except Exception:
             pass
 
+    def set_hati(self, tingkat: float) -> None:
+        """0 = baru kenal, 1 = 10 hati. Kehangatan, bukan kegembiraan."""
+        self._hati = max(0.0, min(1.0, float(tingkat)))
+
+    def _tick_pipi(self) -> None:
+        if not self.pipi:
+            return
+        k = 1.0 + (self.HATI_PIPI - 1.0) * self._hati
+        for e, (x0, y0) in zip(self.pipi, self._pipi0):
+            try:
+                e.scale_x = x0 * k
+                e.scale_y = y0 * (1.0 + (k - 1.0) * 0.55)
+            except Exception:
+                pass
+
     def set_keadaan(self, sakit: bool = False, senang: float = 0.0) -> None:
         """Keadaan yang terbaca dari mata. `senang` 0..1 dan meluruh sendiri."""
         self._sakit = bool(sakit)
@@ -325,6 +358,7 @@ class Wajah:
         self._tidur = bool(tidur)
 
     def tick(self, dt: float) -> None:
+        self._tick_pipi()
         self._tick_mulut(dt)
         self._t += dt
         if self._kedip_t is None:
@@ -356,6 +390,8 @@ class Wajah:
             buka *= self.SAKIT_BUKA
         elif getattr(self, '_senang', 0.0) > 0.0:
             buka *= 1.0 - (1.0 - self.SENANG_BUKA) * self._senang
+        else:
+            buka *= 1.0 - (1.0 - self.HATI_MATA) * getattr(self, '_hati', 0.0)
         if getattr(self, '_tidur', False):
             buka = 0.0
         for e, h0 in zip(self.mata, self._tinggi0):

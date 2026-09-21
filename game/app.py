@@ -811,6 +811,13 @@ class Game3D:
         # warga bergerak selama baris ditampilkan, dan berhenti saat pilihan
         # aktif — pemain sedang memilih, bukan berbicara.
         pilihan = bool(getattr(self.panels, '_dlg_choices_active', False))
+        # Modal membekukan entities.update(), jadi kehangatan warga harus
+        # dipasang di sini juga — kalau tidak, wajahnya justru kehilangan
+        # tanda hati persis saat pemain sedang menatapnya.
+        if lawan and actor is not None:
+            _w = getattr(actor, '_wajah', None)
+            if _w is not None:
+                _w.set_hati(min(1.0, self.state.npc_hearts.get(lawan, 0) / 10.0))
         for e in (actor, p):
             w = getattr(e, '_wajah', None) if e is not None else None
             if w is not None:

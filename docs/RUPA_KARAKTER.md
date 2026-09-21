@@ -236,9 +236,8 @@ yang sama seperti di 5.1.
 - Rig Vitaboy tetap ranjau — lihat `ANIMASI_PERAWATAN.md` §10. Kalau asetnya
   suatu saat di-bake, seluruh rupa di dokumen ini tidak terpakai dan yang
   dipakai adalah avatar TSO.
-- Ekspresi masih hampir satu. **Kedipan, mata lelah dan mulut bicara sudah
-  ada** (§7, §10); senang dan sakit belum. Mata dan mulut sudah entity
-  terpisah, jadi menambahnya murah.
+- Ekspresi warga: **kedipan, mata lelah, mulut bicara, kehangatan hati dan
+  denyut senang sudah ada** (§7, §10, §12). Marah dan sedih belum.
 - Ternak sekarang bermata, berkedip, menggerakkan telinga, mengibaskan ekor,
   dan **keadaan sakit/senangnya terbaca dari hewannya** (§8, §9, §11). Yang
   masih statis cuma mulutnya.
@@ -740,4 +739,76 @@ sakit tidak melemahkan ekor          TERTANGKAP  11,0 -> 10,8 derajat
 kelopak sakit tidak berat            TERTANGKAP  1,000 -> 1,000
 kedipan sakit tidak melambat         TERTANGKAP  jeda 4,01 s -> 4,01 s
 senang tidak beda dari sakit         TERTANGKAP  senang 0,620 lawan sakit 0,620
+```
+
+---
+
+## 12. Warga baru kenal dan warga 10 hati menatap dengan rupa yang sama
+
+Pola yang sama dengan §11, di sisi manusia. `npc_hearts` 0–10 sudah
+menggerakkan cabang dialog, penerimaan hadiah, dan gerbang aksi di pie menu.
+Seluruhnya bekerja. Dan wajah warganya tidak pernah menunjukkannya: tetangga
+yang baru dikenal dan tetangga yang sudah sepuluh hati menatap pemain dengan
+rupa yang persis sama.
+
+### Kehangatan harus HALUS; kegembiraan boleh keras
+
+Godaan pertama adalah memberi warga 10 hati senyum lebar. Itu keliru: ekspresi
+kuat yang menyala terus terbaca sebagai **topeng**, bukan sebagai keakraban.
+Kehangatan di sini cuma dua hal, dan keduanya kecil:
+
+```
+                rona pipi      tinggi mata
+ 0 hati           1,00x           1,000
+10 hati           1,42x           0,930
+```
+
+Yang boleh keras adalah **kejadian**, bukan keadaan. Saat hadiah diterima,
+wajahnya menyipit senang sampai 0,38 tinggi penuh — empat kali lebih dalam
+daripada kehangatan — lalu meluruh sendiri dalam 2,6 detik. Gerbangnya
+menjaga perbandingan itu, bukan cuma angkanya masing-masing.
+
+### Di mana keadaan itu dipasang, dan kenapa di dua tempat
+
+Hati dipasang di `entities.update()`, bukan cuma saat kotak dialog terbuka:
+hati adalah keadaan yang berlaku terus, dan warga yang cuma ramah ketika
+dialog terbuka terbaca sebagai pelayan toko, bukan tetangga. Tapi modal
+**membekukan** `entities.update()` (§10), jadi `_tick_percakapan()` memasangnya
+sekali lagi — kalau tidak, wajahnya justru kehilangan tanda hati persis saat
+pemain sedang menatapnya paling lama.
+
+Denyut hadiah disimpan di `state._npc_senang`, bukan di actor-nya: jalur
+hadiah (`complete_gift_gifting`) tidak memegang `entities_mgr`, dan menambah
+parameter ke seluruh rantai panggilan demi satu angka tidak sepadan. Atribut
+bergaris-bawah tidak ikut `json.dump`, pola yang sama dengan `state.mv`.
+
+### Satu pemeriksaan yang lulus karena alasan yang salah
+
+Uji hadiah versi pertama berbunyi "tinggi mata turun ke 0,0200" dan LULUS.
+Tapi 0,02 adalah **lantai kedipan** — nilai yang disentuh setiap kedipan biasa.
+Pemeriksaan itu akan lulus bahkan kalau denyut senangnya tidak ada sama sekali;
+yang tertangkap cuma bahwa warga itu berkedip.
+
+Sipitan senang **bertahan** sepanjang jendela, sedangkan kedipan cuma 160 ms
+dari 700 ms. Jadi yang diukur sekarang nilai TENGAH jendela, bukan nilai
+terendahnya — dan kedipan tidak cukup panjang untuk menggeser median.
+
+### Dan satu lubang yang cuma uji mutasi bisa menunjukkan
+
+Lima cacat dipasang sengaja. Empat langsung tertangkap; yang kelima —
+**mencabut `set_hati()` dari `entities.update()`** — LOLOS. Sebabnya bukan
+ambang yang longgar melainkan tempat pemeriksaannya: satu-satunya pemeriksaan
+rona pipi berjalan **saat kotak dialog terbuka**, dan `_tick_percakapan()`
+memasang hati di sana juga. Jalur dialog menambal hilangnya jalur normal.
+
+Yang dicabut itu justru jalur yang membawa klaim utamanya — warga hangat juga
+ketika pemain hanya lewat. Pemeriksaan "DI LUAR dialog" ditambahkan, dan
+mutasinya langsung tertangkap:
+
+```
+hati tidak melebarkan pipi        TERTANGKAP  0,0300 -> 0,0300 (1,00x)
+kehangatan sekuat kegembiraan     TERTANGKAP  0,2800 -> 0,1064 (0,380x)
+hadiah tidak memicu denyut        TERTANGKAP  median 0,1105 dari 0,1188
+denyut senang tidak meluruh       TERTANGKAP  median 0,0451 dari 0,1188
+hati tidak dipasang ke warga      TERTANGKAP  di luar dialog 0,1097 -> 0,1097
 ```

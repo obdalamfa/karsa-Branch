@@ -221,8 +221,14 @@ class Game3D:
         # Inisialisasi lingkungan langsung sesuai waktu awal (bukan fade dari gelap)
         self._init_env()
 
-        # Terapkan VHS/Bloom shader jika menggunakan OpenGL
-        if self._use_unlit_sh:
+        # Terapkan VHS/Bloom shader jika menggunakan OpenGL.
+        #
+        # KARSA_NO_POST=1 mematikannya. Dipakai untuk memisahkan "scene-nya yang
+        # salah" dari "pasca-prosesnya yang salah" — tanpa saklar ini keduanya
+        # cuma bisa dibedakan dengan menyunting kode di tengah penyelidikan,
+        # dan itu mengubah barang yang sedang diukur.
+        import os as _os
+        if self._use_unlit_sh and not _os.environ.get('KARSA_NO_POST'):
             try:
                 from .shaders.vhs_bloom import vhs_bloom_shader
                 camera.shader = vhs_bloom_shader

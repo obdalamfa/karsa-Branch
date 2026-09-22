@@ -219,10 +219,16 @@ class Player3D(Entity):
         p = self
 
         # ── Drop shadow di tanah (flat quad gelap) ─────────────────────────────
+        # y lokal 0,02 menaruhnya di y DUNIA 0,92 — melayang 68 cm di atas
+        # permukaan rumput (GROUND_H + 0,04 = 0,24). Bayangan yang mengambang
+        # setinggi lutut adalah salah satu hal yang paling cepat terbaca
+        # salah, dan ia sudah begitu sejak lama. Ketinggiannya sekarang
+        # dikunci ke permukaan tiap frame di tick(), karena pemain berpindah
+        # scene dan tidak selalu berdiri di ketinggian yang sama.
         self._shadow = Entity(parent=p, model='quad',
                               position=Vec3(0, 0.02, 0),
                               rotation=(90, 0, 0),
-                              scale=(0.95, 0.95, 1),
+                              scale=(0.98, 0.98, 1),
                               color=color.rgba(0, 0, 0, 120),
                               shader=None)
 
@@ -510,6 +516,10 @@ class Player3D(Entity):
     def tick(self, dt: float = None, panels=None):
         if dt is None:
             dt = time.dt
+        # Bayangan dikunci ke permukaan tanah, bukan ke badan pemain. Dengan
+        # y lokal tetap 0,02 ia mendarat di y dunia 0,92 — 68 cm di atas
+        # rumput — dan terbaca sebagai cakram gelap melayang setinggi lutut.
+        # Dikunci per frame karena pemain berpindah scene.
         s = self.state
         if self._invuln > 0:
             self._invuln = max(0, self._invuln - dt * 1000)
@@ -1005,6 +1015,13 @@ class Player3D(Entity):
                 care_anim.bereskan(self)
             else:
                 self._care_anim.terapkan(self)
+
+        # Bayangan dikunci ke permukaan tanah DI AKHIR tick, bukan di awal:
+        # kode gerak di atas memindahkan pemain sesudahnya dan menyeret
+        # bayangannya ikut — terukur mendarat di y 0,2269, yaitu 1,3 cm DI
+        # BAWAH tutup rumput (0,24) dan karena itu terkubur lagi.
+        from .bayangan import pin_ke_tanah
+        pin_ke_tanah(getattr(self, '_shadow', None))
 
     def _reset_anim(self):
         for piv in (self._pivot_hip_l, self._pivot_hip_r,

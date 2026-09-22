@@ -7,6 +7,7 @@ from pathlib import Path
 from ursina import Entity, Vec3, color, destroy, Text, Texture
 from .config import TILE_SIZE, GROUND_H, INVULN_AFTER_HIT_MS, WALKABLE
 from .data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS, SCHEDULES, WILD_ITEMS, all_npcs
+from .bayangan import pin_ke_tanah as _pin_bayangan
 from .scenes import SCENES
 
 from .npc import NPC
@@ -189,6 +190,28 @@ def _dandani_manekin(actor, actor_id: str) -> float:
         kotak((0.0, 0.72, 0.0), (0.46, 0.98, 0.42), bawah)     # kolom kaki
         kotak((0.0, 0.11, 0.0), (0.52, 0.20, 0.60),
               (52, 44, 40))                                     # sepatu
+
+        # Bayangan kontak. Terukur sebelum ini: hewan 6/6 punya, pemain punya,
+        # WARGA 0/4 — jadi setiap tetangga di desa ini melayang sedikit di atas
+        # tanah. Alasannya sudah ditulis proyek ini sendiri di docstring
+        # `animal_models._shadow()`: "di proyeksi miring ... terlihat melayang
+        # dan mata tidak tahu ia berdiri di tile mana." Yang berlaku untuk ayam
+        # berlaku untuk manusia.
+        #
+        # Parameternya disalin dari bayangan pemain (player.py:_build_model)
+        # supaya warga dan pemain menapak dengan cara yang sama; lebarnya saja
+        # yang mengikuti bahu manekin, bukan bahu pemain.
+        # Tingginya DIPASANG DI PERMUKAAN, bukan di 0,02 lokal. Permukaan
+        # rumput ada di GROUND_H + 0,04 = 0,24, dan quad di y lokal 0,02
+        # mendarat di y dunia 0,0137 — terkubur 23 cm di bawah tanah, jadi
+        # yang terlihat cuma serpihan di tempat tanahnya kebetulan cekung
+        # (terukur: 149 piksel dari frame 900x900).
+        actor._bayangan = Entity(parent=actor, model='quad',
+                                 position=Vec3(0, 0.0, 0),
+                                 rotation=(90, 0, 0),
+                                 scale=(1.05, 0.92, 1),
+                                 color=color.rgba(0, 0, 0, 120),
+                                 shader=None)
 
         hw, ht = _MANEKIN_KEPALA_W, _MANEKIN_KEPALA_H
         kepala = Entity(parent=actor, position=Vec3(0, _MANEKIN_KEPALA_Y, 0))
@@ -538,6 +561,12 @@ class EntitiesManager:
         for actor_id, actor in list(self.actors.items()):
             # Kedipan warga. Fase tiap orang disebar dari huruf namanya, jadi
             # sekampung tidak berkedip serempak seperti pasukan.
+            # Ketinggian bayangan dikunci ke permukaan tiap frame: node actor
+            # berskala DAN warga yang tidur dipindah ke y = GH + 0,15, jadi
+            # satu angka tetap di konstruktor tidak pernah benar untuk keduanya.
+            _bg = getattr(actor, '_bayangan', None)
+            if _bg is not None:
+                _pin_bayangan(_bg)
             _w = getattr(actor, '_wajah', None)
             if _w is not None:
                 # Kehangatan warga terhadap pemain, dan denyut senang sesudah

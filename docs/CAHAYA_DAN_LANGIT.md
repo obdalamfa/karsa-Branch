@@ -123,3 +123,78 @@ jadi hipotesis pertamanya "probe cuma `step(3)`, lampunya belum menyusul".
 Dinaikkan ke `step(90)` — dan tanahnya tetap `131,147,16` persis. Hipotesis itu
 mati di situ, dan yang sebenarnya baru ketemu dengan bertanya langsung ke game
 shader apa yang dipakai tiap entitas rumput.
+
+---
+
+## 5. Bayangan kontak: satu terkubur, satu melayang setinggi lutut
+
+Diukur siapa yang punya bayangan kontak sama sekali:
+
+```
+farm   hewan 6/6 punya   warga 0/4 punya   pemain punya
+town   hewan 6/6 punya   warga 0/4 punya   pemain punya
+```
+
+Jadi setiap tetangga di desa ini melayang. Alasan kenapa itu buruk sudah
+ditulis proyek ini sendiri, di docstring `animal_models._shadow()`: *"di
+proyeksi miring ... terlihat melayang dan mata tidak tahu ia berdiri di tile
+mana."* Yang berlaku untuk ayam berlaku untuk manusia.
+
+Tapi menambahkannya membuka cacat yang lebih besar. Permukaan rumput ada di
+`GROUND_H + 0,04 = 0,24`, dan:
+
+```
+bayangan warga  (y lokal 0,02)  ->  y dunia 0,0137   terkubur 23 cm
+bayangan pemain (y lokal 0,02)  ->  y dunia 0,92     MELAYANG 68 cm
+```
+
+**Bayangan pemain sudah mengambang setinggi lutut sejak lama.** Dua sebabnya
+berbeda dan tidak satu pun terlihat dari kode di tempatnya: node actor warga
+berskala (manekin dikecilkan 2,35/3,42 = 0,687), sedangkan pemain punya titik
+asal di y 0,90.
+
+### Tiga cara yang tampak benar dan ketiganya salah
+
+- Menulis `position=Vec3(0, GROUND_H + 0.045, 0)` di konstruktor warga
+  mendarat di y dunia **0,168**, bukan 0,245 — node-nya berskala.
+- `Entity.world_y = ...` milik Ursina menulis ke y **LOKAL**: bayangan pemain
+  justru naik ke **1,145**.
+- `Entity.set_position(render, Vec3(...))` juga bukan API yang dikira —
+  bayangannya mendarat di **0,0407**.
+
+Yang dipakai akhirnya `NodePath.setPos(render, ...)` mentah, yang memang
+menghitung skala dan induk. Ia dipanggil tiap frame, karena warga yang tidur
+dipindah ke `y = GH + 0,15` dan pemain berpindah scene.
+
+Dan letaknya di dalam `player.tick()` juga sempat salah: dipasang di AWAL, ia
+mendarat di **0,2269** — 1,3 cm di bawah tutup rumput, terkubur lagi — karena
+kode gerak di bawahnya memindahkan pemain sesudahnya dan menyeret bayangannya
+ikut. Sekarang di akhir tick.
+
+### Terukur
+
+Bayangan dimatikan lalu dinyalakan dalam SATU frame, tanpa satu langkah pun di
+antaranya:
+
+```
+pemain      8.630 piksel berubah   tanah 179,126,59 -> 103,78,44
+warga arya  2.371 piksel berubah   tanah 166,118,58 ->  98,76,45
+```
+
+Sebelum ketinggiannya diperbaiki, bayangan warga yang sama cuma mengubah
+**149 piksel** — serpihan di tempat tanahnya kebetulan cekung. Naik 16 kali
+lipat untuk warga dan 58 kali untuk pemain.
+
+### Empat cacat probe, semuanya jenis yang sama
+
+Seluruh angka membingungkan di irisan ini datang dari probe, bukan dari game:
+
+- Membandingkan dua PROSES terpisah: diff-nya 28.164 piksel tersebar di
+  x 2..899, karena warga dan hewan lain bergerak di antara kedua run.
+- Menyelipkan `step()` di antara dua tembakan isolasi: diff jadi 729.545
+  piksel, yaitu seluruh adegan.
+- Membaca posisi bayangan langsung sesudah memindahkan warga, tanpa satu frame
+  pun lewat — nilai basi.
+- Memperbesar bayangan sampai 1,85 m untuk "membuatnya terbaca", padahal yang
+  salah ketinggiannya: piksel terlihat cuma naik 149 -> 375, karena quad-nya
+  memang ada di bawah tanah sepanjang waktu.

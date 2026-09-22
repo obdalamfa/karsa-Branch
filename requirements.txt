@@ -1,1 +1,8 @@
+# Mesin 3D — menarik panda3d sebagai dependensi.
 ursina>=5.0.0
+# Dipakai game/sound.py (mixer audio). Tanpa ini `from game.app import ...`
+# gagal di baris import, jadi game TIDAK bisa boot sama sekali.
+pygame>=2.0
+# Dipakai game/app.py (Texture dari PIL) dan tools/regress.py, capture.py,
+# progress_page.py.
+pillow>=9.0

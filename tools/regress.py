@@ -152,10 +152,31 @@ def cek_motif_waras(g):
     mood = mv.mood
     if mood != mood or abs(mood) > 1e6:
         return _fail(f'mood tidak terhingga: {mood}')
-    sebelum = mv.get('lapar')
-    mv.tick(240.0)
-    if mv.get('lapar') >= sebelum:
-        return _fail('lapar tidak turun setelah 4 jam-sim')
+    # Peluruhan diuji pada mesin NYATA, tapi tanpa meninggalkan bekas: nilai
+    # kedelapan motif (plus akumulator pecahannya) disalin dulu dan dipulihkan
+    # setelah pemeriksaan.
+    #
+    # Kenapa: sebelumnya pemeriksaan ini memajukan keadaan nyata 4 jam-sim di
+    # SETIAP scene, dan bekasnya menumpuk. Laju peluruhan Lapar non-linear
+    # (melambat saat lapar), jadi setelah belasan kali ia MENDATAR dan berhenti
+    # turun sama sekali -- diukur: tick ke-15 memberi -98,0000 -> -98,0000.
+    # Akibatnya scene TERAKHIR apa pun yang diuji akan GAGAL, dan kegagalannya
+    # berpindah mengikuti urutan argumen: larian 14 scene menuduh `swarga`,
+    # padahal `swarga` sendirian LULUS. Itu cacat alat ukur, bukan cacat game --
+    # persis pola yang sama dengan tiga probe yang dulu gagal menangkap bug
+    # pembeku pemain.
+    salinan = {m: mv.get(m) for m in MOTIVES}
+    carry, acc = mv._tick_carry, dict(mv._acc)
+    try:
+        mv.add('lapar', 100.0)      # jauhkan dari dasar supaya peluruhan terukur
+        sebelum = mv.get('lapar')
+        mv.tick(240.0)
+        if mv.get('lapar') >= sebelum:
+            return _fail('lapar tidak turun setelah 4 jam-sim')
+    finally:
+        for m, v in salinan.items():
+            setattr(mv, m, v)
+        mv._tick_carry, mv._acc = carry, acc
     return _ok(f'mood {mood:+.1f}')
 
 
@@ -186,7 +207,7 @@ def cek_save_bolak(g):
 def main():
     from ursina import application
     application.asset_folder = ROOT
-    application.fonts_folder = ROOT / 'fonts'
+    application.fonts_folder = ROOT / 'assets' / 'fonts'
     from panda3d.core import getModelPath
     getModelPath().append_path(str(ROOT.resolve()))
 

@@ -42,13 +42,41 @@ void main() {
 }
 """
 
+# Fragment shader ini dulu SATU BARIS: `fragColor = texture(...)`. Tanpa
+# cahaya sama sekali, jadi rumput tampil seterang tengah hari pada jam berapa
+# pun. Terukur di scene farm, warna rata-rata tanah:
+#
+#     jam     03:00       09:00       12:00       22:00
+#     tanah   131,147,16  131,147,16  131,147,16  131,147,16
+#
+# Sama persis sampai digit terakhir, sementara langitnya sudah biru tua malam.
+# Langit gelap di atas rumput seterang siang adalah salah satu hal yang paling
+# cepat terbaca salah, dan ia membatalkan seluruh siklus hari yang baru
+# diperbaiki di sky.py.
+#
+# `sm_sun_color` / `sm_ambient` sengaja memakai NAMA YANG SAMA dengan
+# smooth_shader.py: app._sync_smooth_lighting() menyetelnya di node `scene`
+# tiap frame, dan Panda3D menurunkannya ke seluruh anak — jadi rumput ikut
+# cahaya yang sama dengan segala sesuatu yang lain tanpa jalur kedua yang
+# harus dijaga sinkron. Rumusnya juga disalin dari sana (`base * (ambient +
+# sun * diff)`), dengan diff tetap: helai rumput menghadap ke atas, dan
+# normalnya memang tidak dihitung di mesh ini.
 _GRASS_FRAG = """
 #version 140
 uniform sampler2D p3d_Texture0;
+uniform vec3 sm_sun_color;
+uniform vec3 sm_ambient;
 in vec2 uv;
 out vec4 fragColor;
 void main() {
-    fragColor = texture(p3d_Texture0, uv);
+    vec4 base = texture(p3d_Texture0, uv);
+    // 0.78: bidang datar menghadap atas menerima matahari hampir penuh.
+    vec3 lit = base.rgb * (sm_ambient + sm_sun_color * 0.78);
+    // Jaga rona, sama seperti smooth_shader.py dan vhs_bloom.py: memotong
+    // per kanal membuat rumput terang kehilangan hijaunya.
+    float puncak = max(lit.r, max(lit.g, lit.b));
+    if (puncak > 1.0) { lit /= puncak; }
+    fragColor = vec4(lit, base.a);
 }
 """
 

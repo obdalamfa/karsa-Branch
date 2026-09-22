@@ -140,34 +140,13 @@ def paint_zone(world, x0, y0, x1, y1, base_name='sand_ground',
     return e
 
 
-def patch_tile(world, tx, ty, base_name='grass_tso', tint=None):
-    """Tambal SATU ubin yang berada di luar zona apa pun.
-
-    Kenapa perlu: `_make_tile()` memberi ubin penghalang (pohon, tunggul,
-    lentera, peti) tekstur `default_tex` = **'grass'**, dan `grass.png` di repo
-    ini rata-ratanya (44,14,46) — hampir hitam. Akibatnya tiap pohon berdiri di
-    atas kotak hitam. Diukur dari `_bench/shots/layout_farm_over.png`.
-    Ubin pagar tidak kena karena `_make_tile()` sudah punya cabang khusus yang
-    memakai 'grass_tso'; yang lain tidak.
-
-    Ini TAMBALAN, bukan perbaikan. Perbaikan sebenarnya satu baris di
-    `game/world.py` (pakai 'grass_tso'/'sand_ground' sebagai default_tex luar
-    ruang). Begitu itu dikerjakan pemilik world.py, seluruh fungsi ini boleh
-    dihapus beserta pemanggilnya di props.py.
-    """
-    from ursina import color
-    from game.world import _e, _cb
-
-    if tint is None:
-        tint = _cb(tx, ty)
-    # Tinggi & skala disamakan PERSIS dengan tutup rumput tetangga di
-    # world.py (cap_y = GROUND_H + 0.02, tebal 0.04, skala TS*1.005), supaya
-    # tidak ada garis jahitan di antara tambalan dan rumput sekitarnya.
-    e = _e('cube', (tx * TS, GROUND_H + 0.021, ty * TS),
-           (TS * 1.005, 0.042, TS * 1.005), base_name, tint, soft=False)
-    world._obj_ents.append(e)
-    return e
-
+# `patch_tile()` DIHAPUS. Ia menambal kotak hitam di bawah tiap pohon,
+# tunggul, lentera dan peti — satu entity tambahan per tile — dan
+# docstring-nya sendiri menyebutnya sementara: "Perbaikan sebenarnya satu
+# baris di game/world.py (pakai 'grass_tso'/'sand_ground' sebagai default_tex
+# luar ruang)." Baris itu sekarang sudah ditulis, dan cabang penghalang di
+# world.py memberi tutup rumput setinggi tetangganya untuk SEMUA penghalang,
+# bukan cuma pagar.
 
 class Zone:
     """Satu persegi ubin yang dicat ulang oleh SATU entity.

@@ -19,7 +19,7 @@ from .panels import UIManager
 from .sky import SkyDome
 from .chargen import ChargenScreen
 from . import grass_shader as _grass
-from .config import (SCREEN_W, SCREEN_H, CAM_LERP,
+from .config import (SCREEN_W, SCREEN_H, CAM_LERP, TILE_SIZE,
                      CAM_TARGET_LIFT, INGAME_MINUTES_PER_REAL_SECOND, FORCE_SLEEP_HOUR,
                      NEED_MAX, NEED_CRITICAL, NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG)
 
@@ -234,6 +234,36 @@ class Game3D:
                 except Exception:
                     self.panels.mode = 'hud'
 
+        # ── PERCAKAPAN TIDAK MEMBEKUKAN ORANGNYA ───────────────────────
+        # Semua di bawah ini digerbangi mode == 'hud', jadi selama kotak
+        # dialog terbuka dunia berhenti total: pemain dan lawan bicaranya
+        # jadi dua patung dengan sebuah kotak teks di antaranya. Jam
+        # permainan, gerak, dan input memang HARUS berhenti — itu memang
+        # gunanya modal. Tapi ANIMASI tidak: isyarat tangan dan anggukan
+        # justru satu-satunya hal yang membuat kotak teks terbaca sebagai
+        # percakapan. Jadi khusus mode 'dialog', pose tetap dijalankan tanpa
+        # memajukan waktu atau menerima gerak.
+        mode_kini = self.panels.mode
+        if mode_kini != getattr(self, '_mode_lalu', 'hud'):
+            # Dipasang dari PERUBAHAN mode, bukan dari dalam panels.py: dialog
+            # dibuka dari selusin tempat (pie menu, quest, papan, surat), dan
+            # menambahkan pemanggilan di tiap tempat itu berarti satu hari
+            # nanti ada yang lupa dan percakapannya diam-diam kembali beku.
+            if mode_kini == 'dialog':
+                try:
+                    self.mulai_pose_bicara(getattr(self.panels, '_dialog_npc', '') or '')
+                except Exception:
+                    logging.warning('[BICARA] gagal memasang pose', exc_info=True)
+            elif getattr(self, '_mode_lalu', 'hud') == 'dialog':
+                try:
+                    self.akhiri_pose_bicara()
+                except Exception:
+                    pass
+            self._mode_lalu = mode_kini
+
+        if mode_kini == 'dialog':
+            self._tick_percakapan(dt)
+
         if self.panels.mode == 'hud':
             # ── Maju waktu in-game & Needs Decay (via TimeManager) ──
             msg = self.player.time_controller.tick(dt, self.player)
@@ -250,6 +280,10 @@ class Game3D:
                 logging.error(f"Gagal update ambient dynamic: {e}")
             # Jika HP habis → pingsan, balik ke rumah, mulai hari baru
             if s.hp <= 0:
+                # Pingsan juga memindahkan scene, jadi ia juga harus
+                # membatalkan aksi perawatan yang sedang berjalan.
+                from . import care_anim as _ca
+                _ca.bereskan(self.player)
                 s.scene_name = 'house'
                 s.player_x, s.player_y = 7.0, 8.0
                 self.player._advance_day()
@@ -371,9 +405,15 @@ class Game3D:
                     target_sky = color.rgb(248, 138, 88) if not is_raining else color.rgb(115, 82, 82)
                     target_cloud = color.rgb(255, 195, 148, 145) if not is_raining else color.rgb(135, 108, 102, 195)
                 else:
-                    # Malam: biru gelap lembut (bukan hitam total)
-                    target_sun   = color.rgb(35, 48, 92)
-                    target_amb   = color.rgb(28, 28, 52, 255)
+                    # Malam: biru rembulan. Angka lamanya (35,48,92 / 28,28,52)
+                    # ditulis dengan komentar "bukan hitam total" — dan memang
+                    # tidak pernah terbukti salah, karena sampai sekarang
+                    # cahaya adegan TIDAK PERNAH sampai ke satu entitas pun.
+                    # Begitu jalurnya dibuka, terukur: rumput jatuh ke
+                    # 21,29,8 pada 22:00 dan hewannya nyaris tidak terlihat.
+                    # Malam harus redup, bukan buta.
+                    target_sun   = color.rgb(62, 82, 140)
+                    target_amb   = color.rgb(54, 58, 95, 255)
                     target_sky   = color.rgb(18, 12, 42)
                     target_cloud = color.rgb(45, 45, 72, 75)
             
@@ -671,8 +711,9 @@ class Game3D:
             sky_col   = color.rgb(248, 138, 88)
             cloud_col = color.rgb(255, 195, 148, 145)
         else:
-            sun_col   = color.rgb(35, 48, 92)
-            amb_col   = color.rgb(28, 28, 52, 255)
+            # Sama dengan blok transisi di update() — dua tempat, satu angka.
+            sun_col   = color.rgb(62, 82, 140)
+            amb_col   = color.rgb(54, 58, 95, 255)
             sky_col   = color.rgb(18, 12, 42)
             cloud_col = color.rgb(45, 45, 72, 75)
 
@@ -733,6 +774,97 @@ class Game3D:
         return Vec3(math.sin(cy) * math.cos(cp),
                     math.sin(cp),
                     -math.cos(cy) * math.cos(cp)) * self.camera_dist
+
+
+    # ─── PERCAKAPAN ─────────────────────────────────────────────────────────
+    def _tick_percakapan(self, dt: float) -> None:
+        """Jalankan pose bicara/dengar selama kotak dialog terbuka.
+
+        Sengaja TIDAK memanggil player.tick() atau entities.update(): itu akan
+        memajukan waktu permainan dan menerima input gerak, dua hal yang memang
+        harus berhenti saat modal terbuka. Yang dijalankan hanya posenya.
+        """
+        from . import care_anim
+        p = self.player
+        aksi = getattr(p, '_care_anim', None)
+        if aksi is not None:
+            aksi.update(dt)
+            if aksi.selesai:
+                # Percakapan berlangsung selama pemain membaca, dan panjangnya
+                # tidak bisa diketahui di depan — jadi isyaratnya diulang,
+                # bukan dimainkan sekali lalu membeku lagi.
+                jenis = aksi.jenis
+                care_anim.bereskan(p)
+                if jenis in ('bicara', 'dengar'):
+                    care_anim.mulai(p, jenis)
+            else:
+                aksi.terapkan(p)
+
+        lawan = getattr(self.panels, '_dialog_npc', None)
+        actor = self.entities.actors.get(lawan) if lawan else None
+        if actor is not None and hasattr(actor, 'tick_percakapan'):
+            actor.tick_percakapan(dt, p.x, p.z)
+
+        # Wajah harus tetap jalan selama modal terbuka. Loop entitas dan
+        # player.tick() sengaja TIDAK dipanggil di sini (itu akan memajukan
+        # waktu permainan dan menerima input gerak), dan akibatnya terukur:
+        # rentang tinggi mata 0,09881 saat main biasa, 0,00000 begitu kotak
+        # dialog terbuka. Orang yang berhenti berkedip TEPAT saat diajak
+        # bicara adalah tanda uncanny yang paling mudah dilihat pemain,
+        # justru pada saat ia menatap wajah itu paling lama.
+        #
+        # Yang berbicara adalah WARGANYA: baris dialog di sini isinya ucapan
+        # warga, dan giliran pemain muncul sebagai daftar pilihan. Jadi mulut
+        # warga bergerak selama baris ditampilkan, dan berhenti saat pilihan
+        # aktif — pemain sedang memilih, bukan berbicara.
+        pilihan = bool(getattr(self.panels, '_dlg_choices_active', False))
+        # Modal membekukan entities.update(), jadi kehangatan warga harus
+        # dipasang di sini juga — kalau tidak, wajahnya justru kehilangan
+        # tanda hati persis saat pemain sedang menatapnya.
+        if lawan and actor is not None:
+            _w = getattr(actor, '_wajah', None)
+            if _w is not None:
+                _w.set_hati(min(1.0, self.state.npc_hearts.get(lawan, 0) / 10.0))
+        for e in (actor, p):
+            w = getattr(e, '_wajah', None) if e is not None else None
+            if w is not None:
+                w.tick(dt)
+        w_actor = getattr(actor, '_wajah', None) if actor is not None else None
+        if w_actor is not None:
+            w_actor.set_bicara(not pilihan)
+
+    def mulai_pose_bicara(self, npc_id: str) -> None:
+        """Pasang pose bicara pada pemain dan pose dengar pada lawan bicara."""
+        from . import care_anim
+        import math
+        p = self.player
+        pos = self.state.npc_positions.get(npc_id) or {}
+        nx, ny = pos.get('x'), pos.get('y')
+        if nx is not None:
+            # Saling menatap. Dua orang yang bercakap-cakap sambil menghadap
+            # arah yang berbeda adalah hal pertama yang terlihat salah.
+            p.rotation_y = math.degrees(
+                math.atan2(nx - p.x / TILE_SIZE, ny - p.z / TILE_SIZE))
+            p.target_rotation_y = p.rotation_y
+        care_anim.mulai(p, 'bicara')
+        actor = self.entities.actors.get(npc_id)
+        if actor is not None and hasattr(actor, 'mulai_percakapan'):
+            actor.mulai_percakapan(p.x, p.z)
+
+    def akhiri_pose_bicara(self) -> None:
+        from . import care_anim
+        aksi = getattr(self.player, '_care_anim', None)
+        if aksi is not None and aksi.jenis in ('bicara', 'dengar'):
+            care_anim.bereskan(self.player)
+        for actor in self.entities.actors.values():
+            if hasattr(actor, 'akhiri_percakapan'):
+                actor.akhiri_percakapan()
+            w = getattr(actor, '_wajah', None)
+            if w is not None:
+                w.set_bicara(False)
+        w = getattr(self.player, '_wajah', None)
+        if w is not None:
+            w.set_bicara(False)
 
     def _snap_camera_to_player(self):
         """Tempatkan kamera langsung di posisi idealnya, tanpa lerp.

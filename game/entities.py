@@ -7,6 +7,7 @@ from pathlib import Path
 from ursina import Entity, Vec3, color, destroy, Text, Texture
 from .config import TILE_SIZE, GROUND_H, INVULN_AFTER_HIT_MS, WALKABLE
 from .data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS, SCHEDULES, WILD_ITEMS, all_npcs
+from .bayangan import pin_ke_tanah as _pin_bayangan
 from .scenes import SCENES
 
 from .npc import NPC
@@ -91,6 +92,167 @@ _PEMAIN_AKTIF = [None]
 def daftarkan_pemain(pl):
     """Dipanggil Player3D.__init__ supaya head-seek tahu harus melihat siapa."""
     _PEMAIN_AKTIF[0] = pl
+
+
+
+# ─── MANEKIN JADI ORANG ──────────────────────────────────────────────────────
+# Jalur Vitaboy gagal di lingkungan ini (asetnya tidak ada di repo), jadi SEMUA
+# NPC manusia jatuh ke `humanoid.obj`. Diukur, bukan dikira, apa adanya:
+#
+#   Color(1,0, 1,0, 1,0, 1,0)   putih murni, tanpa tekstur, tanpa material
+#   tinggi 3,42 unit            pemain cuma ~2,35 — NPC 1,45x lebih tinggi
+#   anak: ['text']              cuma label nama; tanpa wajah, rambut, baju
+#
+# Hasilnya di layar adalah manekin putih menyala yang menjulang di atas
+# pemain — dan `resolve_outfit()` mengembalikan nama aset Vitaboy yang tidak
+# pernah dipakai jalur ini, jadi warna baju yang sudah ditentukan per-NPC
+# tidak pernah sampai ke mana pun.
+#
+# Empat hal diperbaiki di sini, dan urutannya sesuai besar kerusakannya:
+#   1. TINGGI. Manekin diskalakan ke tinggi pemain. Menjulang membuat tiap NPC
+#      terbaca mengancam sebelum ekspresi apa pun sempat terbaca.
+#   2. WARNA. Putih murni tidak bisa diselamatkan oleh pencahayaan apa pun —
+#      ia terbaca sebagai hantu. Meshnya diwarnai KULIT, lalu baju ditumpuk
+#      sebagai kotak terpisah.
+#   3. WAJAH. Mata, kilau, mulut, rona pipi — resep yang sama dengan pemain.
+#   4. RAMBUT. Yang memberi kepala arah depan.
+# Angka-angka ini DIUKUR dengan menempelkan kubus penanda berwarna di
+# ketinggian lokal 2,40 / 2,70 / 3,00 / 3,30 / 3,45 lalu melihat mana yang
+# mendarat di kepala. Percobaan pertama memakai 3,09 hasil menebak dari
+# profil verteks, dan seluruh rambut serta wajahnya melayang di ATAS kepala.
+# Profil verteks berbohong karena sumbu atas mesh ini y, bukan z, dan karena
+# ada geometri di atas ubun-ubun yang bukan bagian kepala.
+_MANEKIN_TINGGI   = 3.42     # tinggi mesh humanoid.obj apa adanya
+_MANEKIN_KEPALA_Y = 2.80     # pusat kepala (penanda hijau 2,70 dan biru 3,00
+                             # mengapitnya)
+_MANEKIN_KEPALA_W = 0.31     # setengah-lebar kepala
+_MANEKIN_KEPALA_H = 0.22     # setengah-tinggi kepala
+_TINGGI_PEMAIN    = 2.35
+
+
+def _warna_dari_id(actor_id: str, palet):
+    """Warna tetap per NPC, diambil dari huruf namanya.
+
+    sum(ord) — BUKAN hash(), yang diacak ulang tiap proses Python, yang berarti
+    baju tiap NPC akan berganti warna tiap kali game dijalankan.
+    """
+    return palet[sum(map(ord, actor_id)) % len(palet)]
+
+
+_BAJU_PALET = [(196, 84, 78), (72, 122, 168), (108, 152, 84), (188, 148, 66),
+               (140, 96, 156), (208, 130, 92), (86, 142, 138), (176, 96, 120)]
+_BAWAH_PALET = [(72, 66, 88), (94, 74, 58), (58, 74, 90), (86, 82, 74)]
+_RAMBUT_PALET = [(58, 38, 18), (28, 22, 12), (74, 52, 30), (42, 30, 22)]
+
+
+def _dandani_manekin(actor, actor_id: str) -> float:
+    """Skalakan, warnai, beri baju, wajah dan rambut. Return tinggi label baru."""
+    from ursina import Entity, Vec3, color as _c
+    from .wajah import bangun_rambut, bangun_wajah
+    from .player import SKIN_COLOR
+    from .smooth_shader import apply_smooth as _smooth
+    try:
+        skala = _TINGGI_PEMAIN / _MANEKIN_TINGGI
+        actor.scale = skala
+        # Meshnya diwarnai BAJU, bukan kulit. Diwarnai kulit, lengan manekin
+        # yang menjuntai di sisi badan terbaca sebagai dua lengan telanjang
+        # merah muda menyala — dan karena mesh ini satu potong, tidak ada cara
+        # mewarnai lengan berbeda dari badan. Dengan warna baju, lengan itu
+        # otomatis jadi lengan baju panjang, dan yang tersisa perlu kulit
+        # hanyalah kepala — yang memang ditumpuk terpisah di bawah.
+        baju  = _warna_dari_id(actor_id, _BAJU_PALET)
+        actor.color = _c.rgb(*baju)
+
+        def kotak(pos, sk, warna):
+            e = Entity(model='cube', position=Vec3(*pos), scale=sk,
+                       color=_c.rgb(*warna), parent=actor)
+            from .smooth_shader import apply_smooth
+            apply_smooth(e, has_texture=False)
+            return e
+
+        bawah = _warna_dari_id(actor_id + 'b', _BAWAH_PALET)
+        # Semua ketinggian di bawah ini DIUKUR dengan kubus penanda di
+        # 0,15 / 0,55 / 1,00 / 1,45 / 1,90 pada mesh yang belum diskalakan:
+        #   rok/pinggul  1,15-1,45     kolom kaki  0,20-1,15     kaki  < 0,20
+        # Semuanya dalam satuan LOKAL manekin karena semuanya anak dari actor
+        # dan ikut skalanya.
+        #
+        # Badan memakai chibi_torso_mesh() — barrel bahu-lebar-pinggang-sempit
+        # dengan bevel halus yang, seperti chibi_head_mesh(), sudah ada di
+        # meshes.py sejak lama dan tidak pernah dipanggil sekali pun. Kotak
+        # datar menempel di depan dada seperti papan iklan; barrel membungkus.
+        from .meshes import chibi_torso_mesh
+        from ursina import Entity as _E
+        _b = _E(model=chibi_torso_mesh(), position=Vec3(0, 1.90, 0),
+                scale=(1.16, 0.98, 0.66), color=_c.rgb(*baju), parent=actor)
+        _smooth(_b, has_texture=False)
+        kotak((0.0, 1.30, 0.0), (0.86, 0.46, 0.62), bawah)     # rok/pinggul
+        kotak((0.0, 0.72, 0.0), (0.46, 0.98, 0.42), bawah)     # kolom kaki
+        kotak((0.0, 0.11, 0.0), (0.52, 0.20, 0.60),
+              (52, 44, 40))                                     # sepatu
+
+        # Bayangan kontak. Terukur sebelum ini: hewan 6/6 punya, pemain punya,
+        # WARGA 0/4 — jadi setiap tetangga di desa ini melayang sedikit di atas
+        # tanah. Alasannya sudah ditulis proyek ini sendiri di docstring
+        # `animal_models._shadow()`: "di proyeksi miring ... terlihat melayang
+        # dan mata tidak tahu ia berdiri di tile mana." Yang berlaku untuk ayam
+        # berlaku untuk manusia.
+        #
+        # Parameternya disalin dari bayangan pemain (player.py:_build_model)
+        # supaya warga dan pemain menapak dengan cara yang sama; lebarnya saja
+        # yang mengikuti bahu manekin, bukan bahu pemain.
+        # Tingginya DIPASANG DI PERMUKAAN, bukan di 0,02 lokal. Permukaan
+        # rumput ada di GROUND_H + 0,04 = 0,24, dan quad di y lokal 0,02
+        # mendarat di y dunia 0,0137 — terkubur 23 cm di bawah tanah, jadi
+        # yang terlihat cuma serpihan di tempat tanahnya kebetulan cekung
+        # (terukur: 149 piksel dari frame 900x900).
+        actor._bayangan = Entity(parent=actor, model='quad',
+                                 position=Vec3(0, 0.0, 0),
+                                 rotation=(90, 0, 0),
+                                 scale=(1.05, 0.92, 1),
+                                 color=color.rgba(0, 0, 0, 120),
+                                 shader=None)
+
+        hw, ht = _MANEKIN_KEPALA_W, _MANEKIN_KEPALA_H
+        kepala = Entity(parent=actor, position=Vec3(0, _MANEKIN_KEPALA_Y, 0))
+        # Bola kulit yang menutup kepala mesh yang sekarang berwarna baju.
+        # Sedikit lebih besar (1,04) supaya tidak ada permukaan mesh yang
+        # menyembul dan berkedip melawannya.
+        # 1,18x: kepala manekin aslinya terlalu kecil untuk proporsi chibi.
+        # Game kehidupan Jepang memberi kepala porsi yang jauh lebih besar
+        # daripada manusia sungguhan, dan itulah yang membuat wajah kecil
+        # sekali pun masih terbaca dari jarak main.
+        #
+        # Bentuknya chibi_head_mesh(), SAMA dengan kepala pemain, bukan bola.
+        # Bola Ursina bersegi rendah, dan cel-shader di sini memotong terang
+        # dan gelap pada ambang keras — jadi batas bayangannya mengikuti
+        # segi-segi bola itu dan membentuk TANGGA yang terlihat di pipi dari
+        # jarak dekat. Rounded box punya bidang yang lebih besar dan lebih
+        # rata, jadi batasnya bersih. Bonusnya: pemain dan NPC jadi satu
+        # bahasa bentuk, dan resep rambut yang sama dipakai keduanya —
+        # varian bola yang khusus ditulis untuk manekin tidak diperlukan lagi.
+        from .meshes import chibi_head_mesh
+        R = hw * 1.18
+        _k = Entity(model=chibi_head_mesh(), parent=kepala,
+                    scale=(R * 2, R * 2 * 1.16, R * 2), color=SKIN_COLOR)
+        _smooth(_k, has_texture=False)
+        bangun_rambut(kepala, R, R * 1.16,
+                      _c.rgb(*_warna_dari_id(actor_id + 'r', _RAMBUT_PALET)))
+        # Fitur wajah harus mendarat di PERMUKAAN bola, dan permukaan bola pada
+        # ketinggian mata bukan jari-jarinya: pada y = -0,26 ht, jaraknya dari
+        # pusat adalah sqrt(R^2 - y^2). Percobaan pertama memakai 0,80 hw dan
+        # seluruh wajahnya tenggelam DI DALAM kepala — tidak ada mata, tidak
+        # ada mulut, cuma bola kulit polos.
+        # Kepalanya kotak-membulat sekarang, jadi bidang mukanya datar dan
+        # `bola_r` tidak dipakai lagi.
+        actor._wajah = bangun_wajah(kepala, R, R * 1.16, R * 1.005)
+        actor._wajah.fase_awal(actor_id)
+        actor._kepala = kepala
+        return _MANEKIN_TINGGI + 0.45
+    except Exception:
+        import logging
+        logging.warning('[NPC] gagal mendandani manekin %r', actor_id, exc_info=True)
+        return 3.1
 
 
 def get_npc_model_name(npc_id):
@@ -252,7 +414,8 @@ class EntitiesManager:
                 # get_npc_model_name() mengembalikan 'humanoid' untuk SEMUA
                 # hewan — sapi, ayam dan kucing memakai mesh manusia yang sama.
                 from .animal_models import build_animal
-                h = build_animal(actor, ANIMAL_NPCS[actor_id].get('type', ''))
+                h = build_animal(actor, ANIMAL_NPCS[actor_id].get('type', ''),
+                                 kunci=actor_id)
                 # Hewan dibangun menghadap +Z (konvensi base_actor.sync_visuals),
                 # dan kamera default juga memandang ke +Z — jadi pada rotation_y
                 # 0 pemain selalu melihat PUNGGUNG hewan, sementara kepala,
@@ -302,7 +465,8 @@ class EntitiesManager:
                         actor.model = panda_fallback
                     else:
                         actor.model = 'cube'
-                    
+                lbl_y = _dandani_manekin(actor, actor_id)
+
             # Setup Label
             all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
             name = all_d.get(actor_id, {}).get('name', actor_id)
@@ -395,6 +559,32 @@ class EntitiesManager:
 
         # Update all OOP actors
         for actor_id, actor in list(self.actors.items()):
+            # Kedipan warga. Fase tiap orang disebar dari huruf namanya, jadi
+            # sekampung tidak berkedip serempak seperti pasukan.
+            # Ketinggian bayangan dikunci ke permukaan tiap frame: node actor
+            # berskala DAN warga yang tidur dipindah ke y = GH + 0,15, jadi
+            # satu angka tetap di konstruktor tidak pernah benar untuk keduanya.
+            _bg = getattr(actor, '_bayangan', None)
+            if _bg is not None:
+                _pin_bayangan(_bg)
+            _w = getattr(actor, '_wajah', None)
+            if _w is not None:
+                # Kehangatan warga terhadap pemain, dan denyut senang sesudah
+                # menerima hadiah. Keduanya dipasang di sini, bukan cuma saat
+                # dialog terbuka: hati adalah keadaan yang berlaku terus, dan
+                # warga yang cuma ramah ketika kotak dialog terbuka terbaca
+                # sebagai pelayan toko, bukan tetangga.
+                if actor_id not in ANIMAL_NPCS:
+                    _w.set_hati(min(1.0, s.npc_hearts.get(actor_id, 0) / 10.0))
+                    _sn = getattr(s, '_npc_senang', None)
+                    if _sn:
+                        _sisa = max(0.0, _sn.get(actor_id, 0.0) - dt)
+                        if _sisa <= 0.0:
+                            _sn.pop(actor_id, None)
+                        else:
+                            _sn[actor_id] = _sisa
+                        _w.set_keadaan(False, min(1.0, _sisa / 2.6))
+                _w.tick(dt)
             if isinstance(actor, Monster):
                 if actor.hp <= 0:
                     if actor.is_boss: s.naga_defeated = True

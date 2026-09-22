@@ -21,7 +21,12 @@ out vec4 fragColor;
 
 const int SAMPLES = 3;
 const float SPREAD = 0.0035;
-const float LUM_THRESHOLD = 0.65;
+// Ambang dinaikkan 0,65 -> 0,80. Kulit yang tersinari punya luminans 0,85,
+// jadi dengan ambang lama WAJAH IKUT MEKAR — dan mekar itu menambahkannya
+// kembali ke atas 1,0 sehingga terpotong jadi putih, persis pemotongan yang
+// sudah ditutup di smooth_shader.py. Bloom seharusnya menangkap sumber
+// cahaya dan sorotan, bukan kulit orang.
+const float LUM_THRESHOLD = 0.80;
 
 vec3 getBloom(vec2 coord) {
     vec3 bloom = vec3(0.0);
@@ -31,10 +36,15 @@ vec3 getBloom(vec2 coord) {
             vec2 offset = vec2(float(i), float(j)) * SPREAD;
             vec3 c = texture(tex, coord + offset).rgb;
             float lum = dot(c, vec3(0.299, 0.587, 0.114));
-            if (lum > LUM_THRESHOLD) {
-                // boost the bright parts slightly
-                bloom += c * (c * 1.2);
-            }
+            // Lutut LUNAK, bukan saklar. Versi lama memakai `if (lum > ambang)`
+            // lalu menambahkan seluruh c*c*1.2: satu piksel yang kebetulan
+            // melewati ambang menyumbang sebanyak piksel yang jauh lebih
+            // terang. Sekarang yang mekar hanya KELEBIHAN terang di atas
+            // ambang, dan besarnya sebanding dengan kuadrat kelebihan itu,
+            // jadi tepian mekar melunak alih-alih membentuk batas keras.
+            float lebih = max(lum - LUM_THRESHOLD, 0.0)
+                        / max(1.0 - LUM_THRESHOLD, 1e-3);
+            bloom += c * (lebih * lebih);
             count += 1.0;
         }
     }
@@ -76,6 +86,16 @@ void main() {
     // 6. Vignette (very soft edge shading, no dark corners)
     float vignette = length(uv - 0.5);
     final_color *= smoothstep(0.9, 0.48, vignette);
+
+    // Jaga RONA, sama seperti di smooth_shader.py. Bloom menambahkan cahaya
+    // di ATAS warna yang sudah ada, jadi tanpa ini ia mengembalikan persis
+    // pemotongan per-kanal yang baru saja ditutup di sana: kulit hangat
+    // dijadikan putih lagi oleh mekarnya sendiri. Kanal tertinggi didudukkan
+    // di 1,0 dan sisanya ikut turun dengan rasio yang sama.
+    float puncak = max(final_color.r, max(final_color.g, final_color.b));
+    if (puncak > 1.0) {
+        final_color /= puncak;
+    }
 
     fragColor = vec4(final_color, 1.0);
 }

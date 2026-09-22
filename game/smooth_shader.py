@@ -21,7 +21,7 @@ from ursina import Shader, Vec3
 
 _VERT = """
 #version 140
-// v5 2026-05-17
+// v6 2026-09-09
 uniform mat4 p3d_ModelViewProjectionMatrix;
 uniform mat4 p3d_ModelMatrix;
 uniform mat3 p3d_NormalMatrix;
@@ -44,7 +44,7 @@ void main() {
 
 _FRAG = """
 #version 140
-// v5 2026-05-17
+// v6 2026-09-09
 uniform sampler2D p3d_Texture0;
 uniform vec4 p3d_ColorScale;
 uniform mat4 p3d_ViewMatrixInverse;
@@ -106,6 +106,25 @@ void main() {
     lit *= outline_darken; // Tepi sedikit gelap, tidak full hitam
     lit = lift_saturation(lit, sm_saturation * 1.08); // Saturasi ringan — tidak neon
 
+    // Jaga RONA saat pencahayaan melewati 1,0.
+    //
+    // ambient (0,45 0,46 0,50) + sun (1,05 1,02 0,92) = pengganda 1,50 di pita
+    // tersinari, dan tidak ada yang pernah membatasinya. Kanal yang lewat 1,0
+    // dipotong oleh perangkat keras SATU PER SATU, jadi warna terang tidak
+    // menjadi lebih terang — ia kehilangan warnanya. Kulit rgb(230,190,148)
+    // dikali 1,50 jadi (1,35 1,10 0,82) lalu terpotong ke rgb(255,255,210):
+    // cokelat hangat berubah jadi kuning-putih menyala. Itulah kenapa wajah
+    // karakter terbaca seperti bercahaya sendiri di hampir setiap tangkapan.
+    //
+    // Bukan dijepit per kanal, tapi diskalakan bersama-sama: kanal tertinggi
+    // didudukkan di 1,0 dan sisanya ikut turun dengan rasio yang sama, jadi
+    // ronanya utuh dan yang hilang cuma kelebihan terang yang memang tidak
+    // bisa ditampilkan.
+    float puncak = max(lit.r, max(lit.g, lit.b));
+    if (puncak > 1.0) {
+        lit /= puncak;
+    }
+
     fragColor = vec4(lit, base.a);
 }
 """
@@ -149,11 +168,34 @@ def get_smooth_shader():
         try:
             _smooth_shader = Shader(vertex=_VERT, fragment=_FRAG,
                                     language=Shader.GLSL,
+                                    # sm_sun_dir / sm_sun_color / sm_ambient
+                                    # SENGAJA TIDAK ADA di sini. Ursina
+                                    # menyalin tiap default_input ke NODE
+                                    # entitas (Entity.shader_setter:
+                                    # `for key, value in
+                                    # value.default_input.items():
+                                    # self.set_shader_input(key, value)`), dan
+                                    # di Panda3D nilai pada node mengalahkan
+                                    # warisan dari induk. Selama ketiganya ada
+                                    # di sini, `scene.set_shader_input(...)`
+                                    # yang dipanggil app tiap frame TIDAK
+                                    # PERNAH sampai ke satu entitas pun:
+                                    # seluruh adegan terkunci pada cahaya
+                                    # tengah hari, siang maupun tengah malam.
+                                    #
+                                    # Terukur di scene farm, warna rata-rata
+                                    # tanah pada 03:00 / 09:00 / 12:00 / 22:00
+                                    # adalah 131,147,16 — sama sampai digit
+                                    # terakhir di keempat jam, sementara
+                                    # langitnya sudah biru tua malam.
+                                    #
+                                    # Ketiganya sekarang datang dari node
+                                    # `scene` saja, disetel
+                                    # app._sync_smooth_lighting() sebelum
+                                    # frame pertama dan tiap kali cahaya
+                                    # berubah.
                                     default_input={
                                         'sm_has_tex': 0,
-                                        'sm_sun_dir': Vec3(-0.5, -0.8, -0.4),
-                                        'sm_sun_color': Vec3(1.05, 1.02, 0.92),
-                                        'sm_ambient': Vec3(0.45, 0.46, 0.50),
                                         'sm_rim_strength': 0.55,
                                         'sm_ao_strength': 0.28,
                                         'sm_ao_height': 1.6,

@@ -198,3 +198,65 @@ Seluruh angka membingungkan di irisan ini datang dari probe, bukan dari game:
 - Memperbesar bayangan sampai 1,85 m untuk "membuatnya terbaca", padahal yang
   salah ketinggiannya: piksel terlihat cuma naik 149 -> 375, karena quad-nya
   memang ada di bawah tanah sepanjang waktu.
+
+---
+
+## 6. Empat tekstur yang isinya pola uji
+
+Dipindai seluruh 73 berkas di `assets/textures`, empat di antaranya bukan
+gambar bahan sama sekali:
+
+```
+tekstur      rata-rata RGB        isinya
+tree_trunk   (  7,5  71,2  37,5)  hitam bergaris HIJAU NEON tegak
+tree_leaf    ( 15,7  23,0  38,7)  hitam dengan wajik CYAN dan MAGENTA
+dirt         ( 46,2  42,3  60,7)  hitam, garis cyan/magenta/putih acak
+grass        ( 44,1  13,6  46,2)  hitam dengan KISI MAGENTA
+```
+
+Empat tekstur kayu lain di repo ini semuanya coklat wajar — `boat_wood`
+(183,136,86), `chest_wood` (140,96,56), `floor_wood` (155,109,69),
+`wood_plank` (130,90,56) — jadi keempatnya memang ganjil, bukan gaya.
+
+Akibatnya terlihat di **setiap frame**. Batang pohon dikalikan tint
+`rgb(100,70,40)` menghasilkan ~(3,20,6): hitam kehijauan. Dan kontras
+hitam-pekat lawan rumput terang itulah yang memicu aberasi kromatik di
+post-process, sehingga muncul garis magenta dan cyan di sekeliling tiap
+batang — mudah disalahartikan sebagai "tekstur hilang", padahal ia gejala,
+bukan sebabnya.
+
+Ketiganya dibangun ulang oleh `tools/buat_tekstur.py`: deterministik (derau
+dari `sin`, bukan `random()`), dengan alasan tiap angka di sebelahnya, dan
+kecerahannya dipilih dari perhitungan — tiap tekstur di sini DIKALIKAN tint
+entitasnya, jadi tekstur yang terlalu gelap akan hilang berapa pun cahayanya.
+
+### Dan satu regresi yang saya buat sendiri
+
+Versi pertama generator menyimpan PNG bermode **RGB**; seluruh tekstur lain di
+repo bermode RGBA. Akibatnya **batang pohon hilang sama sekali dari layar** —
+terukur pada frame yang sama persis: kolom hitam ada dengan tekstur lama,
+tidak ada dengan yang baru, dan piksel nyaris-hitam di area pohon turun dari
+7.256 ke 4.233 bukan karena membaik melainkan karena batangnya lenyap. Dengan
+RGBA: 6.357, dan batangnya coklat.
+
+### `grass.png` sudah didokumentasikan cacat, dan perbaikannya sudah ditulis
+
+Kotak hitam bergaris magenta di bawah tiap pohon bukan bayangan, melainkan
+UBIN. `world.py` memberi tiap ubin penghalang di luar ruang
+`default_tex = 'grass'` — tekstur kisi magenta itu.
+
+Dua komentar di repo sudah menyebutnya, dan salah satunya menuliskan
+perbaikannya kata per kata:
+
+> *"Ini TAMBALAN, bukan perbaikan. Perbaikan sebenarnya satu baris di
+> `game/world.py` (pakai 'grass_tso'/'sand_ground' sebagai default_tex luar
+> ruang). Begitu itu dikerjakan pemilik world.py, seluruh fungsi ini boleh
+> dihapus beserta pemanggilnya di props.py."*
+
+Baris itu sekarang ditulis. Menghapus tambalannya saja tidak cukup: ia
+memberi ubin penghalang **tutup rumput setinggi tetangganya**, dan tanpa itu
+tiap ubin pohon melesak 4 cm dan terbaca sebagai lubang persegi. Jadi cabang
+penghalang di `world.py` — yang tadinya cuma mengurus pagar — sekarang
+mengurus semua penghalang luar ruang, dan `zone_paint.patch_tile()` beserta
+`_TILE_TAMBALAN` di props.py dihapus: satu entity per pohon, tunggul, lentera
+dan peti yang tidak perlu lagi ada.

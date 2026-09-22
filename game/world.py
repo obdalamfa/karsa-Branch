@@ -469,6 +469,26 @@ class World3D:
         )
 
         # ── Horizon Lingkungan Luas (Menutupi efek "Piring di tengah bola") ──
+        #
+        # INI sumber "bidang putih" yang tercatat di tools/regress.py kolom
+        # `jenuh`: lake 57%, cemetery 42%, swarga 36%. Dilacak dengan sinar
+        # tabrakan dari kamera lewat piksel putihnya — bukan ditebak: yang
+        # kena pertama quad ini di jarak 31,7, kubah langit baru di 241,0.
+        #
+        # Jadi quad ini digambar DI DEPAN kubah langit dan menggantikan langit
+        # di seluruh bagian layar yang melewati tepi peta. Warnanya (255,255,
+        # 255) juga nilai maksimum, jadi dijamin terpotong: tidak ada gradasi
+        # yang tersisa di sana.
+        #
+        # Kenapa dulu sulit ditemukan: mematikan entity SATU PER SATU tidak
+        # pernah menurunkan kadar putih lebih dari 2,5%, karena di belakang
+        # quad ini ada kubah langit yang palet siangnya juga nyaris putih
+        # (zenith 0,93/0,83/1,00 jam 10). Dua lapis saling menutupi, jadi
+        # menyingkirkan salah satunya nyaris tidak mengubah apa pun.
+        #
+        # Dibiarkan apa adanya: komentar di bawah menyebutnya pilihan rupa
+        # yang disengaja, dan mengubah rupa bukan keputusan yang boleh diambil
+        # tanpa patokan pembanding.
         if getattr(sc, 'has_horizon', not sc.indoor and not is_dungeon):
             # Digital Alice style: bright neon sky reflection / white void
             horizon = _e('quad', (w * TS / 2.0, -0.05, h * TS / 2.0),

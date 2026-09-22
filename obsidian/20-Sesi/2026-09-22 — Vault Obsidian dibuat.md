@@ -2,7 +2,7 @@
 judul: Vault Obsidian dibuat — pencatatan progres pindah ke sini
 tipe: sesi
 tanggal: 2026-09-22
-commit: 7a1912f
+commit: 03d61bb
 branch: claude/tender-allen-614l6y
 tags: [sesi, meta, dokumentasi]
 ---
@@ -50,6 +50,11 @@ commit `7ed8d59`, bukan larian baru — dan itu ditulis eksplisit di
 
 Yang **bisa** diverifikasi tanpa GPU sudah diverifikasi: pembacaan kode, `grep`
 pemanggil, hitungan baris, isi git.
+
+> [!note] Kenapa hash-nya butuh commit kedua
+> Nota ini ada **di dalam** commit `03d61bb`, jadi ia tidak mungkin memuat
+> hash-nya sendiri. Hash-nya distempel di satu commit susulan yang tidak
+> mengubah apa pun selain baris `commit:` di frontmatter ini.
 
 ## Tautan
 

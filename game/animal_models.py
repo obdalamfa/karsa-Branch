@@ -31,7 +31,7 @@ ke variabel lalu memakainya untuk dua Entity.
 """
 from ursina import Entity, color
 
-from .meshes import creature_body_mesh, low_cone_mesh, mata_mesh
+from .meshes import creature_body_mesh, low_cone_mesh, mata_mesh, permukaan
 from .smooth_shader import apply_smooth
 
 
@@ -180,16 +180,20 @@ def _mata(akar, kepala, *, d, naik=0.0, maju=0.0, pisah=0.62, arah='samping',
         # kedua memakai 0,18 d untuk semua dan bolanya terlihat ditempel dari
         # luar, bukan duduk di tengkorak.
         if arah == 'samping':
-            # Bidang sisi kepala datar sempurna sampai ~0,8 setengah-lebar
-            # (superelipsoid e=0,10), jadi mata di |naik| <= 0,5 duduk persis
-            # di x = +-0,5 lokal.
-            pusat = (s * (0.5 + d * tanam / sx_), naik * 0.5, maju * 0.5)
+            # Letak permukaan DIHITUNG, tidak diandaikan. Versi pertama menulis
+            # 0,5 lokal dengan alasan "bidang sisi kepala datar sempurna sampai
+            # ~0,8 setengah-lebar" — benar pada eksponen 0,10, dan salah begitu
+            # kepalanya dibuat melengkung: mata kucing terukur melayang 10%
+            # setengah-lebar di eksponen 0,60.
+            _pk = 0.5 * permukaan(abs(naik), abs(maju))
+            pusat = (s * (_pk + d * tanam / sx_), naik * 0.5, maju * 0.5)
             keluar = (s * d / sx_, 0.0, 0.0)          # arah menonjol
             # Kilau di arah yang SAMA pada kedua mata — satu sumber cahaya dari
             # depan-atas. Kilau simetris cermin terbaca sebagai dua bola kaca.
             sudut = (0.0, d * 0.21 / sy_, d * 0.21 / sz_)
         else:
-            pusat = (s * pisah * 0.5, naik * 0.5, 0.5 + d * tanam / sz_)
+            _pk = 0.5 * permukaan(abs(pisah), abs(naik))
+            pusat = (s * pisah * 0.5, naik * 0.5, _pk + d * tanam / sz_)
             keluar = (0.0, 0.0, d / sz_)
             sudut = (-d * 0.21 / sx_, d * 0.21 / sy_, 0.0)
 

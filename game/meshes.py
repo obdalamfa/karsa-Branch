@@ -41,6 +41,49 @@ from ursina import Mesh, Vec3
 # ─── PARAMETER GLOBAL ────────────────────────────────────────────────────────
 _CUBE_SEG_U = 12      # longitudinal (dikurangi untuk performa voxel)
 _CUBE_SEG_V = 10      # latitudinal (kutub ke kutub)
+# Catatan: docstring beberapa mesh di bawah dulu menyebut eksponen 0,22 / 0,28
+# / 0,30, dan tidak satu pun pernah cocok dengan kodenya — keempatnya memakai
+# 0,10. Dokumentasi yang menyebut angka yang tidak dipakai lebih buruk daripada
+# tidak ada angka sama sekali, jadi sekarang semuanya menunjuk ke konstanta ini.
+# ─── KELENGKUNGAN ────────────────────────────────────────────────────────────
+# Satu angka yang mengatur seberapa kotak atau seberapa membulat SELURUH bentuk
+# karakter dan hewan. Superkuadrik dengan eksponen e memenuhi
+#
+#     |x|^(2/e) + |y|^(2/e) + |z|^(2/e) = 1
+#
+# jadi e -> 0 adalah kubus tajam, e = 1 elipsoid penuh. Sebelumnya empat mesh
+# menulis 0,10 masing-masing sebagai angka mati dengan komentar "Crossy Road
+# feel"; pemiliknya kemudian minta bentuk yang lebih melengkung, dan angka yang
+# tersebar di empat tempat tidak bisa diputar sebagai satu keputusan.
+#
+# Yang membuat angka ini TIDAK bebas adalah wajah: mata, kilau, mulut dan rona
+# pipi dulu dipasang pada satu bidang datar, dengan alasan yang benar pada
+# e=0,10 — permukaan sisi memang datar sempurna sampai ~0,8 setengah-lebar di
+# eksponen itu. Terukur, jarak tiap fitur dari permukaan (pecahan setengah-lebar):
+#
+#     fitur          e=0,10   e=0,30   e=0,45   e=0,60   e=0,80
+#     mulut manusia  +0,005   +0,021   +0,059   +0,114   +0,203
+#     rona pipi      -0,018   -0,011   +0,018   +0,076   +0,198
+#     mata kucing    +0,000   +0,009   +0,041   +0,102   +0,225
+#
+# Di 0,60 mulutnya MELAYANG 11% setengah-lebar di depan muka. Karena itu
+# `permukaan()` di bawah ada, dan wajah sekarang menghitung kedalamannya dari
+# bentuk yang sebenarnya — sehingga angka ini bebas diputar tanpa wajah lepas.
+KELENGKUNGAN = 0.42
+
+
+def permukaan(a: float, b: float, e: float = None) -> float:
+    """Letak permukaan pada sumbu utama, 0..1 dari setengah-ukuran.
+
+    `a` dan `b` simpangan pada dua sumbu lain, juga 0..1 dari setengah-ukuran.
+    Mengembalikan 1,0 tepat di tengah bidang dan makin kecil ke arah sudut.
+    """
+    ee = KELENGKUNGAN if e is None else e
+    p = 2.0 / max(1e-6, ee)
+    sisa = 1.0 - min(1.0, abs(a)) ** p - min(1.0, abs(b)) ** p
+    return max(0.0, sisa) ** (1.0 / p)
+
+
 _CUBE_EXP = 0.20      # eksponen 0.20 menghasilkan kubus modern bersudut melengkung, bukan bola bulat
 
 _CAPSULE_SEG_U = 16
@@ -144,13 +187,13 @@ _chibi_torso_mesh = None
 
 def chibi_head_mesh():
     """Kepala chibi: rounded box sedikit lebih tinggi dari lebar, dagu mengecil
-    halus. 32×24 segmen, eksponen 0.22 (sama dengan body — rounded box konsisten)."""
+    halus. 32×24 segmen, kelengkungan dari KELENGKUNGAN."""
     global _chibi_head_mesh
     if _chibi_head_mesh is not None:
         return _instance(_chibi_head_mesh)
 
     nu, nv = 22, 16
-    e1 = e2 = 0.10   # hampir cube tajam, hanya tepi/sudut yang dibevel halus (Crossy Road feel)
+    e1 = e2 = KELENGKUNGAN
 
     verts, norms, uvs = [], [], []
     for j in range(nv + 1):
@@ -191,13 +234,13 @@ def chibi_head_mesh():
 
 def chibi_torso_mesh():
     """Torso chibi: barrel berbentuk T halus — bahu lebar, pinggang sempit,
-    dasar menyempit halus. 28×20 segmen, eksponen 0.22."""
+    dasar menyempit halus. 28×20 segmen, kelengkungan dari KELENGKUNGAN."""
     global _chibi_torso_mesh
     if _chibi_torso_mesh is not None:
         return _instance(_chibi_torso_mesh)
 
     nu, nv = 22, 16
-    e1 = e2 = 0.10   # hampir cube tajam, hanya tepi/sudut yang dibevel halus (Crossy Road feel)
+    e1 = e2 = KELENGKUNGAN
 
     verts, norms, uvs = [], [], []
     for j in range(nv + 1):
@@ -254,13 +297,13 @@ _creature_head_mesh = None
 
 def creature_body_mesh():
     """Tubuh hewan: rounded box (di antara kotak dan ellipsoid).
-    Eksponen 0.30 → face datar tegas, sudut/edge dibevel lebih halus daripada chibi 0.22."""
+    Kelengkungannya dari KELENGKUNGAN, satu angka untuk semua bentuk hidup."""
     global _creature_body_mesh
     if _creature_body_mesh is not None:
         return _instance(_creature_body_mesh)
 
     nu, nv = 22, 16
-    e1 = e2 = 0.10   # hampir cube tajam, hanya tepi/sudut yang dibevel halus (Crossy Road feel)
+    e1 = e2 = KELENGKUNGAN
 
     verts, norms, uvs = [], [], []
     for j in range(nv + 1):
@@ -291,14 +334,14 @@ def creature_body_mesh():
 
 
 def creature_head_mesh():
-    """Kepala hewan: rounded box (eksponen 0.28) — bentuk antara kotak dan bola.
+    """Kepala hewan: rounded box, kelengkungan dari KELENGKUNGAN.
     Tanpa moncong-push agar dekorasi (telinga/tanduk/paruh) tetap kelihatan."""
     global _creature_head_mesh
     if _creature_head_mesh is not None:
         return _instance(_creature_head_mesh)
 
     nu, nv = 22, 16
-    e1 = e2 = 0.10   # hampir cube tajam, hanya tepi/sudut yang dibevel halus (Crossy Road feel)
+    e1 = e2 = KELENGKUNGAN
 
     verts, norms, uvs = [], [], []
     for j in range(nv + 1):
@@ -330,7 +373,7 @@ def creature_head_mesh():
 
 # ─── BOLA MATA ───────────────────────────────────────────────────────────────
 # Satu-satunya bentuk BENAR-BENAR BULAT di proyek ini. Semua superelipsoid lain
-# memakai eksponen 0.10 — hampir kubus — dan itu disengaja: siluet Crossy Road
+# memakai KELENGKUNGAN, yang tetap kotak-membulat dan bukan bola: siluet
 # dibangun dari kotak. Tapi mata yang dibuat dari kotak tidak terbaca sebagai
 # mata. Terpotret: mata kucing ronde pertama memakai creature_body_mesh dan
 # hasilnya dua PERSEGI putih bertambal kotak hitam — pemain membacanya sebagai

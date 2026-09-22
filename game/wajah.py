@@ -103,9 +103,20 @@ def bangun_wajah(induk, hw: float, ht: float, muka_z: float):
     di pipi dari jarak dekat.
     """
     out, mata, kilau, pipi = [], [], [], []
+    from .meshes import permukaan
 
     def kedalaman(x, y, maju):
-        return muka_z + maju
+        """Kedalaman satu fitur, MENGIKUTI lengkung kepala.
+
+        Versi pertama mengembalikan `muka_z + maju` — satu bidang datar untuk
+        semua fitur. Itu benar selama kepala hampir kubus: pada eksponen 0,10
+        permukaannya memang datar sempurna sampai ~0,8 setengah-lebar. Begitu
+        bentuknya dibuat melengkung, bidang datar itu berbohong makin jauh ke
+        arah sudut — terukur, pada eksponen 0,60 mulut melayang 11% dan rona
+        pipi 8% setengah-lebar di depan muka.
+        """
+        return muka_z * permukaan(abs(x) / max(hw, 1e-6),
+                                  abs(y) / max(ht, 1e-6)) + maju
     for sx in (-1, 1):
         x, y = sx * hw * 0.41, -ht * 0.26
         e = _kotak(induk, (x, y, kedalaman(x, y, 0.0)),

@@ -812,3 +812,74 @@ hadiah tidak memicu denyut        TERTANGKAP  median 0,1105 dari 0,1188
 denyut senang tidak meluruh       TERTANGKAP  median 0,0451 dari 0,1188
 hati tidak dipasang ke warga      TERTANGKAP  di luar dialog 0,1097 -> 0,1097
 ```
+
+---
+
+## 13. "Hindari terlalu blocky, kita gunakan curvy"
+
+Permintaan pemilik, dan ia menyentuh setiap bentuk hidup di game ini sekaligus.
+
+Empat mesh — kepala chibi, torso chibi, badan hewan, kepala hewan — masing-masing
+menulis `e1 = e2 = 0.10` sebagai angka mati dengan komentar *"hampir cube
+tajam (Crossy Road feel)"*. Satu keputusan desain yang tersebar di empat tempat
+tidak bisa diputar sebagai satu keputusan, jadi langkah pertamanya menyatukan
+keempatnya jadi `meshes.KELENGKUNGAN`.
+
+Superkuadrik dengan eksponen `e` memenuhi `|x|^(2/e) + |y|^(2/e) + |z|^(2/e) = 1`,
+jadi `e → 0` kubus tajam dan `e = 1` elipsoid penuh.
+
+### Yang membuat angka itu TIDAK bebas: wajahnya
+
+Mata, kilau, mulut dan rona pipi dipasang pada satu **bidang datar**, dan
+alasannya benar pada 0,10 — permukaan sisi memang datar sempurna sampai ~0,8
+setengah-lebar di eksponen itu; komentar di `_mata()` menyebutnya eksplisit.
+Begitu bentuknya dibulatkan, bidang datar itu berbohong makin jauh ke arah
+sudut. Dihitung sebelum satu piksel pun dirender, jarak tiap fitur dari
+permukaan sebenarnya (pecahan setengah-lebar; positif = melayang di depan muka):
+
+```
+fitur           e=0,10   e=0,30   e=0,42   e=0,60   e=0,80
+mata manusia   +0,005  +0,005  +0,008  +0,024  +0,064
+mulut manusia  +0,005  +0,021  +0,050  +0,114  +0,203
+rona pipi      -0,018  -0,011  +0,010  +0,076  +0,198
+mata kucing    +0,000  +0,009  +0,032  +0,102  +0,225
+```
+
+Di 0,60 mulutnya melayang **11% setengah-lebar** di depan muka, dan rona pipi
+8% — persis cacat "dua batang merah muda melayang" yang sudah ditutup di §3,
+kembali lewat pintu lain.
+
+Jadi sebelum melengkungkan apa pun, `meshes.permukaan(a, b)` ditambahkan dan
+wajah — manusia maupun hewan — menghitung kedalamannya dari bentuk yang
+sebenarnya. Sesudah itu kelengkungannya bebas diputar tanpa wajah lepas.
+
+### Angkanya dipilih dari gambar, bukan dari selera
+
+Empat nilai dirender penuh (bukan disimulasikan): 0,10 / 0,30 / 0,42 / 0,60.
+**0,42** membulat tegas tanpa kehilangan bentuk. Di 0,60 kepala sapi mulai
+melebur jadi gumpalan dan tanduknya terlihat ditempel, bukan tumbuh.
+
+### Prop dunia sengaja TIDAK ikut
+
+`soft_cube_mesh()` (dipakai `world.py` untuk bangunan dan perabot) tetap di
+`_CUBE_EXP = 0,20`. Rumah yang membulat tidak terbaca sebagai rumah. Yang
+diminta melengkung adalah yang hidup.
+
+### Dan lima docstring ternyata menyebut angka yang tidak pernah dipakai
+
+Dalam perjalanan: `chibi_head_mesh` dan `chibi_torso_mesh` menulis "eksponen
+0.22", `creature_body_mesh` "Eksponen 0.30", `creature_head_mesh` "eksponen
+0.28" — sementara kodenya selalu 0,10. Tidak satu pun pernah cocok, dan itu
+sudah begitu sebelum perubahan ini. Dokumentasi yang menyebut angka yang tidak
+dipakai lebih buruk daripada tidak ada angka; kelimanya sekarang menunjuk ke
+konstantanya.
+
+### Probe sentuhan mengukur KOTAK, bukan lengkungnya
+
+Perlu dicatat jujur: `sentuh2.py` mengukur jarak ujung alat ke kotak `UKURAN`,
+dan badan yang membulat menarik permukaan sebenarnya masuk ke dalam kotak itu.
+Di titik yang benar-benar dipakai perawatan (lambung, sekitar tengah badan)
+selisihnya kecil — `permukaan(0,5, 0,5) = 0,984` pada 0,42, yaitu 5,8 mm pada
+sapi, lawan ambang sentuh 12 cm. Di sudut jauh badan selisihnya bisa 21%, tapi
+tidak ada aksi perawatan yang menyentuh di sana. Barisnya tetap lulus dengan
+toleransi yang sama: maksimum 2 dari 91 frame menembus.

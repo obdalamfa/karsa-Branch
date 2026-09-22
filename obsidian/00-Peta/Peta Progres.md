@@ -13,9 +13,9 @@ membuka tahap berikutnya, dan tahap yang dilompati menagih ongkosnya belakangan.
 | Tahap | Status | Inti | Catatan |
 |---|---|---|---|
 | 0 | ✅ selesai | amankan kerja di git | [[Tahap 0 — Amankan kerja]] |
-| 1 | ✅ selesai | jaring pengaman regresi | [[Tahap 1 — Jaring pengaman]] |
+| 1 | ✅ selesai | jaring pengaman regresi, kini otomatis di CI | [[Tahap 1 — Jaring pengaman]] |
 | 2 | 🔨 jalan | verifikasi modul yang terlanjur ada | [[Tahap 2 — Verifikasi modul yatim]] |
-| 3 | ⬜ belum | performa, 4–29 FPS | [[Tahap 3 — Performa]] |
+| 3 | ⬜ belum | performa — garis dasar per scene sudah ada | [[Tahap 3 — Performa]] |
 | 4 | ⬜ belum | Wishes — alasan untuk peduli | [[Tahap 4 — Wishes]] |
 | 5 | ⬜ belum | autonomi NPC | [[Tahap 5 — Autonomi]] |
 | 6 | ⬜ belum | traits dan moodlets | [[Tahap 6 — Traits dan moodlets]] |
@@ -34,6 +34,7 @@ timeline
     2026-08-27 : d8da814 tata letak + avatar native
                : 7ed8d59 dua jebakan pembeku pemain
     2026-09-22 : vault Obsidian dibuat
+               : regresi jalan sungguhan 14/14, CI dipasang
 ```
 
 ## Yang TIDAK dikejar

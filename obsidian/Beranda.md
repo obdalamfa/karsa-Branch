@@ -33,8 +33,9 @@ catatan ini tidak menggantikannya, ia menjelaskan *kenapa* kodenya begitu.
 ## Ringkas satu layar
 
 - **Game**: farming RPG Nusantara 3D, Python + [Ursina](https://www.ursinaengine.org/), kamera isometric tetap.
-- **Ukuran**: 19.514 baris di `game/`, 50 modul, 12+ scene.
-- **Riwayat**: 6 commit, 2026-05-27 → 2026-08-27.
+- **Ukuran**: 19.514 baris di `game/`, 50 modul, **14 scene** (semuanya terbukti boot).
+- **Regresi**: **14/14 lulus**, dijalankan 2026-09-22 — dan sekarang jalan otomatis di CI.
+- **Riwayat**: 8 commit, 2026-05-27 → 2026-09-22.
 - **Tahapan**: [[Tahap 0 — Amankan kerja|0]] ✅ · [[Tahap 1 — Jaring pengaman|1]] ✅ · [[Tahap 2 — Verifikasi modul yatim|2]] 🔨 · [[Tahap 3 — Performa|3]]–[[Tahap 8 — Audio|8]] ⬜
 - **Yang paling menghambat**: frame rate 4–29 FPS yang belum pernah diprofil → [[Tahap 3 — Performa]].
 
@@ -52,6 +53,7 @@ TABLE status, ringkas FROM "10-Tahapan" SORT file.name ASC
 
 ## Jurnal sesi terbaru
 
+- [[2026-09-22 — Regresi jalan sungguhan, CI dipasang]] — 14/14 lulus, dua bug ditemukan dalam prosesnya
 - [[2026-09-22 — Vault Obsidian dibuat]] — pencatatan progres dipindah ke vault ini
 - [[2026-08-27 — Dua jebakan pembeku pemain]] — ESC dan pie menu tidak lagi mengunci pemain
 - [[2026-08-27 — Tata letak, avatar native, tukang mesh]] — skinning C++ 22× lebih murah
@@ -68,6 +70,7 @@ Semua sesi: folder `20-Sesi/`.
 
 [[Mesh NodePath dipakai bersama]] · [[WASD terbalik]] · [[Terjepit permanen]] ·
 [[Pendaratan scene di luar peta]] · [[Pemain beku saat panel terbuka]] ·
+[[Font HUD tidak ketemu di mesin bersih]] · [[Pemeriksaan motif mengotori keadaan]] ·
 [[Arah WASD belum terverifikasi]] 🔴
 
 ---

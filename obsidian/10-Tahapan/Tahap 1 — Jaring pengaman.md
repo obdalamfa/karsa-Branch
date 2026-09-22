@@ -30,12 +30,16 @@ sebelumnya cuma ditambal di sisi pemain ([[Terjepit permanen]]).
 ## Status penyelesaian
 
 Perintahnya jalan, mengeluarkan tabel LULUS/GAGAL, dan melaporkan kondisi
-sekarang apa adanya. Hasil terakhir yang tercatat: **5/5 scene lulus**
-(commit `7ed8d59`).
+sekarang apa adanya. Hasil terakhir: **14/14 scene lulus, 0 pemeriksaan
+gagal** — dijalankan sungguhan 2026-09-22, bukan dikutip dari commit.
 
-> [!caution] Belum diuji ulang sejak 2026-08-27
-> Sesi 2026-09-22 tidak punya `ursina`/`panda3d`, jadi angka itu warisan
-> commit, bukan larian baru. Lihat [[Status Sekarang]].
+Tahap ini baru benar-benar tuntas di sesi itu, karena dua hal:
+
+1. Jaringnya ternyata **tidak bisa dijalankan di mesin bersih** sama sekali —
+   `requirements.txt` tidak menyebut `pygame`/`pillow`, dan font HUD tidak
+   ketemu ([[Font HUD tidak ketemu di mesin bersih]]).
+2. Jaring yang hanya jalan kalau diingat bukan jaring. Sekarang ia dipasang di
+   CI: `.github/workflows/regresi.yml` menjalankannya tiap push dan PR.
 
 ## Tautan
 

@@ -4,7 +4,7 @@ tipe: sistem
 modul: tools/regress.py
 baris: 291
 status: jalan
-hasil_terakhir: 5/5 scene lulus (commit 7ed8d59)
+hasil_terakhir: 14/14 scene lulus (dijalankan 2026-09-22)
 tags: [sistem, uji, status/jalan]
 ---
 
@@ -35,16 +35,34 @@ Keluar dengan kode `1` kalau ada yang gagal, supaya bisa dipakai di skrip.
 `ms_frame` dan jumlah entity dicatat sebagai **angka**, bukan lulus/gagal —
 supaya regresi performa **terlihat**, bukan cuma terasa.
 
-## Bentuk laporannya
+## Larian terakhir — 2026-09-22, sungguhan
 
 ```
-scene            hasil  ms/frame  entity  catatan
+scene            hasil  ms/frame  entity
 ------------------------------------------------------------------------------
-farm             LULUS      33.4     412  (13,4)
-...
+mountain         LULUS     119.6    2177
+town             LULUS     102.6    1884
+farm             LULUS      96.8    1257
+beach            LULUS      84.2    1728
+naga_cave        LULUS      82.2     530
+lake             LULUS      72.3     686
+swarga           LULUS      71.9    1379
+cemetery         LULUS      70.5     983
+greenhouse       LULUS      53.9     488
+shop             LULUS      49.5     405
+studio           LULUS      47.3     384
+smith            LULUS      47.2     385
+clinic           LULUS      46.6     385
+house            LULUS      46.4     418
 ------------------------------------------------------------------------------
-5/5 scene lulus, 0 pemeriksaan gagal, boot 4.2s
+14/14 scene lulus, 0 pemeriksaan gagal, boot 3.6s
 ```
+
+**14 scene, bukan 5.** Angka "5/5" yang beredar di dokumen lama hanya
+mencakup sebagian; sepuluh scene lain tidak pernah ikut terhitung.
+
+Angka ms/frame di atas dirender **CPU** (Mesa software di Xvfb), jadi bukan
+FPS sebenarnya — pakai untuk tren, bukan untuk klaim performa.
 
 Tiap scene: 30 frame pemanasan, 12 frame diukur, tangkapan layar ke
 `_bench/regress/<scene>.png`.
@@ -63,9 +81,22 @@ memanggil `player.tick()` **langsung**, melewati gerbang mode di `app.py`.
 Alat ukur yang salah, bukan kode. Aturan yang lahir dari situ ada di
 [[Aturan Pencatatan]].
 
-> [!caution] Belum dijalankan ulang sejak 2026-08-27
-> Lihat [[Status Sekarang]] — mesin sesi 2026-09-22 tidak punya
-> `ursina`/`panda3d`.
+## Sekarang jalan otomatis
+
+`.github/workflows/regresi.yml` menjalankan seluruh 14 scene di tiap push dan
+PR — Xvfb + Mesa software, lalu tangkapan layar dan laporan diunggah sebagai
+artifact. Sebelum itu jaring ini cuma bekerja kalau ada yang **ingat**
+mengetiknya.
+
+Dua hal harus beres lebih dulu sebelum CI mungkin sama sekali:
+[[Font HUD tidak ketemu di mesin bersih]] dan `requirements.txt` yang tidak
+menyebut `pygame`/`pillow`.
+
+## Cacat alat ukur yang ditemukan pada dirinya sendiri
+
+`motif_waras` dulu memajukan keadaan motif nyata di setiap scene tanpa
+memulihkannya, sehingga scene ke-14 apa pun akan gagal palsu →
+[[Pemeriksaan motif mengotori keadaan]]. Sekarang bebas urutan.
 
 ## Tautan
 

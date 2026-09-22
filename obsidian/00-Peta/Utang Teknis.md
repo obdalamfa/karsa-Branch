@@ -34,15 +34,20 @@ terlihat seolah sudah bekerja.
 pemanggil di luar definisinya. Ini persis yang dicatat [[Tahap 5 — Autonomi]]:
 termurah, dampak paling besar, tinggal disambung.
 
-## 🟡 92 file `.pyc` ikut ter-commit
+## 🟡 92 file `.pyc` ikut ter-commit — separuh lunas
 
-`git ls-files | grep -c '\.pyc$'` → **92**. Tidak ada `.gitignore` di root
-(hanya `_bench/.gitignore`). Akibatnya tiap commit membawa bytecode
-`cpython-314` yang tidak relevan dan bikin diff berisik.
+`git ls-files | grep -c '\.pyc$'` → **92**, bytecode `cpython-314` yang tidak
+relevan dan bikin diff berisik.
 
-Perbaikan: `.gitignore` root berisi `__pycache__/`, `*.pyc`, lalu
-`git rm -r --cached` sekali. Kecil, tapi menyentuh banyak file — pantas jadi
-commit tersendiri, bukan disisipkan.
+**Sudah:** `.gitignore` di root (2026-09-22). Pemicunya langsung: satu larian
+regresi di sesi itu menaburkan **70+ berkas `.pyc` baru** ke `git status`,
+plus mengubah cache biner `game/vitaboy/.vitaboy_index.pkl`. Tanpa ignore,
+semuanya berisiko ikut ter-commit hanya karena seseorang mengetik `git add -A`.
+
+**Belum:** 92 berkas yang sudah terlanjur dilacak tetap dilacak — `.gitignore`
+tidak berlaku surut. Melepasnya butuh `git rm -r --cached` sekali, dan karena
+itu menyentuh 92 berkas ia pantas jadi commit tersendiri, bukan disisipkan ke
+commit lain.
 
 ## 🟡 `PLAY.md` sudah melenceng dari kode
 
@@ -55,6 +60,23 @@ Diperiksa 2026-09-22:
 
 Rujukan baris di dokumen memang selalu membusuk. Yang layak diperbaiki minimal
 klaim yang **menyesatkan pemain**, yaitu instruksi Vitaboy.
+
+## 🟡 Workflow CI belum pernah jalan di GitHub
+
+`.github/workflows/regresi.yml` (2026-09-22) terbukti lewat perintah yang
+**identik** di mesin lokal — 14/14 lulus di atas Xvfb + Mesa. Yang belum
+terbukti: nama paket apt di runner `ubuntu-latest`, dan apakah `actions/*`
+versi yang dipakai tersedia. Larian pertamanya di PR adalah buktinya.
+
+## ✅ Lunas 2026-09-22
+
+| Utang | Sebelumnya | Sekarang |
+|---|---|---|
+| `requirements.txt` hanya `ursina` | `import pygame` gagal → game tidak bisa di-import di mesin bersih | `pygame` + `pillow` tercantum, masing-masing dengan alasannya |
+| font HUD tidak ketemu | game mati di baris pertama HUD di mesin tanpa Montserrat | [[Font HUD tidak ketemu di mesin bersih]] |
+| `regress.py`/`capture.py` menunjuk `ROOT/'fonts'` | folder itu tidak ada | diarahkan ke `assets/fonts` |
+| `motif_waras` mengotori keadaannya | scene ke-14 apa pun gagal palsu | [[Pemeriksaan motif mengotori keadaan]] |
+| regresi hanya jalan kalau diingat | jaring digantung tapi tidak dipasang | jalan otomatis di CI |
 
 ## 🔴 Dua utang besar yang sudah punya rumah sendiri
 

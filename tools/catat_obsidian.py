@@ -41,11 +41,27 @@ TERLARANG = r'[\\/:*?"<>|]'
 
 
 def git(*args: str) -> str:
-    hasil = subprocess.run(('git', *args), cwd=ROOT, capture_output=True,
+    # core.quotepath=false: tanpa ini git menulis nama berkas non-ASCII sebagai
+    # oktal di dalam tanda kutip ("obsidian/... \342\200\224 ..."), dan nama
+    # nota di vault ini memang memakai em dash. Akibatnya path tidak lagi
+    # diawali "obsidian/" dan setiap pemeriksaan berbasis awalan meleset.
+    hasil = subprocess.run(('git', '-c', 'core.quotepath=false', *args),
+                           cwd=ROOT, capture_output=True,
                            text=True, encoding='utf-8', errors='replace')
     if hasil.returncode != 0:
         sys.exit(f'git {" ".join(args)} gagal:\n{hasil.stderr.strip()}')
     return hasil.stdout
+
+
+def hanya_vault(sha: str) -> bool:
+    """True kalau commit ini cuma menyentuh isi vault.
+
+    Commit semacam itu adalah pembukuan tentang kerja, bukan kerjanya sendiri,
+    jadi ia tidak menuntut notanya sendiri — kalau tidak, tiap nota melahirkan
+    commit yang menuntut nota baru, tanpa akhir.
+    """
+    berkas = [path for _, _, path in berkas_berubah(sha)]
+    return bool(berkas) and all(p.startswith('obsidian/') for p in berkas)
 
 
 def daftar_commit() -> list[tuple[str, str, str]]:
@@ -88,6 +104,10 @@ def berkas_berubah(sha: str) -> list[tuple[str, str, str]]:
         if len(bagian) != 3:
             continue
         tambah, hapus, path = bagian
+        # Sisa pengutipan tetap dilucuti: git masih mengutip nama yang memuat
+        # tanda kutip atau karakter kendali, apa pun nilai core.quotepath.
+        if len(path) > 1 and path.startswith('"') and path.endswith('"'):
+            path = path[1:-1]
         if path.endswith('.pyc') or '__pycache__' in path:
             continue
         out.append((tambah, hapus, path))
@@ -184,16 +204,23 @@ def main() -> int:
         print(f'{"commit":9s} {"tanggal":11s} {"nota":6s} judul')
         print('-' * 72)
         for sha, tgl, judul in commits:
-            tanda = 'ada' if sha in tercatat else '—'
+            if sha in tercatat:
+                tanda = 'ada'
+            elif hanya_vault(sha):
+                tanda = 'vault'
+            else:
+                tanda = '—'
             print(f'{sha:9s} {tgl:11s} {tanda:6s} {judul[:42]}')
-        belum = [s for s, _, _ in commits if s not in tercatat]
+        belum = [s for s, _, _ in commits
+                 if s not in tercatat and not hanya_vault(s)]
         print('-' * 72)
         print(f'{len(belum)} commit belum tercatat'
               + (f': {", ".join(belum)}' if belum else ''))
         return 0
 
     if arg.semua:
-        n = sum(tulis(s, t, j, tercatat) for s, t, j in commits)
+        n = sum(tulis(s, t, j, tercatat) for s, t, j in commits
+                if not hanya_vault(s))
         print(f'\n{n} nota baru ditulis.')
         return 0
 

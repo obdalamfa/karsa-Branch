@@ -1,0 +1,15 @@
+# Bytecode Python. Sebelum berkas ini ada, satu larian game menaburkan 70+
+# berkas .pyc ke dalam `git status` dan 92 di antaranya sudah terlanjur
+# ter-commit di riwayat.
+__pycache__/
+*.py[cod]
+
+# Cache indeks aset Vitaboy — dibangun ulang otomatis, isinya bergantung mesin.
+game/vitaboy/.vitaboy_index.pkl
+
+# Save game milik pemain, bukan milik repo.
+lembah_karsa_3d_save.json
+
+# Lingkungan virtual
+.venv/
+venv/

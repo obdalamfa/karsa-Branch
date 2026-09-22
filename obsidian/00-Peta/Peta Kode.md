@@ -64,6 +64,13 @@ yang statusnya perlu diwaspadai.
 | `blender_gen_models.py` | model lewat Blender |
 | `catat_obsidian.py` | **tulis catatan sesi ke vault ini** → [[Aturan Pencatatan]] |
 
+## Otomatisasi
+
+| Berkas | Untuk apa |
+|---|---|
+| `.github/workflows/regresi.yml` | jalankan 14 scene tiap push & PR di atas Xvfb + Mesa, unggah bukti → [[Regresi]] |
+| `requirements.txt` | `ursina`, `pygame`, `pillow` — dua terakhir sempat hilang dan membuat game tidak bisa di-import di mesin bersih |
+
 ## Dokumen panjang di `docs/`
 
 `CODE_MAP.md` (880) · `READABILITY.md` (1021) · `BAR_STRANGERVILLE.md` (823) ·

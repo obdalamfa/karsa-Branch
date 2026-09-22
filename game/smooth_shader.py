@@ -168,11 +168,34 @@ def get_smooth_shader():
         try:
             _smooth_shader = Shader(vertex=_VERT, fragment=_FRAG,
                                     language=Shader.GLSL,
+                                    # sm_sun_dir / sm_sun_color / sm_ambient
+                                    # SENGAJA TIDAK ADA di sini. Ursina
+                                    # menyalin tiap default_input ke NODE
+                                    # entitas (Entity.shader_setter:
+                                    # `for key, value in
+                                    # value.default_input.items():
+                                    # self.set_shader_input(key, value)`), dan
+                                    # di Panda3D nilai pada node mengalahkan
+                                    # warisan dari induk. Selama ketiganya ada
+                                    # di sini, `scene.set_shader_input(...)`
+                                    # yang dipanggil app tiap frame TIDAK
+                                    # PERNAH sampai ke satu entitas pun:
+                                    # seluruh adegan terkunci pada cahaya
+                                    # tengah hari, siang maupun tengah malam.
+                                    #
+                                    # Terukur di scene farm, warna rata-rata
+                                    # tanah pada 03:00 / 09:00 / 12:00 / 22:00
+                                    # adalah 131,147,16 — sama sampai digit
+                                    # terakhir di keempat jam, sementara
+                                    # langitnya sudah biru tua malam.
+                                    #
+                                    # Ketiganya sekarang datang dari node
+                                    # `scene` saja, disetel
+                                    # app._sync_smooth_lighting() sebelum
+                                    # frame pertama dan tiap kali cahaya
+                                    # berubah.
                                     default_input={
                                         'sm_has_tex': 0,
-                                        'sm_sun_dir': Vec3(-0.5, -0.8, -0.4),
-                                        'sm_sun_color': Vec3(1.05, 1.02, 0.92),
-                                        'sm_ambient': Vec3(0.45, 0.46, 0.50),
                                         'sm_rim_strength': 0.55,
                                         'sm_ao_strength': 0.28,
                                         'sm_ao_height': 1.6,

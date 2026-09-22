@@ -85,12 +85,35 @@ def _get_sky_shader():
 
 # ─── Palet warna langit per kondisi (port FreeSO OutsideTime interpolation) ───
 # Format: (zenith_rgb, horizon_rgb, sun_glow_rgb, sun_dir_xyz)
-_SKY_NIGHT   = ((0.15, 0.05, 0.15), (0.10, 0.80, 1.00), (1.00, 0.20, 0.80), ( 0.0,  1.0,  0.0))
-_SKY_DAWN    = ((1.00, 0.80, 0.90), (1.00, 0.20, 0.80), (0.00, 1.00, 1.00), ( 0.7,  0.2, -0.1))
-_SKY_MORNING = ((1.00, 0.90, 1.00), (0.20, 1.00, 0.80), (1.00, 0.20, 0.80), ( 0.5,  0.5, -0.4))
-_SKY_DAY     = ((0.90, 0.80, 1.00), (1.00, 0.50, 0.80), (0.20, 0.80, 1.00), ( 0.0,  1.0, -0.4))
-_SKY_DUSK    = ((1.00, 0.50, 0.80), (0.20, 0.80, 1.00), (1.00, 0.80, 1.00), (-0.7,  0.2, -0.1))
-_SKY_EVENING = ((0.50, 0.10, 0.50), (0.10, 0.80, 1.00), (1.00, 0.20, 0.80), (-0.9, -0.1,  0.0))
+# Format tiap baris: (zenith, cakrawala, pendar matahari, arah matahari).
+#
+# Tabel sebelumnya tidak punya SATU PUN warna langit yang masuk akal. Diukur
+# dari frame yang benar-benar dirender di scene farm:
+#
+#     jam     zenith            cakrawala
+#     09:00   158,198,211       154,188,191
+#     12:00   253,131,210 MERAH MUDA   201,136,188 MERAH MUDA
+#     15:00   253,131,210 MERAH MUDA   201,136,188 MERAH MUDA
+#     22:00    26,210,253 sian          48,187,198 sian
+#
+# Dua hal yang tidak bisa dibela sebagai gaya: sepanjang siang langitnya merah
+# muda menyala, dan pukul 22:00 langitnya LEBIH TERANG daripada pukul 09:00.
+# Di tabel lamanya magenta (1,00 0,20 0,80) dipakai di EMPAT slot berbeda —
+# sebagai pendar malam, cakrawala fajar, pendar pagi, dan pendar petang
+# sekaligus. Itu bukan palet, itu warna tempelan yang tidak pernah diganti.
+#
+# Tabel ini gaya, bukan fotoreal: birunya lebih pekat dan jingganya lebih
+# hangat daripada langit sungguhan, mengikuti bahasa game kehidupan Jepang yang
+# sudah dipakai di seluruh rupa karakter. Tapi tiga hal fisis dijaga —
+# zenith selalu lebih GELAP daripada cakrawala di siang hari (itu yang membuat
+# langit terbaca sebagai kubah, bukan sebagai dinding), malam benar-benar
+# gelap, dan pendar matahari hangat, tidak pernah magenta.
+_SKY_NIGHT   = ((0.05, 0.07, 0.16), (0.10, 0.12, 0.24), (0.30, 0.36, 0.58), ( 0.0,  1.0,  0.0))
+_SKY_DAWN    = ((0.30, 0.36, 0.64), (0.98, 0.66, 0.52), (1.00, 0.72, 0.45), ( 0.7,  0.2, -0.1))
+_SKY_MORNING = ((0.34, 0.58, 0.89), (0.82, 0.89, 0.96), (1.00, 0.93, 0.78), ( 0.5,  0.5, -0.4))
+_SKY_DAY     = ((0.25, 0.51, 0.90), (0.72, 0.86, 0.97), (1.00, 0.97, 0.88), ( 0.0,  1.0, -0.4))
+_SKY_DUSK    = ((0.32, 0.34, 0.62), (1.00, 0.60, 0.42), (1.00, 0.64, 0.38), (-0.7,  0.2, -0.1))
+_SKY_EVENING = ((0.09, 0.11, 0.28), (0.22, 0.20, 0.40), (0.52, 0.42, 0.58), (-0.9, -0.1,  0.0))
 
 # Modifikasi cuaca — mengurangi saturasi (FreeSO Weather pattern)
 _WEATHER_MUL = {
@@ -107,20 +130,29 @@ def _lerp3(a, b, t):
 def _sky_palette(hour: float, weather: str):
     """Interpolasi palet langit berdasarkan jam (0–24) dan cuaca."""
     # Peta jam → palet
-    if hour < 5.0:
-        pal = _lerp_pal(_SKY_NIGHT, _SKY_DAWN, hour / 5.0)
-    elif hour < 7.0:
-        pal = _lerp_pal(_SKY_DAWN, _SKY_MORNING, (hour - 5.0) / 2.0)
-    elif hour < 11.0:
-        pal = _lerp_pal(_SKY_MORNING, _SKY_DAY, (hour - 7.0) / 4.0)
-    elif hour < 17.0:
+    # Pemetaan jam. Versi lama memulai peralihan ke fajar dari jam 00:00
+    # (`hour / 5.0`), jadi pukul 03:00 langitnya sudah 60% fajar — terukur
+    # kejinggaan di tengah malam. Malam sekarang DITAHAN sampai 04:12, dan
+    # tidak ada malam kedua yang dimulai dari nol: sesudah 21:00 langit sudah
+    # malam penuh dan tinggal diam di situ.
+    if hour < 4.2:
+        pal = _SKY_NIGHT
+    elif hour < 6.0:
+        pal = _lerp_pal(_SKY_NIGHT, _SKY_DAWN, (hour - 4.2) / 1.8)
+    elif hour < 7.5:
+        pal = _lerp_pal(_SKY_DAWN, _SKY_MORNING, (hour - 6.0) / 1.5)
+    elif hour < 10.0:
+        pal = _lerp_pal(_SKY_MORNING, _SKY_DAY, (hour - 7.5) / 2.5)
+    elif hour < 16.0:
         pal = _SKY_DAY
-    elif hour < 19.0:
-        pal = _lerp_pal(_SKY_DAY, _SKY_DUSK, (hour - 17.0) / 2.0)
+    elif hour < 18.0:
+        pal = _lerp_pal(_SKY_DAY, _SKY_DUSK, (hour - 16.0) / 2.0)
+    elif hour < 19.3:
+        pal = _lerp_pal(_SKY_DUSK, _SKY_EVENING, (hour - 18.0) / 1.3)
     elif hour < 21.0:
-        pal = _lerp_pal(_SKY_DUSK, _SKY_EVENING, (hour - 19.0) / 2.0)
+        pal = _lerp_pal(_SKY_EVENING, _SKY_NIGHT, (hour - 19.3) / 1.7)
     else:
-        pal = _lerp_pal(_SKY_EVENING, _SKY_NIGHT, (hour - 21.0) / 3.0)
+        pal = _SKY_NIGHT
 
     mul = _WEATHER_MUL.get(weather, 1.0)
     zenith  = tuple(c * mul for c in pal[0])

@@ -405,9 +405,15 @@ class Game3D:
                     target_sky = color.rgb(248, 138, 88) if not is_raining else color.rgb(115, 82, 82)
                     target_cloud = color.rgb(255, 195, 148, 145) if not is_raining else color.rgb(135, 108, 102, 195)
                 else:
-                    # Malam: biru gelap lembut (bukan hitam total)
-                    target_sun   = color.rgb(35, 48, 92)
-                    target_amb   = color.rgb(28, 28, 52, 255)
+                    # Malam: biru rembulan. Angka lamanya (35,48,92 / 28,28,52)
+                    # ditulis dengan komentar "bukan hitam total" — dan memang
+                    # tidak pernah terbukti salah, karena sampai sekarang
+                    # cahaya adegan TIDAK PERNAH sampai ke satu entitas pun.
+                    # Begitu jalurnya dibuka, terukur: rumput jatuh ke
+                    # 21,29,8 pada 22:00 dan hewannya nyaris tidak terlihat.
+                    # Malam harus redup, bukan buta.
+                    target_sun   = color.rgb(62, 82, 140)
+                    target_amb   = color.rgb(54, 58, 95, 255)
                     target_sky   = color.rgb(18, 12, 42)
                     target_cloud = color.rgb(45, 45, 72, 75)
             
@@ -705,8 +711,9 @@ class Game3D:
             sky_col   = color.rgb(248, 138, 88)
             cloud_col = color.rgb(255, 195, 148, 145)
         else:
-            sun_col   = color.rgb(35, 48, 92)
-            amb_col   = color.rgb(28, 28, 52, 255)
+            # Sama dengan blok transisi di update() — dua tempat, satu angka.
+            sun_col   = color.rgb(62, 82, 140)
+            amb_col   = color.rgb(54, 58, 95, 255)
             sky_col   = color.rgb(18, 12, 42)
             cloud_col = color.rgb(45, 45, 72, 75)
 

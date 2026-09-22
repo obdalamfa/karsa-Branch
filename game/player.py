@@ -116,6 +116,24 @@ def _part(model, pos, scale, tex_name, tint=color.white, parent=None):
     return e
 
 
+
+def _menuju(sekarang, tujuan, k, dt):
+    """Bergerak menuju `tujuan` dengan laju k per detik, aman di frame rate mana pun.
+
+    `lerp(a, b, dt * k)` — pola yang sebelumnya dipakai di seluruh file ini —
+    diam-diam rusak begitu `dt * k` melewati 1,0. Pada k=15 itu terjadi di
+    bawah 15 FPS: nilainya MELEWATI tujuan, lalu berayun, lalu (di atas 2,0)
+    berbalik arah. Game ini berjalan 4-29 FPS, jadi itu wilayah kerja
+    sehari-hari, bukan kasus tepi. Bug WASD-terbalik yang dikejar berulang
+    kali ternyata versi bentuk ini pada gesekan kecepatan.
+
+    Peluruhan eksponensial menyelesaikannya secara matematis, bukan dengan
+    penjepitan: 1 - exp(-k*dt) tidak pernah melebihi 1, dan pecahan yang
+    ditempuh per satuan waktu sama di 60 FPS maupun 8 FPS.
+    """
+    return sekarang + (tujuan - sekarang) * (1.0 - math.exp(-k * dt))
+
+
 class Player3D(Entity):
     """Player sebagai Ursina Entity. Root di y=0, semua bagian sebagai child."""
 
@@ -541,15 +559,37 @@ class Player3D(Entity):
             # apa pun parent-nya. Tidak ada tanda yang perlu ditebak.
             try:
                 from direct.showbase.ShowBaseGlobal import base as _p3d
-                _q = _p3d.cam.getQuat(_p3d.render)
-                _f, _r = _q.getForward(), _q.getRight()
-                # Maju DINEGASIKAN: kamera Ursina menghadap ke arah berlawanan
-                # dengan sumbu +Z Ursina yang dipakai posisi entity, jadi
-                # getForward() menunjuk menjauhi layar-atas. Sumbu kanan tidak
-                # kena efek ini. Keduanya diverifikasi pada yaw 0/90/215 lewat
-                # proyeksi lensa di _bench/probes/probe_screen.py.
-                fwd_x, fwd_z = -_f.x, -_f.y    # Panda3D Z-up: y mendatar = z Ursina
-                right_x, right_z = _r.x, _r.y
+                from panda3d.core import Point2 as _P2, Point3 as _P3
+
+                # Basisnya diambil dari LENSA, bukan dari sumbu quaternion.
+                #
+                # Sebelumnya basis diturunkan dari getForward()/getRight() lalu
+                # tandanya disetel sampai "terasa benar". Itu gagal dua kali,
+                # dan terakhir gagal karena `_f.y` — komponen TEGAK di sistem
+                # `y-up-left` yang dipasang Ursina (window.py:24) — dipakai
+                # sebagai sumbu mendatar. Akibatnya pada pitch 34° nilainya
+                # selalu negatif berapa pun yaw: W menarik pemain ke arah
+                # kamera dan yaw kamera nyaris tidak berpengaruh.
+                #
+                # lens.extrude() menjawab pertanyaan yang sebenarnya ingin
+                # dijawab — "arah dunia mana yang MASUK ke layar, dan mana yang
+                # ke KANAN layar" — dalam istilah layar itu sendiri. Tidak ada
+                # konvensi sumbu, tangan kiri/kanan, atau tanda yang perlu
+                # ditebak, sehingga tidak ada yang bisa terbalik lagi ketika
+                # ada yang menyentuh kamera. Diverifikasi pada yaw 0/90/215 di
+                # tools/probe_arah.py.
+                _lens, _cam, _rend = _p3d.camLens, _p3d.cam, _p3d.render
+                _n, _tengah = _P3(), _P3()
+                _lens.extrude(_P2(0, 0), _n, _tengah)      # sinar tengah layar
+                _n2, _kanan = _P3(), _P3()
+                _lens.extrude(_P2(1, 0), _n2, _kanan)      # sinar tepi kanan
+                _w0 = _rend.getRelativePoint(_cam, _n)
+                _wt = _rend.getRelativePoint(_cam, _tengah)
+                _wr = _rend.getRelativePoint(_cam, _kanan)
+                # Komponen tegak dibuang: pemain berjalan di bidang tanah,
+                # tidak mengikuti kemiringan kamera.
+                fwd_x, fwd_z = _wt.x - _w0.x, _wt.z - _w0.z
+                right_x, right_z = _wr.x - _wt.x, _wr.z - _wt.z
             except Exception:
                 # Cadangan kalau base belum ada (mis. di unit test murni)
                 cy = math.radians(camera.world_rotation_y)
@@ -581,9 +621,26 @@ class Player3D(Entity):
             if run:
                 s.energy = max(0, s.energy - SPRINT_ENERGY_DRAIN * dt)
 
-        # Apply friction
-        self.velocity_x = lerp(self.velocity_x, 0, FRICTION * dt)
-        self.velocity_z = lerp(self.velocity_z, 0, FRICTION * dt)
+        # Gesekan sebagai PELURUHAN EKSPONENSIAL, bukan lerp.
+        #
+        # Versi lerp-nya adalah sebab sebenarnya dari "WASD terbalik" yang
+        # dikejar berkali-kali dengan membalik tanda di basis kamera —
+        # padahal basisnya tidak pernah salah. lerp(v, 0, FRICTION*dt)
+        # menjadi v*(1 - FRICTION*dt); dengan FRICTION=14 faktor itu melewati
+        # 1,0 begitu dt > 0,071 detik, yaitu di bawah 14 FPS. Di bawah ambang
+        # itu hasilnya BERTANDA TERBALIK dari kecepatan yang baru saja
+        # ditambahkan input — pada dt≈0,14 s (7 FPS) tepat -1,0, jadi tiap
+        # frame kecepatan dibalik utuh dan pemain melawan tombolnya sendiri.
+        # Game ini berjalan 4-29 FPS, jadi separuh waktu ia ada di wilayah itu.
+        # Terukur di tools/probe_arah.py: fwd/right sudah benar (+0,+1)/(+1,+0)
+        # sementara kecepatan hasilnya justru negatif.
+        #
+        # exp(-k*dt) tidak pernah berpindah tanda, tidak pernah melewati nol,
+        # dan memberi peluruhan yang SAMA per satuan waktu di frame rate mana
+        # pun — 60 FPS dan 8 FPS terasa sama, bukan cuma tidak rusak.
+        _gesek = math.exp(-FRICTION * dt)
+        self.velocity_x *= _gesek
+        self.velocity_z *= _gesek
 
         # Clamp max speed
         v_mag = math.sqrt(self.velocity_x**2 + self.velocity_z**2)
@@ -720,15 +777,15 @@ class Player3D(Entity):
 
             if getattr(self, '_slide_active_ms', 0) > 0:
                 # Slide pose for Voxel chibi
-                self.body.rotation_x = lerp(self.body.rotation_x, -35, dt * 15)
-                self.body.y = lerp(self.body.y, _GH + 0.8, dt * 15)
+                self.body.rotation_x = _menuju(self.body.rotation_x, -35, 15, dt)
+                self.body.y = _menuju(self.body.y, _GH + 0.8, 15, dt)
                 if hasattr(self, '_pivot_hip_l') and self._pivot_hip_l:
-                    self._pivot_hip_l.rotation_x = lerp(self._pivot_hip_l.rotation_x, 90, dt * 15)
-                    self._pivot_hip_r.rotation_x = lerp(self._pivot_hip_r.rotation_x, 90, dt * 15)
-                    self._pivot_knee_l.rotation_x = lerp(self._pivot_knee_l.rotation_x, 90, dt * 15)
-                    self._pivot_knee_r.rotation_x = lerp(self._pivot_knee_r.rotation_x, 90, dt * 15)
-                    self._pivot_shoulder_l.rotation_x = lerp(self._pivot_shoulder_l.rotation_x, -25, dt * 15)
-                    self._pivot_shoulder_r.rotation_x = lerp(self._pivot_shoulder_r.rotation_x, -25, dt * 15)
+                    self._pivot_hip_l.rotation_x = _menuju(self._pivot_hip_l.rotation_x, 90, 15, dt)
+                    self._pivot_hip_r.rotation_x = _menuju(self._pivot_hip_r.rotation_x, 90, 15, dt)
+                    self._pivot_knee_l.rotation_x = _menuju(self._pivot_knee_l.rotation_x, 90, 15, dt)
+                    self._pivot_knee_r.rotation_x = _menuju(self._pivot_knee_r.rotation_x, 90, 15, dt)
+                    self._pivot_shoulder_l.rotation_x = _menuju(self._pivot_shoulder_l.rotation_x, -25, 15, dt)
+                    self._pivot_shoulder_r.rotation_x = _menuju(self._pivot_shoulder_r.rotation_x, -25, 15, dt)
             elif getattr(self, '_is_flying', False):
                 # Flying pose for Voxel chibi
                 self._walk_t += dt * 3.0
@@ -743,18 +800,18 @@ class Player3D(Entity):
                 
                 # sitting-flying pose
                 if hasattr(self, '_pivot_hip_l') and self._pivot_hip_l:
-                    self._pivot_hip_l.rotation_x = lerp(self._pivot_hip_l.rotation_x, 65, dt * 8)
-                    self._pivot_hip_r.rotation_x = lerp(self._pivot_hip_r.rotation_x, 65, dt * 8)
-                    self._pivot_knee_l.rotation_x = lerp(self._pivot_knee_l.rotation_x, 40, dt * 8)
-                    self._pivot_knee_r.rotation_x = lerp(self._pivot_knee_r.rotation_x, 40, dt * 8)
-                    self._pivot_shoulder_l.rotation_x = lerp(self._pivot_shoulder_l.rotation_x, -40, dt * 8)
-                    self._pivot_shoulder_r.rotation_x = lerp(self._pivot_shoulder_r.rotation_x, -40, dt * 8)
+                    self._pivot_hip_l.rotation_x = _menuju(self._pivot_hip_l.rotation_x, 65, 8, dt)
+                    self._pivot_hip_r.rotation_x = _menuju(self._pivot_hip_r.rotation_x, 65, 8, dt)
+                    self._pivot_knee_l.rotation_x = _menuju(self._pivot_knee_l.rotation_x, 40, 8, dt)
+                    self._pivot_knee_r.rotation_x = _menuju(self._pivot_knee_r.rotation_x, 40, 8, dt)
+                    self._pivot_shoulder_l.rotation_x = _menuju(self._pivot_shoulder_l.rotation_x, -40, 8, dt)
+                    self._pivot_shoulder_r.rotation_x = _menuju(self._pivot_shoulder_r.rotation_x, -40, 8, dt)
                     
                     if hasattr(self, '_pivot_elbow_l') and self._pivot_elbow_l:
-                        self._pivot_elbow_l.rotation_x = lerp(self._pivot_elbow_l.rotation_x, -25, dt * 8)
-                        self._pivot_elbow_r.rotation_x = lerp(self._pivot_elbow_r.rotation_x, -25, dt * 8)
+                        self._pivot_elbow_l.rotation_x = _menuju(self._pivot_elbow_l.rotation_x, -25, 8, dt)
+                        self._pivot_elbow_r.rotation_x = _menuju(self._pivot_elbow_r.rotation_x, -25, 8, dt)
                 
-                self.body.rotation_x = lerp(self.body.rotation_x, 15, dt * 8)
+                self.body.rotation_x = _menuju(self.body.rotation_x, 15, 8, dt)
                 self.body.rotation_z = math.sin(t) * 3  # gentle sway
             elif moving_now:
                 # Scale walk animation frequency based on actual velocity
@@ -793,19 +850,19 @@ class Player3D(Entity):
                 self._walk_t += dt * 1.8
                 t = self._walk_t
                 if hasattr(self, '_pivot_hip_l') and self._pivot_hip_l:
-                    self._pivot_hip_l.rotation_x = lerp(self._pivot_hip_l.rotation_x, 0, dt * 10)
-                    self._pivot_hip_r.rotation_x = lerp(self._pivot_hip_r.rotation_x, 0, dt * 10)
-                    self._pivot_shoulder_l.rotation_x = lerp(self._pivot_shoulder_l.rotation_x, 0, dt * 10)
-                    self._pivot_shoulder_r.rotation_x = lerp(self._pivot_shoulder_r.rotation_x, 0, dt * 10)
+                    self._pivot_hip_l.rotation_x = _menuju(self._pivot_hip_l.rotation_x, 0, 10, dt)
+                    self._pivot_hip_r.rotation_x = _menuju(self._pivot_hip_r.rotation_x, 0, 10, dt)
+                    self._pivot_shoulder_l.rotation_x = _menuju(self._pivot_shoulder_l.rotation_x, 0, 10, dt)
+                    self._pivot_shoulder_r.rotation_x = _menuju(self._pivot_shoulder_r.rotation_x, 0, 10, dt)
 
                     if hasattr(self, '_pivot_elbow_l') and self._pivot_elbow_l:
-                        self._pivot_elbow_l.rotation_x = lerp(self._pivot_elbow_l.rotation_x, 0, dt * 10)
-                        self._pivot_elbow_r.rotation_x = lerp(self._pivot_elbow_r.rotation_x, 0, dt * 10)
+                        self._pivot_elbow_l.rotation_x = _menuju(self._pivot_elbow_l.rotation_x, 0, 10, dt)
+                        self._pivot_elbow_r.rotation_x = _menuju(self._pivot_elbow_r.rotation_x, 0, 10, dt)
                     if hasattr(self, '_pivot_knee_l') and self._pivot_knee_l:
-                        self._pivot_knee_l.rotation_x = lerp(self._pivot_knee_l.rotation_x, 0, dt * 10)
-                        self._pivot_knee_r.rotation_x = lerp(self._pivot_knee_r.rotation_x, 0, dt * 10)
+                        self._pivot_knee_l.rotation_x = _menuju(self._pivot_knee_l.rotation_x, 0, 10, dt)
+                        self._pivot_knee_r.rotation_x = _menuju(self._pivot_knee_r.rotation_x, 0, 10, dt)
 
-                    self.body.rotation_x = lerp(self.body.rotation_x, 0, dt * 10)
+                    self.body.rotation_x = _menuju(self.body.rotation_x, 0, 10, dt)
                     breathe = math.sin(t) * 0.015
                     self.body.y = (_GH + 1.42) + breathe
                     self._pivot_neck.y = _GH + 1.89 + breathe
@@ -858,9 +915,9 @@ class Player3D(Entity):
             if moving_now and not getattr(self, '_is_vitaboy', True):
                 pass # let walk cycle govern rotation_x
             else:
-                self._pivot_shoulder_r.rotation_x = lerp(self._pivot_shoulder_r.rotation_x, 0, dt * 10)
-                self._pivot_shoulder_l.rotation_x = lerp(self._pivot_shoulder_l.rotation_x, 0, dt * 10)
-            self.body.rotation_x = lerp(self.body.rotation_x, 0, dt * 10)
+                self._pivot_shoulder_r.rotation_x = _menuju(self._pivot_shoulder_r.rotation_x, 0, 10, dt)
+                self._pivot_shoulder_l.rotation_x = _menuju(self._pivot_shoulder_l.rotation_x, 0, 10, dt)
+            self.body.rotation_x = _menuju(self.body.rotation_x, 0, 10, dt)
             if getattr(self, '_is_vitaboy', False) and hasattr(self, '_va') and self._va:
                 self._va.root_entity.rotation_x = 0
 

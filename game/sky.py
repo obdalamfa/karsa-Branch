@@ -180,6 +180,16 @@ class SkyDome:
             self._apply(hour, weather)
 
     def _apply(self, hour: float, weather: str):
+        # Catatan yang belum diselesaikan: palet ini dan `window.color` tidak
+        # sepakat soal warna langit. Jam 10 palet memberi zenith (0,93 0,83
+        # 1,00) dan horizon (0,80 0,62 0,80) — lavender/merah muda pucat yang
+        # nyaris putih — sementara window.color, yang dipakai sebagai kabut DAN
+        # sebagai langit di jalur tanpa shader, bernilai (0,50 0,80 0,97), biru
+        # langit biasa.
+        #
+        # Akibatnya warna langit bergantung pada apakah jalur GLSL tersedia di
+        # mesin pemain: ada shader -> nyaris putih, tidak ada -> biru. Itu bukan
+        # selera, itu dua kebenaran untuk satu hal yang sama.
         zenith, horizon, sun_glow, sun_dir = _sky_palette(hour, weather)
         if self._sphere is None:
             # Fallback: set window background ke horizon color

@@ -2,7 +2,7 @@
 judul: Regresi jalan sungguhan, CI dipasang
 tipe: sesi
 tanggal: 2026-09-22
-commit:
+commit: 1424196
 tags: [sesi, regresi, ci, bug, boot]
 ---
 

@@ -128,4 +128,33 @@ lembah_karsa_3d/
 
 ---
 
+## 📓 Catatan Progres (Obsidian)
+
+Seluruh progres proyek dicatat di vault Obsidian `obsidian/`.
+
+```
+Obsidian → Open folder as vault → pilih folder obsidian/
+```
+
+| Folder | Isi |
+|--------|-----|
+| `00-Peta/` | status hari ini, peta progres, peta kode, utang teknis |
+| `10-Tahapan/` | sembilan tahap kerja dari `docs/TAHAPAN.md` |
+| `20-Sesi/` | jurnal kronologis, satu nota per commit |
+| `30-Sistem/` | sistem permainan: motif, ternak, ekonomi, avatar, regresi |
+| `40-Bug/` | bug yang pernah nyata + pemeriksaan yang menjaganya |
+| `50-Templat/` | templat nota baru |
+
+Mulai dari `obsidian/Beranda.md`. Setelah commit baru, tulis kerangka notanya:
+
+```bash
+python tools/catat_obsidian.py --status   # commit mana yang belum tercatat
+python tools/catat_obsidian.py            # buat nota untuk HEAD
+```
+
+Aturannya ada di `obsidian/00-Peta/Aturan Pencatatan.md` — intinya: klaim tanpa
+bukti tidak ditulis sebagai fakta.
+
+---
+
 Selamat bertani di Lembah Karsa! 🌾✨

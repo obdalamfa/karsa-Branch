@@ -1,0 +1,30 @@
+# ── Python bytecode ──────────────────────────────────────────────────────────
+# 92 file .pyc sempat ikut ter-commit dan terus muncul sebagai "modified"
+# setiap kali game dijalankan, sehingga diff yang sungguhan tenggelam.
+__pycache__/
+*.py[cod]
+
+# ── Artefak Vitaboy yang di-generate ────────────────────────────────────────
+# `registry.py` menulis ulang file ini dari hasil scan aset TSO mesin lokal
+# (lihat AssetRegistry._cache_path). Isinya berbeda tiap mesin dan tidak punya
+# makna di mesin lain — komentar di registry.py sendiri sudah menyatakan
+# "di-gitignore tidak masalah, generated".
+game/vitaboy/.vitaboy_index.pkl
+
+# ── Keluaran harness gauntlet ───────────────────────────────────────────────
+# `gauntlet/check.py` menulis ulang save uji ini tiap kali dijalankan.
+# Screenshot dan results.json sengaja TETAP di-track: `progress.html`
+# menampilkan keduanya sebagai bukti putaran, jadi keduanya artefak, bukan
+# sampah.
+gauntlet/test-save.json
+# Sisa berkas 0 byte dari operasi yang terputus. Spesifik, bukan `*.pz` --
+# Panda3D memakai .pz untuk arsip model terkompresi yang sah.
+gauntlet/cave-overview.png.pz
+
+# ── Worktree Claude Code ────────────────────────────────────────────────────
+.claude/worktrees/
+
+# ── Sampah sesi ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.log

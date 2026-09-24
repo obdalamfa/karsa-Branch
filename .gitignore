@@ -13,10 +13,22 @@ game/vitaboy/.vitaboy_index.pkl
 
 # ── Keluaran harness gauntlet ───────────────────────────────────────────────
 # `gauntlet/check.py` menulis ulang save uji ini tiap kali dijalankan.
-# Screenshot dan results.json sengaja TETAP di-track: `progress.html`
-# menampilkan keduanya sebagai bukti putaran, jadi keduanya artefak, bukan
-# sampah.
 gauntlet/test-save.json
+
+# Lima screenshot kamera ditulis ulang tiap run, dan rasterisasi GPU tidak
+# deterministik pada tingkat piksel: diukur 1 sampai 87 piksel dari 1.152.000
+# berbeda antar-run (0,000%-0,008%), selisih kanal 72-108 pada piksel tepi
+# terisolasi. Gambarnya sama secara visual, jadi menyimpannya hanya
+# mengembalikan "modified" yang menenggelamkan perubahan sungguhan -- persis
+# masalah yang baru saja disingkirkan untuk berkas .pyc.
+# `baseline.png` TIDAK di sini: itu rujukan tetap "Sebelum" dan tidak pernah
+# ditulis ulang skrip.
+gauntlet/cave-gameplay.png
+gauntlet/cave-overview.png
+gauntlet/guardians-front.png
+gauntlet/mountain-entrance.png
+gauntlet/mountain-overview.png
+
 # Sisa berkas 0 byte dari operasi yang terputus. Spesifik, bukan `*.pz` --
 # Panda3D memakai .pz untuk arsip model terkompresi yang sah.
 gauntlet/cave-overview.png.pz

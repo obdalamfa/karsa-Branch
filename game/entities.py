@@ -125,6 +125,7 @@ class EntitiesManager:
         self.brains = None
 
         self._init_data()
+        self._npc_sched_hour = self.state.get_hour()
         self._spawn_wild_state()
 
         try:
@@ -214,6 +215,8 @@ class EntitiesManager:
 
     def load_scene(self, scene_name: str):
         self._clear_all()
+        self._update_npc_schedules()
+        self._npc_sched_hour = self.state.get_hour()
         self.scene_name = scene_name
         if self.brains is not None:
             self.brains.rebuild_grid(scene_name, self.state.dungeon_tiles)
@@ -224,12 +227,28 @@ class EntitiesManager:
             if pos.get('scene') != self.scene_name: continue
             if pos.get('x', -1) < 0: continue
             
+            # Restore mountain saves whose old actor location became a cliff.
+            if self.scene_name == 'mountain' and not _can_walk(pos['x'], pos['y'], 'mountain'):
+                sc = SCENES['mountain']
+                candidates = [(x, y) for y, row in enumerate(sc.tiles)
+                              for x, tid in enumerate(row) if tid in WALKABLE]
+                if candidates:
+                    preferred = (pos.get('sched_x', pos['x']), pos.get('sched_y', pos['y']))
+                    nx, ny = min(candidates, key=lambda p: (p[0]-preferred[0])**2 + (p[1]-preferred[1])**2)
+                    pos['x'] = pos['target_x'] = nx
+                    pos['y'] = pos['target_y'] = ny
+                    pos.pop('path', None)
+
             # Determine class
             if actor_id in ANIMAL_NPCS:
                 actor = FarmAnimal(s, actor_id)
             else:
                 actor = NPC(s, actor_id)
                 
+            if actor_id in ('naga_bijak', 'banaspati'):
+                pos['x'] = pos['target_x'] = pos.get('sched_x', pos['x'])
+                pos['y'] = pos['target_y'] = pos.get('sched_y', pos['y'])
+                pos.pop('path', None)
             actor.logical_x = pos['x']
             actor.logical_y = pos['y']
             actor.target_x = pos.get('target_x', pos['x'])
@@ -265,7 +284,13 @@ class EntitiesManager:
                 # (3,1 m) label ayam melayang lepas dari badannya sehingga
                 # pemain tidak bisa memasangkan nama dengan bentuk.
                 lbl_y, lbl_scale = h + 0.45, 2.6
-            apr_list = None if is_animal else resolve_outfit(actor_id, default=False)
+            is_guardian = actor_id in ('naga_bijak', 'banaspati')
+            if is_guardian:
+                from .guardian_models import build_guardian
+                lbl_y = build_guardian(actor, actor_id)
+                lbl_scale = 5.0
+            actor._label_y = lbl_y
+            apr_list = None if is_animal or is_guardian else resolve_outfit(actor_id, default=False)
             # Vitaboy memuat aset TSO asli dari path absolut mesin tertentu
             # (vitaboy/tso_paths.py). Tanpa try/except, satu mesin tanpa TSO
             # membuat load_scene() crash total dan game tidak bisa dibuka sama
@@ -289,7 +314,7 @@ class EntitiesManager:
                         f"Vitaboy gagal untuk '{actor_id}' ({e}); pakai model biasa.")
                     actor._va = None
                     apr_list = None
-            if not apr_list and not is_animal:
+            if not apr_list and not is_animal and not is_guardian:
                 model_name = get_npc_model_name(actor_id)
                 panda_model = load_model_file(model_name)
                 if panda_model:
@@ -313,13 +338,36 @@ class EntitiesManager:
                              
             self.actors[actor_id] = actor
 
+        # Old saves can contain plants on terrain that is now a cliff.
+        if self.scene_name == 'mountain':
+            from .config import G, D
+            sc = SCENES['mountain']
+            occupied = set()
+            candidates = [(x, y) for y, row in enumerate(sc.tiles)
+                          for x, tid in enumerate(row) if tid in (G, D)]
+            for wild in s.wild_entities:
+                if wild['scene'] != 'mountain':
+                    continue
+                cell = (int(round(wild['x'])), int(round(wild['y'])))
+                if cell not in candidates or cell in occupied:
+                    available = [cell for cell in candidates if cell not in occupied]
+                    if not available:
+                        continue
+                    cell = min(available, key=lambda p: (p[0]-wild['x'])**2 + (p[1]-wild['y'])**2)
+                    wild['x'], wild['y'] = cell
+                occupied.add(cell)
+
         # Spawn Wild
         for i, w in enumerate(s.wild_entities):
             if w['scene'] != self.scene_name: continue
             if w.get('night_only') and not s.is_night(): continue
             px, py = w['x'] * TS, w['y'] * TS
             # Simple fallback for wild entities, no complex procedural shapes
-            e = Entity(model='quad', position=(px, GH + 0.25, py), scale=0.5, billboard=True)
+            if self.scene_name == 'mountain' and w['kind'] != 'firefly':
+                from .wild_models import build_wild
+                e = build_wild(w['kind'], (px, GH, py))
+            else:
+                e = Entity(model='quad', position=(px, GH + 0.25, py), scale=0.5, billboard=True)
             self.wild_ents[i] = e
             
         # Spawn Mobs
@@ -385,9 +433,23 @@ class EntitiesManager:
             self.brains.tick(dt)
 
         self._npc_sched_t += dt
-        if self._npc_sched_t >= 30:
+        if self._npc_sched_t >= 30 or s.get_hour() != self._npc_sched_hour:
             self._npc_sched_t = 0
+            self._npc_sched_hour = s.get_hour()
             self._update_npc_schedules()
+            if self.scene_name == 'naga_cave':
+                guardian_ids = {'naga_bijak', 'banaspati'}
+                scheduled = {key for key in guardian_ids
+                             if s.npc_positions.get(key, {}).get('scene') == self.scene_name}
+                present = guardian_ids.intersection(self.actors)
+                if scheduled != present:
+                    self.load_scene(self.scene_name)
+                for key in scheduled:
+                    actor = self.actors[key]
+                    pos = s.npc_positions[key]
+                    actor.activity = pos['activity']
+                    actor.sched_x = pos['sched_x']
+                    actor.sched_y = pos['sched_y']
 
         # Build local walk function for actors
         def can_walk_fn(nx, ny):
@@ -438,8 +500,8 @@ class EntitiesManager:
                     actor.y = GH + 0.15
                 else:
                     actor._lbl.text = actor._lbl.text.split(' (Tidur)')[0]
-                    actor._lbl.position = (0, GH + 3.1, 0)
-                actor._lbl.position = (0, GH + 3.1, 0)
+                    actor._lbl.position = (0, actor._label_y, 0)
+                actor._lbl.position = (0, actor._label_y, 0)
                 
                 is_moving_now = abs(actor.logical_x - actor.target_x) > 0.02 or abs(actor.logical_y - actor.target_y) > 0.02
                 if is_moving_now:
@@ -485,6 +547,18 @@ class EntitiesManager:
 
             # Let the actor smoothly move visually
             actor.sync_visuals(dt, TS, GH)
+            # Penunggu gua: SATU panggilan per frame. Blok ini sempat
+            # tergandakan, sehingga `_guardian_time` maju 2x dt dan napas naga
+            # serta ayunan api banaspati berjalan dua kali kecepatan rancangan.
+            if actor_id in ('naga_bijak', 'banaspati'):
+                from .guardian_models import update_guardian
+                update_guardian(actor, dt)
+                # Hanya penunggu yang melayang yang di-bob. Naga_bijak harus
+                # tetap menempel lantai, dan itu dinyatakan lewat penanda
+                # `_guardian_floats` — bukan lewat atribut yang kebetulan tidak
+                # ada, yang membuat perilaku bergantung pada kecelakaan.
+                if getattr(actor, '_guardian_floats', False):
+                    actor._guardian_visual.y = GH + math.sin(actor._walk_t) * 0.12
 
         # Wild update tiap 0.8s
         self._wild_update_t += dt
@@ -533,12 +607,12 @@ class EntitiesManager:
 
     def get_nearest_npc(self, tx: int, ty: int, max_dist_tiles: float = 3.0):
         s = self.state
-        best_d, best_id = max_dist_tiles + 1, None
+        best_d, best_id = max_dist_tiles, None
         for npc_id, pos in s.npc_positions.items():
             if pos.get('scene') != s.scene_name: continue
             if pos.get('x', -1) < 0: continue
             d = math.hypot(pos['x'] - tx, pos['y'] - ty)
-            if d < best_d:
+            if d <= best_d:
                 best_d, best_id = d, npc_id
         if best_id is None: return None
         return {'id': best_id}

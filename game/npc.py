@@ -24,6 +24,14 @@ class NPC(BaseActor):
         self.ai_state = NPCState.IDLE
 
     def update_ai(self, dt: float, brains, can_walk_fn):
+        # Penunggu tetap di tempat ritual, termasuk saat memuat save lama.
+        if self.actor_id in ('naga_bijak', 'banaspati'):
+            self.path.clear()
+            self.logical_x = self.target_x = float(self.sched_x)
+            self.logical_y = self.target_y = float(self.sched_y)
+            self.ai_state = (NPCState.SLEEPING if self.activity == 'sleeping'
+                             else NPCState.IDLE)
+            return
         if self.activity == 'sleeping':
             self.ai_state = NPCState.SLEEPING
             return

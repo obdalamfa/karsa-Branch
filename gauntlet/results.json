@@ -1,0 +1,15 @@
+{
+  "passed": [
+    "mountain portal and arrival connectivity",
+    "naga_cave portal and arrival connectivity",
+    "cave crystals have real geometry, outward normals, and no clipped tint",
+    "exact hour visibility and sleep/wake without re-entering cave",
+    "actual save/load and obsolete guardian position restoration",
+    "guardian dialogue, interaction radius and obtainable iron gift progression",
+    "real portal cooldown, dungeon generation and return transition",
+    "guardian visual update runs exactly once per frame",
+    "five actual-engine screenshots with gameplay camera convention"
+  ],
+  "memory_vfs_fallback": false,
+  "interactive_playthrough": false
+}

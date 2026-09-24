@@ -152,6 +152,14 @@ def cek_motif_waras(g):
     mood = mv.mood
     if mood != mood or abs(mood) > 1e6:
         return _fail(f'mood tidak terhingga: {mood}')
+    # `lapar` dikembalikan ke titik netral sebelum diuji. Pemeriksaan ini
+    # memakai mesin motif MILIK STATE YANG SAMA untuk tiap scene, dan tiap
+    # panggilan memajukan 240 menit. Setelah belasan scene, `lapar` menempel di
+    # dasar -100 -- dan di sana laju peluruhannya, HUNGER_RATIO * (100 + lapar),
+    # menjadi NOL, sehingga `mv.get('lapar') >= sebelum` benar dan scene
+    # terakhir gagal tanpa sebab yang nyata. Tanpa penyetelan ini, hasilnya
+    # ditentukan urutan scene, bukan kesehatan motif.
+    mv.add('lapar', -mv.get('lapar'))
     sebelum = mv.get('lapar')
     mv.tick(240.0)
     if mv.get('lapar') >= sebelum:
@@ -225,6 +233,17 @@ def main():
             for _ in range(MEASURE):
                 base.taskMgr.step()
             ms = (time.time() - tm) / MEASURE * 1000.0
+
+            # `taskMgr.step()` menjalankan logika permainan, tapi TIDAK menjamin
+            # buffer belakang selesai digambar sebelum `getScreenshot()`
+            # membacanya. Itulah sebabnya enam scene dilaporkan `frame_kosong`
+            # di sini -- shop, house, lake, cemetery, beach, clinic -- padahal
+            # `tools/capture.py`, yang memang memanggil renderFrame(),
+            # merender scene yang sama dengan puluhan ribu warna unik.
+            # Tanpa langkah ini, alatnya sendiri yang menjadi sumber kegagalan
+            # palsu, dan seluruh kesimpulan yang dibangun di atasnya tidak aman.
+            for _ in range(8):
+                base.graphicsEngine.renderFrame()
 
             png = OUT / f'{nama}.png'
             img = base.win.getScreenshot()

@@ -13,7 +13,7 @@ working tree tanpa jaring apa pun, dan satu agen sudah pernah menjalankan
 
 ---
 
-## Tahap 1 — Jaring pengaman 🔨 SEDANG DIKERJAKAN
+## Tahap 1 — Jaring pengaman ✅ SELESAI
 
 **`tools/regress.py`** — boot tiap scene, buktikan ia dirender, dan periksa
 hal-hal yang memang PERNAH rusak di proyek ini.
@@ -36,6 +36,28 @@ Yang diperiksa, tiap satu terikat kegagalan nyata:
 
 **Selesai kalau:** perintahnya jalan, mengeluarkan tabel LULUS/GAGAL, dan
 melaporkan kondisi SEKARANG apa adanya — termasuk yang gagal.
+
+**Catatan penyelesaian.** Syarat itu baru benar-benar terpenuhi setelah dua
+cacat di alatnya sendiri diperbaiki, dan keduanya menghasilkan kegagalan PALSU
+yang sempat dipercaya:
+
+1. `frame_kosong` menuduh enam scene (shop, house, lake, cemetery, beach,
+   clinic) tidak terender. Ternyata `taskMgr.step()` tidak menjamin buffer
+   selesai digambar sebelum `getScreenshot()` membacanya;
+   `tools/capture.py` merender scene yang sama dengan puluhan ribu warna.
+   Efek sampingnya lebih buruk lagi: `ms/frame` ikut membengkak ke 122–149 ms
+   untuk scene yang sebenarnya 22 ms. Setelah `renderFrame()` eksplisit,
+   **14/14 lulus** dan rentangnya **21,8–58,8 ms**, yaitu **17–46 FPS** —
+   bukan 4–29 FPS seperti yang tercatat di tabel ini.
+
+2. `motif_waras` menuduh `swarga` gagal secara acak. Pemeriksaan itu memakai
+   mesin motif milik state yang sama untuk tiap scene dan memajukan 240 menit
+   tiap kali; setelah belasan scene, `lapar` menempel di dasar -100 dan laju
+   peluruhannya menjadi nol, sehingga syarat "harus turun" mustahil dipenuhi.
+   Kegagalannya bergantung urutan scene, bukan kesehatan motif.
+
+Alat yang melaporkan kegagalan palsu lebih berbahaya daripada tidak ada alat:
+ia mengajarkan untuk mengabaikan alarmnya.
 
 ---
 

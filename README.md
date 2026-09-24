@@ -11,14 +11,15 @@ Terinspirasi gameplay **Rune Factory 4** — kamera fixed isometric, combat acti
 # 1. Install Ursina Engine
 pip install ursina
 
-# 2. Masuk ke folder
-cd lembah_karsa_3d
-
-# 3. Jalankan
+# 2. Jalankan Game
 python main.py
+
+# 3. Jalankan Level & Scene Editor 3D
+python karsa_level_editor.py
 ```
 
 > **Catatan:** Ursina membutuhkan Python 3.8+ dan Panda3D (otomatis terinstall bersama ursina).
+> Lihat [EDITOR.md](EDITOR.md) untuk panduan lengkap pembuat level 3D.
 
 ---
 

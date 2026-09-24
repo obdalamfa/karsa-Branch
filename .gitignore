@@ -24,6 +24,12 @@ gauntlet/cave-overview.png.pz
 # ── Worktree Claude Code ────────────────────────────────────────────────────
 .claude/worktrees/
 
+# ── Keluaran pratinjau ──────────────────────────────────────────────────────
+# `preview_cave.py` menulis ini di root repo. Isinya byte-identik dengan
+# `gauntlet/baseline.png` yang sudah di-track (SHA256 sama persis), jadi
+# menyimpan keduanya hanya membuang sekitar 450 KB.
+cave-preview.png
+
 # ── Sampah sesi ─────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

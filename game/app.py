@@ -138,7 +138,11 @@ class Game3D:
             _build_ambients()
 
         logging.info("Memuat data Game State...")
-        self.state = GameState.load() or GameState()
+        # `load_with_status` membedakan "belum pernah main" dari "save rusak";
+        # dulu keduanya sama-sama None. Berkas rusak sudah dipindahkan ke
+        # samping oleh pemuat, jadi langkah berikutnya tidak bisa menimpanya.
+        _loaded, self._load_status = GameState.load_with_status()
+        self.state = _loaded or GameState()
 
         logging.info("Membangun sistem UI, Dunia, dan Entitas...")
         self._needs_warned: set = set()
@@ -578,9 +582,13 @@ class Game3D:
                 self._open_chargen()
             elif key == 'escape':
                 # Esc di HUD: save + tampilkan pesan, jangan langsung quit
-                # (klik X window untuk benar-benar tutup)
-                self.state.save()
-                self.panels.flash_msg("Game tersimpan. Tekan X di window untuk keluar.", 3.5)
+                # (klik X window untuk benar-benar tutup).
+                # Nilai kembalian diperiksa -- sebelumnya pesan "tersimpan"
+                # selalu muncul walau penulisannya gagal.
+                if self.state.save():
+                    self.panels.flash_msg("Game tersimpan. Tekan X di window untuk keluar.", 3.5)
+                else:
+                    self.panels.flash_msg("GAGAL menyimpan! Progresmu belum aman.", 5.0)
             elif key == 'f5':
                 if self.state.save():
                     self.panels.flash_msg("[F5] Game Tersimpan!")
@@ -627,8 +635,18 @@ class Game3D:
         self.player.apply_appearance(state)
         if hasattr(self, 'player') and self.player:
             self.player._set_initial_rotation()
-        self.state.save()
         self.panels.mode = 'hud'
+        # Hasil penyimpanan diperiksa, dan pemulihan save rusak dilaporkan.
+        # Dulu `save()` di sini dipanggil tanpa syarat lalu hasilnya dibuang:
+        # kalau pemuatan tadi gagal, INILAH momen yang menimpa satu-satunya
+        # salinan pemain -- tanpa dia pernah menekan simpan.
+        tersimpan = self.state.save()
+        if not tersimpan:
+            self.panels.flash_msg("GAGAL menyimpan! Progresmu belum aman.", 9.0)
+        elif getattr(self, '_load_status', None) == 'corrupt':
+            self.panels.flash_msg(
+                "Save lama tidak bisa dibaca dan sudah dipindahkan ke "
+                "*.corrupt-* -- tidak ditimpa.", 9.0)
         # Tutorial intro untuk first-time player
         from ursina import invoke
         self.panels.flash_msg(f'Selamat datang, {state.char_name}! Petualanganmu dimulai.', 3.5)

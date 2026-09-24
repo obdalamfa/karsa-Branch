@@ -129,6 +129,62 @@ with patch.object(state_module,'SAVE_FILE',str(save_path)):
 record('actual save/load and obsolete guardian position restoration')
 s=loaded
 
+# Integritas save. Pemeriksaan di atas hanya membuktikan bolak-balik yang
+# BERSIH, sehingga tidak satu pun dari tiga cacat nyata di bawah ini tertangkap:
+# penulisan yang memotong berkas hidup lebih dulu, save rusak yang berubah jadi
+# game baru lalu menimpa satu-satunya salinan, dan field dinamis yang dibuang
+# diam-diam saat dimuat.
+import logging
+logging.disable(logging.CRITICAL)
+with patch.object(state_module,'SAVE_FILE',str(save_path)):
+    # 1. Atomik: kegagalan saat MERAKIT save tidak boleh menyentuh berkas lama.
+    #    Dulu `open(SAVE_FILE,'w')` memotongnya sebelum json.dump dijalankan.
+    save_path.write_text('{"char_name":"PEMAIN LAMA","gold":4242}',encoding='utf-8')
+    sebelum=save_path.read_bytes()
+    with patch.object(GameState,'sync_motives',side_effect=RuntimeError('sengaja digagalkan')):
+        assert GameState().save() is False, 'save yang gagal harus mengembalikan False'
+    assert save_path.read_bytes()==sebelum, 'save yang gagal menyentuh berkas lama'
+
+    # 2. Save rusak dipindahkan, bukan ditinggalkan untuk ditimpa save baru.
+    save_path.write_text('{ ini bukan json',encoding='utf-8')
+    hasil,status=GameState.load_with_status()
+    assert hasil is None and status=='corrupt', (hasil,status)
+    assert not save_path.exists(), 'berkas rusak seharusnya sudah dipindahkan'
+    karantina=sorted(save_path.parent.glob(save_path.name+'.corrupt-*'))
+    assert karantina, 'berkas rusak tidak ditemukan setelah dikarantina'
+    assert karantina[0].read_text(encoding='utf-8')=='{ ini bukan json', \
+        'isi berkas rusak berubah saat dikarantina'
+    for k in karantina: k.unlink()
+
+    # 3. 'absent' harus bisa dibedakan dari 'corrupt'. Dulu keduanya sama-sama
+    #    None, dan itulah yang membuat kehilangan data tidak terlihat.
+    assert GameState.load_with_status()==(None,'absent')
+
+    # 4. Field dinamis yang ditulis kode lain harus bertahan bolak-balik.
+    #    `animal_care` ditulis husbandry.care_of() tapi bukan field dataclass,
+    #    jadi dulu ditulis ke JSON lalu dibuang lagi saat dimuat.
+    s.animal_care={'sapi_1':{'kenyang':0,'sakit':True}}
+    assert s.save()
+    ulang,status=GameState.load_with_status()
+    assert status=='ok'
+    assert ulang.animal_care==s.animal_care, ulang.animal_care
+
+    # 5. Hanya field dataclass yang diterima. Dulu `hasattr` juga menerima nama
+    #    method, sehingga kunci bernama `save` membayangi method save().
+    save_path.write_text(json.dumps({'char_name':'X','save':'BUKAN FIELD','mv':'BUKAN FIELD'}),encoding='utf-8')
+    ulang,status=GameState.load_with_status()
+    assert status=='ok' and callable(getattr(ulang,'save')), 'method save() terbayangi'
+
+    # 6. Nilai liar dipulihkan, bukan meledak di frame pertama. panels.py
+    #    mengindeks SEASON_NAMES[season_index] tiap frame tanpa penjaga.
+    save_path.write_text(json.dumps({'season_index':99,'soil':[],'mobs':{}}),encoding='utf-8')
+    ulang,status=GameState.load_with_status()
+    assert ulang.season_index==0 and ulang.soil=={} and ulang.mobs==[], \
+        (ulang.season_index,ulang.soil,ulang.mobs)
+    save_path.unlink(missing_ok=True)
+logging.disable(logging.NOTSET)
+record('save is atomic, corrupt files quarantined, dynamic fields survive')
+
 panels=Mock()
 pl=SimpleNamespace(state=s)
 controller=InteractionController(pl,w)

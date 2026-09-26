@@ -115,10 +115,9 @@ class TimeController:
             pass
             
         # Optional: check quest progress
-        if hasattr(player, 'quest_manager') and player.quest_manager:
-            player.quest_manager.check_quest_progress()
-        elif hasattr(player, '_check_quest_progress'):
-            player._check_quest_progress()
+        qc = getattr(player, 'quest_controller', None)
+        if qc is not None:
+            qc.check_quest_progress()
 
     def try_sleep(self, panels, player):
         from ursina import invoke

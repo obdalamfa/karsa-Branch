@@ -234,11 +234,10 @@ class InteractionController:
                 self.player.state.energy = min(100, self.player.state.energy + 20)
                 sound_play('menu_select', 0.8)
             elif tid == CL:
-                h, m = self.player.state.time_hm()
-                panels.flash_msg(f"Jam menunjukkan pukul {h:02d}:{m:02d}.", 1.5)
+                panels.flash_msg(f"Jam menunjukkan pukul {self.player.state.get_time_str()}.", 1.5)
                 sound_play('menu_select', 0.8)
             elif tid == CAL:
-                panels.flash_msg(f"Hari ini adalah Hari ke-{self.player.state.day} Musim {self.player.state.season_name()}.", 1.5)
+                panels.flash_msg(f"Hari ini adalah Hari ke-{self.player.state.day} Musim {self.player.state.get_season_name()}.", 1.5)
                 sound_play('menu_select', 0.8)
             elif tid == TV:
                 panels.flash_msg("Kamu menonton acara televisi yang menarik. (+10 Senang)", 1.5)
@@ -411,10 +410,9 @@ class InteractionController:
         return True
 
     def check_quests(self, panels=None):
-        if hasattr(self.player, 'quest_manager') and self.player.quest_manager:
-            self.player.quest_manager.check_quest_progress(panels)
-        elif hasattr(self.player, '_check_quest_progress'):
-            self.player._check_quest_progress(panels)
+        qc = getattr(self.player, 'quest_controller', None)
+        if qc is not None:
+            qc.check_quest_progress(panels)
     def give_gift(self, entities_mgr, panels, npc_id=None):
         s = self.player.state
         tx, ty = self.player.get_tile_pos()

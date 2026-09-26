@@ -595,10 +595,18 @@ class Game3D:
             elif key == 'f9':
                 loaded = GameState.load()
                 if loaded:
-                    self.state = loaded
+                    # Muat data KE state yang sudah dipegang semua komponen,
+                    # bukan mengganti objeknya. Sebelumnya `self.state = loaded`
+                    # hanya me-rebind app + player, sementara panels/world/
+                    # entities/time_controller/quest_controller/queue tetap
+                    # menunjuk GameState lama -> HUD beku & split-state.
+                    self.state.__dict__.clear()
+                    self.state.__dict__.update(loaded.__dict__)
+                    self.state.__dict__.pop('_mv', None)
+                    self.player.queue.motives = self.state.mv
+                    self.player.queue.clear()
                     self.world.load_scene(self.state.scene_name)
                     self.entities.load_scene(self.state.scene_name)
-                    self.player.state = self.state
                     # Safety walkable snap check
                     if not self.world.is_walkable(int(round(self.state.player_x)), int(round(self.state.player_y))):
                         found = None

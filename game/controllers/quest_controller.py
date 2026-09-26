@@ -1,10 +1,9 @@
 from ..data import QUEST_STAGES
 from ..sound import play as sound_play
-from ursina import invoke
 
 class QuestController:
     """Manages quest progression, checks, and lore."""
-    
+
     def __init__(self, state):
         self.state = state
 
@@ -13,13 +12,19 @@ class QuestController:
         if s.quest_stage == 0 and s.mail_read:
             s.quest_stage = 1
 
+        # NOTE: ambang `earned >= 500` tidak sama dengan teks tahapan
+        # "Kumpulkan 150G" di data.QUEST_STAGES — threshold quest masih perlu
+        # satu pass desain terpisah. Di sini hanya jalur crash yang diperbaiki.
         if s.quest_stage == 1:
             if s.stats.get('lobak_harvested', 0) >= 3 and s.stats.get('earned', 0) >= 500:
                 s.quest_stage = 2
                 self._notify_quest_up(panels)
 
         if s.quest_stage == 2:
-            if s.npc_relations.get('arya', 0) >= 15:
+            # npc_hearts berskala 0..10 (di-cap min(10, ...) di semua penambah),
+            # jadi ambang lama 15 tidak pernah tercapai. 3 hati = kira-kira 3x
+            # hadiah atau belasan dialog.
+            if s.npc_hearts.get('arya', 0) >= 3:
                 s.quest_stage = 3
                 self._notify_quest_up(panels)
 
@@ -31,7 +36,9 @@ class QuestController:
     def _notify_quest_up(self, panels):
         s = self.state
         sound_play('magic', 0.8)
-        msg = f"Quest Update: Tahap {s.quest_stage} - {QUEST_STAGES.get(s.quest_stage, 'Rahasia baru terungkap')}"
+        stage = next((q for q in QUEST_STAGES if q.get('s') == s.quest_stage), None)
+        title = stage['t'] if stage else 'Rahasia baru terungkap'
+        msg = f"Quest Update: Tahap {s.quest_stage} - {title}"
         if panels:
             panels.flash_msg(msg, 3.5)
         else:
@@ -39,22 +46,14 @@ class QuestController:
 
     def check_dungeon_lore(self, dungeon_level, player, panels=None):
         s = self.state
-        lore_msg = None
-        if dungeon_level == 3 and not s.lore_found.get('dungeon_3'):
-            s.lore_found['dungeon_3'] = True
-            lore_msg = "Sebuah prasasti kuno: 'Kutukan Lembah Karsa berawal dari keserakahan manusia...'"
-        elif dungeon_level == 7 and not s.lore_found.get('dungeon_7'):
-            s.lore_found['dungeon_7'] = True
-            lore_msg = "Sisa-sisa kemah penambang. Ada buku harian: 'Kami menggali terlalu dalam. Sesuatu terbangun...'"
-        elif dungeon_level == 12 and not s.lore_found.get('dungeon_12'):
-            s.lore_found['dungeon_12'] = True
-            lore_msg = "Dinding bercahaya: 'Hanya hati yang murni yang bisa menenangkan sang Naga Bumi...'"
-        
-        if lore_msg:
-            if panels:
-                invoke(panels.flash_msg, lore_msg, 5.0, delay=1.0)
-            else:
-                player._pending_lore_msg = lore_msg
+        level_to_lore = {
+            3: 'fragmen_prasasti_1',
+            7: 'fragmen_prasasti_2',
+            12: 'fragmen_prasasti_3',
+        }
+        lore_id = level_to_lore.get(dungeon_level)
+        if lore_id and lore_id not in s.lore_collected:
+            self.add_lore(lore_id, player, panels)
 
     def add_lore(self, lore_id, player, panels=None):
         """Add a lore item to the player's collection if not already found."""
@@ -69,7 +68,6 @@ class QuestController:
             if panels:
                 panels.flash_msg(f"[N] Catatan baru: {name}", 3.5)
             else:
-                # Delayed flash via stored pending
                 player._pending_lore_msg = f"[N] Catatan baru: {name}"
 
     def check_npc_lore_gift(self, npc_id, player, panels):

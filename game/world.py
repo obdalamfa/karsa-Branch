@@ -304,7 +304,7 @@ class World3D:
         memblokir berarti mengubah grid saat runtime -- itu pekerjaan Fase 5c,
         bukan tugas perender ini.
         """
-        from .objects import OBJECT_TINGGI, tile_dari_kind
+        from .objects import posisi_dunia, tile_dari_kind
         for o in getattr(self.scene_obj, 'objects', []):
             tid = tile_dari_kind(o['kind'])
             if tid is None:
@@ -316,10 +316,11 @@ class World3D:
             # bertekstur -- dua wajah untuk satu benda.
             tex = OBJ_TEX.get(tid) or TILE_TEX.get(tid)
             lebar = TS * 0.8 * o['scale']
-            tinggi = TS * OBJECT_TINGGI.get(o['kind'], 0.6) * o['scale']
-            e = _e('cube',
-                   (o['x'] * TS, GROUND_H + o['h'] + tinggi / 2.0, o['y'] * TS),
-                   (lebar, tinggi, lebar),
+            # Rumus posisinya milik `objects.posisi_dunia`, dipakai bersama
+            # editor: kalau keduanya menghitung sendiri-sendiri, benda akan
+            # melompat tiap kali disimpan dari editor lalu dimuat game.
+            px, py, pz, tinggi = posisi_dunia(o, TS, GROUND_H)
+            e = _e('cube', (px, py, pz), (lebar, tinggi, lebar),
                    tex, OBJ_COLORS.get(tid, _c(130, 130, 130)),
                    rotation=(0, o['rot_y'], 0), soft=False)
             # Ditandai supaya bisa dibedakan dari prop yang dibangun builder

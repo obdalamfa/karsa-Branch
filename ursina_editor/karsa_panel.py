@@ -40,8 +40,11 @@ class SesiKarsa:
     def __init__(self):
         self.scene = None
         self.layer = None
+        self.layer_objek = None
         self.sumber = None          # 'data' atau 'kode'
         self.tid_aktif = None
+        self.kind_aktif = None
+        self.ubin_terakhir = None   # tempat "+ OBJEK" akan menaruh bendanya
         self.kotor = False
 
     # ─── Membuka & menutup ──────────────────────────────────────────────────
@@ -53,24 +56,33 @@ class SesiKarsa:
         self.tutup()
         self.scene, self.sumber = ks.muat(nama)
         self.layer = kt.LayerUbin(self.scene)
+        self.layer_objek = kt.LayerObjek(self.scene)
         self.kotor = False
         if self.tid_aktif is None:
             # Default yang berguna: ubin yang paling banyak dipakai peta ini.
             self.tid_aktif = max(
                 {tid for baris in self.scene.tiles for tid in baris},
                 key=lambda t: sum(b.count(t) for b in self.scene.tiles))
+        if self.kind_aktif is None:
+            from game.objects import OBJECT_KINDS
+            self.kind_aktif = sorted(OBJECT_KINDS)[0]
         return ks.ringkas(self.scene)
 
     def tutup(self):
-        if self.layer is not None:
-            destroy(self.layer.root)
+        for lapis in (self.layer, self.layer_objek):
+            if lapis is not None:
+                destroy(lapis.root)
         self.layer = None
+        self.layer_objek = None
         self.scene = None
         self.sumber = None
 
     # ─── Menyunting ─────────────────────────────────────────────────────────
     def pilih_ubin(self, tid: int):
         self.tid_aktif = tid
+
+    def pilih_kind(self, kind: str):
+        self.kind_aktif = kind
 
     def klik(self, entity) -> bool:
         """Cat ubin yang diklik dengan ubin aktif.
@@ -83,9 +95,60 @@ class SesiKarsa:
         koor = self.layer.koordinat(entity)
         if koor is None:
             return False
+        # Diingat walau tidak jadi mengecat: "+ OBJEK" menaruh bendanya di
+        # ubin terakhir yang disentuh, jadi pemain menunjuk tempat dulu.
+        self.ubin_terakhir = koor
         if self.tid_aktif is None:
             return False
         if not self.layer.set(koor[0], koor[1], self.tid_aktif):
+            return False
+        self.kotor = True
+        return True
+
+    # ─── Objek terpasang ────────────────────────────────────────────────────
+    def klik_objek(self, entity) -> bool:
+        """True kalau entity ini objek terpasang milik scene yang terbuka.
+
+        Tidak menyeleksi apa pun sendiri -- pemanggil yang tahu cara editor
+        memilih entity (gizmo mengikuti `scene_manager.selected_entity`).
+        """
+        if self.layer_objek is None or entity is None:
+            return False
+        return self.layer_objek.index_dari(entity) is not None
+
+    def tambah_objek(self, kind: str = None):
+        """Taruh satu objek di ubin terakhir yang diklik.
+
+        Menunjuk tempat dulu lalu menambah, bukan sebaliknya: benda yang
+        muncul di tempat yang baru saja disentuh selalu bisa ditemukan, dan
+        tidak perlu dialog untuk memilih koordinat.
+        """
+        if self.layer_objek is None:
+            return None
+        if self.ubin_terakhir is None:
+            # Belum ada yang diklik: pakai tengah peta, bukan pojok, supaya
+            # bendanya langsung terlihat kamera.
+            self.ubin_terakhir = (self.scene.w // 2, self.scene.h // 2)
+        ent = self.layer_objek.tambah(kind or self.kind_aktif,
+                                      float(self.ubin_terakhir[0]),
+                                      float(self.ubin_terakhir[1]))
+        if ent is not None:
+            self.kotor = True
+        return ent
+
+    def sinkron_objek(self, entity) -> bool:
+        """Tulis balik posisi objek setelah gizmo menggesernya."""
+        if self.layer_objek is None:
+            return False
+        if not self.layer_objek.sinkron(entity):
+            return False
+        self.kotor = True
+        return True
+
+    def hapus_objek(self, entity) -> bool:
+        if self.layer_objek is None:
+            return False
+        if not self.layer_objek.hapus(entity):
             return False
         self.kotor = True
         return True
@@ -114,12 +177,16 @@ class PanelKarsa:
 
     LEBAR = 0.30
 
-    def __init__(self, sesi: SesiKarsa = None, on_pesan=None):
+    def __init__(self, sesi: SesiKarsa = None, on_pesan=None, on_pilih=None):
         self.sesi = sesi or SesiKarsa()
         self.on_pesan = on_pesan or (lambda pesan, **kw: None)
+        # Dipanggil saat sebuah objek diklik. Editor yang tahu cara memilih
+        # entity (gizmo mengikuti `scene_manager.selected_entity`), bukan panel.
+        self.on_pilih = on_pilih or (lambda ent: None)
         self.root = Entity(parent=camera.ui, enabled=False)
         self.tombol_scene = {}
         self.tombol_ubin = {}
+        self.tombol_kind = {}
         self._bangun()
 
     def _bangun(self):
@@ -159,9 +226,41 @@ class PanelKarsa:
             b.on_click = (lambda t=tid, n=nama: self._pilih(t, n))
             self.tombol_ubin[tid] = b
 
+        # ── Objek terpasang ─────────────────────────────────────────────────
+        # Palet terpisah dari palet ubin karena keduanya benda yang berbeda:
+        # ubin MENEMPATI sel, objek BERDIRI di posisi bebas dan bisa digeser
+        # gizmo. Mencampurnya di satu baris akan membuat perbedaan itu hilang.
+        y = y - (51 // 4 + 1) * 0.021
+        self.label_kind = Text(
+            parent=self.root, text='objek aktif: -', position=(-0.5 + 0.02, y),
+            scale=0.8, color=color.rgb(200, 170, 230), z=0.0)
+        y -= 0.030
+        from game.objects import OBJECT_KINDS
+        for kolom, kind in enumerate(sorted(OBJECT_KINDS)):
+            bx = -0.5 + 0.02 + (kolom % 5) * ((self.LEBAR - 0.05) / 5)
+            by = y - (kolom // 5) * 0.021
+            b = Button(
+                parent=self.root, text=kind[:4],
+                scale=((self.LEBAR - 0.06) / 5, 0.019), position=(bx, by),
+                color=color.rgba(70, 55, 90, 235),
+                highlight_color=color.rgba(110, 85, 140, 245),
+            )
+            b.on_click = (lambda k=kind: self._pilih_kind(k))
+            self.tombol_kind[kind] = b
+        y -= (len(OBJECT_KINDS) // 5 + 1) * 0.021
+
+        self.btn_objek = Button(
+            parent=self.root, text='+ OBJEK DI UBIN TERAKHIR',
+            scale=(self.LEBAR - 0.04, 0.030), position=(-0.5 + self.LEBAR / 2, y),
+            color=color.rgba(80, 60, 110, 235),
+            highlight_color=color.rgba(120, 90, 160, 245),
+        )
+        self.btn_objek.on_click = self._tambah_objek
+        y -= 0.036
+
         self.btn_simpan = Button(
             parent=self.root, text='SIMPAN PETA', scale=(self.LEBAR - 0.04, 0.032),
-            position=(-0.5 + self.LEBAR / 2, y - (51 // 4 + 2) * 0.021),
+            position=(-0.5 + self.LEBAR / 2, y),
             color=color.rgba(45, 105, 80, 235),
             highlight_color=color.rgba(70, 150, 115, 245),
         )
@@ -182,6 +281,22 @@ class PanelKarsa:
         self.sesi.pilih_ubin(tid)
         self.label_palet.text = f'ubin aktif: {nama}'
 
+    def _pilih_kind(self, kind):
+        self.sesi.pilih_kind(kind)
+        self.label_kind.text = f'objek aktif: {kind}'
+
+    def _tambah_objek(self):
+        ent = self.sesi.tambah_objek()
+        if ent is None:
+            self.on_pesan("Buka scene dulu sebelum menambah objek.",
+                          bg_color=color.rgba(140, 45, 45, 230))
+            return
+        # Langsung diseleksi supaya gizmo menempel padanya dan pemain bisa
+        # menggesernya tanpa mencari dulu.
+        self.on_pilih(ent)
+        self.on_pesan(f"{self.sesi.kind_aktif} ditaruh di ubin "
+                      f"{self.sesi.ubin_terakhir}. Geser dengan gizmo.")
+
     def _simpan(self):
         try:
             p = self.sesi.simpan()
@@ -197,7 +312,25 @@ class PanelKarsa:
         return self.root.enabled
 
     def klik_viewport(self) -> bool:
-        """Klik kiri di viewport: cat ubin kalau yang kena memang ubin."""
+        """Klik kiri di viewport.
+
+        Objek terpasang diperiksa DULU: mengklik kursi harus memilihnya supaya
+        gizmo menempel, bukan mengecat ubin di bawahnya. Handle gizmo bukan
+        objek maupun ubin, jadi klik pada handle jatuh ke gizmo seperti biasa.
+        """
         if not self.root.enabled:
             return False
-        return self.sesi.klik(getattr(mouse, 'hovered_entity', None))
+        ent = getattr(mouse, 'hovered_entity', None)
+        if self.sesi.klik_objek(ent):
+            self.on_pilih(ent)
+            return True
+        return self.sesi.klik(ent)
+
+    def hapus_terpilih(self, ent) -> bool:
+        """Hapus objek terpasang yang sedang diseleksi gizmo."""
+        if not self.sesi.klik_objek(ent):
+            return False
+        if self.sesi.hapus_objek(ent):
+            self.on_pesan("Objek dihapus.")
+            return True
+        return False

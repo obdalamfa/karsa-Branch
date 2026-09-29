@@ -378,6 +378,39 @@ assert not any(h[3]==_tdk2('jam') for h in _hits), \
     'jam di (4.5,3.5) berjarak 1.5 -- seharusnya di luar radius 1'
 record('placed objects are usable through find_nearby, alongside grid tiles')
 
+# Editor menggeser objek dengan gizmo, lalu menulis posisinya BALIK ke
+# `scene.objects` lewat `dari_posisi_dunia`. Kebalikannya harus TEPAT: kalau
+# `posisi_dunia` dan `dari_posisi_dunia` tidak benar-benar saling membalik,
+# benda akan melompat setiap kali disimpan dari editor lalu dimuat game -- dan
+# karena angkanya "hampir benar", itu jenis bug yang sulit dipercaya.
+from game.objects import posisi_dunia as _pd, dari_posisi_dunia as _dpd
+import ursina_editor.karsa_tiles as _kt2
+# Dibangun SEGAR dari kode, bukan `SCENES['farm']`: pemeriksaan ini menggeser
+# dan menambah objek, dan memutasi scene yang sedang hidup akan membuat
+# pemeriksaan lain melihat dunia yang sudah diubah.
+from game.scenes import SCENE_BUILDERS as _SB
+_s3=_SB['farm']()
+_lap=_kt2.LayerObjek(_s3)
+assert _lap.jumlah()==3, _lap.jumlah()
+_e0=_lap.entitas[0]
+# Geser seperti gizmo: posisi DAN rotasi, karena rotasi pun ikut ditulis balik.
+_e0.x+=1.7; _e0.z-=0.9; _e0.y+=0.4; _e0.rotation_y=90.0
+assert _lap.sinkron(_e0), 'sinkron gagal'
+_o=_s3.objects[0]
+assert abs(_o['x']-_e0.x/_TS2)<1e-6 and abs(_o['y']-_e0.z/_TS2)<1e-6, _o
+assert _o['rot_y']==90.0, _o
+_px,_py,_pz,_t2=_pd(_o,_TS2,_GH2)
+assert abs(_px-_e0.x)<1e-6 and abs(_py-_e0.y)<1e-6 and abs(_pz-_e0.z)<1e-6, \
+    ('posisi dunia tidak kembali sama', (_px,_py,_pz), (_e0.x,_e0.y,_e0.z))
+# Tambah dan hapus juga harus menjaga jumlah entity tetap sejajar.
+_n0=_lap.jumlah()
+_lap.tambah('peti', 5.0, 5.0)
+assert _lap.jumlah()==_n0+1 and len(_s3.objects)==_n0+1, (_lap.jumlah(), len(_s3.objects))
+assert _lap.hapus(_lap.entitas[-1])
+assert _lap.jumlah()==_n0 and len(_s3.objects)==_n0, (_lap.jumlah(), len(_s3.objects))
+destroy(_lap.root)
+record('editor moving an object round-trips through the shared position formula')
+
 # Viewport editor peta. Editor bekerja dengan entity, game menyimpan GRID UBIN;
 # `karsa_tiles.LayerUbin` menjembatani keduanya untuk ditampilkan dan disunting.
 # Yang diperiksa di sini bukan "apakah terlihat bagus" -- itu perlu mata -- tapi

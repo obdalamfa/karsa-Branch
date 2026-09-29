@@ -84,6 +84,25 @@ def main() -> int:
     cek('viewport dibangun ulang', lapis.ubin[(x, y)] is not sebelum)
     cek('sesi ditandai kotor', panel.sesi.kotor is True)
 
+    # ─── Objek terpasang ────────────────────────────────────────────────────
+    # Inilah yang membuat gizmo editor berguna untuk game: benda yang berdiri
+    # di posisi bebas, bukan menempati sel.
+    lapis_obj = panel.sesi.layer_objek
+    n0 = lapis_obj.jumlah()
+    ent = panel.sesi.tambah_objek('peti')
+    cek('objek bisa ditambah', ent is not None and lapis_obj.jumlah() == n0 + 1,
+        f'{n0} -> {lapis_obj.jumlah()}')
+    cek('objek baru langsung terpilih', panel.sesi.klik_objek(ent) is True)
+    ent.x += 2.0
+    ent.rotation_y = 90.0
+    cek('geser objek tersinkron', panel.sesi.sinkron_objek(ent) is True)
+    idx = lapis_obj.index_dari(ent)
+    cek('rotasi ikut tertulis',
+        panel.sesi.scene.objects[idx]['rot_y'] == 90.0,
+        str(panel.sesi.scene.objects[idx]))
+    cek('hapus objek', panel.sesi.hapus_objek(ent) is True
+        and lapis_obj.jumlah() == n0, f'{lapis_obj.jumlah()} vs {n0}')
+
     # Scene asli tidak boleh tersentuh sama sekali.
     import game.scenes as _gs
     cek('scene asli tidak ditulis', not (_gs._DIR / 'farm.json').stat().st_mtime

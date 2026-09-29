@@ -14,6 +14,7 @@
     "placed objects render at the tile coordinates they were given",
     "placed objects reuse the grid texture, including TILE_TEX-only kinds",
     "placed objects are usable through find_nearby, alongside grid tiles",
+    "editor moving an object round-trips through the shared position formula",
     "map editor viewport mirrors the tile grid and edits land in both",
     "map editing session paints, rejects non-tiles, and saves readable files",
     "player registers itself for NPC head-seek"

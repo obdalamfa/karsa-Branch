@@ -253,6 +253,46 @@ def tinggi_kind(kind: str) -> float:
     return OBJECT_TINGGI.get(kind, 0.6)
 
 
+def posisi_dunia(o, tile_size=None, ground_h=None):
+    """Posisi pusat kotak objek di dunia, dan tingginya.
+
+    Mengembalikan `(x, y, z, tinggi)` dengan `x`/`z` koordinat dunia dan `y`
+    ketinggian pusat kotak.
+
+    SATU rumus, dua pemakai: perender game (`world._build_objects`) dan editor
+    peta. Kalau keduanya menghitungnya sendiri-sendiri, benda akan melompat
+    setiap kali disimpan dari editor lalu dimuat game -- dan itu jenis bug yang
+    sulit dipercaya karena angkanya "hampir benar".
+    """
+    from .config import GROUND_H, TILE_SIZE
+    ts = TILE_SIZE if tile_size is None else tile_size
+    gh = GROUND_H if ground_h is None else ground_h
+    tinggi = ts * tinggi_kind(o['kind']) * o['scale']
+    return (o['x'] * ts, gh + o['h'] + tinggi / 2.0, o['y'] * ts, tinggi)
+
+
+def dari_posisi_dunia(kind, x, y, z, rot_y=0.0, scale=1.0,
+                      tile_size=None, ground_h=None):
+    """Kebalikan `posisi_dunia`: posisi dunia kembali menjadi bentuk objek.
+
+    Dipakai editor setelah gizmo menggeser sebuah benda. `y` di sini ketinggian
+    PUSAT kotak, jadi tinggi kotaknya dikurangi lagi supaya `h` kembali berarti
+    "ketinggian alas di atas tanah" -- bukan "ketinggian pusat".
+    """
+    from .config import GROUND_H, TILE_SIZE
+    ts = TILE_SIZE if tile_size is None else tile_size
+    gh = GROUND_H if ground_h is None else ground_h
+    tinggi = ts * tinggi_kind(kind) * scale
+    return {
+        'kind': kind,
+        'x': x / ts,
+        'y': z / ts,
+        'h': y - gh - tinggi / 2.0,
+        'rot_y': rot_y % 360.0,
+        'scale': scale,
+    }
+
+
 def kind_dari_tile(tile_id: int):
     """Kebalikan `tile_dari_kind`. Dipakai editor untuk menandai objek."""
     for kind, tid in OBJECT_KINDS.items():

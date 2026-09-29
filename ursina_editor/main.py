@@ -109,7 +109,16 @@ class UrsinaEditorApp:
         # sedangkan seluruh panel di atas mengurus entity bebas -- dua model
         # yang berbeda, jadi ia berdiri sendiri dan tidak menumpang toolbar.
         # Tersembunyi sampai dinyalakan dengan `K`.
-        self.karsa_panel = PanelKarsa(on_pesan=self.show_notification)
+        self.karsa_panel = PanelKarsa(
+            on_pesan=self.show_notification,
+            # Gizmo mengikuti `scene_manager.selected_entity`, jadi mengklik
+            # objek peta cukup menyeleksinya lewat jalur yang sudah ada.
+            on_pilih=self.scene_manager.select,
+        )
+        # Gizmo menggeser entity; kalau yang digeser adalah objek peta Karsa,
+        # posisinya ditulis BALIK ke `scene.objects`. Tanpa ini gizmo hanya
+        # memindahkan gambarnya, dan perubahannya hilang begitu scene disimpan.
+        self.gizmo.on_transform_changed = self.karsa_panel.sesi.sinkron_objek
 
         # Populate Starter Scene
         self._setup_starter_scene()
@@ -774,8 +783,12 @@ class UrsinaEditorApp:
             self.set_camera_view('reset')
             return
 
-        # Delete selection
+        # Delete selection. Objek peta Karsa diperiksa lebih dulu: kalau yang
+        # sedang diseleksi gizmo adalah objek terpasang, hapus dari
+        # `scene.objects`; kalau bukan, jatuh ke penghapusan entity bebas.
         elif key == 'delete' or key == 'backspace':
+            if self.karsa_panel.hapus_terpilih(self.scene_manager.selected_entity):
+                return
             self.scene_manager.remove_selected()
             return
 

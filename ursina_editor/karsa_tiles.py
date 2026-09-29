@@ -169,3 +169,93 @@ class LayerUbin:
 
     def jumlah_entity(self) -> int:
         return len(self.ubin)
+
+
+class LayerObjek:
+    """Viewport untuk `Scene.objects` milik game, plus jalan pulangnya.
+
+    Bergaya sama dengan `LayerUbin`: satu Entity per objek, dan tiap perubahan
+    ditulis ke `scene.objects` DAN ke viewport dalam satu langkah. Kalau
+    keduanya bisa berbeda, editor menampilkan peta yang tidak sama dengan yang
+    akan disimpan -- dan itu kebohongan yang paling mahal di alat penyunting.
+
+    Rumus posisinya milik `game.objects.posisi_dunia` / `dari_posisi_dunia`,
+    bukan salinan di sini, supaya benda tidak melompat tiap kali disimpan dari
+    editor lalu dimuat game.
+    """
+
+    def __init__(self, scene, parent=None):
+        self.scene = scene
+        self.root = Entity(parent=parent, name=f'karsa_obj_{scene.name}')
+        self.entitas: list = []
+        self.bangun()
+
+    def bangun(self):
+        for e in self.entitas:
+            destroy(e)
+        self.entitas = [self._entitas(o) for o in self.scene.objects]
+
+    def _entitas(self, o):
+        from game.objects import posisi_dunia, tile_dari_kind
+        tid = tile_dari_kind(o['kind'])
+        nama_tex = TEKSTUR.get(tid) if tid is not None else None
+        tex = _tekstur(nama_tex) if nama_tex else None
+        px, py, pz, tinggi = posisi_dunia(o, TILE_SIZE, GROUND_H)
+        lebar = TILE_SIZE * 0.8 * o['scale']
+        e = Entity(parent=self.root, model='cube',
+                   position=Vec3(px, py, pz),
+                   scale=Vec3(lebar, tinggi, lebar),
+                   texture=tex,
+                   color=color.white if tex else warna_ubin(tid),
+                   rotation_y=o['rot_y'])
+        # Ditandai supaya klik di viewport bisa dibedakan dari ubin dan dari
+        # entity bebas milik editor generik.
+        e.kind = o['kind']
+        e.is_karsa_object = True
+        return e
+
+    def index_dari(self, entity):
+        for i, e in enumerate(self.entitas):
+            if e is entity:
+                return i
+        return None
+
+    def sinkron(self, entity) -> bool:
+        """Tulis posisi entity kembali ke `scene.objects`.
+
+        Kebalikan dari `posisi_dunia`: `y` entity adalah ketinggian PUSAT kotak,
+        jadi tinggi kotaknya dikurangi lagi supaya `h` kembali berarti
+        "ketinggian alas di atas tanah".
+        """
+        i = self.index_dari(entity)
+        if i is None:
+            return False
+        from game.objects import dari_posisi_dunia
+        self.scene.objects[i] = dari_posisi_dunia(
+            entity.kind, entity.x, entity.y, entity.z, entity.rotation_y,
+            self.scene.objects[i]['scale'], TILE_SIZE, GROUND_H)
+        # Setter `Scene.objects` memvalidasi ulang; kalau sampai ada entri yang
+        # dibuang, daftar entity di sini jadi tidak sejajar lagi.
+        if len(self.scene.objects) != len(self.entitas):
+            self.bangun()
+        return True
+
+    def tambah(self, kind: str, x: float, y: float,
+               h: float = 0.0, rot_y: float = 0.0):
+        """Tambah objek di koordinat ubin. Mengembalikan entity barunya."""
+        self.scene.objects = list(self.scene.objects) + [
+            {'kind': kind, 'x': x, 'y': y, 'h': h, 'rot_y': rot_y, 'scale': 1.0}]
+        self.bangun()
+        return self.entitas[-1] if self.entitas else None
+
+    def hapus(self, entity) -> bool:
+        i = self.index_dari(entity)
+        if i is None:
+            return False
+        self.scene.objects = [o for j, o in enumerate(self.scene.objects)
+                              if j != i]
+        self.bangun()
+        return True
+
+    def jumlah(self) -> int:
+        return len(self.entitas)

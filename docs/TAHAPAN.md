@@ -37,8 +37,8 @@ Yang diperiksa, tiap satu terikat kegagalan nyata:
 **Selesai kalau:** perintahnya jalan, mengeluarkan tabel LULUS/GAGAL, dan
 melaporkan kondisi SEKARANG apa adanya — termasuk yang gagal.
 
-**Catatan penyelesaian.** Syarat itu baru benar-benar terpenuhi setelah dua
-cacat di alatnya sendiri diperbaiki, dan keduanya menghasilkan kegagalan PALSU
+**Catatan penyelesaian.** Syarat itu baru benar-benar terpenuhi setelah TIGA
+cacat di alatnya sendiri diperbaiki, dan ketiganya menghasilkan kegagalan PALSU
 yang sempat dipercaya:
 
 1. `frame_kosong` menuduh enam scene (shop, house, lake, cemetery, beach,
@@ -56,8 +56,19 @@ yang sempat dipercaya:
    peluruhannya menjadi nol, sehingga syarat "harus turun" mustahil dipenuhi.
    Kegagalannya bergantung urutan scene, bukan kesehatan motif.
 
+3. Seluruh 14 scene pernah dilaporkan GAGAL sekaligus, dengan seragam
+   `frame_kosong`. Itu bukan cacat scene: `regress.py` membuka jendela
+   sungguhan, dan saat Windows menolak `SetForegroundWindow()` isinya tidak
+   pernah digambar sehingga `getScreenshot()` membaca buffer kosong. Cacatnya
+   bukan bahwa hal itu bisa terjadi — melainkan bahwa alatnya **memberi vonis**
+   atas keadaan yang bukan milik scene. Sekarang kegagalan seragam semacam itu
+   dilaporkan sebagai LINGKUNGAN BERMASALAH dan keluar dengan kode **2**,
+   dibedakan dari kode 1 yang berarti ada scene yang benar-benar rusak. Ada juga
+   `--offscreen` untuk melepas ketergantungan pada jendela sama sekali.
+
 Alat yang melaporkan kegagalan palsu lebih berbahaya daripada tidak ada alat:
-ia mengajarkan untuk mengabaikan alarmnya.
+ia mengajarkan untuk mengabaikan alarmnya. Kegagalan nomor 3 tertangkap ulang
+saat memperbaikinya — dan kali ini alatnya menolak memberi vonis.
 
 ---
 

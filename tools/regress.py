@@ -45,6 +45,13 @@ loadPrcFileData('', 'aux-display pandadx9')
 loadPrcFileData('', 'audio-library-name null')
 loadPrcFileData('', 'sync-video false')
 
+# `--offscreen` melepas ketergantungan pada jendela sungguhan. Dipakai saat
+# lingkungan menolak memfokuskan jendela: di situ tiap tangkapan layar kembali
+# kosong dan tanpa ini seluruh run dilaporkan gagal padahal scene-nya sehat.
+# Lihat catatan `lingkungan` di ujung main().
+if '--offscreen' in sys.argv:
+    loadPrcFileData('', 'window-type offscreen')
+
 import logging  # noqa: E402
 logging.basicConfig(level=logging.ERROR)
 
@@ -268,6 +275,27 @@ def main():
         baris.append((nama, hasil, ms, n_ent, buruk))
 
     # ── laporan ──
+    # Empat belas scene kosong SEKALIGUS bukan cacat scene: game ini terbukti
+    # merender semuanya di `gauntlet/check.py`. Yang terjadi adalah jendelanya
+    # tidak bisa difokuskan -- Windows menolak `SetForegroundWindow()`, isinya
+    # tidak pernah digambar, dan `getScreenshot()` membaca buffer kosong.
+    #
+    # Alat yang melaporkan 0/14 karena lingkungan lebih berbahaya daripada tidak
+    # ada alat sama sekali: 0/14 palsu tidak bisa dibedakan dari kerusakan
+    # sungguhan, dan itu melatih pemakainya untuk mengabaikan alarmnya.
+    lingkungan = bool(baris) and gagal_total > 0 and all(
+        set(buruk) == {'frame_kosong'} for _n, _h, _ms, _e, buruk in baris)
+    if lingkungan:
+        print()
+        print('=' * 78)
+        print('LINGKUNGAN BERMASALAH -- ini BUKAN cacat scene.')
+        print('Seluruh scene menghasilkan frame kosong. Game ini terbukti merender')
+        print('semuanya di gauntlet/check.py, jadi yang gagal adalah jendelanya:')
+        print('Windows menolak SetForegroundWindow(), isinya tidak pernah digambar,')
+        print('dan getScreenshot() membaca buffer kosong.')
+        print('Tabel di bawah dicetak sebagai bukti, bukan sebagai vonis.')
+        print('Coba lagi dengan:  python tools/regress.py --offscreen')
+        print('=' * 78)
     print()
     print(f'{"scene":14s} {"hasil":>7s} {"ms/frame":>9s} {"entity":>7s}  catatan')
     print('-' * 78)
@@ -280,11 +308,18 @@ def main():
     n_lulus = sum(1 for _, _, _, _, b in baris if not b)
     print(f'{n_lulus}/{len(baris)} scene lulus, {gagal_total} pemeriksaan gagal, '
           f'boot {boot_s:.1f}s')
+    if lingkungan:
+        print('CATATAN: angka di atas TIDAK SAH. Kegagalannya seragam dan sebabnya')
+        print('lingkungan, bukan scene. Pakai --offscreen, atau fokuskan jendelanya')
 
     laporan = OUT / 'report.md'
     with open(laporan, 'w', encoding='utf-8') as f:
         f.write('# Laporan regresi\n\n')
         f.write(f'{n_lulus}/{len(baris)} scene lulus, {gagal_total} pemeriksaan gagal.\n\n')
+        if lingkungan:
+            f.write('> **Hasil ini tidak sah.** Kegagalannya seragam `frame_kosong` '
+                    'dan sebabnya\n> lingkungan (jendela tidak bisa difokuskan), '
+                    'bukan scene. Jalankan ulang dengan `--offscreen`.\n\n')
         f.write('| scene | hasil | ms/frame | entity | catatan |\n|---|---|--:|--:|---|\n')
         for nama, hasil, ms, n_ent, buruk in baris:
             tanda = 'LULUS' if not buruk else '**GAGAL**'
@@ -303,7 +338,9 @@ def main():
         pass
 
     sys.stdout.flush()
-    os._exit(1 if gagal_total else 0)
+    # Kode 2 dibedakan dari 1: 1 berarti ada scene yang benar-benar rusak,
+    # 2 berarti hasilnya tidak sah karena lingkungan. CI bisa membedakannya.
+    os._exit(2 if lingkungan else (1 if gagal_total else 0))
 
 
 if __name__ == '__main__':

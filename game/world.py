@@ -309,7 +309,12 @@ class World3D:
             tid = tile_dari_kind(o['kind'])
             if tid is None:
                 continue          # jenis tak dikenal sudah disaring _objek_sah
-            tex = OBJ_TEX.get(tid)
+            # `TILE_TEX` ikut dicek, bukan cuma `OBJ_TEX`. `dermaga` (DCK)
+            # hanya punya tekstur di sana, dan grid merendernya sebagai ubin
+            # datar bertekstur. Tanpa cadangan ini, dermaga yang DITEMPATKAN
+            # akan jadi kotak kelabu sementara dermaga yang sama di grid
+            # bertekstur -- dua wajah untuk satu benda.
+            tex = OBJ_TEX.get(tid) or TILE_TEX.get(tid)
             lebar = TS * 0.8 * o['scale']
             tinggi = TS * OBJECT_TINGGI.get(o['kind'], 0.6) * o['scale']
             e = _e('cube',

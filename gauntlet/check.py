@@ -343,6 +343,20 @@ _jam=[o for o in SCENES['farm'].objects if o['kind']=='jam']
 assert _jam and _jam[0]['h']>1.0, 'farm butuh satu objek berketinggian'
 record('placed objects render at the tile coordinates they were given')
 
+# Tekstur objek terpasang harus SAMA dengan tekstur ubin yang sama di grid.
+# `dermaga` hanya punya tekstur di `TILE_TEX`, dan perender yang cuma memeriksa
+# `OBJ_TEX` membuatnya jadi kotak kelabu sementara dermaga di grid bertekstur --
+# dua wajah untuk satu benda.
+from game.world import OBJ_TEX as _OTEX, TILE_TEX as _TTEX
+from game.objects import OBJECT_KINDS as _OKINDS, tile_dari_kind as _tdk
+_tanpa_tekstur=sorted(k for k in _OKINDS if not (_OTEX.get(_tdk(k)) or _TTEX.get(_tdk(k))))
+# Dua jenis ini memang tidak punya tekstur di MANA PUN, termasuk di grid -- itu
+# celah yang sudah ada sebelum lapisan objek, dan daftarnya dipatok di sini
+# supaya jenis BARU yang lupa diberi tekstur langsung ketahuan.
+assert _tanpa_tekstur==['kursi','televisi'], _tanpa_tekstur
+assert _OTEX.get(_tdk('dermaga')) is None and _TTEX.get(_tdk('dermaga'))=='dock'
+record('placed objects reuse the grid texture, including TILE_TEX-only kinds')
+
 # Viewport editor peta. Editor bekerja dengan entity, game menyimpan GRID UBIN;
 # `karsa_tiles.LayerUbin` menjembatani keduanya untuk ditampilkan dan disunting.
 # Yang diperiksa di sini bukan "apakah terlihat bagus" -- itu perlu mata -- tapi

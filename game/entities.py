@@ -336,7 +336,18 @@ class EntitiesManager:
                              position=(0, lbl_y, 0),
                              scale=lbl_scale, color=color.rgb(255, 240, 160),
                              background=True)
-                             
+
+            # Label aksi saat NPC "memakai" perabot: nama interaksinya
+            # ("Masak", "Tidur", ...) muncul di atas nameplate selama
+            # `use_timer > 0`, lalu hilang. Membuat otonomi terbaca pemain
+            # tanpa perlu aset animasi baru. Hewan tidak memakai perabot.
+            if isinstance(actor, NPC):
+                actor._use_lbl = Text('', parent=actor, billboard=True,
+                                      position=(0, lbl_y + 0.8, 0),
+                                      scale=lbl_scale * 0.55,
+                                      color=color.white, background=True)
+                actor._use_lbl.enabled = False
+
             self.actors[actor_id] = actor
 
         # Old saves can contain plants on terrain that is now a cliff.
@@ -485,6 +496,14 @@ class EntitiesManager:
                 
             elif isinstance(actor, NPC):
                 actor.update_ai(dt, self.brains, can_walk_fn, self.world)
+                # Tampilkan label aksi "memakai" hanya saat NPC sedang memakai.
+                if hasattr(actor, '_use_lbl'):
+                    _using = getattr(actor, 'use_timer', 0.0) > 0
+                    if _using and getattr(actor, 'auto_inter', None) is not None:
+                        actor._use_lbl.text = actor.auto_inter.name
+                        actor._use_lbl.enabled = True
+                    else:
+                        actor._use_lbl.enabled = False
                 if actor_id in s.npc_positions:
                     s.npc_positions[actor_id]['x'] = actor.logical_x
                     s.npc_positions[actor_id]['y'] = actor.logical_y

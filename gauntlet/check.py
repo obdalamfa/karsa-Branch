@@ -536,6 +536,21 @@ for _ in range(400):
 assert _bm2._brains['arya'].motives['energy'] > 25.0, \
     ('energi tidak naik setelah durasi memakai', _bm2._brains['arya'].motives['energy'])
 destroy(_aktor3)
+
+# (e) kecepatan berjalan: NPC bergerak ~2.5 ubin/detik, bukan teleport. Rumus
+#     lama (`NPC_SPEED/(TILE_SIZE*20)` lalu `*dt*1000`) 50x terlalu cepat,
+#     sehingga logical NPC melompat ke target dalam SATU frame dan animasi
+#     berjalan tak pernah terlihat. Satu frame seharusnya menggeser < 0,5 ubin.
+_bm3 = _Brains(SimpleNamespace())
+_bm3.grid = _grid_fresh([])
+_aktor4 = _NPC(SimpleNamespace(), 'arya')
+_aktor4.logical_x = _aktor4.target_x = 2.0
+_aktor4.logical_y = _aktor4.target_y = 4.0
+_aktor4.path = [(4.0, 4.0)]   # target 2 ubin jauh; paksa lewat path, bukan otonomi
+_aktor4.update_ai(1/60, _bm3, _cw, _fake_stove)
+_lompat = abs(_aktor4.logical_x - 2.0)
+assert 0.0 < _lompat < 0.5, ('NPC masih teleport dalam satu frame', _lompat)
+destroy(_aktor4)
 record('NPC autonomy walks, uses the furniture, then recovers its motive')
 
 # Editor menggeser objek dengan gizmo, lalu menulis posisinya BALIK ke

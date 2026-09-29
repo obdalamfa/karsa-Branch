@@ -299,10 +299,14 @@ for _k,_tid in _KINDS.items():
     # Sifat memblokir harus IKUT grid, bukan daftar kedua yang bisa berbeda.
     assert _solid(_k)==(_tid in _BLOCK), _k
 _probe=_Scene('probe','Probe',[[0,0],[0,0]])
-_probe.objects=[{'kind':'kompor','x':1.5,'z':2.5},
-                {'kind':'jam','x':0.0,'z':0.0,'rot_y':-90},
-                {'kind':'tidak_ada','x':1,'z':1},
-                {'kind':'kompor','x':float('nan'),'z':1},
+# `x`/`y` adalah koordinat UBIN, `h` ketinggian -- konvensi yang sama dengan
+# `portals` dan `npc_positions`. Versi pertama pemeriksaan ini masih memakai
+# skema lama (`x`/`z`), dan kedua entri sahnya langsung tertolak karena `y`
+# hilang: pemeriksaannya yang benar, datanya yang basi.
+_probe.objects=[{'kind':'kompor','x':1.5,'y':2.5},
+                {'kind':'jam','x':0.0,'y':0.0,'rot_y':-90},
+                {'kind':'tidak_ada','x':1,'y':1},
+                {'kind':'kompor','x':float('nan'),'y':1},
                 {'kind':'kompor'},
                 'bukan dict']
 assert len(_probe.objects)==2, _probe.objects
@@ -312,10 +316,32 @@ assert _probe.objects[0]['scale']==1.0
 # hanya memvalidasi di __init__, sehingga editor -- yang memang menulis
 # `scene.objects = [...]` -- bisa menyelipkan daftar mentah yang baru meledak
 # jauh kemudian di `to_dict`. Ketahuan dari uji data kotor, bukan dari membaca.
-_probe.objects=[{'kind':'peti','x':1,'z':1},'bukan dict']
+_probe.objects=[{'kind':'peti','x':1,'y':1},'bukan dict']
 assert len(_probe.objects)==1, _probe.objects
 assert _Scene.from_dict(_probe.to_dict()).objects==_probe.objects
 record('placed-object layer maps kinds to tiles and rejects malformed entries')
+
+# Objek terpasang benar-benar DIRENDER, dan di posisi yang benar. Yang paling
+# mudah salah di sini adalah KONVENSINYA: `x`/`y` adalah koordinat ubin, bukan
+# satuan dunia, dan `h` ketinggian di atas tanah. Salah satu saja dan perabot
+# muncul di tempat yang salah tanpa satu pun error.
+from game.config import TILE_SIZE as _TS2, GROUND_H as _GH2
+from game.objects import OBJECT_TINGGI as _OTINGGI
+w.load_scene('farm')
+_obj=[e for e in w._obj_ents if getattr(e,'is_object',False)]
+assert len(_obj)==3, f'harap 3 objek terpasang di farm, dapat {len(_obj)}'
+assert len(_obj)==len(SCENES['farm'].objects)
+for o,e in zip(SCENES['farm'].objects,_obj):
+    hx,hz=o['x']*_TS2, o['y']*_TS2
+    hy=_GH2+o['h']+_TS2*_OTINGGI.get(o['kind'],0.6)*o['scale']/2.0
+    assert abs(e.x-hx)<0.01 and abs(e.z-hz)<0.01, (o,(e.x,e.y,e.z),hx,hz)
+    assert abs(e.y-hy)<0.01, (o,(e.x,e.y,e.z),hy)
+    assert abs(e.rotation_y-o['rot_y'])<0.01, (o,e.rotation_y)
+# Jam sengaja diberi `h` 1,15 m supaya ketinggian ikut terbukti, bukan cuma
+# bidang datar.
+_jam=[o for o in SCENES['farm'].objects if o['kind']=='jam']
+assert _jam and _jam[0]['h']>1.0, 'farm butuh satu objek berketinggian'
+record('placed objects render at the tile coordinates they were given')
 
 # Viewport editor peta. Editor bekerja dengan entity, game menyimpan GRID UBIN;
 # `karsa_tiles.LayerUbin` menjembatani keduanya untuk ditampilkan dan disunting.

@@ -204,6 +204,23 @@ def tile_dari_kind(kind: str):
     return OBJECT_KINDS.get(kind)
 
 
+# Tinggi kotak objek dalam satuan ubin, dipakai perender sampai tiap jenis punya
+# modelnya sendiri. Angkanya kasar dengan SENGAJA: yang perlu terbaca dari
+# viewport adalah bahwa kasur lebih rendah daripada rak buku, bukan bahwa
+# tingginya presisi. Model khusus per jenis adalah pekerjaan terpisah.
+OBJECT_TINGGI: dict[str, float] = {
+    'kasur': 0.30, 'kompor': 0.55, 'meja': 0.45, 'kursi': 0.55,
+    'televisi': 0.40, 'rak_buku': 0.95, 'cermin': 0.90, 'tungku': 0.75,
+    'konter': 0.55, 'rak': 0.95, 'peti': 0.45, 'pot': 0.35,
+    'jam': 0.20, 'dermaga': 0.15, 'nisan': 0.75,
+}
+
+
+def tinggi_kind(kind: str) -> float:
+    """Tinggi kotak sebuah jenis, dalam satuan ubin."""
+    return OBJECT_TINGGI.get(kind, 0.6)
+
+
 def kind_dari_tile(tile_id: int):
     """Kebalikan `tile_dari_kind`. Dipakai editor untuk menandai objek."""
     for kind, tid in OBJECT_KINDS.items():

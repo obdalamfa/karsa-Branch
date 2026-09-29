@@ -157,7 +157,21 @@ def build_farm():
         Zone(13, 3, 21, 7, **JERAMI),           # lantai kandang
     ]
 
-    return Scene('farm', 'Kebun Paman Arsa', m, paint=paint, portals=[
+    return Scene('farm', 'Kebun Paman Arsa', m, paint=paint,
+        # Pemakaian PERTAMA lapisan objek terpasang (Fase 5). Tiga perabot di
+        # teras rumah, ditempatkan di POSISI alih-alih di sel ubin: kursi yang
+        # menghadap pintu, pot di sudut, dan jam yang menempel di muka selatan
+        # rumah pada ketinggian 1,15 m.
+        #
+        # `x`/`y` adalah koordinat UBIN dalam float (3,5 = tengah antara ubin 3
+        # dan 4), dan `h` ketinggian di atas tanah. Terasnya sendiri ada di
+        # baris y=4, x=2..5 -- lihat rect(m, 2, 4, 5, 4, P) di atas.
+        objects=[
+            {'kind': 'kursi', 'x': 3.5, 'y': 4.5, 'rot_y': 180},
+            {'kind': 'pot',   'x': 2.4, 'y': 4.5},
+            {'kind': 'jam',   'x': 4.5, 'y': 3.5, 'h': 1.15, 'rot_y': 180},
+        ],
+        portals=[
         (DOOR_HOUSE[0], DOOR_HOUSE[1], 'house', 7, 9),
         (DOOR_GREEN[0], DOOR_GREEN[1], 'greenhouse', 7, 10),
         (GATE_OUT[0][0], GATE_OUT[0][1], 'town', 1, 14),

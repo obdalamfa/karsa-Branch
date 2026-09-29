@@ -50,6 +50,16 @@ def tile_key(tid: int) -> str:
 # memblokirnya tidak perlu disimpan di sini -- semuanya sudah ada di tabel yang
 # dipakai grid. Yang benar-benar BARU hanyalah posisi bebas dan rotasi; itulah
 # satu-satunya hal yang tidak bisa diungkapkan grid.
+#
+# KONVENSI KOORDINAT, dan ini mengikuti seluruh basis kode:
+#   `x`, `y`  koordinat UBIN dalam float -- sama dengan `player_x/player_y`,
+#             `portals`, `npc_positions`, dan `wild_entities`. `12.5` berarti
+#             "di antara ubin 12 dan 13".
+#   `h`       ketinggian di atas tanah, dalam satuan dunia.
+#   `rot_y`   putaran mengelilingi sumbu tegak, derajat.
+# Versi pertama skema ini memakai `x`/`z` untuk posisi ubin dan `y` untuk
+# ketinggian -- persis TERBALIK dari kebiasaan seluruh basis kode, dan karena
+# itu menyesatkan setiap pembaca berikutnya.
 def _angka(nilai, baku):
     """float yang terhingga, atau `baku` kalau nilainya tidak bisa dipakai.
 
@@ -77,14 +87,14 @@ def _objek_sah(o):
     kind = o.get('kind')
     if not isinstance(kind, str) or tile_dari_kind(kind) is None:
         return None
-    x, z = _angka(o.get('x'), None), _angka(o.get('z'), None)
-    if x is None or z is None:
+    x, y = _angka(o.get('x'), None), _angka(o.get('y'), None)
+    if x is None or y is None:
         return None
     skala = _angka(o.get('scale'), 1.0)
     return {
         'kind': kind,
-        'x': x, 'z': z,
-        'y': _angka(o.get('y'), 0.0),
+        'x': x, 'y': y,
+        'h': _angka(o.get('h'), 0.0),
         'rot_y': _angka(o.get('rot_y'), 0.0) % 360.0,
         'scale': skala if skala > 0 else 1.0,
     }

@@ -11,6 +11,7 @@
     "guardian visual update runs exactly once per frame",
     "five actual-engine screenshots with gameplay camera convention",
     "placed-object layer maps kinds to tiles and rejects malformed entries",
+    "placed objects render at the tile coordinates they were given",
     "map editor viewport mirrors the tile grid and edits land in both",
     "map editing session paints, rejects non-tiles, and saves readable files",
     "player registers itself for NPC head-seek"

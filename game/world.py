@@ -285,6 +285,42 @@ class World3D:
         self._build_all_crops()
         if hasattr(self.scene_obj, 'builder') and self.scene_obj.builder:
             self.scene_obj.builder(self)
+        self._build_objects()
+
+    def _build_objects(self):
+        """Render objek terpasang bebas (`Scene.objects`).
+
+        Dijalankan SESUDAH `scene.builder()`, bukan sebelumnya: builder scene
+        boleh menaruh apa pun yang ia mau, dan objek terpasang adalah lapisan
+        paling atas -- perabot yang diletakkan sendiri di atas peta yang sudah
+        jadi.
+
+        Koordinatnya mengikuti konvensi seluruh basis kode: `x`/`y` adalah
+        koordinat UBIN dalam float (sama dengan `portals` dan `npc_positions`),
+        dan `h` adalah ketinggian di atas tanah dalam satuan dunia.
+
+        Objek yang memblokir BELUM didaftarkan ke pathfinder di sini. Grid
+        pencarian jalan dibangun dari `scene.tiles`, dan membuat objek ikut
+        memblokir berarti mengubah grid saat runtime -- itu pekerjaan Fase 5c,
+        bukan tugas perender ini.
+        """
+        from .objects import OBJECT_TINGGI, tile_dari_kind
+        for o in getattr(self.scene_obj, 'objects', []):
+            tid = tile_dari_kind(o['kind'])
+            if tid is None:
+                continue          # jenis tak dikenal sudah disaring _objek_sah
+            tex = OBJ_TEX.get(tid)
+            lebar = TS * 0.8 * o['scale']
+            tinggi = TS * OBJECT_TINGGI.get(o['kind'], 0.6) * o['scale']
+            e = _e('cube',
+                   (o['x'] * TS, GROUND_H + o['h'] + tinggi / 2.0, o['y'] * TS),
+                   (lebar, tinggi, lebar),
+                   tex, OBJ_COLORS.get(tid, _c(130, 130, 130)),
+                   rotation=(0, o['rot_y'], 0), soft=False)
+            # Ditandai supaya bisa dibedakan dari prop yang dibangun builder
+            # scene -- berguna saat menelusuri "benda ini datang dari mana".
+            e.is_object = True
+            self._obj_ents.append(e)
 
     def tile_to_world(self, tx: int, ty: int) -> Vec3:
         return Vec3(tx * TS, 0, ty * TS)

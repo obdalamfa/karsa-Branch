@@ -449,6 +449,82 @@ _s_jauh = _score(_mv2, _masak, 6.0)
 assert _s_dekat > _s_jauh > 0.0, (_s_dekat, _s_jauh)
 record('NPC autonomy bridge selects the right furniture for each motive')
 
+# Fase 6b+6c+6d: otonomi tersambung ke GERAKAN, bukan cuma keputusan. Sebelum
+# ini simulasi bayangan menyembuhkan motifnya sendiri lewat `_auto_queue` dalam
+# tick yang sama, sehingga NPC lapar tidak pernah benar-benar lapar dari sudut
+# pandang siapa pun di luar `tick`. Sekarang `tick` hanya meluruhkan motif, dan
+# motif naik hanya ketika NPC SUNGGUH berjalan ke perabot lalu tiba.
+from game.npc import NPC as _NPC, NPCState as _NS
+from game.pathfinder import PathGrid as _PG
+from game.motives import Interaction as _Inter, Advert as _Ad
+
+# (a) decouple: tick tidak lagi menyembuhkan; pilih + selesaikan adalah pasangan.
+_bd = _Brains(SimpleNamespace())
+_ed = _bd._brains['arya']
+_ed.motives['hunger'] = 10.0
+_bd.tick(1.0)
+assert _ed.motives['hunger'] < 10.0, ('tick masih menyembuhkan', _ed.motives['hunger'])
+_pil = _bd.pilih_otonom('arya', _fake_stove, 4.0, 4.0, rng=_rng.Random(7))
+assert _pil is not None and _pil[0] == (6, 4), _pil
+assert _pil[1].name in ('Masak', 'Bikin Kopi'), _pil
+_bd.selesaikan_otonom('arya', _Inter('Masak', adverts=[_Ad('lapar', 55)]))
+assert _ed.motives['hunger'] > 50.0, ('selesaikan tidak menaikkan', _ed.motives['hunger'])
+
+def _grid_fresh(obstacles):
+    g = _PG(9, 9, tile_size=1.0)
+    for (c, r) in obstacles:
+        g.set_obstacle(c, r)
+    return g
+
+def _cw(nx, ny):
+    return True
+
+# (b) lapar -> aktor NPC asli mulai menuju kompor (tile deterministik).
+_bm = _Brains(SimpleNamespace())
+_bm.grid = _grid_fresh([(6, 4)])
+_bm._brains['arya'].motives.update({'hunger': 10.0, 'energy': 80.0,
+                                    'social': 70.0, 'fun': 60.0, 'hygiene': 75.0})
+_aktor = _NPC(SimpleNamespace(), 'arya')
+_aktor.logical_x = _aktor.target_x = 2.0
+_aktor.logical_y = _aktor.target_y = 4.0
+_aktor.sched_x = 2.0
+_aktor.sched_y = 4.0
+_aktor.update_ai(1/60, _bm, _cw, _fake_stove)
+assert _aktor.auto_inter is not None, 'NPC lapar tidak memilih interaksi'
+assert _aktor.auto_inter.name in ('Masak', 'Bikin Kopi'), _aktor.auto_inter.name
+assert _aktor.path and _aktor.ai_state == _NS.PATHFINDING, (_aktor.path, _aktor.ai_state)
+destroy(_aktor)
+
+# (c) sehat -> diam: gerbang tertutup, jadwal+wander lama tidak berubah.
+_bm._brains['arya'].motives.update({'hunger': 80.0, 'energy': 80.0,
+                                    'social': 70.0, 'fun': 60.0, 'hygiene': 75.0})
+_aktor2 = _NPC(SimpleNamespace(), 'arya')
+_aktor2.logical_x = _aktor2.target_x = 2.0
+_aktor2.logical_y = _aktor2.target_y = 4.0
+_aktor2.update_ai(1/60, _bm, _cw, _fake_stove)
+assert _aktor2.auto_inter is None and not _aktor2.path, \
+    ('NPC sehat seharusnya tidak jalan otonom', _aktor2.auto_inter, _aktor2.path)
+destroy(_aktor2)
+
+# (d) mengantuk -> berjalan ke kasur DAN saat tiba energinya benar-benar naik.
+#     `auto_first` pada 'Tidur' menjadikan pilihannya deterministik, jadi
+#     kenaikan energi adalah bukti loop lengkap: butuh -> pilih -> jalan -> tiba
+#     -> pulih.
+_bm2 = _Brains(SimpleNamespace())
+_bm2.grid = _grid_fresh([(6, 4)])
+_fake_bed = _mk({(6, 4): _BD})
+_bm2._brains['arya'].motives.update({'hunger': 80.0, 'energy': 10.0,
+                                     'social': 70.0, 'fun': 60.0, 'hygiene': 75.0})
+_aktor3 = _NPC(SimpleNamespace(), 'arya')
+_aktor3.logical_x = _aktor3.target_x = 2.0
+_aktor3.logical_y = _aktor3.target_y = 4.0
+for _ in range(120):
+    _aktor3.update_ai(1/60, _bm2, _cw, _fake_bed)
+assert _bm2._brains['arya'].motives['energy'] > 25.0, \
+    ('energi tidak naik setelah tiba di kasur', _bm2._brains['arya'].motives['energy'])
+destroy(_aktor3)
+record('NPC autonomy walks to the right furniture and recovers its motive on arrival')
+
 # Editor menggeser objek dengan gizmo, lalu menulis posisinya BALIK ke
 # `scene.objects` lewat `dari_posisi_dunia`. Kebalikannya harus TEPAT: kalau
 # `posisi_dunia` dan `dari_posisi_dunia` tidak benar-benar saling membalik,

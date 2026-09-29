@@ -57,13 +57,17 @@ _MOTIVE_BRIDGE = {
     "hygiene": "higiene",
 }
 
-# Ambang "mendesak" untuk otonomi. Sama dengan _auto_queue supaya tidak ada dua
-# gagasan tentang kapan NPC dianggap butuh.
+# Ambang "mendesak" untuk otonomi. Satu-satunya sumber kebenaran untuk "kapan
+# NPC dianggap butuh" -- dipakai `motive_urgent` di pemilihan perabot.
 URGENT_THRESHOLD = {
     "hunger":  35.0,
     "energy":  25.0,
     "social":  30.0,
 }
+
+# Kebalikan _MOTIVE_BRIDGE: nama motif mesin pemain → kunci otak NPC. Dipakai
+# `selesaikan_otonom` untuk menerapkan janji iklan kembali ke otak.
+_MOTIVE_BRIDGE_REVERSE = {v: k for k, v in _MOTIVE_BRIDGE.items()}
 
 
 def _motif_dari_otak(ent: BehaviorEntity) -> Motives:
@@ -99,27 +103,19 @@ class NPCBrains:
 
     # ─── PUBLIC ──────────────────────────────────────────
     def tick(self, dt: float):
-        # Decay motif
+        """Meluruhkan motif tiap NPC.
+
+        Pemulihan TIDAK lagi terjadi diam-diam di sini. Sebelumnya `_auto_queue`
+        mengantri aksi "makan"/"tidur"/"bicara" ke VM, dan VM menaikkan motif
+        dalam tick yang SAMA -- jadi NPC lapar tidak pernah benar-benar lapar
+        dari sudut pandang siapa pun di luar `tick`. Sekarang pemulihan datang
+        dari gerakan nyata: NPC berjalan ke perabot dan `selesaikan_otonom`
+        yang menaikkan motif saat ia tiba.
+        """
         for ent in self._brains.values():
             for key, rate in _MOTIVE_DECAY.items():
                 ent.change_motive(key, -rate * dt)
-            # Auto-queue aksi paling urgent kalau idle
-            if not ent.thread.queue and not ent.thread.stack:
-                self._auto_queue(ent)
         self.vm.tick(dt)
-
-    def _auto_queue(self, ent: BehaviorEntity):
-        # Pilih kebutuhan paling rendah & antri aksi yang menaikkannya
-        thresholds = [
-            ("hunger", "makan",  35.0),
-            ("energy", "tidur",  25.0),
-            ("social", "bicara", 30.0),
-        ]
-        for key, act, th in thresholds:
-            if ent.get_motive(key) < th:
-                ent.queue_action(act, priority=10)
-                return
-        ent.queue_action("idle", priority=1)
 
     def get_motives(self, npc_id: str) -> Optional[dict]:
         ent = self._brains.get(npc_id)
@@ -141,17 +137,16 @@ class NPCBrains:
             return False
         return any(ent.get_motive(k) < v for k, v in URGENT_THRESHOLD.items())
 
-    def target_otonom(self, npc_id: str, world, tx: float, ty: float,
-                      rng=None, radius: int = 8):
-        """Ubin tujuan otonom untuk NPC, atau None kalau tidak ada kebutuhan.
+    def pilih_otonom(self, npc_id: str, world, tx: float, ty: float,
+                     rng=None, radius: int = 8):
+        """Pilih perabot untuk kebutuhan mendesak NPC: `((tx, ty), inter)` / None.
 
         Ini panggilan PERTAMA bagi dua fungsi yang selama ini tidak punya
         pemanggil: `objects.autonomy_candidates` dan `motives.choose_action`.
         `world` harus punya `get_tile(x, y)` dan `scene_obj` (yaitu World3D);
         kalau None, kembalikan None supaya pemanggil jatuh ke jadwal biasa.
 
-        Mengembalikan `(tx, ty)` ubin perabot terpilih. TIDAK mencari jalan --
-        itu tetap tugas PathGrid lewat `plan_path`.
+        TIDAK mencari jalan -- itu tetap tugas PathGrid lewat `plan_path`.
         """
         ent = self._brains.get(npc_id)
         if ent is None or world is None:
@@ -164,8 +159,32 @@ class NPCBrains:
         pick = choose_action(mv, candidates, rng if rng is not None else random)
         if pick is None:
             return None
-        obj, _inter = pick
-        return (obj[0], obj[1])
+        obj, inter = pick
+        return (obj[0], obj[1]), inter
+
+    def target_otonom(self, npc_id: str, world, tx: float, ty: float,
+                      rng=None, radius: int = 8):
+        """Ubin tujuan otonom (tanpa interaksinya), atau None."""
+        pilih = self.pilih_otonom(npc_id, world, tx, ty, rng=rng, radius=radius)
+        if pilih is None:
+            return None
+        (gx, gy), _inter = pilih
+        return (gx, gy)
+
+    def selesaikan_otonom(self, npc_id: str, inter) -> None:
+        """Terapkan janji motif sebuah interaksi ke otak NPC (pemulihan nyata).
+
+        Dipanggil ketika NPC sungguh tiba di perabot -- bukan lewat self-heal
+        bayangan. Iklan `nyaman`/`ruang` tidak punya padanan di otak NPC dan
+        dilewati; lima lainnya dipetakan balik lewat _MOTIVE_BRIDGE_REVERSE.
+        """
+        ent = self._brains.get(npc_id)
+        if ent is None or inter is None:
+            return
+        for ad in getattr(inter, 'adverts', None) or []:
+            key = _MOTIVE_BRIDGE_REVERSE.get(ad.motive)
+            if key:
+                ent.change_motive(key, ad.delta)
 
     # ─── PATHFINDING ─────────────────────────────────────
     def rebuild_grid(self, scene_name: str, dungeon_tiles=None):

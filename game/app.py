@@ -150,6 +150,7 @@ class Game3D:
         self.panels = UIManager(self.state)
         self.world = World3D(self.state)
         self.entities = EntitiesManager(self.state)
+        self.entities.world = self.world
         
         # Load map awal
         self.world.load_scene(self.state.scene_name)

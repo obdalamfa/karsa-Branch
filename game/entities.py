@@ -123,6 +123,7 @@ class EntitiesManager:
         self._npc_sched_t = 0.0
         self._wild_update_t = 0.0
         self.brains = None
+        self.world = None   # World3D; diisi app.py, dipakai otonomi NPC
 
         self._init_data()
         self._npc_sched_hour = self.state.get_hour()
@@ -483,7 +484,7 @@ class EntitiesManager:
                     actor.color = color.white # Revert to normal
                 
             elif isinstance(actor, NPC):
-                actor.update_ai(dt, self.brains, can_walk_fn)
+                actor.update_ai(dt, self.brains, can_walk_fn, self.world)
                 if actor_id in s.npc_positions:
                     s.npc_positions[actor_id]['x'] = actor.logical_x
                     s.npc_positions[actor_id]['y'] = actor.logical_y

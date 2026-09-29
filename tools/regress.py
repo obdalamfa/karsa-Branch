@@ -225,6 +225,39 @@ def main():
         base.taskMgr.step()
     boot_s = time.time() - t0
 
+    # ── Pre-flight: bisakah jendela ini menggambar sama sekali? ─────────────
+    # Diperiksa SEBELUM keempat belas scene dijalankan. Kalau jendela tidak bisa
+    # difokuskan (Windows menolak SetForegroundWindow), isinya tidak pernah
+    # digambar dan setiap tangkapan layar akan kosong -- melaporkan 14 scene
+    # gagal karena itu berarti memberi vonis atas keadaan yang bukan milik
+    # scene.
+    #
+    # Sinyal LANGSUNG, bukan statistik. Versi pertama penjaga ini hanya melihat
+    # hasil di ujung dan mensyaratkan kegagalannya SERAGAM; ketika jendela sempat
+    # pulih di tengah run, 12 dari 14 scene tetap divonis gagal. Memeriksa satu
+    # frame lebih dulu menutup celah itu.
+    for _ in range(8):
+        base.graphicsEngine.renderFrame()
+    _probe = OUT / '_probe.png'
+    _img = base.win.getScreenshot()
+    if _img is not None:
+        _img.write(Filename.fromOsSpecific(str(_probe)))
+    if _probe.exists():
+        _ok_probe, _pesan_probe = cek_frame_kosong(_probe)
+        _probe.unlink(missing_ok=True)
+        if not _ok_probe:
+            print()
+            print('=' * 78)
+            print('LINGKUNGAN BERMASALAH -- dihentikan SEBELUM menjalankan scene.')
+            print(f'Jendela tidak menghasilkan gambar: {_pesan_probe}')
+            print('Windows kemungkinan menolak SetForegroundWindow(), sehingga isinya')
+            print('tidak pernah digambar. Setiap tangkapan layar akan kosong, dan')
+            print('melaporkan scene gagal karena itu tidak sah.')
+            print('Coba lagi dengan:  python tools/regress.py --offscreen')
+            print('=' * 78)
+            sys.stdout.flush()
+            os._exit(2)
+
     from ursina import scene as uscene
     baris = []
     gagal_total = 0
@@ -247,19 +280,28 @@ def main():
             # di sini -- shop, house, lake, cemetery, beach, clinic -- padahal
             # `tools/capture.py`, yang memang memanggil renderFrame(),
             # merender scene yang sama dengan puluhan ribu warna unik.
-            # Tanpa langkah ini, alatnya sendiri yang menjadi sumber kegagalan
-            # palsu, dan seluruh kesimpulan yang dibangun di atasnya tidak aman.
-            for _ in range(8):
-                base.graphicsEngine.renderFrame()
-
+            #
+            # Dan frame kosong bisa TRANSIEN: jendela kehilangan fokus sebentar,
+            # isinya tidak digambar, dan tangkapan berikutnya sudah benar lagi.
+            # Diulang sampai tiga kali, karena yang perlu diputuskan bukan
+            # "tangkapan pertama kosong" melainkan "scene ini TIDAK PERNAH bisa
+            # digambar". Memvonis dari satu percobaan berarti menghukum keadaan
+            # sesaat -- dan itu sudah dua kali menyesatkan.
             png = OUT / f'{nama}.png'
-            img = base.win.getScreenshot()
-            if img is not None:
-                img.write(Filename.fromOsSpecific(str(png)))
+            hasil_frame = _fail('tidak ada tangkapan layar')
+            for _percobaan in range(3):
+                for _ in range(8):
+                    base.graphicsEngine.renderFrame()
+                img = base.win.getScreenshot()
+                if img is not None:
+                    img.write(Filename.fromOsSpecific(str(png)))
+                if png.exists():
+                    hasil_frame = cek_frame_kosong(png)
+                    if hasil_frame[0]:
+                        break
 
             hasil['geom_nol'] = cek_geom_nol(nama)
-            hasil['frame_kosong'] = cek_frame_kosong(png) if png.exists() \
-                else _fail('tidak ada tangkapan layar')
+            hasil['frame_kosong'] = hasil_frame
             hasil['pemain_valid'] = cek_pemain_valid(g)
             hasil['bisa_keluar'] = cek_bisa_keluar(g)
             hasil['motif_waras'] = cek_motif_waras(g)

@@ -22,6 +22,8 @@ Berkas scene menyimpan `"CV_W"`, bukan `28`. Kalau urutan `range(51)` di
 ubin yang salah di seluruh 15 scene — kerusakan yang tidak memunculkan satu pun
 error. Nama juga yang membuat berkasnya bisa dibaca dan diedit manusia.
 """
+import math
+
 from game.config import TILE_IDS
 
 # Versi format berkas scene. Naikkan saat makna sebuah field berubah, lalu
@@ -39,6 +41,53 @@ _ID_TO_KEY = {value: name for name, value in TILE_IDS.items()}
 def tile_key(tid: int) -> str:
     """Nama konstanta untuk sebuah ID ubin."""
     return _ID_TO_KEY.get(tid, f'UNKNOWN_{tid}')
+
+
+# ─── Objek terpasang bebas ──────────────────────────────────────────────────
+# Perabot yang diletakkan di POSISI, bukan di sel grid. Bentuknya sengaja
+# sekecil mungkin: `kind` menunjuk ke tile ID yang sudah ada lewat
+# `objects.tile_dari_kind`, sehingga tekstur, nama pemain, interaksi, dan sifat
+# memblokirnya tidak perlu disimpan di sini -- semuanya sudah ada di tabel yang
+# dipakai grid. Yang benar-benar BARU hanyalah posisi bebas dan rotasi; itulah
+# satu-satunya hal yang tidak bisa diungkapkan grid.
+def _angka(nilai, baku):
+    """float yang terhingga, atau `baku` kalau nilainya tidak bisa dipakai.
+
+    `math.isfinite` penting di sini: `float('nan')` adalah float yang sah di
+    Python, tapi NaN dan Infinity BUKAN JSON yang sah. Menerimanya berarti
+    menulis berkas yang tidak bisa dibaca alat lain.
+    """
+    try:
+        v = float(nilai)
+    except (TypeError, ValueError):
+        return baku
+    return v if math.isfinite(v) else baku
+
+
+def _objek_sah(o):
+    """Validasi satu objek terpasang. None kalau tidak bisa dipakai.
+
+    Objek rusak dibuang SATU, bukan menjatuhkan seluruh scene: satu entri salah
+    ketik di berkas peta tidak boleh membuat game tidak bisa dibuka. Pola yang
+    sama dengan pemuat scene di `__init__.py`.
+    """
+    from game.objects import tile_dari_kind
+    if not isinstance(o, dict):
+        return None
+    kind = o.get('kind')
+    if not isinstance(kind, str) or tile_dari_kind(kind) is None:
+        return None
+    x, z = _angka(o.get('x'), None), _angka(o.get('z'), None)
+    if x is None or z is None:
+        return None
+    skala = _angka(o.get('scale'), 1.0)
+    return {
+        'kind': kind,
+        'x': x, 'z': z,
+        'y': _angka(o.get('y'), 0.0),
+        'rot_y': _angka(o.get('rot_y'), 0.0) % 360.0,
+        'scale': skala if skala > 0 else 1.0,
+    }
 
 
 def resolve_builder(name: str, scene):
@@ -64,7 +113,7 @@ def resolve_builder(name: str, scene):
 
 class Scene:
     def __init__(self, name, display, tiles, portals=None, indoor=False, builder=None,
-                 has_horizon=None, paint=None, builder_name='default'):
+                 has_horizon=None, paint=None, builder_name='default', objects=None):
         if builder is None:
             from .props import default_prop_builder
             self.builder = lambda world: default_prop_builder(world, self)
@@ -89,10 +138,32 @@ class Scene:
         # default_prop_builder() tahu ubin mana yang SUDAH tertutup dan tidak
         # perlu ditambal satu-satu.
         self.paint   = list(paint or [])
+        # Objek terpasang bebas. Validasinya ada di SETTER properti di bawah,
+        # bukan di sini, supaya penugasan langsung sesudah konstruksi -- yang
+        # justru dilakukan editor -- tidak bisa melewatinya.
+        self.objects = objects
         # Horizon = pelat putih raksasa 1000x1000 di world.py. Di dalam ruangan
         # pelat itu menelan seluruh interior jadi void putih ("rumah ga muncul"),
         # jadi defaultnya harus ikut `indoor`, bukan True untuk semua scene.
         self.has_horizon = (not indoor) if has_horizon is None else has_horizon
+
+    # ─── Objek terpasang ────────────────────────────────────────────────────
+    @property
+    def objects(self):
+        return self._objects
+
+    @objects.setter
+    def objects(self, nilai):
+        """Validasi di SETTER, bukan cuma di `__init__`.
+
+        Versi pertama hanya memvalidasi saat konstruksi, dan itu lubang: editor
+        -- dan kode mana pun -- menulis `scene.objects = [...]` langsung, jadi
+        daftar mentah bisa masuk dan baru meledak jauh kemudian di `to_dict`.
+        Properti membuat invariannya tidak bisa dilanggar lewat penugasan.
+
+        Ketahuan dari uji dengan data kotor, bukan dari membaca ulang.
+        """
+        self._objects = [o for o in (_objek_sah(x) for x in (nilai or [])) if o]
 
     # ─── Bentuk data ────────────────────────────────────────────────────────
     def to_dict(self) -> dict:
@@ -125,6 +196,7 @@ class Scene:
             'tiles': grid,
             'portals': [list(p) for p in self.portals],
             'paint': [z.to_dict() for z in self.paint],
+            'objects': [dict(o) for o in self.objects],
         }
 
     @classmethod
@@ -156,6 +228,7 @@ class Scene:
             has_horizon=bool(data.get('has_horizon', True)),
             paint=[Zone.from_dict(z) for z in data.get('paint', [])],
             builder_name=data.get('builder', 'default'),
+            objects=data.get('objects', []),
         )
         # Builder dipasang SESUDAH konstruksi karena `resolve_builder` butuh
         # scene-nya sendiri untuk membentuk closure-nya.

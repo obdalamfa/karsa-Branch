@@ -74,6 +74,15 @@ def bandingkan(asli: Scene, ulang: Scene) -> list[str]:
     if zona_a != zona_b:
         beda.append(f'paint: {zona_a} -> {zona_b}')
 
+    if asli.objects != ulang.objects:
+        beda.append(f'objects: {len(asli.objects)} -> {len(ulang.objects)}')
+        # Sebut objek pertama yang berbeda, bukan seluruh daftar: peta dengan
+        # banyak objek akan membanjiri laporan dan menyembunyikan yang penting.
+        for i, (a, b) in enumerate(zip(asli.objects, ulang.objects)):
+            if a != b:
+                beda.append(f'  objek[{i}]: {a} -> {b}')
+                break
+
     if asli.builder_name not in BUILDER_NAMES:
         beda.append(f"nama builder '{asli.builder_name}' tidak ada di "
                     f'BUILDER_NAMES {BUILDER_NAMES}')

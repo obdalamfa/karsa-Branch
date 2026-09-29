@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from .motives import Advert, Interaction
 from .config import (BD, ST, TB, CHR, TV, CH, BS, MR, FP, CT, SH, PP, CL,
-                     DCK, W, GR, CRYS)
+                     DCK, W, GR, CRYS, BLOCKING)
 
 
 def _i(name, adverts, duration=60.0, atten=0.3, autonomous=True, auto_first=False):
@@ -179,3 +179,44 @@ OBJECT_NAMES: dict[int, str] = {
 
 def object_name(tile_id: int) -> str:
     return OBJECT_NAMES.get(tile_id, 'Benda')
+
+
+# ─── PENEMPATAN BEBAS ───────────────────────────────────────────────────────
+# Sampai sini perabot hanya bisa datang dari GRID: satu tile ID menempati satu
+# sel. `Scene.objects` (game/scenes/scene_base.py) membolehkan perabot yang
+# SAMA diletakkan di posisi bebas, dengan rotasi dan skala.
+#
+# Kuncinya: objek bebas TIDAK punya katalog sendiri. `kind`-nya memetakan ke
+# TILE ID yang sudah ada, sehingga tekstur, nama pemain, interaksi, dan sifat
+# memblokirnya semua diambil dari tabel di atas. Katalog kedua akan perlahan
+# menyimpang dari yang pertama, dan pemain akan menemukan kompor yang bisa
+# dimasak di grid tapi tidak bisa dimasak begitu dipindah ke halaman.
+OBJECT_KINDS: dict[str, int] = {
+    'kasur': BD, 'kompor': ST, 'meja': TB, 'kursi': CHR,
+    'televisi': TV, 'rak_buku': BS, 'cermin': MR, 'tungku': FP,
+    'konter': CT, 'rak': SH, 'peti': CH, 'pot': PP,
+    'jam': CL, 'dermaga': DCK, 'nisan': GR,
+}
+
+
+def tile_dari_kind(kind: str):
+    """Tile ID untuk sebuah jenis objek, atau None kalau jenisnya tak dikenal."""
+    return OBJECT_KINDS.get(kind)
+
+
+def kind_dari_tile(tile_id: int):
+    """Kebalikan `tile_dari_kind`. Dipakai editor untuk menandai objek."""
+    for kind, tid in OBJECT_KINDS.items():
+        if tid == tile_id:
+            return kind
+    return None
+
+
+def solid_kind(kind: str) -> bool:
+    """Apakah objek jenis ini memblokir jalan.
+
+    Diambil dari `BLOCKING` yang sama dengan yang dipakai grid, jadi tidak ada
+    daftar kedua yang bisa berbeda diam-diam.
+    """
+    tid = OBJECT_KINDS.get(kind)
+    return tid is not None and tid in BLOCKING

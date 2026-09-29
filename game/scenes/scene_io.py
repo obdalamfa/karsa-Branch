@@ -23,7 +23,7 @@ from .scene_base import SCENE_VERSION, Scene
 # Field yang isinya "daftar baris kecil", ditulis SATU BARIS PER ELEMEN.
 # `tiles` = satu baris per baris peta, `portals` = satu baris per portal,
 # `paint` = satu baris per zona. Selebihnya memakai indentasi JSON biasa.
-_RINGKAS = ('tiles', 'portals', 'paint')
+_RINGKAS = ('tiles', 'portals', 'paint', 'objects')
 
 
 def teks_scene(data: dict) -> str:

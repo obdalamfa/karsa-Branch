@@ -286,6 +286,37 @@ for name,focus,dist in (('mountain',(29,1,16),48),):
     shot(name+'-entrance',(29,1,10),24,180,34)
 record('five actual-engine screenshots with gameplay camera convention')
 
+# Lapisan objek terpasang (`Scene.objects`). Fase 5a baru DATA-nya -- belum ada
+# yang merender -- jadi yang dibuktikan di sini adalah invariannya, bukan
+# tampilannya: validasi menolak entri rusak, jenis memetakan ke ubin yang sudah
+# ada, dan bolak-balik lewat dict mempertahankannya.
+from game.objects import OBJECT_KINDS as _KINDS, solid_kind as _solid, tile_dari_kind as _tile
+from game.config import BLOCKING as _BLOCK
+from game.scenes.scene_base import Scene as _Scene
+assert len(_KINDS)>=15, len(_KINDS)
+for _k,_tid in _KINDS.items():
+    assert _tile(_k)==_tid
+    # Sifat memblokir harus IKUT grid, bukan daftar kedua yang bisa berbeda.
+    assert _solid(_k)==(_tid in _BLOCK), _k
+_probe=_Scene('probe','Probe',[[0,0],[0,0]])
+_probe.objects=[{'kind':'kompor','x':1.5,'z':2.5},
+                {'kind':'jam','x':0.0,'z':0.0,'rot_y':-90},
+                {'kind':'tidak_ada','x':1,'z':1},
+                {'kind':'kompor','x':float('nan'),'z':1},
+                {'kind':'kompor'},
+                'bukan dict']
+assert len(_probe.objects)==2, _probe.objects
+assert _probe.objects[1]['rot_y']==270.0, _probe.objects[1]
+assert _probe.objects[0]['scale']==1.0
+# Penugasan LANGSUNG sesudah konstruksi juga harus tervalidasi. Versi pertama
+# hanya memvalidasi di __init__, sehingga editor -- yang memang menulis
+# `scene.objects = [...]` -- bisa menyelipkan daftar mentah yang baru meledak
+# jauh kemudian di `to_dict`. Ketahuan dari uji data kotor, bukan dari membaca.
+_probe.objects=[{'kind':'peti','x':1,'z':1},'bukan dict']
+assert len(_probe.objects)==1, _probe.objects
+assert _Scene.from_dict(_probe.to_dict()).objects==_probe.objects
+record('placed-object layer maps kinds to tiles and rejects malformed entries')
+
 # Viewport editor peta. Editor bekerja dengan entity, game menyimpan GRID UBIN;
 # `karsa_tiles.LayerUbin` menjembatani keduanya untuk ditampilkan dan disunting.
 # Yang diperiksa di sini bukan "apakah terlihat bagus" -- itu perlu mata -- tapi

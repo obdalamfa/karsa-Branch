@@ -52,6 +52,12 @@ lembah_karsa_3d_save.json
 lembah_karsa_3d_save.json.corrupt-*
 lembah_karsa_3d_save.json.tmp
 
+# ── Keluaran kerja editor peta ──────────────────────────────────────────────
+# `ursina_editor/main.py` menulis keduanya di sebelah paketnya. Itu hasil
+# sesi menyunting, bukan bagian dari game.
+ursina_editor/scene.json
+ursina_editor/exported_scene.py
+
 # ── Sampah sesi ─────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

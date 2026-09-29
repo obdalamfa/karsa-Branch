@@ -357,6 +357,27 @@ assert _tanpa_tekstur==['kursi','televisi'], _tanpa_tekstur
 assert _OTEX.get(_tdk('dermaga')) is None and _TTEX.get(_tdk('dermaga'))=='dock'
 record('placed objects reuse the grid texture, including TILE_TEX-only kinds')
 
+# Objek terpasang harus BISA DIPAKAI, bukan cuma terlihat. `find_nearby` --
+# yang dipanggil `open_object_menu` untuk membangun pie menu pemain -- memindai
+# grid; sejak Fase 5c ia juga memindai `Scene.objects`. Kalau tidak, perabot
+# yang ditempatkan lewat editor hanya akan jadi patung.
+from game.objects import find_nearby as _cari, tile_dari_kind as _tdk2
+from game.config import CHR as _CHR, CH as _CH, PP as _PP
+w.load_scene('farm')
+_hits=_cari(w, 3, 5, radius=1)
+assert _hits, 'find_nearby tidak menemukan apa pun di teras farm'
+assert _hits[0][3]==_CHR, ('yang terdekat harus kursi terpasang', _hits[0])
+# Jaraknya dihitung dari posisi FLOAT objek (3.5,4.5) ke ubin pemain (3,5) = 0.5.
+# Kalau perender mengembalikan jarak ubin, angkanya akan selalu bilangan bulat
+# dan pot yang ditanam setengah ubin tidak akan terasa lebih dekat.
+assert abs(_hits[0][0]-0.5)<1e-6, _hits[0]
+assert (_hits[0][1],_hits[0][2])==(4,4), _hits[0]
+assert any(h[3]==_PP for h in _hits), 'pot terpasang tidak terlihat'
+assert any(h[3]==_CH for h in _hits), 'peti di GRID tidak lagi terlihat'
+assert not any(h[3]==_tdk2('jam') for h in _hits), \
+    'jam di (4.5,3.5) berjarak 1.5 -- seharusnya di luar radius 1'
+record('placed objects are usable through find_nearby, alongside grid tiles')
+
 # Viewport editor peta. Editor bekerja dengan entity, game menyimpan GRID UBIN;
 # `karsa_tiles.LayerUbin` menjembatani keduanya untuk ditampilkan dan disunting.
 # Yang diperiksa di sini bukan "apakah terlihat bagus" -- itu perlu mata -- tapi

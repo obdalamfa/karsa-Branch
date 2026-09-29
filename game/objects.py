@@ -124,23 +124,56 @@ def is_interactive(tile_id: int) -> bool:
     return tile_id in OBJECT_INTERACTIONS
 
 
-def find_nearby(world, tx: int, ty: int, radius: int = 1):
-    """Perabot yang bisa dipakai di sekitar tile (tx, ty).
+def _kandidat(world, tx: int, ty: int, radius: int, jarak):
+    """Semua perabot yang bisa dipakai di sekitar (tx, ty).
 
-    Mengembalikan [(jarak_tile, tx, ty, tile_id, interaksi), ...] terurut dari
-    yang terdekat. Radius 1 = delapan tetangga plus tile itu sendiri, yang
-    cocok dengan cara pemain berdiri tepat di depan benda.
+    Dua sumber: ubin di grid, dan objek terpasang bebas (`Scene.objects`).
+    Digabung di SATU tempat supaya `find_nearby` dan `autonomy_candidates`
+    tidak pernah punya gagasan berbeda tentang apa yang ada di sekitar --
+    kalau keduanya memindai sendiri-sendiri, pemain dan NPC akan melihat dunia
+    yang berbeda, dan yang satu akan bisa memasak di kompor yang tidak ada bagi
+    yang lain.
+
+    `jarak(dx, dy)` menentukan metriknya: Chebyshev untuk pemain (delapan
+    tetangga), Euclidean untuk NPC (boleh menyeberang ruangan).
+
+    Mengembalikan [(jarak, tx, ty, tile_id, interaksi), ...].
     """
-    hits = []
+    hasil = []
     for dy in range(-radius, radius + 1):
         for dx in range(-radius, radius + 1):
             nx, ny = tx + dx, ty + dy
             tid = world.get_tile(nx, ny)
             acts = interactions_for(tid)
-            if not acts:
-                continue
-            dist = max(abs(dx), abs(dy))
-            hits.append((dist, nx, ny, tid, acts))
+            if acts:
+                hasil.append((jarak(dx, dy), nx, ny, tid, acts))
+
+    # Objek terpasang. Posisinya FLOAT, jadi jaraknya dihitung dari posisi
+    # sebenarnya, bukan dari ubin terdekat: pot yang ditanam setengah ubin dari
+    # pemain memang harus terasa lebih dekat daripada ubin di sebelahnya.
+    # `tx`/`ty` yang dikembalikan tetap bilangan bulat karena dipakai untuk
+    # mencari jalan, dan pathfinder bekerja pada grid.
+    objek = getattr(getattr(world, 'scene_obj', None), 'objects', None) or []
+    for o in objek:
+        tid = tile_dari_kind(o['kind'])
+        acts = interactions_for(tid) if tid is not None else []
+        if not acts:
+            continue
+        d = jarak(o['x'] - tx, o['y'] - ty)
+        if d > radius:
+            continue
+        hasil.append((d, int(round(o['x'])), int(round(o['y'])), tid, acts))
+    return hasil
+
+
+def find_nearby(world, tx: int, ty: int, radius: int = 1):
+    """Perabot yang bisa dipakai di sekitar tile (tx, ty).
+
+    Mengembalikan [(jarak, tx, ty, tile_id, interaksi), ...] terurut dari yang
+    terdekat. Radius 1 = delapan tetangga plus tile itu sendiri, yang cocok
+    dengan cara pemain berdiri tepat di depan benda.
+    """
+    hits = _kandidat(world, tx, ty, radius, lambda dx, dy: max(abs(dx), abs(dy)))
     hits.sort(key=lambda h: h[0])
     return hits
 
@@ -152,18 +185,17 @@ def autonomy_candidates(world, tx: int, ty: int, radius: int = 8):
     jauh lebih besar daripada `find_nearby`: sim boleh berjalan menyeberangi
     ruangan demi sesuatu yang cukup berharga, dan falloff jarak di
     `score_interaction` yang memutuskan apakah itu sepadan.
+
+    BELUM ADA PEMANGGILNYA. Ia melihat objek terpasang sejak Fase 5c supaya
+    tidak menjadi jebakan bagi yang menyambungkannya nanti -- mesin autonomi di
+    `behavior_vm.py` lengkap tetapi belum tersambung ke dunia, dan menyambungkan
+    itu pekerjaan tersendiri.
     """
     out = []
-    for dy in range(-radius, radius + 1):
-        for dx in range(-radius, radius + 1):
-            nx, ny = tx + dx, ty + dy
-            tid = world.get_tile(nx, ny)
-            acts = interactions_for(tid)
-            if not acts:
-                continue
-            dist = (dx * dx + dy * dy) ** 0.5
-            for act in acts:
-                out.append(((nx, ny, tid), act, dist))
+    for dist, nx, ny, tid, acts in _kandidat(
+            world, tx, ty, radius, lambda dx, dy: (dx * dx + dy * dy) ** 0.5):
+        for act in acts:
+            out.append(((nx, ny, tid), act, dist))
     return out
 
 

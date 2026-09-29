@@ -286,6 +286,90 @@ for name,focus,dist in (('mountain',(29,1,16),48),):
     shot(name+'-entrance',(29,1,10),24,180,34)
 record('five actual-engine screenshots with gameplay camera convention')
 
+# Viewport editor peta. Editor bekerja dengan entity, game menyimpan GRID UBIN;
+# `karsa_tiles.LayerUbin` menjembatani keduanya untuk ditampilkan dan disunting.
+# Yang diperiksa di sini bukan "apakah terlihat bagus" -- itu perlu mata -- tapi
+# bahwa jumlahnya benar, tiap entity bisa dipetakan balik ke koordinat ubinnya,
+# dan satu perubahan mendarat di scene DAN di viewport sekaligus. Kalau keduanya
+# bisa berbeda, editor menampilkan peta yang tidak sama dengan yang disimpan.
+import ursina_editor.karsa_tiles as _kt
+_layer=_kt.LayerUbin(SCENES['farm'])
+assert _layer.jumlah_entity()==SCENES['farm'].w*SCENES['farm'].h, \
+    f"viewport punya {_layer.jumlah_entity()} entity, seharusnya satu per ubin"
+for (x,y),ent in list(_layer.ubin.items())[:40]:
+    assert _layer.koordinat(ent)==(x,y), (x,y,_layer.koordinat(ent))
+assert _layer.koordinat(object()) is None, 'entity asing dianggap ubin'
+_palet=_kt.palet()
+assert len(_palet)==51, f'palet harus mencakup 51 ubin, dapat {len(_palet)}'
+_bertekstur=sum(1 for _,_,ada in _palet if ada)
+assert _bertekstur>=47, f'hanya {_bertekstur} ubin punya tekstur'
+# Satu perubahan harus mendarat di scene DAN viewport.
+from game.config import G as _G, FN as _FN
+_lama=SCENES['farm'].tiles[0][0]
+# Nilai barunya WAJIB berbeda dari yang lama. Versi pertama pemeriksaan ini
+# menulis `_FN` ke ubin yang memang sudah `_FN` (perbatasan utara farm), jadi
+# assertion-nya sudah benar sebelum `set()` dipanggil sekalipun -- dan ia tetap
+# lulus walau `set()` sengaja dirusak agar tidak menyentuh scene. Ketahuan dari
+# uji suntik, bukan dari membaca ulang.
+_baru=_G if _lama!=_G else _FN
+assert _baru!=_lama, 'uji ini butuh dua nilai ubin yang berbeda'
+_sebelum=_layer.ubin[(0,0)]
+assert _layer.set(0,0,_baru), 'set() mengembalikan False'
+assert SCENES['farm'].tiles[0][0]==_baru, 'perubahan tidak mendarat di scene'
+assert _layer.ubin[(0,0)] is not _sebelum, 'viewport tidak dibangun ulang'
+assert _layer.koordinat(_layer.ubin[(0,0)])==(0,0)
+assert _layer.set(0,0,_lama), 'gagal mengembalikan ubin'
+assert SCENES['farm'].tiles[0][0]==_lama, 'pemulihan tidak mendarat di scene'
+assert not _layer.set(-1,0,_G), 'koordinat di luar peta harus ditolak'
+destroy(_layer.root)
+record('map editor viewport mirrors the tile grid and edits land in both')
+
+# Logika sesi penyuntingan peta (`SesiKarsa`), terpisah dari tombolnya supaya
+# bisa diperiksa di sini. Yang dibuktikan: klik pada entity yang BUKAN ubin
+# ditolak alih-alih crash, klik pada ubin mengubah scene lewat jalur yang sama
+# dengan yang dipakai UI, dan simpan benar-benar menulis berkas yang bisa
+# dibaca ulang.
+import shutil as _shutil
+import ursina_editor.karsa_panel as _kp
+import ursina_editor.karsa_scene as _ksc
+_sesi=_kp.SesiKarsa()
+assert len(_sesi.daftar())==15, len(_sesi.daftar())
+_sesi.buka('farm')
+assert _sesi.scene is not None and _sesi.layer is not None and not _sesi.kotor
+assert _sesi.klik(None) is False and _sesi.klik(object()) is False, \
+    'klik bukan-ubin harus ditolak, bukan crash'
+from game.config import G as _G2
+_x,_y=3,3
+_lama3=_sesi.scene.tiles[_y][_x]
+_sesi.pilih_ubin(_FN if _lama3!=_FN else _G2)
+assert _sesi.klik(_sesi.layer.ubin[(_x,_y)]) is True
+assert _sesi.scene.tiles[_y][_x]==_sesi.tid_aktif!=_lama3, 'klik tidak mengubah ubin'
+assert _sesi.kotor, 'sesi tidak menandai dirinya kotor setelah disunting'
+_sesi.tutup()
+assert _sesi.scene is None and _sesi.layer is None
+try:
+    _kp.SesiKarsa().simpan(); assert False, 'simpan tanpa scene harus menolak'
+except RuntimeError:
+    pass
+# Jalur simpan diuji di direktori TERISOLASI supaya berkas scene asli tidak
+# pernah tersentuh oleh harness.
+_asli_dir=_ksc.DIR_SCENE
+_ksc.DIR_SCENE=ROOT/'gauntlet'/'_scene_test'
+try:
+    _ksc.DIR_SCENE.mkdir(exist_ok=True)
+    _s2=_kp.SesiKarsa(); _s2.buka('farm')
+    _s2.pilih_ubin(_G2); _s2.klik(_s2.layer.ubin[(3,3)])
+    _p=_s2.simpan()
+    assert _p.exists() and not _s2.kotor, 'simpan tidak menulis atau tidak membersihkan kotor'
+    _ulang,_sumber=_ksc.muat('farm')
+    assert _ulang.tiles[3][3]==_G2, 'ubin hasil simpan tidak terbaca kembali'
+    assert _ulang.w==_s2.scene.w and _ulang.h==_s2.scene.h
+    assert len(_ulang.portals)==len(_s2.scene.portals)
+finally:
+    _ksc.DIR_SCENE=_asli_dir
+    _shutil.rmtree(ROOT/'gauntlet'/'_scene_test', ignore_errors=True)
+record('map editing session paints, rejects non-tiles, and saves readable files')
+
 # Head-seek. `daftarkan_pemain()` di entities.py adalah SATU-SATUNYA penulis
 # `_PEMAIN_AKTIF`, dan ia tidak pernah dipanggil dari mana pun -- padahal
 # docstring-nya sendiri mengklaim "Dipanggil Player3D.__init__". Akibatnya

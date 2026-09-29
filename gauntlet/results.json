@@ -10,6 +10,8 @@
     "real portal cooldown, dungeon generation and return transition",
     "guardian visual update runs exactly once per frame",
     "five actual-engine screenshots with gameplay camera convention",
+    "map editor viewport mirrors the tile grid and edits land in both",
+    "map editing session paints, rejects non-tiles, and saves readable files",
     "player registers itself for NPC head-seek"
   ],
   "memory_vfs_fallback": false,

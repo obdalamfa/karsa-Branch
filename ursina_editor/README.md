@@ -41,11 +41,61 @@ A standalone, visual 3D scene and level editor built with the **Ursina Engine**.
 Launch the editor from your terminal:
 
 ```bash
-# From within the ursina_editor folder:
-python main.py
-
-# Or from the parent directory:
+# From the repository root:
 python -m ursina_editor.main
+
+# Or from within the ursina_editor folder:
+python main.py
+```
+
+The editor writes `scene.json` and `exported_scene.py` next to its own package,
+**not** in the current working directory. Both are ignored by git — they are
+session output, not part of the game.
+
+---
+
+## Menyunting peta Lembah Karsa
+
+Tekan **`K`** untuk membuka panel peta. Panel itu berdiri sendiri karena ia
+mengurus **grid ubin** milik game, sedangkan seluruh panel lain di editor ini
+mengurus **entity bebas** — dua model yang berbeda, dan mencampurnya di satu
+toolbar akan membuat keduanya terlihat seperti satu.
+
+Alurnya: pilih scene dari daftar, pilih jenis ubin dari palet, lalu **klik ubin
+di viewport untuk mengecat**. Tombol `SIMPAN PETA` menulis
+`game/scenes/<nama>.json`.
+
+Ubin ditampilkan memakai **tekstur asli game** dari `assets/textures/`, bukan
+warna karangan, supaya peta terlihat seperti di game. Empat ubin (PALM, TV, CHR,
+CAL) tidak punya tekstur di `world.py`; keempatnya memakai warna netral dan
+ditandai `?` di palet.
+
+### Yang belum bisa dilakukan di sini
+
+Editor ini memakai gizmo transform untuk memindahkan, memutar, dan menskalakan
+entity. Itu **tidak berlaku untuk ubin**: ubin menempati sel grid, jadi
+"memindahkan" sebuah ubin berarti menulis ulang dua sel, bukan menggeser posisi.
+Karena itu penyuntingan ubin memakai klik-untuk-mengecat.
+
+Objek bebas yang bisa digeser dengan gizmo — furnitur, pohon, bangunan — belum
+tersimpan di game. Dunia game adalah grid, bukan daftar entity. Lapisan objek
+terpasang adalah pekerjaan tersendiri.
+
+### Setelah menyimpan
+
+Jalankan dari akar repo:
+
+```bash
+python tools/scene_export.py --check
+```
+
+Perintah itu mengadu **berkas data melawan kode**. Kalau hasil editan Anda
+menyimpang dari `game/scenes/<nama>.py`, ia menyebut ubin yang berbeda beserta
+koordinatnya. Itu memang tujuannya: kode dan data tidak boleh berbeda diam-diam.
+
+```bash
+python tools/scene_export.py --check farm town   # scene tertentu saja
+python tools/editor_smoke.py                     # uji editor tanpa membuka jendela
 ```
 
 ---
@@ -70,6 +120,8 @@ python -m ursina_editor.main
 | **Quick Save Scene** | `Ctrl + S` or click `Save` |
 | **Toggle Play Mode** | Press `P` or click `Play Mode [P]` |
 | **Exit Play Mode** | Press `Esc` |
+| **Toggle Peta Karsa** | Press `K` |
+| **Cat ubin (peta Karsa)** | Klik kiri pada ubin di viewport |
 | **Toggle Shortcuts & Help** | Press `H` or `F1` or click `? Help [H]` |
 
 ---

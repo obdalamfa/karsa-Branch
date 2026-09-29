@@ -41,12 +41,14 @@ try:
     from ursina_editor.hierarchy import HierarchyPanel
     from ursina_editor.inspector import InspectorPanel
     from ursina_editor.play_mode import PlayModeManager
+    from ursina_editor.karsa_panel import PanelKarsa
 except ImportError:
     from scene_manager import SceneManager
     from gizmo import TransformGizmo
     from hierarchy import HierarchyPanel
     from inspector import InspectorPanel
     from play_mode import PlayModeManager
+    from karsa_panel import PanelKarsa
 
 
 class UrsinaEditorApp:
@@ -102,6 +104,12 @@ class UrsinaEditorApp:
             grid_entity=self.grid,
             gizmo=self.gizmo
         )
+
+        # Panel peta Lembah Karsa. Panel ini mengurus GRID UBIN milik game,
+        # sedangkan seluruh panel di atas mengurus entity bebas -- dua model
+        # yang berbeda, jadi ia berdiri sendiri dan tidak menumpang toolbar.
+        # Tersembunyi sampai dinyalakan dengan `K`.
+        self.karsa_panel = PanelKarsa(on_pesan=self.show_notification)
 
         # Populate Starter Scene
         self._setup_starter_scene()
@@ -717,6 +725,17 @@ class UrsinaEditorApp:
             return
         elif key == 'escape' and self.help_modal.enabled:
             self.help_modal.enabled = False
+            return
+
+        # Panel peta Karsa. Diperiksa SEBELUM gizmo: mengklik ubin untuk
+        # mengecat tidak boleh sekaligus memindahkan gizmo ke sana.
+        if key == 'k':
+            nyala = self.karsa_panel.toggle()
+            self.show_notification(
+                "Panel peta Karsa aktif -- pilih scene, pilih ubin, klik ubin untuk mengecat."
+                if nyala else "Panel peta Karsa disembunyikan.")
+            return
+        if key == 'left mouse down' and self.karsa_panel.klik_viewport():
             return
 
         # Gizmo hotkeys & clicks

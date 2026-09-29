@@ -38,7 +38,7 @@ from game.scenes.scene_base import (               # noqa: E402
 )
 
 
-def _bandingkan(asli: Scene, ulang: Scene) -> list[str]:
+def bandingkan(asli: Scene, ulang: Scene) -> list[str]:
     """Daftar perbedaan antara scene asli dan hasil rekonstruksi."""
     beda = []
 
@@ -107,7 +107,7 @@ def main() -> int:
                   f'{type(e).__name__}: {e}')
             gagal += 1
             continue
-        masalah += _bandingkan(asli, ulang)
+        masalah += bandingkan(asli, ulang)
 
         # 2. `to_dict()` harus stabil. Legend dibangun dari urutan kemunculan
         #    ubin; kalau urutannya tidak deterministik, dua penyimpanan berturut
@@ -123,7 +123,7 @@ def main() -> int:
             masalah.append(f'JSON: {type(e).__name__}: {e}')
             lewat_json = None
         if lewat_json is not None:
-            masalah += [f'(via JSON) {m}' for m in _bandingkan(asli, lewat_json)]
+            masalah += [f'(via JSON) {m}' for m in bandingkan(asli, lewat_json)]
 
         # 4. Setiap nama di legend harus ada di TILE_IDS -- kalau tidak,
         #    berkasnya tidak akan bisa dimuat lagi setelah ditulis.

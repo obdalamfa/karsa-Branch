@@ -15,7 +15,7 @@
     "placed objects reuse the grid texture, including TILE_TEX-only kinds",
     "placed objects are usable through find_nearby, alongside grid tiles",
     "NPC autonomy bridge selects the right furniture for each motive",
-    "NPC autonomy walks to the right furniture and recovers its motive on arrival",
+    "NPC autonomy walks, uses the furniture, then recovers its motive",
     "editor moving an object round-trips through the shared position formula",
     "map editor viewport mirrors the tile grid and edits land in both",
     "map editing session paints, rejects non-tiles, and saves readable files",

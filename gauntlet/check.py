@@ -506,10 +506,12 @@ assert _aktor2.auto_inter is None and not _aktor2.path, \
     ('NPC sehat seharusnya tidak jalan otonom', _aktor2.auto_inter, _aktor2.path)
 destroy(_aktor2)
 
-# (d) mengantuk -> berjalan ke kasur DAN saat tiba energinya benar-benar naik.
-#     `auto_first` pada 'Tidur' menjadikan pilihannya deterministik, jadi
-#     kenaikan energi adalah bukti loop lengkap: butuh -> pilih -> jalan -> tiba
-#     -> pulih.
+# (d) mengantuk -> berjalan ke kasur, lalu MEMAKAI-nya selama durasi sebelum
+#     energinya naik. `auto_first` pada 'Tidur' menjadikan pilihannya
+#     deterministik. Dua fase dibuktikan sekaligus: (1) motif TIDAK boleh pulih
+#     seketika saat tiba -- NPC harus berdiri memakai dulu; (2) setelah durasi,
+#     energi benar-benar naik. Loop lengkap: butuh -> pilih -> jalan -> tiba ->
+#     memakai -> pulih.
 _bm2 = _Brains(SimpleNamespace())
 _bm2.grid = _grid_fresh([(6, 4)])
 _fake_bed = _mk({(6, 4): _BD})
@@ -518,12 +520,23 @@ _bm2._brains['arya'].motives.update({'hunger': 80.0, 'energy': 10.0,
 _aktor3 = _NPC(SimpleNamespace(), 'arya')
 _aktor3.logical_x = _aktor3.target_x = 2.0
 _aktor3.logical_y = _aktor3.target_y = 4.0
+# Fase 1: jalan sampai mulai memakai. Durasi belum selesai -> energi belum naik.
 for _ in range(120):
     _aktor3.update_ai(1/60, _bm2, _cw, _fake_bed)
+    if _aktor3.use_timer > 0:
+        break
+assert _aktor3.use_timer > 0, 'NPC mengantuk tidak masuk fase memakai'
+assert _bm2._brains['arya'].motives['energy'] == 10.0, \
+    ('energi pulih sebelum durasi selesai', _bm2._brains['arya'].motives['energy'])
+# Fase 2: selesaikan durasi (maks 6 detik = 360 frame) -> energi naik.
+for _ in range(400):
+    _aktor3.update_ai(1/60, _bm2, _cw, _fake_bed)
+    if _aktor3.auto_inter is None and _aktor3.use_timer <= 0:
+        break
 assert _bm2._brains['arya'].motives['energy'] > 25.0, \
-    ('energi tidak naik setelah tiba di kasur', _bm2._brains['arya'].motives['energy'])
+    ('energi tidak naik setelah durasi memakai', _bm2._brains['arya'].motives['energy'])
 destroy(_aktor3)
-record('NPC autonomy walks to the right furniture and recovers its motive on arrival')
+record('NPC autonomy walks, uses the furniture, then recovers its motive')
 
 # Editor menggeser objek dengan gizmo, lalu menulis posisinya BALIK ke
 # `scene.objects` lewat `dari_posisi_dunia`. Kebalikannya harus TEPAT: kalau

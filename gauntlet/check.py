@@ -378,6 +378,77 @@ assert not any(h[3]==_tdk2('jam') for h in _hits), \
     'jam di (4.5,3.5) berjarak 1.5 -- seharusnya di luar radius 1'
 record('placed objects are usable through find_nearby, alongside grid tiles')
 
+# Autonomi NPC. `objects.autonomy_candidates` dan `motives.choose_action`
+# selama ini TIDAK punya pemanggil; `npc_brain.target_otonom` adalah pemanggil
+# pertamanya, lewat satu gerbang motif. Yang dibuktikan di sini BUKAN gerakan
+# (fase berikut), tapi bahwa kebutuhan memilih perabot yang benar. Dunia palsu
+# dipakai supaya susunannya deterministik, tidak bergantung layout scene.
+import random as _rng
+from game.behavior_vm import BehaviorEntity as _BEnt
+from game.npc_brain import NPCBrains as _Brains, _motif_dari_otak as _mdo
+from game.objects import autonomy_candidates as _acand, interactions_for as _ifor
+from game.motives import Motives as _Motives, score_interaction as _score
+from game.config import ST as _ST, BD as _BD, G as _G
+
+# Jembatan motif: lima kunci Inggris memetakan ke motif Indonesia satu-satu,
+# dan tiga motif yang tidak dimodelkan otak NPC tetap pada default netral.
+_mv = _mdo(_BEnt('probe', motives={
+    'hunger': 10.0, 'energy': 80.0, 'social': 70.0, 'fun': 60.0, 'hygiene': 75.0}))
+assert isinstance(_mv, _Motives)
+assert (_mv.lapar, _mv.energi, _mv.sosial, _mv.senang, _mv.higiene) == \
+    (10.0, 80.0, 70.0, 60.0, 75.0), _mv.as_dict()
+assert (_mv.nyaman, _mv.kandung, _mv.ruang) == (50.0, 70.0, 0.0), _mv.as_dict()
+
+def _mk(cells_special):
+    cells = {(c, r): _G for r in range(9) for c in range(9)}
+    cells.update(cells_special)
+    return SimpleNamespace(
+        scene_obj=SimpleNamespace(objects=[]),
+        get_tile=lambda x, y, _c=cells: _c.get((int(x), int(y)), _G),
+    )
+
+_fake = _mk({(6, 4): _ST, (2, 4): _BD})   # kompor + kasur
+_fake_stove = _mk({(6, 4): _ST})          # hanya kompor
+
+# (a) autonomy_candidates melihat kedua jenis perabot di sekitar.
+_cands = _acand(_fake, 4, 4, radius=8)
+assert {c[0][2] for c in _cands} == {_ST, _BD}, {c[0][2] for c in _cands}
+
+_b = _Brains(SimpleNamespace())
+_nid = 'arya'
+_ent = _b._brains[_nid]
+
+# (b) sehat -> tidak mendesak, dan gerbang otonom tertutup (tanpa tujuan).
+_ent.motives.update({'hunger': 80.0, 'energy': 80.0, 'social': 70.0,
+                     'fun': 60.0, 'hygiene': 75.0})
+assert _b.motive_urgent(_nid) is False
+assert _b.target_otonom(_nid, _fake, 4.0, 4.0) is None
+
+# (c) lapar -> kompor. Di dunia tanpa kasur, satu-satunya kandidat adalah
+#     'Masak'/'Bikin Kopi' pada kompor yang SAMA, jadi hasilnya deterministik:
+#     ubin kompor, bukan kasur (yang memang tidak ada) dan bukan None.
+_ent.motives['hunger'] = 10.0
+assert _b.motive_urgent(_nid) is True
+_t = _b.target_otonom(_nid, _fake_stove, 4.0, 4.0, rng=_rng.Random(1234))
+assert _t is not None, 'NPC lapar tidak memilih apa pun'
+assert _fake_stove.get_tile(*_t) == _ST, ('NPC lapar memilih', _t)
+
+# (d) mengantuk -> kasur, lewat auto_first 'Tidur'. Ada kompor di dekat yang
+#     juga mengiklankan energi ('Bikin Kopi'), tapi 'Tidur' menang deterministik
+#     apa pun RNG-nya, jadi ini membuktikan prioritas kebutuhan yang sebenarnya.
+_ent.motives.update({'hunger': 80.0, 'energy': 10.0})
+_t2 = _b.target_otonom(_nid, _fake, 4.0, 4.0, rng=_rng.Random(9999))
+assert _t2 == (2, 4), ('NPC mengantuk memilih', _t2)
+
+# (e) falloff jarak nyata: 'Masak' yang dekat menilai lebih tinggi daripada jauh.
+#     Inilah alasan `autonomy_candidates` memakai radius 8 dan bukannya 1.
+_masak = next(i for i in _ifor(_ST) if i.name == 'Masak')
+_mv2 = _Motives(); _mv2.lapar = 20.0
+_s_dekat = _score(_mv2, _masak, 2.0)
+_s_jauh = _score(_mv2, _masak, 6.0)
+assert _s_dekat > _s_jauh > 0.0, (_s_dekat, _s_jauh)
+record('NPC autonomy bridge selects the right furniture for each motive')
+
 # Editor menggeser objek dengan gizmo, lalu menulis posisinya BALIK ke
 # `scene.objects` lewat `dari_posisi_dunia`. Kebalikannya harus TEPAT: kalau
 # `posisi_dunia` dan `dari_posisi_dunia` tidak benar-benar saling membalik,

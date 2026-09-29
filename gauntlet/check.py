@@ -285,6 +285,22 @@ for name,focus,dist in (('mountain',(29,1,16),48),):
     shot(name+'-overview',focus,dist)
     shot(name+'-entrance',(29,1,10),24,180,34)
 record('five actual-engine screenshots with gameplay camera convention')
+
+# Head-seek. `daftarkan_pemain()` di entities.py adalah SATU-SATUNYA penulis
+# `_PEMAIN_AKTIF`, dan ia tidak pernah dipanggil dari mana pun -- padahal
+# docstring-nya sendiri mengklaim "Dipanggil Player3D.__init__". Akibatnya
+# `_PEMAIN_AKTIF[0]` selalu None, `_lihat_pemain` di entities.update() selalu
+# None, dan cabang head-seek tidak pernah menyala. Itu ikut mematikan
+# satu-satunya bagian `animator.py` yang masih punya pemanggil hidup
+# (HeadSeekController). Dijalankan paling akhir supaya Player3D yang dibangun
+# di sini tidak ikut muncul di kelima screenshot di atas.
+import game.entities as _entities_mod
+_entities_mod._PEMAIN_AKTIF[0]=None
+_probe_player=Player3D(s,w)
+assert _entities_mod._PEMAIN_AKTIF[0] is _probe_player, \
+    'Player3D tidak mendaftarkan diri; head-seek NPC akan mati'
+record('player registers itself for NPC head-seek')
+
 (ROOT/'gauntlet/results.json').write_text(json.dumps({'passed':passed,'memory_vfs_fallback':memory_fallback,
     'interactive_playthrough':False},indent=2),encoding='utf-8')
 print('RESULT:',len(passed),'checks passed; memory VFS:',memory_fallback)

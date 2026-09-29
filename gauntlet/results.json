@@ -9,7 +9,8 @@
     "guardian dialogue, interaction radius and obtainable iron gift progression",
     "real portal cooldown, dungeon generation and return transition",
     "guardian visual update runs exactly once per frame",
-    "five actual-engine screenshots with gameplay camera convention"
+    "five actual-engine screenshots with gameplay camera convention",
+    "player registers itself for NPC head-seek"
   ],
   "memory_vfs_fallback": false,
   "interactive_playthrough": false

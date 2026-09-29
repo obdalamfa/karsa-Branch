@@ -32,4 +32,7 @@ def build_naga_cave():
     ])
 
     scene.builder = lambda world: build_cavern(world, scene)
+    # Nama builder ikut disimpan: berkas scene tidak bisa memuat lambda, jadi
+    # hanya namanya yang bisa bolak-balik. Lihat game/scenes/scene_base.py.
+    scene.builder_name = 'cave'
     return scene

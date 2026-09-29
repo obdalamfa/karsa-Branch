@@ -23,7 +23,8 @@ def build_beach():
             if x < 12 or x > 20:
                 if rng.random() < 0.1: m[y][x] = PALM
                 elif rng.random() < 0.05: m[y][x] = DT
-    return Scene('beach', 'Pantai Selatan', m, builder=beach_builder, portals=[
+    return Scene('beach', 'Pantai Selatan', m, builder=beach_builder,
+                 builder_name='beach', portals=[
         (14, 0, 'town', 14, 23), (15, 0, 'town', 15, 23),
     ])
 

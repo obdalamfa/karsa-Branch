@@ -26,7 +26,7 @@ sys.path.insert(0, str(ROOT))
 # tidak pernah punya gagasan berbeda tentang apa artinya "identik".
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from game.scenes import SCENES                       # noqa: E402
+from game.scenes import SCENE_BUILDERS               # noqa: E402
 from game.scenes.scene_base import Scene             # noqa: E402
 from scene_roundtrip import bandingkan               # noqa: E402
 
@@ -75,9 +75,9 @@ def teks_scene(data: dict) -> str:
 def main() -> int:
     hanya_cek = '--check' in sys.argv
     dipilih = [a for a in sys.argv[1:] if not a.startswith('--')]
-    nama_scene = dipilih or sorted(SCENES)
+    nama_scene = dipilih or sorted(SCENE_BUILDERS)
 
-    tak_dikenal = [n for n in nama_scene if n not in SCENES]
+    tak_dikenal = [n for n in nama_scene if n not in SCENE_BUILDERS]
     if tak_dikenal:
         print(f'scene tidak dikenal: {tak_dikenal}')
         return 2
@@ -89,7 +89,11 @@ def main() -> int:
     gagal = 0
     total = 0
     for nama in nama_scene:
-        asli = SCENES[nama]
+        # Sisi "kode" dibangun ULANG dari fungsi builder, bukan diambil dari
+        # SCENES. Sejak Fase 3 SCENES berisi hasil bacaan berkas data, jadi
+        # membandingkannya dengan berkasnya sendiri akan selalu setuju --
+        # drift detector-nya mati dan tidak membuktikan apa pun.
+        asli = SCENE_BUILDERS[nama]()
         p = jalur(nama)
 
         if not hanya_cek:
@@ -113,7 +117,10 @@ def main() -> int:
         # Yang dibandingkan adalah scene hasil BACA DARI DISK, bukan dict di
         # memori. Itu yang membuktikan berkasnya sendiri bisa dimuat ulang.
         try:
-            dari_disk = Scene.from_dict(json.loads(p.read_text(encoding='utf-8')))
+            # `utf-8-sig` menerima berkas dengan maupun tanpa BOM, sama seperti
+            # pemuat di game/scenes/__init__.py.
+            dari_disk = Scene.from_dict(
+                json.loads(p.read_text(encoding='utf-8-sig')))
         except Exception as e:
             print(f'{nama:<13}{ukuran/1024:>8.1f}K  GAGAL memuat: '
                   f'{type(e).__name__}: {e}')

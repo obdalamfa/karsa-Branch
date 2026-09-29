@@ -32,7 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from game.scenes import SCENES                     # noqa: E402
+from game.scenes import SCENE_BUILDERS             # noqa: E402
 from game.scenes.scene_base import (               # noqa: E402
     BUILDER_NAMES, Scene, tile_key, TILE_IDS,
 )
@@ -85,9 +85,9 @@ def bandingkan(asli: Scene, ulang: Scene) -> list[str]:
 
 def main() -> int:
     dipilih = sys.argv[1:]
-    nama_scene = dipilih or sorted(SCENES)
+    nama_scene = dipilih or sorted(SCENE_BUILDERS)
 
-    tak_dikenal = [n for n in nama_scene if n not in SCENES]
+    tak_dikenal = [n for n in nama_scene if n not in SCENE_BUILDERS]
     if tak_dikenal:
         print(f'scene tidak dikenal: {tak_dikenal}')
         return 2
@@ -95,7 +95,10 @@ def main() -> int:
     print(f'{"scene":<13}{"ubin":>7}{"zona":>6}{"portal":>7}  hasil')
     gagal = 0
     for nama in nama_scene:
-        asli = SCENES[nama]
+        # Dibangun dari KODE, bukan diambil dari SCENES: sejak Fase 3 SCENES
+        # bisa berisi hasil bacaan berkas data, sedangkan tes ini menguji
+        # FORMAT-nya, bukan datanya.
+        asli = SCENE_BUILDERS[nama]()
         masalah = []
 
         # 1. Bolak-balik lewat dict.

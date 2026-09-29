@@ -42,6 +42,16 @@ gauntlet/cave-overview.png.pz
 # menyimpan keduanya hanya membuang sekitar 450 KB.
 cave-preview.png
 
+# ── State pemain ────────────────────────────────────────────────────────────
+# `config.py:35` menjadikan ini target save hidup, dan `state.py` membukanya
+# relatif terhadap CWD. Selama ia ter-track, setiap kali ada yang bermain
+# `git status` jadi kotor dan salinan di repo tertukar dengan milik pemain.
+# Berkas rusak yang dikarantina `GameState._quarantine()` serta berkas
+# sementara dari penulisan atomik juga masuk sini.
+lembah_karsa_3d_save.json
+lembah_karsa_3d_save.json.corrupt-*
+lembah_karsa_3d_save.json.tmp
+
 # ── Sampah sesi ─────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

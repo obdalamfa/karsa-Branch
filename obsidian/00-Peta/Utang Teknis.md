@@ -9,23 +9,13 @@ tags: [moc, utang, status/terbuka]
 
 Daftar hal yang diketahui berutang. Setiap butir punya bukti, bukan firasat.
 
-## 🟠 `entity_mesh.py` yatim — 458 baris tanpa pemanggil
+## ✅ `entity_mesh.py` — terbukti jalan dan ditandai (2026-10-03)
 
-Ditambahkan di [[2026-08-27 — Tata letak, avatar native, tukang mesh]] sebagai
-"tukang mesh untuk kosakata rupa entitas". Diperiksa 2026-09-22:
-
-```
-grep -rn "entity_mesh" --include=*.py .   → hanya file itu sendiri
-```
-
-Ia sendiri memakai `entity_style.py`, tapi tidak ada satu pun modul yang
-memakainya. Efeknya di game: **nol**. Ini pola yang persis sama dengan yang
-ditangani [[Tahap 2 — Verifikasi modul yatim]] — modul mendarat lengkap saat
-agennya kehabisan sesi, tepat sebelum disambungkan.
-
-Pilihannya dua, dan keduanya jujur: sambungkan ke jalur render entitas, atau
-tandai eksplisit sebagai belum dipakai. Yang tidak boleh: membiarkannya
-terlihat seolah sudah bekerja.
+458 baris tanpa pemanggil, dan statusnya sempat "tidak jelas". Sekarang jelas:
+16 pemeriksaan di `_bench/probes/probe_entity_mesh.py` lulus semua, dan kepala
+modulnya menyatakan terang bahwa ia menunggu [[Tahap 7 — Misteri dan entitas]].
+Tidak disambungkan supaya tidak melompati urutan tahap →
+[[Tahap 2 — Verifikasi modul yatim]].
 
 ## ✅ Autonomi — lunas, oleh branch sebelah
 
@@ -33,7 +23,7 @@ Dulu utang paling murah di daftar ini: dua fungsi matang tanpa pemanggil.
 Sejak merge `342facf` ia dipanggil dari `game/npc.py:92` — kode game yang
 hidup, bukan harness → [[Tahap 5 — Autonomi]].
 
-## 🟡 92 file `.pyc` ikut ter-commit — separuh lunas
+## ✅ 92 file `.pyc` — lunas, oleh base branch
 
 `git ls-files | grep -c '\.pyc$'` → **92**, bytecode `cpython-314` yang tidak
 relevan dan bikin diff berisik.
@@ -43,10 +33,16 @@ regresi di sesi itu menaburkan **70+ berkas `.pyc` baru** ke `git status`,
 plus mengubah cache biner `game/vitaboy/.vitaboy_index.pkl`. Tanpa ignore,
 semuanya berisiko ikut ter-commit hanya karena seseorang mengetik `git add -A`.
 
-**Belum:** 92 berkas yang sudah terlanjur dilacak tetap dilacak — `.gitignore`
-tidak berlaku surut. Melepasnya butuh `git rm -r --cached` sekali, dan karena
-itu menyentuh 92 berkas ia pantas jadi commit tersendiri, bukan disisipkan ke
-commit lain.
+**Juga sudah, dan bukan oleh sesi ini:** base branch melepas 92 berkas yang
+terlanjur dilacak. Diperiksa 2026-10-03:
+
+```
+git ls-files | grep -c '\.pyc$'   →  0
+```
+
+Nota ini sempat mencatatnya sebagai utang terbuka beberapa jam setelah ia
+sebenarnya lunas — contoh kecil kenapa [[Status Sekarang]] harus diperiksa
+ulang terhadap repo, bukan terhadap catatan sebelumnya.
 
 ## 🟡 `PLAY.md` sudah melenceng dari kode
 

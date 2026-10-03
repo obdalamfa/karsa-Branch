@@ -19,7 +19,7 @@ sudah terjadi, dan vault mencatat yang terjadi.
 |---|---|---|---|
 | 0 | ✅ selesai | amankan kerja di git | [[Tahap 0 — Amankan kerja]] |
 | 1 | ✅ selesai | jaring pengaman regresi, kini otomatis di CI | [[Tahap 1 — Jaring pengaman]] |
-| 2 | 🔨 jalan | verifikasi modul yang terlanjur ada | [[Tahap 2 — Verifikasi modul yatim]] |
+| 2 | ✅ selesai | verifikasi modul yang terlanjur ada | [[Tahap 2 — Verifikasi modul yatim]] |
 | 3 | ⬜ belum | performa — garis dasar per scene sudah ada | [[Tahap 3 — Performa]] |
 | 4 | ⬜ belum | Wishes — alasan untuk peduli | [[Tahap 4 — Wishes]] |
 | 5 | ✅ selesai | autonomi NPC — NPC berjalan ke perabot | [[Tahap 5 — Autonomi]] |
@@ -42,6 +42,7 @@ timeline
                : regresi jalan sungguhan 14/14, CI dipasang
                : CI terbukti hijau di GitHub; base di-merge
                : Tahap 5 otonomi selesai (branch sebelah)
+    2026-10-03 : Tahap 2 ditutup — entity_mesh terbukti + ditandai
 ```
 
 ## Yang TIDAK dikejar

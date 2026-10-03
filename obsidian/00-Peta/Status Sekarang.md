@@ -22,6 +22,7 @@ tags: [moc, status]
 | Hal | Bukti |
 |---|---|
 | 14 scene boot, dirender, pemain mendarat di tile sah | larian regresi 2026-09-22 |
+| `entity_mesh.py` terbukti berfungsi (16 pemeriksaan) | `_bench/probes/probe_entity_mesh.py` |
 | ESC selalu bisa keluar dari mode panel apa pun | cek `bisa_keluar`, lulus di 14 scene |
 | Motif waras + benar-benar meluruh | cek `motif_waras`, lulus bebas urutan |
 | Save bolak-balik utuh | cek `save_bolak`, lulus di 14 scene |
@@ -52,12 +53,12 @@ Angka ms/frame berasal dari runner tanpa GPU (Mesa software). Ia berguna untuk
 |---|---|---|
 | Arah WASD belum terverifikasi benar | 🔴 | [[Arah WASD belum terverifikasi]] — regresi tidak menguji arah |
 | 4–29 FPS di mesin pemilik, belum pernah diprofil di GPU | 🔴 | [[Tahap 3 — Performa]] |
-| `entity_mesh.py` (458 baris) nol pemanggil | 🟠 | [[Utang Teknis]] |
-| 92 file `.pyc` ter-commit | 🟡 | [[Utang Teknis]] |
 | `PLAY.md` menunjuk baris & flag yang sudah tidak ada | 🟡 | [[Utang Teknis]] |
 
 ## Yang baru saja lunas
 
+- **Tahap 2 — Verifikasi modul yatim**: yatim terakhir `entity_mesh.py` dibuktikan jalan (16 pemeriksaan) dan ditandai jujur di kepala modulnya; tidak disambungkan supaya tidak melompati urutan tahap → [[2026-10-03 — Tahap 2 ditutup, entity_mesh terbukti]].
+- **92 `.pyc`**: nol yang masih dilacak — base branch sudah melepasnya.
 - **Tahap 5 — Autonomi**: `choose_action()` dan `autonomy_candidates()` akhirnya punya pemanggil di kode game yang hidup. Kerja branch `claude/nice-shamir-93f5de`, masuk lewat merge `342facf` → [[Tahap 5 — Autonomi]].
 - **Workflow CI terbukti jalan di GitHub** — tebakan nama paket apt untuk `ubuntu-latest` ternyata benar.
 
@@ -67,10 +68,9 @@ Angka ms/frame berasal dari runner tanpa GPU (Mesa software). Ia berguna untuk
 
 ## Langkah berikutnya yang masuk akal
 
-1. Sambungkan atau tandai `entity_mesh.py` → menutup [[Tahap 2 — Verifikasi modul yatim]]. Ini satu-satunya yang menahan tahap itu.
-2. Bangun probe arah yang kokoh, baru sentuh tanda WASD → [[Arah WASD belum terverifikasi]].
-3. Profil di mesin ber-GPU, mulai optimasi aman → [[Tahap 3 — Performa]].
-4. Lepas 92 `.pyc` dari pelacakan git — commit tersendiri → [[Utang Teknis]].
+1. **Bangun probe arah yang kokoh**, baru sentuh tanda WASD → [[Arah WASD belum terverifikasi]]. Satu-satunya 🔴 yang bisa dikerjakan tanpa GPU.
+2. Profil di mesin ber-GPU, mulai optimasi aman → [[Tahap 3 — Performa]].
+3. Perbaiki instruksi Vitaboy di `PLAY.md` yang menyuruh mengedit flag tidak ada → [[Utang Teknis]].
 
 Dengan Tahap 5 lunas, [[Tahap 4 — Wishes]] jadi kandidat berikutnya yang paling
 mengubah rasa bermain: bahan-bahannya (motif, kandidat objek, antrian) kini

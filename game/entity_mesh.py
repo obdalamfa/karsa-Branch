@@ -8,6 +8,25 @@ Pembagian kerja dengan entity_style.py:
                    ursina.Mesh. Tidak tahu apa-apa soal entitas; kalau dipakai
                    untuk menggambar bendera, dia akan menggambar bendera.
 
+STATUS: TERBUKTI JALAN, BELUM ADA PEMANGGIL  (diperiksa 2026-10-03)
+    Modul ini sengaja belum dipakai siapa pun. Konsumennya adalah bahasa rupa
+    entitas, yaitu Tahap 7 di `docs/TAHAPAN.md` -- dan Tahap 7 ditaruh belakangan
+    dengan alasan: horor StrangerVille bekerja justru karena kehidupan biasa
+    berjalan normal di sekelilingnya, jadi ia menunggu Wishes dan autonomi.
+    Menyambungkannya sekarang berarti melompati urutan itu.
+
+    Yang TIDAK berlaku di sini: dugaan bahwa "nol pemanggil" berarti isinya
+    belum tentu berfungsi. Enam belas pemeriksaan di
+    `_bench/probes/probe_entity_mesh.py` membuktikan sebaliknya -- kurva,
+    resample, rel, PolyBuilder, sampai GeomNode per-entity:
+
+        184 segitiga, 404 verteks, 404 warna per-verteks
+        dua Entity dari dua Mesh -> GeomNode 1 dan 1 (bukan 0)
+        style_entity unlit=True
+
+    Jadi statusnya bukan "tidak jelas", melainkan "siap dan menunggu".
+    Jalankan probenya sebelum mengubah apa pun di sini.
+
 KENAPA SEMUA DATAR
     docs/entity-logo.svg adalah seni vektor datar: tidak ada satu motif pun yang
     bervolume. Jadi semua dibangun di bidang XY lokal dan z dipakai HANYA sebagai

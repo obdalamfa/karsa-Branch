@@ -17,6 +17,17 @@ Setiap commit dapat satu nota di `20-Sesi/`, dinamai
 kronologis, tidak pernah ditulis ulang — kalau kesimpulannya berubah, tulis
 catatan baru yang menautkan yang lama.
 
+Dua pengecualian, keduanya supaya daftar ini tidak menagih pekerjaan yang bukan
+pekerjaannya:
+
+- **Commit yang masuk lewat merge** adalah kerja branch lain dan punya jurnalnya
+  sendiri di sana. Yang dicatat di sini isi merge-nya, dalam satu nota — contoh:
+  [[2026-09-22 — Merge base, CI terbukti hijau]] meringkas 26 commit base.
+  `catat_obsidian.py` hanya menyusuri jalur induk-pertama.
+- **Commit pembukuan** — yang hanya menyentuh `obsidian/` atau skrip pencatat
+  itu sendiri — tidak menuntut notanya sendiri. Kalau tidak, tiap nota
+  melahirkan commit yang menuntut nota baru, tanpa akhir.
+
 ## 2. Klaim tanpa bukti tidak ditulis sebagai fakta
 
 Verifikasi manual di proyek ini sudah gagal dua kali: WASD dinyatakan beres

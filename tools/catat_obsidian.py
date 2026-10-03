@@ -61,12 +61,24 @@ def hanya_vault(sha: str) -> bool:
     commit yang menuntut nota baru, tanpa akhir.
     """
     berkas = [path for _, _, path in berkas_berubah(sha)]
-    return bool(berkas) and all(p.startswith('obsidian/') for p in berkas)
+    # Skrip ini sendiri termasuk mesin pembukuan, bukan game. Tanpa
+    # pengecualian itu, memperbaiki skrip pencatat menuntut nota tentang
+    # perbaikan skrip pencatat.
+    pembukuan = ('obsidian/', 'tools/catat_obsidian.py')
+    return bool(berkas) and all(p.startswith(pembukuan) for p in berkas)
 
 
 def daftar_commit() -> list[tuple[str, str, str]]:
-    """(hash pendek, tanggal YYYY-MM-DD, judul) — terlama dulu."""
-    keluaran = git('log', '--reverse', '--pretty=format:%h\x1f%ad\x1f%s',
+    """(hash pendek, tanggal YYYY-MM-DD, judul) — terlama dulu.
+
+    Hanya jalur induk-pertama. Commit yang masuk lewat MERGE adalah kerja
+    branch lain dan punya jurnalnya sendiri di sana; menuntut nota untuk
+    masing-masing hanya memindahkan pekerjaan orang lain ke daftar utang ini.
+    Satu merge dari base pernah menambah 26 commit sekaligus. Commit merge-nya
+    sendiri tetap ikut terdaftar, dan di situlah isi mergenya dicatat.
+    """
+    keluaran = git('log', '--reverse', '--first-parent',
+                   '--pretty=format:%h\x1f%ad\x1f%s',
                    '--date=format:%Y-%m-%d')
     out = []
     for baris in keluaran.splitlines():

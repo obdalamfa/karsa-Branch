@@ -87,7 +87,7 @@ def main():
     # so fonts/textures/models resolve exactly as they do for main.py.
     from ursina import application
     application.asset_folder = ROOT
-    application.fonts_folder = ROOT / 'fonts'
+    application.fonts_folder = ROOT / 'assets' / 'fonts'
     application.scenes_folder = ROOT / 'scenes'
     application.scripts_folder = ROOT / 'scripts'
     application.textures_compressed_folder = ROOT / 'textures_compressed'

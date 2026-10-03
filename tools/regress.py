@@ -159,18 +159,38 @@ def cek_motif_waras(g):
     mood = mv.mood
     if mood != mood or abs(mood) > 1e6:
         return _fail(f'mood tidak terhingga: {mood}')
-    # `lapar` dikembalikan ke titik netral sebelum diuji. Pemeriksaan ini
-    # memakai mesin motif MILIK STATE YANG SAMA untuk tiap scene, dan tiap
-    # panggilan memajukan 240 menit. Setelah belasan scene, `lapar` menempel di
-    # dasar -100 -- dan di sana laju peluruhannya, HUNGER_RATIO * (100 + lapar),
-    # menjadi NOL, sehingga `mv.get('lapar') >= sebelum` benar dan scene
-    # terakhir gagal tanpa sebab yang nyata. Tanpa penyetelan ini, hasilnya
-    # ditentukan urutan scene, bukan kesehatan motif.
-    mv.add('lapar', -mv.get('lapar'))
-    sebelum = mv.get('lapar')
-    mv.tick(240.0)
-    if mv.get('lapar') >= sebelum:
-        return _fail('lapar tidak turun setelah 4 jam-sim')
+    # Peluruhan diuji pada mesin NYATA, tapi tanpa meninggalkan bekas: nilai
+    # kedelapan motif (plus akumulator pecahannya) disalin dulu dan dipulihkan
+    # di `finally`.
+    #
+    # Kenapa: pemeriksaan ini memakai mesin motif MILIK STATE YANG SAMA untuk
+    # tiap scene, dan tiap panggilan memajukan 240 menit tanpa memulihkannya.
+    # Laju peluruhan Lapar adalah HUNGER_RATIO * (100 + lapar) -- non-linear,
+    # dan MENUJU NOL saat lapar mendekati dasar -100. Setelah belasan scene
+    # penurunannya tidak lagi mencapai satu poin utuh yang bisa dibukukan
+    # `tick()`, jadi nilainya mendatar: diukur, tick ke-15 memberi
+    # -98,0000 -> -98,0000. Akibatnya `mv.get('lapar') >= sebelum` benar dan
+    # scene TERAKHIR apa pun gagal tanpa sebab nyata -- larian 14 scene menuduh
+    # `swarga`, padahal `swarga` sendirian LULUS. Hasilnya ditentukan urutan
+    # scene, bukan kesehatan motif.
+    #
+    # Dua agen menemukan cacat ini terpisah dan menambalnya berbeda: satu
+    # menyetel ulang `lapar` ke titik netral tiap scene, satu menyalin-dan-
+    # memulihkan. Yang kedua dipakai di sini karena ia tidak mengubah keadaan
+    # yang dipakai pemeriksaan SESUDAHNYA (`save_bolak` membaca state yang
+    # sama); penjelasan rumus di atas datang dari yang pertama.
+    salinan = {m: mv.get(m) for m in MOTIVES}
+    carry, acc = mv._tick_carry, dict(mv._acc)
+    try:
+        mv.add('lapar', 100.0)      # jauhkan dari dasar supaya peluruhan terukur
+        sebelum = mv.get('lapar')
+        mv.tick(240.0)
+        if mv.get('lapar') >= sebelum:
+            return _fail('lapar tidak turun setelah 4 jam-sim')
+    finally:
+        for m, v in salinan.items():
+            setattr(mv, m, v)
+        mv._tick_carry, mv._acc = carry, acc
     return _ok(f'mood {mood:+.1f}')
 
 
@@ -201,7 +221,7 @@ def cek_save_bolak(g):
 def main():
     from ursina import application
     application.asset_folder = ROOT
-    application.fonts_folder = ROOT / 'fonts'
+    application.fonts_folder = ROOT / 'assets' / 'fonts'
     from panda3d.core import getModelPath
     getModelPath().append_path(str(ROOT.resolve()))
 

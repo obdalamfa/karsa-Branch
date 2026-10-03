@@ -62,3 +62,7 @@ ursina_editor/exported_scene.py
 .DS_Store
 Thumbs.db
 *.log
+
+# ── Lingkungan virtual ──────────────────────────────────────────────────────
+.venv/
+venv/

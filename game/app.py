@@ -11,6 +11,22 @@ from ursina.shaders import unlit_shader
 color.rgb = lambda r, g, b, a=255: Vec4(r/255.0, g/255.0, b/255.0, a/255.0)
 color.rgba = color.rgb
 
+# Font HUD tinggal di assets/fonts/, sedangkan Panda3D mencari font di
+# model-path TANPA menelusuri subfolder. Ursina hanya memasukkan akar repo ke
+# sana, jadi tanpa baris di bawah `loader.loadFont('Montserrat-Bold.ttf')`
+# GAGAL dan game mati saat membangun HUD. Diukur di _bench/probes/probe_font.py:
+#
+#     akar repo di model-path (seperti main.py)   GAGAL
+#     assets/fonts ikut di model-path             KETEMU
+#
+# Kenapa tidak pernah ketahuan: Ursina juga memasukkan C:/Windows/Fonts, jadi
+# di mesin Windows yang kebetulan sudah memasang Montserrat game tetap jalan.
+# Di mesin bersih — termasuk CI — ia mati di baris pertama HUD.
+from panda3d.core import getModelPath as _getModelPath
+_FONTS_DIR = _Path(__file__).resolve().parent.parent / 'assets' / 'fonts'
+if _FONTS_DIR.is_dir():
+    _getModelPath().append_path(str(_FONTS_DIR))
+
 from .state import GameState
 from .world import World3D
 from .player import Player3D

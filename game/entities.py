@@ -23,24 +23,20 @@ _MODEL_CACHE: dict = {}
 _TEX_CACHE: dict = {}
 
 def _model_instance(cached):
-    """Salinan lepas dari model cache — WAJIB, sama alasannya dengan
-    meshes._instance() (BRIEF §8.1).
-
-    Model hasil `loader.loadModel()` adalah NodePath Panda3D, dan sebuah
-    NodePath hanya boleh punya SATU parent. `Entity.model = <NodePath>`
-    me-reparent node itu, jadi actor kedua yang memakai nama model yang sama
-    MENCURI geometri dari actor pertama. Diukur di scene farm sebelum perbaikan:
-    dari 6 hewan yang semuanya memakai 'humanoid.obj', hanya SATU (yang dibuat
-    terakhir) punya tight-bounds bervolume; lima sisanya kosong dan hanya
-    menyisakan nameplate melayang.
-    """
+    """Salinan lepas dari model cache."""
     if cached is None:
         return None
     from panda3d.core import NodePath
-    holder = NodePath('_model_instance')
-    copy = cached.copy_to(holder)
-    copy.detach_node()
-    return copy
+    if isinstance(cached, NodePath):
+        return cached.copy_to(NodePath('_temp'))
+    try:
+        np = NodePath(cached)
+        holder = NodePath('_model_instance')
+        copy = np.copy_to(holder)
+        copy.detach_node()
+        return copy
+    except Exception:
+        return cached
 
 
 def load_model_file(name: str):
@@ -58,10 +54,29 @@ def load_model_file(name: str):
         return None
         
     try:
-        from panda3d.core import Filename
-        from direct.showbase.ShowBaseGlobal import base
+        from panda3d.core import Filename, Loader
+        import builtins
+        ldr = getattr(builtins, 'loader', None)
+        if ldr is None:
+            try:
+                from direct.showbase.ShowBaseGlobal import base
+                ldr = getattr(base, 'loader', None)
+            except Exception:
+                ldr = None
+        if ldr is None:
+            ldr = Loader.getGlobalPtr()
+            
         fn = Filename.fromOsSpecific(str(path))
-        m = base.loader.loadModel(fn)
+        m = ldr.loadSync(fn) if hasattr(ldr, 'loadSync') else ldr.loadModel(fn)
+        # Koreksi pitch otomatis untuk model OBJ buatan Blender yang sumbu tingginya di Y:
+        if m and path == path_obj:
+            try:
+                lo, hi = m.getTightBounds()
+                d = hi - lo
+                if d.y > d.z:
+                    m.setP(-90)
+            except Exception:
+                pass
         _MODEL_CACHE[name] = m
         return _model_instance(m)
     except Exception as e:
@@ -93,12 +108,47 @@ def daftarkan_pemain(pl):
     _PEMAIN_AKTIF[0] = pl
 
 
+_PROP_TEX_CACHE = {}
+
+def _baked_texture(name):
+    """Load baked PNG texture for character / prop OBJ if available."""
+    if name in _PROP_TEX_CACHE:
+        return _PROP_TEX_CACHE[name]
+    path = _MODELS_DIR / f'{name}.png'
+    tex = None
+    if path.exists():
+        try:
+            from ursina import Texture
+            from PIL import Image
+            img = Image.open(path)
+            tex = Texture(img)
+            tex.filtering = True
+        except Exception:
+            tex = None
+    _PROP_TEX_CACHE[name] = tex
+    return tex
+
+def _setup_pose_swap(actor, base_name):
+    """Aktifkan animasi mesh-swap 4-frame untuk model .obj."""
+    try:
+        if not (load_model_file(base_name + '_idle') and load_model_file(base_name + '_walk1')):
+            return
+        names = [base_name + '_idle', base_name + '_walk1']
+        if load_model_file(base_name + '_walk3') and load_model_file(base_name + '_walk4'):
+            names += [base_name + '_walk3', base_name + '_walk2', base_name + '_walk4']
+        else:
+            names += [base_name + '_walk2']
+        actor._pose_names = tuple(names)
+        actor._pose_cur = -1
+    except Exception:
+        pass
+
 def get_npc_model_name(npc_id):
     if npc_id == 'naga_bijak':
         return 'naga'
     if npc_id in ['genderuwo', 'kelelawar', 'pocong']:
         return f"mob_{npc_id}"
-    return 'humanoid' # Fallback
+    return f"npc_{npc_id}"
 
 def _can_walk(tx, ty, scene_name, dungeon_tiles=None):
     tx, ty = int(round(tx)), int(round(ty))
@@ -295,38 +345,44 @@ class EntitiesManager:
             # (vitaboy/tso_paths.py). Tanpa try/except, satu mesin tanpa TSO
             # membuat load_scene() crash total dan game tidak bisa dibuka sama
             # sekali. Pembungkus gagal-lunak ini WAJIB dipertahankan.
-            if apr_list:
-                try:
-                    from .vitaboy_npc import build_vitaboy_human_npc
-                    sc = 0.19 if actor_id in ('cici', 'bowo') else 0.32
-                    # Pabrik memilih backend sendiri: Character Panda3D (skinning
-                    # C++, 0,288 ms/avatar) kalau bisa, jatuh ke skinning Python
-                    # (6,387 ms/avatar) kalau tidak. Lihat vitaboy_npc.py.
-                    actor._va = build_vitaboy_human_npc(actor, actor_id, scale=sc,
-                                                       apr_list=apr_list)
-                    if actor._va is None:
-                        raise RuntimeError('kedua backend avatar gagal')
-                    actor.model = 'cube'  # dummy parent
-                    actor.color = color.clear # hide dummy
-                except Exception as e:
-                    import logging
-                    logging.warning(
-                        f"Vitaboy gagal untuk '{actor_id}' ({e}); pakai model biasa.")
-                    actor._va = None
-                    apr_list = None
-            if not apr_list and not is_animal and not is_guardian:
-                model_name = get_npc_model_name(actor_id)
-                panda_model = load_model_file(model_name)
-                if panda_model:
-                    actor.model = panda_model
+            # Cek apakah ada model kustom 3D Blender (npc_<id>.obj) dengan pose swap & tekstur baked
+            if not is_animal and not is_guardian:
+                npc_mdl = load_model_file(f'npc_{actor_id}')
+                if npc_mdl is not None:
+                    actor.model = npc_mdl
+                    tex = _baked_texture(f'npc_{actor_id}_baked')
+                    if tex is not None:
+                        actor.texture = tex
+                        actor.color = color.white
                     actor.scale = 1.0
-                else:
-                    # Fallback model if missing
-                    panda_fallback = load_model_file('humanoid')
-                    if panda_fallback:
-                        actor.model = panda_fallback
+                    _setup_pose_swap(actor, f'npc_{actor_id}')
+                    apr_list = None
+                elif apr_list:
+                    try:
+                        from .vitaboy_npc import build_vitaboy_human_npc
+                        sc = 0.19 if actor_id in ('cici', 'bowo') else 0.32
+                        actor._va = build_vitaboy_human_npc(actor, actor_id, scale=sc, apr_list=apr_list)
+                        if actor._va is None:
+                            raise RuntimeError('kedua backend avatar gagal')
+                        actor.model = 'cube'  # dummy parent
+                        actor.color = color.clear # hide dummy
+                    except Exception as e:
+                        import logging
+                        logging.warning(f"Vitaboy gagal untuk '{actor_id}' ({e}); pakai model biasa.")
+                        actor._va = None
+                        apr_list = None
+                if not apr_list and actor.model is None:
+                    model_name = get_npc_model_name(actor_id)
+                    panda_model = load_model_file(model_name)
+                    if panda_model:
+                        actor.model = panda_model
+                        actor.scale = 1.0
                     else:
-                        actor.model = 'cube'
+                        panda_fallback = load_model_file('humanoid')
+                        if panda_fallback:
+                            actor.model = panda_fallback
+                        else:
+                            actor.model = 'cube'
                     
             # Setup Label
             all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}

@@ -63,9 +63,27 @@ class BaseActor(Entity):
                 self.rotation_y = 90 if dx > 0 else -90
             else:
                 self.rotation_y = 0 if dz > 0 else 180
-            self._walk_t += dt * 16.0
+            self._walk_t += dt * 10.0
         else:
             self._walk_t += dt * 1.8
+
+        # ── Mesh-swap (jika tersedia aset _walk1..4) ──
+        names = getattr(self, '_pose_names', None)
+        if names:
+            if self.is_moving:
+                n_walk = max(1, len(names) - 1)
+                frame = 1 + (int(self._walk_t * 0.5) % n_walk)
+            else:
+                frame = 0
+            if frame != getattr(self, '_pose_cur', -1):
+                try:
+                    from .entities import load_model_file
+                    mdl = load_model_file(names[frame])
+                    if mdl is not None:
+                        self.model = mdl
+                        self._pose_cur = frame
+                except Exception:
+                    self._pose_names = None
 
     def on_destroy(self):
         """Cleanup logic when the actor is destroyed or removed from the scene."""

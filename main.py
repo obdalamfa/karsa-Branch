@@ -2,6 +2,18 @@ import sys
 import os
 import logging
 
+# On Windows, ensure thread is attached to the interactive 'Default' desktop
+# so window renders directly onto the user screen when launched
+if sys.platform == 'win32':
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        hdesk_default = user32.OpenDesktopW('Default', 0, False, 0x01FF)
+        if hdesk_default:
+            user32.SetThreadDesktop(hdesk_default)
+    except Exception as e:
+        pass
+
 # Paksa OpenGL pipeline SEBELUM Ursina/Panda3D di-import — Direct3D9 tidak
 # support GLSL shader yang dipakai smooth_shader / grass_shader / sky.
 # `gl-version` tidak dipaksa supaya driver lawas tetap kompatibel.

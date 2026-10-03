@@ -154,18 +154,46 @@ def nilai(key, dunia, layar):
 
 
 
-def tile_lapang(g):
-    """Tile berjalan yang tetangganya juga berjalan — supaya yang diukur arah,
-    bukan dinding. Jatuh kembali ke tile pemain kalau tidak ada yang lapang."""
+def tile_lapang(g, base=None):
+    """Tile yang pemainnya BENAR-BENAR bisa bergerak dari sana.
+
+    Versi pertama fungsi ini hanya membaca peta ubin: ia memilih petak yang
+    `is_walkable()` bersama kedelapan tetangganya. Itu tidak cukup lagi.
+    Pekerjaan lingkungan menaruh pagar, peti, dan tiang — semuanya ber-collider
+    — DI ATAS ubin yang peta sebut bisa dijalani. Hasilnya probe memilih petak
+    yang lapang di peta tapi terkepung di dunia, pemain tidak bergeser sama
+    sekali, dan `nilai()` melaporkan arahnya "mendatar"/"menegak".
+
+    Yang terbaca dari laporan itu adalah "kontrol WASD rusak". Yang sebenarnya
+    terjadi adalah pemain terjepit. Dua kesimpulan yang sangat berbeda, dan
+    yang salah akan mengirim orang mengobrak-abrik kode gerak yang sehat —
+    kode yang catatannya sendiri sudah memperingatkan sudah dua kali dibalik
+    tandanya karena alat ukur yang buruk.
+
+    Jadi kandidat sekarang DIBUKTIKAN: tempatkan pemain di sana, tahan satu
+    tombol, dan pastikan ia benar-benar berpindah. `base` opsional supaya
+    pemanggil lama tetap jalan — tanpa base ia kembali ke pemeriksaan peta.
+    """
     tx, ty = g.player.get_tile_pos()
+    kandidat = []
     for r in range(0, 8):
         for dx in range(-r, r + 1):
             for dy in range(-r, r + 1):
                 c = (tx + dx, ty + dy)
-                if all(g.world.is_walkable(c[0] + ox, c[1] + oy)
-                       for ox in (-1, 0, 1) for oy in (-1, 0, 1)):
-                    return c
-    return (tx, ty)
+                if c not in kandidat and all(
+                        g.world.is_walkable(c[0] + ox, c[1] + oy)
+                        for ox in (-1, 0, 1) for oy in (-1, 0, 1)):
+                    kandidat.append(c)
+    if not kandidat:
+        return (tx, ty)
+    if base is None:
+        return kandidat[0]
+
+    for c in kandidat[:24]:
+        pindah, _ = ukur_satu(g, base, 'd', c)
+        if (pindah[0] ** 2 + pindah[2] ** 2) ** 0.5 > 0.05:
+            return c
+    return kandidat[0]
 
 
 def uji_arah(g, base, yaw=0.0, mulai=None):
@@ -175,7 +203,7 @@ def uji_arah(g, base, yaw=0.0, mulai=None):
     pengaman memakai alat ukur yang sama persis dengan probe manual.
     """
     if mulai is None:
-        mulai = tile_lapang(g)
+        mulai = tile_lapang(g, base)
     g.camera_yaw = yaw
     g._snap_camera_to_player()
     for _ in range(SETTLE):

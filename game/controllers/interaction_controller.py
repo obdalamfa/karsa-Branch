@@ -411,10 +411,13 @@ class InteractionController:
         return True
 
     def check_quests(self, panels=None):
-        if hasattr(self.player, 'quest_manager') and self.player.quest_manager:
-            self.player.quest_manager.check_quest_progress(panels)
-        elif hasattr(self.player, '_check_quest_progress'):
-            self.player._check_quest_progress(panels)
+        # `quest_controller` dulu, baru `quest_manager`. Yang kedua tidak
+        # pernah ada di Player3D, jadi cabang ini SELALU diam dan progres quest
+        # tidak pernah diperiksa — gagal tanpa suara, bukan gagal berisik.
+        qc = (getattr(self.player, 'quest_controller', None)
+              or getattr(self.player, 'quest_manager', None))
+        if qc is not None:
+            qc.check_quest_progress(panels)
     def give_gift(self, entities_mgr, panels):
         s = self.player.state
         tx, ty = self.player.get_tile_pos()
@@ -676,7 +679,7 @@ class InteractionController:
             # supaya apa yang diuji harness adalah apa yang ditempuh pemain.
             from ..husbandry import species_of
             opts_naik = []
-            if species_of(npc_id) in TUNGGANGAN:
+            if species_of(npc_id) in self.TUNGGANGAN:
                 if getattr(s, 'menunggangi', None) == npc_id:
                     opts_naik.append(('turun', 'Turun', True, 'berhenti menunggang'))
                 else:

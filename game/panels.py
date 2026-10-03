@@ -1420,8 +1420,35 @@ class UIManager:
             s.npc_hearts[self._dialog_npc] = min(10, s.npc_hearts.get(self._dialog_npc, 0) + 0.1)
         self._set_dialog_visible(False)
         self.mode = 'hud'
-        if hasattr(self, 'player') and self.player:
-            self.player._check_quest_progress(self)
+        # Jalur quest DIPILIH dengan pola yang sama seperti dua pemanggil
+        # lainnya (interaction_controller.check_quests, time_controller), dan
+        # itu bukan gaya — ini memperbaiki CRASH saat bermain:
+        #
+        #     AttributeError: 'Player3D' object has no attribute
+        #                     '_check_quest_progress'
+        #
+        # Baris lama memanggil `_check_quest_progress()` telanjang. Metode itu
+        # tidak ada di cabang MANA PUN — bukan hilang saat merge, memang tidak
+        # pernah ada. Dua pemanggil lain sudah menjaganya dengan hasattr dan
+        # mendahulukan `quest_manager`; yang ini tidak, jadi ia meledak tiap
+        # kali pemain menutup dialog dengan NPC.
+        #
+        # Regresi tidak menangkapnya: ia memuat tiap scene dan menggerakkan
+        # pemain, tapi tidak pernah MENUTUP DIALOG. Yang menangkapnya adalah
+        # menjalankan gamenya dan memainkannya.
+        p = getattr(self, 'player', None)
+        if p is not None:
+            # `quest_controller` — nama atribut yang BENAR di Player3D.
+            # Ketiga pemanggil quest di pohon ini mencari `quest_manager`, dan
+            # atribut itu tidak pernah ada: Player3D membuat
+            # `self.quest_controller = QuestController(state)` (player.py:198).
+            # Dua pemanggil menjaganya dengan hasattr dan karena itu DIAM —
+            # progres quest tidak pernah diperiksa sama sekali — dan yang
+            # ketiga memanggil `_check_quest_progress()` telanjang lalu
+            # meledak tiap kali pemain menutup dialog NPC.
+            qc = getattr(p, 'quest_controller', None) or getattr(p, 'quest_manager', None)
+            if qc is not None:
+                qc.check_quest_progress(self)
 
     def _refresh_dialog_choices_ui(self):
         for i, ent in enumerate(self._dlg_choice_ents):

@@ -81,6 +81,24 @@ TILE_NAMES = {
     TV:'tv', CHR:'chair', CAL:'calendar'
 }
 
+# Nama konstanta untuk tiap ID ubin. Dipakai berkas scene (yang menyimpan NAMA,
+# bukan angka -- lihat game/scenes/scene_base.py) dan katalog editor.
+#
+# Urutannya HARUS sama dengan tuple-unpack di atas; assertion di bawah
+# menangkap kalau ada yang menambah ubin di satu tempat tapi lupa di sini.
+_TILE_ORDER = (
+    'G D P W FL WL TR H MB DR FN GT BD ST TB BS MR FP CL PP CH CT SH GR LN DT '
+    'CV_W CV_F PEN STR_T DCK BOT LLY CRYS ORE_TBG ORE_BSI ORE_EMS ORE_KRS '
+    'ORE_MTH STAIRS_DOWN STAIRS_UP MINED SD LGH_B LGH_F CLOUD GOLD_W PALM TV '
+    'CHR CAL'
+).split()
+
+TILE_IDS = {name: globals()[name] for name in _TILE_ORDER}
+
+assert len(TILE_IDS) == 51 and set(TILE_IDS.values()) == set(range(51)), (
+    'TILE_IDS tidak cocok dengan 51 ID ubin di tuple-unpack atas'
+)
+
 WALKABLE  = [G, D, P, FL, DR, GT, CV_F, STR_T, DCK, LLY, MINED, STAIRS_DOWN, STAIRS_UP, SD, CLOUD]
 TILLABLE  = [G, D]
 BLOCKING  = [WL, TR, H, FN, BD, ST, TB, BS, MR, FP, CL, PP, CH, CT, SH, GR, LN, DT,

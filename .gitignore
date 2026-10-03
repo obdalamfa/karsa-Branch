@@ -1,15 +1,68 @@
-# Bytecode Python. Sebelum berkas ini ada, satu larian game menaburkan 70+
-# berkas .pyc ke dalam `git status` dan 92 di antaranya sudah terlanjur
-# ter-commit di riwayat.
+# ── Python bytecode ──────────────────────────────────────────────────────────
+# 92 file .pyc sempat ikut ter-commit dan terus muncul sebagai "modified"
+# setiap kali game dijalankan, sehingga diff yang sungguhan tenggelam.
 __pycache__/
 *.py[cod]
 
-# Cache indeks aset Vitaboy — dibangun ulang otomatis, isinya bergantung mesin.
+# ── Artefak Vitaboy yang di-generate ────────────────────────────────────────
+# `registry.py` menulis ulang file ini dari hasil scan aset TSO mesin lokal
+# (lihat AssetRegistry._cache_path). Isinya berbeda tiap mesin dan tidak punya
+# makna di mesin lain — komentar di registry.py sendiri sudah menyatakan
+# "di-gitignore tidak masalah, generated".
 game/vitaboy/.vitaboy_index.pkl
 
-# Save game milik pemain, bukan milik repo.
-lembah_karsa_3d_save.json
+# ── Keluaran harness gauntlet ───────────────────────────────────────────────
+# `gauntlet/check.py` menulis ulang save uji ini tiap kali dijalankan.
+gauntlet/test-save.json
 
-# Lingkungan virtual
+# Lima screenshot kamera ditulis ulang tiap run, dan rasterisasi GPU tidak
+# deterministik pada tingkat piksel: diukur 1 sampai 87 piksel dari 1.152.000
+# berbeda antar-run (0,000%-0,008%), selisih kanal 72-108 pada piksel tepi
+# terisolasi. Gambarnya sama secara visual, jadi menyimpannya hanya
+# mengembalikan "modified" yang menenggelamkan perubahan sungguhan -- persis
+# masalah yang baru saja disingkirkan untuk berkas .pyc.
+# `baseline.png` TIDAK di sini: itu rujukan tetap "Sebelum" dan tidak pernah
+# ditulis ulang skrip.
+gauntlet/cave-gameplay.png
+gauntlet/cave-overview.png
+gauntlet/guardians-front.png
+gauntlet/mountain-entrance.png
+gauntlet/mountain-overview.png
+
+# Sisa berkas 0 byte dari operasi yang terputus. Spesifik, bukan `*.pz` --
+# Panda3D memakai .pz untuk arsip model terkompresi yang sah.
+gauntlet/cave-overview.png.pz
+
+# ── Worktree Claude Code ────────────────────────────────────────────────────
+.claude/worktrees/
+
+# ── Keluaran pratinjau ──────────────────────────────────────────────────────
+# `preview_cave.py` menulis ini di root repo. Isinya byte-identik dengan
+# `gauntlet/baseline.png` yang sudah di-track (SHA256 sama persis), jadi
+# menyimpan keduanya hanya membuang sekitar 450 KB.
+cave-preview.png
+
+# ── State pemain ────────────────────────────────────────────────────────────
+# `config.py:35` menjadikan ini target save hidup, dan `state.py` membukanya
+# relatif terhadap CWD. Selama ia ter-track, setiap kali ada yang bermain
+# `git status` jadi kotor dan salinan di repo tertukar dengan milik pemain.
+# Berkas rusak yang dikarantina `GameState._quarantine()` serta berkas
+# sementara dari penulisan atomik juga masuk sini.
+lembah_karsa_3d_save.json
+lembah_karsa_3d_save.json.corrupt-*
+lembah_karsa_3d_save.json.tmp
+
+# ── Keluaran kerja editor peta ──────────────────────────────────────────────
+# `ursina_editor/main.py` menulis keduanya di sebelah paketnya. Itu hasil
+# sesi menyunting, bukan bagian dari game.
+ursina_editor/scene.json
+ursina_editor/exported_scene.py
+
+# ── Sampah sesi ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.log
+
+# ── Lingkungan virtual ──────────────────────────────────────────────────────
 .venv/
 venv/

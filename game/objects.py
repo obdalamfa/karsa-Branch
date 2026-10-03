@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from .motives import Advert, Interaction
 from .config import (BD, ST, TB, CHR, TV, CH, BS, MR, FP, CT, SH, PP, CL,
-                     DCK, W, GR, CRYS)
+                     DCK, W, GR, CRYS, BLOCKING)
 
 
 def _i(name, adverts, duration=60.0, atten=0.3, autonomous=True, auto_first=False):
@@ -124,23 +124,56 @@ def is_interactive(tile_id: int) -> bool:
     return tile_id in OBJECT_INTERACTIONS
 
 
-def find_nearby(world, tx: int, ty: int, radius: int = 1):
-    """Perabot yang bisa dipakai di sekitar tile (tx, ty).
+def _kandidat(world, tx: int, ty: int, radius: int, jarak):
+    """Semua perabot yang bisa dipakai di sekitar (tx, ty).
 
-    Mengembalikan [(jarak_tile, tx, ty, tile_id, interaksi), ...] terurut dari
-    yang terdekat. Radius 1 = delapan tetangga plus tile itu sendiri, yang
-    cocok dengan cara pemain berdiri tepat di depan benda.
+    Dua sumber: ubin di grid, dan objek terpasang bebas (`Scene.objects`).
+    Digabung di SATU tempat supaya `find_nearby` dan `autonomy_candidates`
+    tidak pernah punya gagasan berbeda tentang apa yang ada di sekitar --
+    kalau keduanya memindai sendiri-sendiri, pemain dan NPC akan melihat dunia
+    yang berbeda, dan yang satu akan bisa memasak di kompor yang tidak ada bagi
+    yang lain.
+
+    `jarak(dx, dy)` menentukan metriknya: Chebyshev untuk pemain (delapan
+    tetangga), Euclidean untuk NPC (boleh menyeberang ruangan).
+
+    Mengembalikan [(jarak, tx, ty, tile_id, interaksi), ...].
     """
-    hits = []
+    hasil = []
     for dy in range(-radius, radius + 1):
         for dx in range(-radius, radius + 1):
             nx, ny = tx + dx, ty + dy
             tid = world.get_tile(nx, ny)
             acts = interactions_for(tid)
-            if not acts:
-                continue
-            dist = max(abs(dx), abs(dy))
-            hits.append((dist, nx, ny, tid, acts))
+            if acts:
+                hasil.append((jarak(dx, dy), nx, ny, tid, acts))
+
+    # Objek terpasang. Posisinya FLOAT, jadi jaraknya dihitung dari posisi
+    # sebenarnya, bukan dari ubin terdekat: pot yang ditanam setengah ubin dari
+    # pemain memang harus terasa lebih dekat daripada ubin di sebelahnya.
+    # `tx`/`ty` yang dikembalikan tetap bilangan bulat karena dipakai untuk
+    # mencari jalan, dan pathfinder bekerja pada grid.
+    objek = getattr(getattr(world, 'scene_obj', None), 'objects', None) or []
+    for o in objek:
+        tid = tile_dari_kind(o['kind'])
+        acts = interactions_for(tid) if tid is not None else []
+        if not acts:
+            continue
+        d = jarak(o['x'] - tx, o['y'] - ty)
+        if d > radius:
+            continue
+        hasil.append((d, int(round(o['x'])), int(round(o['y'])), tid, acts))
+    return hasil
+
+
+def find_nearby(world, tx: int, ty: int, radius: int = 1):
+    """Perabot yang bisa dipakai di sekitar tile (tx, ty).
+
+    Mengembalikan [(jarak, tx, ty, tile_id, interaksi), ...] terurut dari yang
+    terdekat. Radius 1 = delapan tetangga plus tile itu sendiri, yang cocok
+    dengan cara pemain berdiri tepat di depan benda.
+    """
+    hits = _kandidat(world, tx, ty, radius, lambda dx, dy: max(abs(dx), abs(dy)))
     hits.sort(key=lambda h: h[0])
     return hits
 
@@ -152,18 +185,17 @@ def autonomy_candidates(world, tx: int, ty: int, radius: int = 8):
     jauh lebih besar daripada `find_nearby`: sim boleh berjalan menyeberangi
     ruangan demi sesuatu yang cukup berharga, dan falloff jarak di
     `score_interaction` yang memutuskan apakah itu sepadan.
+
+    BELUM ADA PEMANGGILNYA. Ia melihat objek terpasang sejak Fase 5c supaya
+    tidak menjadi jebakan bagi yang menyambungkannya nanti -- mesin autonomi di
+    `behavior_vm.py` lengkap tetapi belum tersambung ke dunia, dan menyambungkan
+    itu pekerjaan tersendiri.
     """
     out = []
-    for dy in range(-radius, radius + 1):
-        for dx in range(-radius, radius + 1):
-            nx, ny = tx + dx, ty + dy
-            tid = world.get_tile(nx, ny)
-            acts = interactions_for(tid)
-            if not acts:
-                continue
-            dist = (dx * dx + dy * dy) ** 0.5
-            for act in acts:
-                out.append(((nx, ny, tid), act, dist))
+    for dist, nx, ny, tid, acts in _kandidat(
+            world, tx, ty, radius, lambda dx, dy: (dx * dx + dy * dy) ** 0.5):
+        for act in acts:
+            out.append(((nx, ny, tid), act, dist))
     return out
 
 
@@ -179,3 +211,101 @@ OBJECT_NAMES: dict[int, str] = {
 
 def object_name(tile_id: int) -> str:
     return OBJECT_NAMES.get(tile_id, 'Benda')
+
+
+# ─── PENEMPATAN BEBAS ───────────────────────────────────────────────────────
+# Sampai sini perabot hanya bisa datang dari GRID: satu tile ID menempati satu
+# sel. `Scene.objects` (game/scenes/scene_base.py) membolehkan perabot yang
+# SAMA diletakkan di posisi bebas, dengan rotasi dan skala.
+#
+# Kuncinya: objek bebas TIDAK punya katalog sendiri. `kind`-nya memetakan ke
+# TILE ID yang sudah ada, sehingga tekstur, nama pemain, interaksi, dan sifat
+# memblokirnya semua diambil dari tabel di atas. Katalog kedua akan perlahan
+# menyimpang dari yang pertama, dan pemain akan menemukan kompor yang bisa
+# dimasak di grid tapi tidak bisa dimasak begitu dipindah ke halaman.
+OBJECT_KINDS: dict[str, int] = {
+    'kasur': BD, 'kompor': ST, 'meja': TB, 'kursi': CHR,
+    'televisi': TV, 'rak_buku': BS, 'cermin': MR, 'tungku': FP,
+    'konter': CT, 'rak': SH, 'peti': CH, 'pot': PP,
+    'jam': CL, 'dermaga': DCK, 'nisan': GR,
+}
+
+
+def tile_dari_kind(kind: str):
+    """Tile ID untuk sebuah jenis objek, atau None kalau jenisnya tak dikenal."""
+    return OBJECT_KINDS.get(kind)
+
+
+# Tinggi kotak objek dalam satuan ubin, dipakai perender sampai tiap jenis punya
+# modelnya sendiri. Angkanya kasar dengan SENGAJA: yang perlu terbaca dari
+# viewport adalah bahwa kasur lebih rendah daripada rak buku, bukan bahwa
+# tingginya presisi. Model khusus per jenis adalah pekerjaan terpisah.
+OBJECT_TINGGI: dict[str, float] = {
+    'kasur': 0.30, 'kompor': 0.55, 'meja': 0.45, 'kursi': 0.55,
+    'televisi': 0.40, 'rak_buku': 0.95, 'cermin': 0.90, 'tungku': 0.75,
+    'konter': 0.55, 'rak': 0.95, 'peti': 0.45, 'pot': 0.35,
+    'jam': 0.20, 'dermaga': 0.15, 'nisan': 0.75,
+}
+
+
+def tinggi_kind(kind: str) -> float:
+    """Tinggi kotak sebuah jenis, dalam satuan ubin."""
+    return OBJECT_TINGGI.get(kind, 0.6)
+
+
+def posisi_dunia(o, tile_size=None, ground_h=None):
+    """Posisi pusat kotak objek di dunia, dan tingginya.
+
+    Mengembalikan `(x, y, z, tinggi)` dengan `x`/`z` koordinat dunia dan `y`
+    ketinggian pusat kotak.
+
+    SATU rumus, dua pemakai: perender game (`world._build_objects`) dan editor
+    peta. Kalau keduanya menghitungnya sendiri-sendiri, benda akan melompat
+    setiap kali disimpan dari editor lalu dimuat game -- dan itu jenis bug yang
+    sulit dipercaya karena angkanya "hampir benar".
+    """
+    from .config import GROUND_H, TILE_SIZE
+    ts = TILE_SIZE if tile_size is None else tile_size
+    gh = GROUND_H if ground_h is None else ground_h
+    tinggi = ts * tinggi_kind(o['kind']) * o['scale']
+    return (o['x'] * ts, gh + o['h'] + tinggi / 2.0, o['y'] * ts, tinggi)
+
+
+def dari_posisi_dunia(kind, x, y, z, rot_y=0.0, scale=1.0,
+                      tile_size=None, ground_h=None):
+    """Kebalikan `posisi_dunia`: posisi dunia kembali menjadi bentuk objek.
+
+    Dipakai editor setelah gizmo menggeser sebuah benda. `y` di sini ketinggian
+    PUSAT kotak, jadi tinggi kotaknya dikurangi lagi supaya `h` kembali berarti
+    "ketinggian alas di atas tanah" -- bukan "ketinggian pusat".
+    """
+    from .config import GROUND_H, TILE_SIZE
+    ts = TILE_SIZE if tile_size is None else tile_size
+    gh = GROUND_H if ground_h is None else ground_h
+    tinggi = ts * tinggi_kind(kind) * scale
+    return {
+        'kind': kind,
+        'x': x / ts,
+        'y': z / ts,
+        'h': y - gh - tinggi / 2.0,
+        'rot_y': rot_y % 360.0,
+        'scale': scale,
+    }
+
+
+def kind_dari_tile(tile_id: int):
+    """Kebalikan `tile_dari_kind`. Dipakai editor untuk menandai objek."""
+    for kind, tid in OBJECT_KINDS.items():
+        if tid == tile_id:
+            return kind
+    return None
+
+
+def solid_kind(kind: str) -> bool:
+    """Apakah objek jenis ini memblokir jalan.
+
+    Diambil dari `BLOCKING` yang sama dengan yang dipakai grid, jadi tidak ada
+    daftar kedua yang bisa berbeda diam-diam.
+    """
+    tid = OBJECT_KINDS.get(kind)
+    return tid is not None and tid in BLOCKING

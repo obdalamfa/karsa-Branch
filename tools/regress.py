@@ -45,6 +45,13 @@ loadPrcFileData('', 'aux-display pandadx9')
 loadPrcFileData('', 'audio-library-name null')
 loadPrcFileData('', 'sync-video false')
 
+# `--offscreen` melepas ketergantungan pada jendela sungguhan. Dipakai saat
+# lingkungan menolak memfokuskan jendela: di situ tiap tangkapan layar kembali
+# kosong dan tanpa ini seluruh run dilaporkan gagal padahal scene-nya sehat.
+# Lihat catatan `lingkungan` di ujung main().
+if '--offscreen' in sys.argv:
+    loadPrcFileData('', 'window-type offscreen')
+
 import logging  # noqa: E402
 logging.basicConfig(level=logging.ERROR)
 
@@ -154,17 +161,24 @@ def cek_motif_waras(g):
         return _fail(f'mood tidak terhingga: {mood}')
     # Peluruhan diuji pada mesin NYATA, tapi tanpa meninggalkan bekas: nilai
     # kedelapan motif (plus akumulator pecahannya) disalin dulu dan dipulihkan
-    # setelah pemeriksaan.
+    # di `finally`.
     #
-    # Kenapa: sebelumnya pemeriksaan ini memajukan keadaan nyata 4 jam-sim di
-    # SETIAP scene, dan bekasnya menumpuk. Laju peluruhan Lapar non-linear
-    # (melambat saat lapar), jadi setelah belasan kali ia MENDATAR dan berhenti
-    # turun sama sekali -- diukur: tick ke-15 memberi -98,0000 -> -98,0000.
-    # Akibatnya scene TERAKHIR apa pun yang diuji akan GAGAL, dan kegagalannya
-    # berpindah mengikuti urutan argumen: larian 14 scene menuduh `swarga`,
-    # padahal `swarga` sendirian LULUS. Itu cacat alat ukur, bukan cacat game --
-    # persis pola yang sama dengan tiga probe yang dulu gagal menangkap bug
-    # pembeku pemain.
+    # Kenapa: pemeriksaan ini memakai mesin motif MILIK STATE YANG SAMA untuk
+    # tiap scene, dan tiap panggilan memajukan 240 menit tanpa memulihkannya.
+    # Laju peluruhan Lapar adalah HUNGER_RATIO * (100 + lapar) -- non-linear,
+    # dan MENUJU NOL saat lapar mendekati dasar -100. Setelah belasan scene
+    # penurunannya tidak lagi mencapai satu poin utuh yang bisa dibukukan
+    # `tick()`, jadi nilainya mendatar: diukur, tick ke-15 memberi
+    # -98,0000 -> -98,0000. Akibatnya `mv.get('lapar') >= sebelum` benar dan
+    # scene TERAKHIR apa pun gagal tanpa sebab nyata -- larian 14 scene menuduh
+    # `swarga`, padahal `swarga` sendirian LULUS. Hasilnya ditentukan urutan
+    # scene, bukan kesehatan motif.
+    #
+    # Dua agen menemukan cacat ini terpisah dan menambalnya berbeda: satu
+    # menyetel ulang `lapar` ke titik netral tiap scene, satu menyalin-dan-
+    # memulihkan. Yang kedua dipakai di sini karena ia tidak mengubah keadaan
+    # yang dipakai pemeriksaan SESUDAHNYA (`save_bolak` membaca state yang
+    # sama); penjelasan rumus di atas datang dari yang pertama.
     salinan = {m: mv.get(m) for m in MOTIVES}
     carry, acc = mv._tick_carry, dict(mv._acc)
     try:
@@ -231,6 +245,39 @@ def main():
         base.taskMgr.step()
     boot_s = time.time() - t0
 
+    # ── Pre-flight: bisakah jendela ini menggambar sama sekali? ─────────────
+    # Diperiksa SEBELUM keempat belas scene dijalankan. Kalau jendela tidak bisa
+    # difokuskan (Windows menolak SetForegroundWindow), isinya tidak pernah
+    # digambar dan setiap tangkapan layar akan kosong -- melaporkan 14 scene
+    # gagal karena itu berarti memberi vonis atas keadaan yang bukan milik
+    # scene.
+    #
+    # Sinyal LANGSUNG, bukan statistik. Versi pertama penjaga ini hanya melihat
+    # hasil di ujung dan mensyaratkan kegagalannya SERAGAM; ketika jendela sempat
+    # pulih di tengah run, 12 dari 14 scene tetap divonis gagal. Memeriksa satu
+    # frame lebih dulu menutup celah itu.
+    for _ in range(8):
+        base.graphicsEngine.renderFrame()
+    _probe = OUT / '_probe.png'
+    _img = base.win.getScreenshot()
+    if _img is not None:
+        _img.write(Filename.fromOsSpecific(str(_probe)))
+    if _probe.exists():
+        _ok_probe, _pesan_probe = cek_frame_kosong(_probe)
+        _probe.unlink(missing_ok=True)
+        if not _ok_probe:
+            print()
+            print('=' * 78)
+            print('LINGKUNGAN BERMASALAH -- dihentikan SEBELUM menjalankan scene.')
+            print(f'Jendela tidak menghasilkan gambar: {_pesan_probe}')
+            print('Windows kemungkinan menolak SetForegroundWindow(), sehingga isinya')
+            print('tidak pernah digambar. Setiap tangkapan layar akan kosong, dan')
+            print('melaporkan scene gagal karena itu tidak sah.')
+            print('Coba lagi dengan:  python tools/regress.py --offscreen')
+            print('=' * 78)
+            sys.stdout.flush()
+            os._exit(2)
+
     from ursina import scene as uscene
     baris = []
     gagal_total = 0
@@ -247,14 +294,34 @@ def main():
                 base.taskMgr.step()
             ms = (time.time() - tm) / MEASURE * 1000.0
 
+            # `taskMgr.step()` menjalankan logika permainan, tapi TIDAK menjamin
+            # buffer belakang selesai digambar sebelum `getScreenshot()`
+            # membacanya. Itulah sebabnya enam scene dilaporkan `frame_kosong`
+            # di sini -- shop, house, lake, cemetery, beach, clinic -- padahal
+            # `tools/capture.py`, yang memang memanggil renderFrame(),
+            # merender scene yang sama dengan puluhan ribu warna unik.
+            #
+            # Dan frame kosong bisa TRANSIEN: jendela kehilangan fokus sebentar,
+            # isinya tidak digambar, dan tangkapan berikutnya sudah benar lagi.
+            # Diulang sampai tiga kali, karena yang perlu diputuskan bukan
+            # "tangkapan pertama kosong" melainkan "scene ini TIDAK PERNAH bisa
+            # digambar". Memvonis dari satu percobaan berarti menghukum keadaan
+            # sesaat -- dan itu sudah dua kali menyesatkan.
             png = OUT / f'{nama}.png'
-            img = base.win.getScreenshot()
-            if img is not None:
-                img.write(Filename.fromOsSpecific(str(png)))
+            hasil_frame = _fail('tidak ada tangkapan layar')
+            for _percobaan in range(3):
+                for _ in range(8):
+                    base.graphicsEngine.renderFrame()
+                img = base.win.getScreenshot()
+                if img is not None:
+                    img.write(Filename.fromOsSpecific(str(png)))
+                if png.exists():
+                    hasil_frame = cek_frame_kosong(png)
+                    if hasil_frame[0]:
+                        break
 
             hasil['geom_nol'] = cek_geom_nol(nama)
-            hasil['frame_kosong'] = cek_frame_kosong(png) if png.exists() \
-                else _fail('tidak ada tangkapan layar')
+            hasil['frame_kosong'] = hasil_frame
             hasil['pemain_valid'] = cek_pemain_valid(g)
             hasil['bisa_keluar'] = cek_bisa_keluar(g)
             hasil['motif_waras'] = cek_motif_waras(g)
@@ -270,6 +337,27 @@ def main():
         baris.append((nama, hasil, ms, n_ent, buruk))
 
     # ── laporan ──
+    # Empat belas scene kosong SEKALIGUS bukan cacat scene: game ini terbukti
+    # merender semuanya di `gauntlet/check.py`. Yang terjadi adalah jendelanya
+    # tidak bisa difokuskan -- Windows menolak `SetForegroundWindow()`, isinya
+    # tidak pernah digambar, dan `getScreenshot()` membaca buffer kosong.
+    #
+    # Alat yang melaporkan 0/14 karena lingkungan lebih berbahaya daripada tidak
+    # ada alat sama sekali: 0/14 palsu tidak bisa dibedakan dari kerusakan
+    # sungguhan, dan itu melatih pemakainya untuk mengabaikan alarmnya.
+    lingkungan = bool(baris) and gagal_total > 0 and all(
+        set(buruk) == {'frame_kosong'} for _n, _h, _ms, _e, buruk in baris)
+    if lingkungan:
+        print()
+        print('=' * 78)
+        print('LINGKUNGAN BERMASALAH -- ini BUKAN cacat scene.')
+        print('Seluruh scene menghasilkan frame kosong. Game ini terbukti merender')
+        print('semuanya di gauntlet/check.py, jadi yang gagal adalah jendelanya:')
+        print('Windows menolak SetForegroundWindow(), isinya tidak pernah digambar,')
+        print('dan getScreenshot() membaca buffer kosong.')
+        print('Tabel di bawah dicetak sebagai bukti, bukan sebagai vonis.')
+        print('Coba lagi dengan:  python tools/regress.py --offscreen')
+        print('=' * 78)
     print()
     print(f'{"scene":14s} {"hasil":>7s} {"ms/frame":>9s} {"entity":>7s}  catatan')
     print('-' * 78)
@@ -282,11 +370,18 @@ def main():
     n_lulus = sum(1 for _, _, _, _, b in baris if not b)
     print(f'{n_lulus}/{len(baris)} scene lulus, {gagal_total} pemeriksaan gagal, '
           f'boot {boot_s:.1f}s')
+    if lingkungan:
+        print('CATATAN: angka di atas TIDAK SAH. Kegagalannya seragam dan sebabnya')
+        print('lingkungan, bukan scene. Pakai --offscreen, atau fokuskan jendelanya')
 
     laporan = OUT / 'report.md'
     with open(laporan, 'w', encoding='utf-8') as f:
         f.write('# Laporan regresi\n\n')
         f.write(f'{n_lulus}/{len(baris)} scene lulus, {gagal_total} pemeriksaan gagal.\n\n')
+        if lingkungan:
+            f.write('> **Hasil ini tidak sah.** Kegagalannya seragam `frame_kosong` '
+                    'dan sebabnya\n> lingkungan (jendela tidak bisa difokuskan), '
+                    'bukan scene. Jalankan ulang dengan `--offscreen`.\n\n')
         f.write('| scene | hasil | ms/frame | entity | catatan |\n|---|---|--:|--:|---|\n')
         for nama, hasil, ms, n_ent, buruk in baris:
             tanda = 'LULUS' if not buruk else '**GAGAL**'
@@ -305,7 +400,9 @@ def main():
         pass
 
     sys.stdout.flush()
-    os._exit(1 if gagal_total else 0)
+    # Kode 2 dibedakan dari 1: 1 berarti ada scene yang benar-benar rusak,
+    # 2 berarti hasilnya tidak sah karena lingkungan. CI bisa membedakannya.
+    os._exit(2 if lingkungan else (1 if gagal_total else 0))
 
 
 if __name__ == '__main__':

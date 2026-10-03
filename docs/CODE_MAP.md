@@ -327,7 +327,7 @@ Detail di §5.
 | `game/vitaboy_baked.py` | 167 | Loader Panda3D `Actor` untuk GLB hasil bake — **24 GLB `au-*_idle/walk.glb` benar-benar ada di `assets/models/`**. Ini jalur skinning GPU yang sudah jadi dan tidak dipakai. |
 | `game/vitaboy_npc.py` | 64 | Tabel outfit per-NPC yang lebih lengkap dari yang dipakai `entities.py`. Nol pemanggil. |
 | `game/vitaboy/default_skeleton.py` | 76 | Tidak pernah dipanggil sejak registry punya `adult.skel`. |
-| `scratch.py`, `scratch_test.py`, `refactor_entities.py`, `refactor_player_script.py`, `refactor_scene_logic.py`, `extract_scenes.py`, `standardize_assets.py`, `test_init.py` | ~250 | Skrip refactor sekali-jalan. Semua mereferensikan `game/scenes.py` yang **sudah tidak ada**. |
+| `scratch.py`, `scratch_test.py`, `refactor_entities.py`, `refactor_player_script.py`, `refactor_scene_logic.py`, `extract_scenes.py`, `standardize_assets.py`, `test_init.py` | ~250 | Skrip refactor sekali-jalan. Semua mereferensikan `game/scenes.py` yang **sudah tidak ada**. **Dihapus 2026-09-24** kecuali `test_init.py`, yang masih dipakai sebagai smoke test. |
 
 Total baris mati/orphan: **± 1.550** (12% dari basis kode).
 

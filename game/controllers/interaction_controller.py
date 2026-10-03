@@ -415,10 +415,16 @@ class InteractionController:
             self.player.quest_manager.check_quest_progress(panels)
         elif hasattr(self.player, '_check_quest_progress'):
             self.player._check_quest_progress(panels)
-    def give_gift(self, entities_mgr, panels):
+    def give_gift(self, entities_mgr, panels, npc_id=None):
         s = self.player.state
         tx, ty = self.player.get_tile_pos()
-        info = entities_mgr.get_nearest_npc(tx, ty, max_dist_tiles=3.0)
+        if npc_id is None:
+            info = entities_mgr.get_nearest_npc(tx, ty, max_dist_tiles=3.0)
+        else:
+            pos = s.npc_positions.get(npc_id, {})
+            nearby = (pos.get('scene') == s.scene_name and
+                      math.hypot(pos.get('x', -100)-tx, pos.get('y', -100)-ty) <= 3.0)
+            info = {'id': npc_id} if nearby else None
         if not info:
             sound_play('blocked', 0.6)
             panels.flash_msg("Tidak ada NPC di dekat (G).", 0.8)
@@ -664,7 +670,7 @@ class InteractionController:
             else:
                 panels.start_dialog(npc_id, s, node_key='maya_quest_start')
         elif action == 'beri_hadiah':
-            self.give_gift(entities_mgr, panels)
+            self.give_gift(entities_mgr, panels, npc_id=npc_id)
             s.sosial = min(NEED_MAX, s.sosial + 20)
         elif action == 'tanya_kabar':
             s.sosial = min(NEED_MAX, s.sosial + 8)
@@ -684,7 +690,7 @@ class InteractionController:
         elif action == 'naga_riddle':
             panels.start_dialog(npc_id, s, node_key='naga_riddle_start')
         elif action == 'tawarkan':
-            self.give_gift(entities_mgr, panels)
+            self.give_gift(entities_mgr, panels, npc_id=npc_id)
             s.senang = min(NEED_MAX, s.senang + 15)
         elif action == 'belai':
             s.senang = min(NEED_MAX, s.senang + 8)

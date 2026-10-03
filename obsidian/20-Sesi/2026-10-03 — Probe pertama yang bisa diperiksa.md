@@ -2,7 +2,7 @@
 judul: Probe pertama yang bisa diperiksa
 tipe: sesi
 tanggal: 2026-10-03
-commit:
+commit: c801acc
 tags: [sesi, bukti, dokumentasi]
 ---
 

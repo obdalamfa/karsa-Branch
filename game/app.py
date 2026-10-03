@@ -1,5 +1,6 @@
 import logging
 import math
+import os
 import random
 from pathlib import Path as _Path
 from PIL import Image as _PILImg
@@ -75,10 +76,11 @@ class Game3D:
     def __init__(self):
         logging.info("Inisialisasi Game Engine 3D (Ursina)...")
         
-        # Inisialisasi Ursina Engine
-        self.app = Ursina(size=(SCREEN_W, SCREEN_H),
+        # Inisialisasi Ursina Engine (ukuran pas jendela agar tidak offscreen di monitor 1080p)
+        self.app = Ursina(size=(1280, 720),
                           title='Lembah Karsa 3D — v0.10 [Cozy Edition]',
                           borderless=False)
+        window.center_on_screen()
         window.color = color.rgb(30, 20, 40)
 
         # Overlay debug bawaan Ursina dimatikan, dan ini bukan soal selera.
@@ -94,6 +96,18 @@ class Game3D:
         # mengukur. Alat ukur yang dibuang akan ditulis ulang dengan buruk.
         self._debug_overlay = False
         _pasang_overlay_debug(False)
+
+        # Pastikan jendela aktif dan muncul di depan di Windows
+        if os.name == 'nt':
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                hwnd = user32.FindWindowW(None, 'Lembah Karsa 3D — v0.10 [Cozy Edition]')
+                if hwnd:
+                    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                    user32.SetForegroundWindow(hwnd)
+            except Exception:
+                pass
         
         # Pencahayaan — arah lebih datar agar detail karakter chibi terlihat
         self.sun = DirectionalLight(shadows=False)

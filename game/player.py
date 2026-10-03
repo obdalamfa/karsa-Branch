@@ -289,26 +289,35 @@ class Player3D(Entity):
         self.body = Entity(parent=p)
         self._pivot_neck = Entity(parent=p)
 
-        try:
-            # Lewat pabrik tunggal di vitaboy_npc.py: ia memilih Character
-            # Panda3D (skinning C++, 0,288 ms/avatar) kalau ada, dan jatuh ke
-            # skinning Python (6,387 ms/avatar) kalau tidak. Pemain memakai
-            # jalur yang sama dengan NPC supaya tidak ada dua kebenaran.
-            from .vitaboy_npc import build_vitaboy_avatar, PEMAIN_DEFAULT
-            from .wajah import varian_pemain
-            apr_list = list(PEMAIN_DEFAULT)
-            st = getattr(self, 'state', None)
-            varian = varian_pemain(getattr(st, 'char_skin', 0) or 0,
-                                   getattr(st, 'char_hair', 0) or 0)
-            self._va = build_vitaboy_avatar(self, apr_list, scale=0.32,
-                                            varian=varian)
-            if self._va is None:
-                raise RuntimeError('kedua backend avatar gagal')
-        except Exception as e:
-            import logging
-            logging.error(f"Failed to load Vitaboy for Player: {e}")
-            self._va = None
+        self._use_mesh_swap = False
+        from .entities import load_model_file, _baked_texture, _setup_pose_swap
+        p_mdl = load_model_file('player_idle') or load_model_file('player')
+        if p_mdl is not None:
+            self.model = p_mdl
+            tex = _baked_texture('player_baked')
+            if tex is not None:
+                self.texture = tex
+                self.color = color.white
+            _setup_pose_swap(self, 'player')
+            self._use_mesh_swap = True
             self._is_vitaboy = False
+        else:
+            try:
+                from .vitaboy_npc import build_vitaboy_avatar, PEMAIN_DEFAULT
+                from .wajah import varian_pemain
+                apr_list = list(PEMAIN_DEFAULT)
+                st = getattr(self, 'state', None)
+                varian = varian_pemain(getattr(st, 'char_skin', 0) or 0,
+                                       getattr(st, 'char_hair', 0) or 0)
+                self._va = build_vitaboy_avatar(self, apr_list, scale=0.32,
+                                                varian=varian)
+                if self._va is None:
+                    raise RuntimeError('kedua backend avatar gagal')
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to load Vitaboy for Player: {e}")
+                self._va = None
+                self._is_vitaboy = False
 
             # Build full gorgeous voxel character fallback
             pants = PANTS_COLOR
@@ -1054,6 +1063,25 @@ class Player3D(Entity):
                     self._pivot_neck.y = _GH + 1.89 + breathe
                     self._pivot_shoulder_l.y = _GH + 1.55 + breathe
                     self._pivot_shoulder_r.y = _GH + 1.55 + breathe
+
+        # ── Mesh-swap animation (jika model player memakai mesh swap) ──
+        if getattr(self, '_use_mesh_swap', False):
+            names = getattr(self, '_pose_names', None)
+            if names:
+                if moving_now:
+                    n_walk = max(1, len(names) - 1)
+                    frame = 1 + (int(getattr(self, '_walk_t', 0.0) * 0.5) % n_walk)
+                else:
+                    frame = 0
+                if frame != getattr(self, '_pose_cur', -1):
+                    try:
+                        from .entities import load_model_file
+                        mdl = load_model_file(names[frame])
+                        if mdl is not None:
+                            self.model = mdl
+                            self._pose_cur = frame
+                    except Exception:
+                        pass
 
         # Animasi alat/serangan — per mode
         if self._attack_anim > 0:

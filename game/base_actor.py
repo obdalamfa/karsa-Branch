@@ -63,7 +63,7 @@ class BaseActor(Entity):
                 self.rotation_y = 90 if dx > 0 else -90
             else:
                 self.rotation_y = 0 if dz > 0 else 180
-            self._walk_t += dt * 16.0
+            self._walk_t += dt * 10.0
         else:
             self._walk_t += dt * 1.8
 

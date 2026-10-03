@@ -1,8 +1,8 @@
-# Blender 5.1.1 MTL File: 'petapa_srimana_galak.blend'
+# Blender 5.1.1 MTL File: 'characters_vitaboy.blend'
 # www.blender.org
 
-newmtl npc_bowo_mat.002
-Ns 48.400013
+newmtl npc_bowo_mat.001
+Ns 39.999996
 Ka 1.000000 1.000000 1.000000
 Ks 0.500000 0.500000 0.500000
 Ke 0.000000 0.000000 0.000000

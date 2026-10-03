@@ -10,6 +10,11 @@ tags: [moc, progres]
 Urutan tahap diambil dari `docs/TAHAPAN.md`. Urutannya bukan selera: tiap tahap
 membuka tahap berikutnya, dan tahap yang dilompati menagih ongkosnya belakangan.
 
+Satu pengecualian yang nyata: **Tahap 5 selesai sebelum Tahap 3 dan 4**. Ia
+dikerjakan di branch `claude/nice-shamir-93f5de` dan memang tahap termurah —
+mesinnya sudah ada, cuma belum disambung. Urutan ideal kalah dari kerja yang
+sudah terjadi, dan vault mencatat yang terjadi.
+
 | Tahap | Status | Inti | Catatan |
 |---|---|---|---|
 | 0 | ✅ selesai | amankan kerja di git | [[Tahap 0 — Amankan kerja]] |
@@ -17,7 +22,7 @@ membuka tahap berikutnya, dan tahap yang dilompati menagih ongkosnya belakangan.
 | 2 | 🔨 jalan | verifikasi modul yang terlanjur ada | [[Tahap 2 — Verifikasi modul yatim]] |
 | 3 | ⬜ belum | performa — garis dasar per scene sudah ada | [[Tahap 3 — Performa]] |
 | 4 | ⬜ belum | Wishes — alasan untuk peduli | [[Tahap 4 — Wishes]] |
-| 5 | ⬜ belum | autonomi NPC | [[Tahap 5 — Autonomi]] |
+| 5 | ✅ selesai | autonomi NPC — NPC berjalan ke perabot | [[Tahap 5 — Autonomi]] |
 | 6 | ⬜ belum | traits dan moodlets | [[Tahap 6 — Traits dan moodlets]] |
 | 7 | ⬜ belum | misteri dan entitas | [[Tahap 7 — Misteri dan entitas]] |
 | 8 | ⬜ belum | audio | [[Tahap 8 — Audio]] |
@@ -35,6 +40,8 @@ timeline
                : 7ed8d59 dua jebakan pembeku pemain
     2026-09-22 : vault Obsidian dibuat
                : regresi jalan sungguhan 14/14, CI dipasang
+               : CI terbukti hijau di GitHub; base di-merge
+               : Tahap 5 otonomi selesai (branch sebelah)
 ```
 
 ## Yang TIDAK dikejar

@@ -27,12 +27,11 @@ Pilihannya dua, dan keduanya jujur: sambungkan ke jalur render entitas, atau
 tandai eksplisit sebagai belum dipakai. Yang tidak boleh: membiarkannya
 terlihat seolah sudah bekerja.
 
-## 🟠 Autonomi sudah jadi tapi tidak dipanggil
+## ✅ Autonomi — lunas, oleh branch sebelah
 
-`motives.choose_action()` (`motives.py:295`) dan `objects.autonomy_candidates()`
-(`objects.py:148`) ada dan teruji, tapi `grep` 2026-09-22 menemukan **nol**
-pemanggil di luar definisinya. Ini persis yang dicatat [[Tahap 5 — Autonomi]]:
-termurah, dampak paling besar, tinggal disambung.
+Dulu utang paling murah di daftar ini: dua fungsi matang tanpa pemanggil.
+Sejak merge `342facf` ia dipanggil dari `game/npc.py:92` — kode game yang
+hidup, bukan harness → [[Tahap 5 — Autonomi]].
 
 ## 🟡 92 file `.pyc` ikut ter-commit — separuh lunas
 
@@ -61,12 +60,12 @@ Diperiksa 2026-09-22:
 Rujukan baris di dokumen memang selalu membusuk. Yang layak diperbaiki minimal
 klaim yang **menyesatkan pemain**, yaitu instruksi Vitaboy.
 
-## 🟡 Workflow CI belum pernah jalan di GitHub
+## ✅ Workflow CI — terbukti hijau di GitHub
 
-`.github/workflows/regresi.yml` (2026-09-22) terbukti lewat perintah yang
-**identik** di mesin lokal — 14/14 lulus di atas Xvfb + Mesa. Yang belum
-terbukti: nama paket apt di runner `ubuntu-latest`, dan apakah `actions/*`
-versi yang dipakai tersedia. Larian pertamanya di PR adalah buktinya.
+Sudah tidak jadi utang. `.github/workflows/regresi.yml` berjalan **4 kali**
+di GitHub Actions (push + pull_request untuk dua commit), semuanya `success`,
+dengan artifact bukti 3,28 MB terunggah. Nama paket apt yang ditebak untuk
+`ubuntu-latest` ternyata benar.
 
 ## ✅ Lunas 2026-09-22
 

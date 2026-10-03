@@ -4,7 +4,7 @@ tipe: sistem
 modul: tools/regress.py
 baris: 291
 status: jalan
-hasil_terakhir: 14/14 scene lulus (dijalankan 2026-09-22)
+hasil_terakhir: 14/14 scene lulus — lokal dan di CI GitHub (2026-09-22)
 tags: [sistem, uji, status/jalan]
 ---
 
@@ -87,6 +87,10 @@ Alat ukur yang salah, bukan kode. Aturan yang lahir dari situ ada di
 PR — Xvfb + Mesa software, lalu tangkapan layar dan laporan diunggah sebagai
 artifact. Sebelum itu jaring ini cuma bekerja kalau ada yang **ingat**
 mengetiknya.
+
+**Terbukti jalan:** 4 larian di GitHub Actions, semuanya `success`, artifact
+bukti 3,28 MB. Karena `regress.py` keluar dengan kode 1 begitu satu pemeriksaan
+gagal, langkah CI yang hijau itu sendiri adalah bukti 14/14.
 
 Dua hal harus beres lebih dulu sebelum CI mungkin sama sekali:
 [[Font HUD tidak ketemu di mesin bersih]] dan `requirements.txt` yang tidak

@@ -71,6 +71,17 @@ yang statusnya perlu diwaspadai.
 | `.github/workflows/regresi.yml` | jalankan 14 scene tiap push & PR di atas Xvfb + Mesa, unggah bukti → [[Regresi]] |
 | `requirements.txt` | `ursina`, `pygame`, `pillow` — dua terakhir sempat hilang dan membuat game tidak bisa di-import di mesin bersih |
 
+## Datang dari base branch (merge `342facf`)
+
+| Tempat | Isi |
+|---|---|
+| `game/npc_brain.py` | `pilih_otonom()` — pemanggil pertama `choose_action` → [[Tahap 5 — Autonomi]] |
+| `game/npc.py` | yang benar-benar memakai otonomi di dunia hidup |
+| `game/guardian_models.py` | model guardian |
+| `gauntlet/` | harness uji terpisah (`check.py`), punya skill `.claude/skills/gauntlet-loop/` |
+| `ursina_editor/` | editor peta — menempatkan dan menggeser objek dengan gizmo (`EDITOR.md`) |
+| `game/scenes/beach.json` | scene berbasis data, bukan kode |
+
 ## Dokumen panjang di `docs/`
 
 `CODE_MAP.md` (880) · `READABILITY.md` (1021) · `BAR_STRANGERVILLE.md` (823) ·

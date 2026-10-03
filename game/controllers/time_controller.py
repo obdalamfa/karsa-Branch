@@ -2,7 +2,6 @@ from ..config import (
     FORCE_SLEEP_HOUR, INGAME_MINUTES_PER_REAL_SECOND, 
     NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG, NEED_MAX
 )
-from ..data import CROPS
 
 class TimeController:
     """Manages time, day progression, and needs decay."""
@@ -52,17 +51,6 @@ class TimeController:
         s.day           += 1
         s.day_in_season += 1
 
-        # Satu malam berlalu untuk ternak: kenyang turun, yang terlalu lama
-        # dilalaikan jatuh sakit, yang terawat siap dipanen hasilnya.
-        # game/husbandry.py sudah lengkap tapi tidak ada pemanggilnya sama
-        # sekali — tanpa baris ini, merawat hewan tidak berakibat apa pun.
-        try:
-            from ..husbandry import daily_tick as _ternak_tick
-            self._ternak_pagi = _ternak_tick(s)
-        except Exception as e:
-            import logging
-            logging.warning(f"[TERNAK] daily_tick gagal: {e}")
-            self._ternak_pagi = None
         s.time_minutes   = 360.0
         s.energy         = s.max_energy
         s.hp             = s.max_hp
@@ -77,14 +65,11 @@ class TimeController:
                 if soil.get('tilled') and not soil.get('watered'):
                     soil['watered'] = True
 
-        # Tumbuh tanaman semalam
-        cur_season = s.get_season()
-        for soil in s.soil.values():
-            if soil.get('watered') and soil.get('crop'):
-                crop_seasons = CROPS.get(soil['crop'], {}).get('seasons', [])
-                growth = 2 if cur_season in crop_seasons else 1
-                soil['age'] = soil.get('age', 0) + growth
-                soil['watered'] = False
+        # Tumbuh tanaman semalam — satu mesin di game/crops.py (kering/layu/
+        # mati, laju musim, panen berulang). Loop inline lama hanya menambah
+        # umur dan mengabaikan seluruh aturan air.
+        from ..crops import grow_all
+        grow_all(s)
 
         # Ternak maju semalam persis seperti tanaman: yang kenyang mendekat
         # satu hari ke hasilnya, yang lapar diam di tempat. Diletakkan tepat

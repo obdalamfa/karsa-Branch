@@ -36,6 +36,10 @@ class InteractionController:
         if tool == 'Cangkul':
             if tid in TILLABLE and s.energy >= 2:
                 soil = s.soil.setdefault(soil_key, {})
+                if soil.get('mati'):
+                    # Bongkar tanaman mati (kekeringan) agar petak bisa
+                    # ditanami ulang. Lihat crops.status_line().
+                    soil.clear()
                 soil['tilled'] = True
                 self.player._spend_energy(2)
                 self.world.refresh_tile(tx, ty, soil_key)
@@ -65,8 +69,8 @@ class InteractionController:
             soil = s.soil.get(soil_key, {})
             seed_key = s.seed_key + '_seed'
             if soil.get('tilled') and not soil.get('crop') and s.inventory.get(seed_key, 0) > 0:
-                soil = s.soil.setdefault(soil_key, {})
-                soil.update({'crop': s.seed_key, 'age': 0, 'tilled': True})
+                from ..crops import plant_payload
+                s.soil[soil_key] = plant_payload(s.seed_key)
                 s.inventory[seed_key] -= 1
                 self.player._spend_energy(2)
                 self.world.refresh_tile(tx, ty, soil_key)
@@ -80,38 +84,39 @@ class InteractionController:
                 sound_play('blocked', 0.6)
 
         elif tool == 'Panen':
+            from ..crops import is_ready, harvest
             soil = s.soil.get(soil_key)
-            if soil and soil.get('crop'):
-                crop_data = CROPS.get(soil['crop'], {})
-                if soil.get('age', 0) >= crop_data.get('days', 4):
-                    crop_name = soil['crop']
-                    s.inventory[crop_name] = s.inventory.get(crop_name, 0) + 1
-                    # Panen TIDAK lagi langsung mencetak emas. Dulu baris ini
-                    # menambah gold DAN menaruh barangnya di tas sekaligus,
-                    # jadi hasil panen tidak punya harga yang berarti dan
-                    # menjual tidak pernah ada gunanya. Sekarang panen
-                    # menghasilkan BARANG; emas datang dari menjualnya —
-                    # di Warung (harga penuh) atau Peti Kirim kebun (85%).
-                    from ..economy import sell_price, best_process_hint
-                    nilai = sell_price(crop_name)
-                    if crop_name == 'lobak':
-                        s.stats['lobak_harvested'] = s.stats.get('lobak_harvested', 0) + 1
-                    s.stats['harvested'] = s.stats.get('harvested', 0) + 1
+            crop_name = soil.get('crop') if soil else None
+            if crop_name and is_ready(crop_name, soil):
+                jumlah, petak_kosong = harvest(soil, crop_name)
+                s.inventory[crop_name] = s.inventory.get(crop_name, 0) + jumlah
+                # Panen TIDAK lagi langsung mencetak emas. Dulu baris ini
+                # menambah gold DAN menaruh barangnya di tas sekaligus,
+                # jadi hasil panen tidak punya harga yang berarti dan
+                # menjual tidak pernah ada gunanya. Sekarang panen
+                # menghasilkan BARANG; emas datang dari menjualnya —
+                # di Warung (harga penuh) atau Peti Kirim kebun (85%).
+                from ..economy import sell_price, best_process_hint
+                nilai = sell_price(crop_name)
+                if crop_name == 'lobak':
+                    s.stats['lobak_harvested'] = s.stats.get('lobak_harvested', 0) + 1
+                s.stats['harvested'] = s.stats.get('harvested', 0) + 1
+                if petak_kosong:
                     del s.soil[soil_key]
-                    self.player._spend_energy(2)
-                    s.senang = min(NEED_MAX, s.senang + 8)
-                    self.world.refresh_tile(tx, ty, soil_key)
-                    self.player._play_tool_anim('bend')
-                    self.player._fx_burst(fx, fy + 0.3, fz, color.rgb(255, 225, 50), n=7)
-                    sound_play('harvest', 0.8)
-                    hint = best_process_hint(crop_name)
-                    ekor = f" | {hint}" if hint else ""
-                    panels.flash_msg(
-                        f"+1 {CROPS[crop_name]['name']} (nilai {nilai}G){ekor}", 1.6)
-                    self.check_quests(panels)
-                else:
-                    sound_play('blocked', 0.6)
-                    panels.flash_msg("Belum siap panen.", 0.8)
+                self.player._spend_energy(2)
+                s.senang = min(NEED_MAX, s.senang + 8)
+                self.world.refresh_tile(tx, ty, soil_key)
+                self.player._play_tool_anim('bend')
+                self.player._fx_burst(fx, fy + 0.3, fz, color.rgb(255, 225, 50), n=7)
+                sound_play('harvest', 0.8)
+                hint = best_process_hint(crop_name)
+                ekor = f" | {hint}" if hint else ""
+                panels.flash_msg(
+                    f"+{jumlah} {CROPS[crop_name]['name']} (nilai {nilai * jumlah}G){ekor}", 1.6)
+                self.check_quests(panels)
+            else:
+                sound_play('blocked', 0.6)
+                panels.flash_msg("Belum siap panen.", 0.8)
 
         elif tool == 'Hadiah':
             self.player.give_gift(entities_mgr, panels)

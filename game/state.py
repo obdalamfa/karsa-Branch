@@ -45,14 +45,8 @@ class GameState:
     # Catatan ternak: {animal_id: {'kenyang': sisa_hari, 'siap': hari_terkumpul}}.
     # Dict biasa supaya save tetap JSON murni, sama seperti `soil` dan `motives`.
     animals:         dict = field(default_factory=dict)
-    # Kesejahteraan ternak versi `husbandry.py`: {animal_id: {...}}.
-    #
-    # SEBELUMNYA TIDAK ADA DI SINI, dan itu bug yang menghapus data. `care_of()`
-    # menulis `state.animal_care` sebagai atribut dinamis; `save()` menulisnya
-    # ke JSON karena ia menyerialkan `__dict__`; tapi `load()` dulu menyaring
-    # dengan `hasattr()` terhadap instance BARU -- yang belum punya atribut itu
-    # -- sehingga seluruh akumulasi kelalaian ternak dibuang setiap kali save
-    # dimuat, dan model biaya peternakan jadi tidak berarti.
+    # LEGACY: dulu ditulis husbandry.py (modulnya sudah dihapus). Field
+    # dipertahankan supaya save lama yang memuat kunci ini tidak dianggap asing.
     animal_care:     dict = field(default_factory=dict)
     soil:            dict = field(default_factory=dict)
     npc_hearts:      dict = field(default_factory=dict)

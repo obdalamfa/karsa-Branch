@@ -1,0 +1,26 @@
+{
+  "passed": [
+    "mountain portal and arrival connectivity",
+    "naga_cave portal and arrival connectivity",
+    "cave crystals have real geometry, outward normals, and no clipped tint",
+    "exact hour visibility and sleep/wake without re-entering cave",
+    "actual save/load and obsolete guardian position restoration",
+    "save is atomic, corrupt files quarantined, dynamic fields survive",
+    "guardian dialogue, interaction radius and obtainable iron gift progression",
+    "real portal cooldown, dungeon generation and return transition",
+    "guardian visual update runs exactly once per frame",
+    "five actual-engine screenshots with gameplay camera convention",
+    "placed-object layer maps kinds to tiles and rejects malformed entries",
+    "placed objects render at the tile coordinates they were given",
+    "placed objects reuse the grid texture, including TILE_TEX-only kinds",
+    "placed objects are usable through find_nearby, alongside grid tiles",
+    "NPC autonomy bridge selects the right furniture for each motive",
+    "NPC autonomy walks, uses the furniture, then recovers its motive",
+    "editor moving an object round-trips through the shared position formula",
+    "map editor viewport mirrors the tile grid and edits land in both",
+    "map editing session paints, rejects non-tiles, and saves readable files",
+    "player registers itself for NPC head-seek"
+  ],
+  "memory_vfs_fallback": false,
+  "interactive_playthrough": false
+}

@@ -142,6 +142,19 @@ class Player3D(Entity):
         self.state = state
         self.world = world
 
+        # Daftarkan diri ke slot modul di `entities.py` supaya loop NPC bisa
+        # menemukan pemain untuk head-seek. Docstring `daftarkan_pemain()`
+        # sudah sejak awal menyatakan "Dipanggil Player3D.__init__", tapi tidak
+        # ada yang memanggilnya: `_PEMAIN_AKTIF[0]` selalu None, sehingga
+        # `_lihat_pemain` di `entities.update()` selalu None dan cabang
+        # head-seek tidak pernah menyala. Itu ikut mematikan satu-satunya
+        # bagian `animator.py` yang masih punya pemanggil hidup
+        # (HeadSeekController, dipakai `vitaboy_baked.py`).
+        # Impor lokal: `entities.py` sengaja TIDAK mengimpor `player.py` untuk
+        # menghindari siklus, dan slot modul ini ada justru karena itu.
+        from .entities import daftarkan_pemain
+        daftarkan_pemain(self)
+
         self.speed             = PLAYER_SPEED
         self.facing            = state.facing
         self._attack_cd        = 0.0    # ms

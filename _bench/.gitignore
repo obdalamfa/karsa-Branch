@@ -1,4 +1,30 @@
 # Benchmark scratch: reference imagery, renders, comparison sheets.
 # Not part of the shipped game.
-*
-!.gitignore
+#
+# Catatan: berkas ini dulu memakai pola `*` yang menelan SELURUH isi `_bench/`,
+# termasuk `BRIEF.md`, `probes/`, `reports/`, `RESEP.md`, dan `temuan.json`.
+# Akibatnya:
+#
+#   - `docs/BAR_STRANGERVILLE.md` dan `docs/ENTITY_VISUAL_LANGUAGE.md` merujuk
+#     `_bench/BRIEF.md` sebagai sumber kebenaran, 7 kali, dan berkas itu tidak
+#     pernah ada di repo mana pun.
+#   - Puluhan komentar kode menulis "Diukur di `_bench/probes/probe_*.py`" dan
+#     "lihat `_bench/reports/profil-logika.md`" sebagai dasar keputusan yang
+#     sengaja diambil dari pengukuran, bukan dugaan -- dan tidak satu pun bisa
+#     diperiksa pembaca.
+#
+# Jadi sekarang yang diabaikan adalah KELUARANNYA saja. Dokumen dan alat ukur
+# tetap bisa di-commit.
+
+# Keluaran berat: hasil render, lembar perbandingan, dan gambar acuan.
+# (`refs/` berisi tangkapan layar milik pihak lain; tetap tidak di-commit.)
+*.png
+*.jpg
+*.jpeg
+shots/
+sheets/
+regress/
+
+# Log hasil harness.
+progress.jsonl
+progress.html

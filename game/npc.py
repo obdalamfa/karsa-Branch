@@ -9,6 +9,19 @@ class NPCState(Enum):
     WANDER = auto()
     PATHFINDING = auto()
     SLEEPING = auto()
+    USING = auto()
+
+
+def _use_seconds(inter) -> float:
+    """Durasi 'memakai' perabot dalam detik nyata, dari `inter.duration` (menit-sim).
+
+    Otak NPC meluruh dalam detik nyata, jadi durasi sim yang panjang tidak boleh
+    dipetakan 1:1 -- 'Tidur' 420 menit-sim akan jadi tujuh menit membeku. Skala
+    ~1/10 lalu dijepit 1,5–6 detik memberi jeda yang terbaca tanpa membuat NPC
+    tampak macet di depan perabot.
+    """
+    dur = getattr(inter, 'duration', 60.0)
+    return max(1.5, min(6.0, dur / 10.0))
 
 class NPC(BaseActor):
     """
@@ -16,27 +29,84 @@ class NPC(BaseActor):
     """
     def __init__(self, state, actor_id, **kwargs):
         super().__init__(state, actor_id, **kwargs)
-        self.speed = NPC_SPEED / (TILE_SIZE * 20)
+        # Tile per detik. Sebelumnya `NPC_SPEED/(TILE_SIZE*20)` lalu dikalikan
+        # `dt*1000` menghasilkan 50x kecepatan seharusnya: logical NPC melompat
+        # ke target dalam satu frame, `is_moving` tak pernah terlihat True, dan
+        # NPC tampak "meluncur" dengan animasi idle alih-alih berjalan. Rumus
+        # ini menyamai mob.py (`speed/TILE_SIZE*dt`).
+        self.speed = NPC_SPEED / TILE_SIZE
         self.path = []
         self.activity = ''
         self.sched_x = 0
         self.sched_y = 0
         self.ai_state = NPCState.IDLE
+        # Interaksi otonom yang sedang dikejar; diterapkan saat tiba di perabot.
+        self.auto_inter = None
+        # Sisa detik "memakai" perabot. > 0 berarti sedang memakai (berdiri diam).
+        self.use_timer = 0.0
 
-    def update_ai(self, dt: float, brains, can_walk_fn):
+    def update_ai(self, dt: float, brains, can_walk_fn, world=None):
+        # Penunggu tetap di tempat ritual, termasuk saat memuat save lama.
+        if self.actor_id in ('naga_bijak', 'banaspati'):
+            self.path.clear()
+            self.logical_x = self.target_x = float(self.sched_x)
+            self.logical_y = self.target_y = float(self.sched_y)
+            self.ai_state = (NPCState.SLEEPING if self.activity == 'sleeping'
+                             else NPCState.IDLE)
+            return
         if self.activity == 'sleeping':
             self.ai_state = NPCState.SLEEPING
             return
 
+        # ── Memakai perabot: berdiri diam selama durasi, lalu motif pulih ──
+        if self.use_timer > 0:
+            self.ai_state = NPCState.USING
+            self.use_timer -= dt
+            if self.use_timer <= 0:
+                if brains is not None:
+                    brains.selesaikan_otonom(self.actor_id, self.auto_inter)
+                self.auto_inter = None
+            return
+
         is_moving = abs(self.logical_x - self.target_x) > 0.02 or abs(self.logical_y - self.target_y) > 0.02
-        
+
         if not is_moving and self.path:
             nxt = self.path.pop(0)
             self.target_x, self.target_y = float(nxt[0]), float(nxt[1])
             is_moving = True
             self.ai_state = NPCState.PATHFINDING
-            
-        if self.ai_state != NPCState.SLEEPING and not is_moving and random.random() < 0.012:
+
+        # ── Otonomi: kalau ada kebutuhan mendesak, jalan ke perabot yang
+        #    memenuhinya. Menggantikan MENGEMBARA, bukan jadwal -- NPC tetap
+        #    berlabuh ke sched_x/sched_y saat tidak ada kebutuhan. Kalau otak
+        #    atau dunia tidak tersedia (harness), blok ini no-op dan perilaku
+        #    jadwal+wander lama tidak berubah.
+        if not is_moving and not self.path:
+            if self.auto_inter is not None:
+                # Tiba: mulai memakai. Pemulihan motif terjadi SETELAH durasi.
+                self.use_timer = _use_seconds(self.auto_inter)
+                self.ai_state = NPCState.USING
+                return
+            pilih = None
+            if brains is not None and world is not None:
+                pilih = brains.pilih_otonom(self.actor_id, world,
+                                            self.logical_x, self.logical_y)
+            if pilih is not None:
+                (gx, gy), inter = pilih
+                if abs(self.logical_x - gx) < 1.5 and abs(self.logical_y - gy) < 1.5:
+                    # Sudah berdiri tepat di depan perabot.
+                    self.auto_inter = inter
+                    self.use_timer = _use_seconds(inter)
+                    self.ai_state = NPCState.USING
+                    return
+                new_path = brains.plan_path(self.logical_x, self.logical_y, gx, gy)
+                if new_path:
+                    self.path = new_path
+                    self.auto_inter = inter
+                    self.ai_state = NPCState.PATHFINDING
+
+        if self.ai_state != NPCState.SLEEPING and not is_moving and not self.path \
+                and random.random() < 0.012:
             self.ai_state = NPCState.WANDER
             dx = random.choice([-2, -1, 0, 1, 2])
             dy = random.choice([-2, -1, 0, 1, 2])
@@ -60,8 +130,8 @@ class NPC(BaseActor):
         dx = self.target_x - self.logical_x
         dy = self.target_y - self.logical_y
         dist = math.hypot(dx, dy)
-        move = self.speed * (dt * 1000)
-        
+        move = self.speed * dt
+
         if dist <= move:
             self.logical_x, self.logical_y = float(self.target_x), float(self.target_y)
         elif dist > 0:

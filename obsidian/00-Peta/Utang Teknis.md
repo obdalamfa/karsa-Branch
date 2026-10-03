@@ -77,6 +77,24 @@ dengan artifact bukti 3,28 MB terunggah. Nama paket apt yang ditebak untuk
 | `motif_waras` mengotori keadaannya | scene ke-14 apa pun gagal palsu | [[Pemeriksaan motif mengotori keadaan]] |
 | regresi hanya jalan kalau diingat | jaring digantung tapi tidak dipasang | jalan otomatis di CI |
 
+## 🟠 15 dari 16 probe yang dikutip kode tidak ada di repo
+
+```
+grep -rhao "_bench/probes/probe_[a-z_]*\.py" --include=*.py game/ tools/ | sort -u
+```
+
+16 nama probe dikutip komentar kode sebagai dasar keputusan. Yang benar-benar
+ada: **satu**, `probe_font.py` (di-commit 2026-10-03). Sisanya hilang bersama
+sesi yang menulisnya, karena `_bench/.gitignore` dulu memakai pola `*`.
+
+Akibatnya angka-angka penting — 0,288 ms lawan 6,387 ms per avatar,
+"mode=dialog 0,00 unit MEMBEKU", "keempat arah 0,00" — tidak bisa dijalankan
+ulang siapa pun. Masih dipercaya, tapi tidak bisa diaudit.
+
+Pola aturannya sudah diperbaiki base branch: sekarang hanya **keluaran** yang
+diabaikan, alat ukurnya bisa di-commit. Yang tersisa: tiap probe baru harus
+ikut masuk → [[2026-10-03 — Probe pertama yang bisa diperiksa]].
+
 ## 🔴 Dua utang besar yang sudah punya rumah sendiri
 
 - [[Arah WASD belum terverifikasi]] — jangan ubah tanda sebelum ada probe kokoh.

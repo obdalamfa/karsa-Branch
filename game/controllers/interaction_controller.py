@@ -785,10 +785,13 @@ class InteractionController:
         return True
 
     def check_quests(self, panels=None):
-        if hasattr(self.player, 'quest_manager') and self.player.quest_manager:
-            self.player.quest_manager.check_quest_progress(panels)
-        elif hasattr(self.player, '_check_quest_progress'):
-            self.player._check_quest_progress(panels)
+        # `quest_controller` dulu, baru `quest_manager`. Yang kedua tidak
+        # pernah ada di Player3D, jadi cabang ini SELALU diam dan progres quest
+        # tidak pernah diperiksa — gagal tanpa suara, bukan gagal berisik.
+        qc = (getattr(self.player, 'quest_controller', None)
+              or getattr(self.player, 'quest_manager', None))
+        if qc is not None:
+            qc.check_quest_progress(panels)
     def give_gift(self, entities_mgr, panels):
         s = self.player.state
         tx, ty = self.player.get_tile_pos()
@@ -1099,6 +1102,18 @@ class InteractionController:
                 gosok_lbl = f'Gosok - bersih {bersih}%{mampet}'
                 gosok_fx  = f'-{EN_BRUSH} EN, bersih -> 100%, +1 hati'
 
+            # Hewan tunggangan dapat dua pilihan tambahan. Digantung di jalur
+            # pie yang SAMA dengan aksi perawatan lain — bukan tombol baru —
+            # supaya apa yang diuji harness adalah apa yang ditempuh pemain.
+            from ..husbandry import species_of
+            opts_naik = []
+            if species_of(npc_id) in self.TUNGGANGAN:
+                if getattr(s, 'menunggangi', None) == npc_id:
+                    opts_naik.append(('turun', 'Turun', True, 'berhenti menunggang'))
+                else:
+                    opts_naik.append(('naik', 'Naik', not getattr(s, 'menunggangi', None),
+                                      'tunggangi, jalan jadi lebih cepat'))
+
             opsi = [
                 ('belai',       'Belai',                    True,          '+8 Senang'),
                 ('gosok',       gosok_lbl,          not sudah_bersih,      gosok_fx),
@@ -1108,7 +1123,15 @@ class InteractionController:
             if tawarkan_minum:
                 opsi.append(
                     ('beri_minum', minum_lbl, not penuh and not jauh, minum_fx))
-            return opsi
+            # Opsi tunggangan DI DEPAN. Tanpa baris ini `opts_naik` dibangun
+            # lalu dibuang — dan itu persis yang terjadi sesudah merge
+            # feature/3d-mobs: `TUNGGANGAN` masih terdefinisi, mekanik
+            # menunggang di player.py masih utuh (`mulai_menunggang`,
+            # `_tunggangan`, 9 rujukan), `execute_pie_action` masih menangani
+            # 'naik' dan 'turun' — tapi tidak ada satu pun jalan bagi pemain
+            # untuk MEMILIHNYA. Fitur yang lengkap dan tak terjangkau, bentuk
+            # kegagalan yang sama dengan sims_build.
+            return opts_naik + opsi
 
     def execute_pie_action(self, npc_id: str, action: str, entities_mgr, panels):
         from ..data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS

@@ -43,6 +43,7 @@ timeline
                : CI terbukti hijau di GitHub; base di-merge
                : Tahap 5 otonomi selesai (branch sebelah)
     2026-10-03 : Tahap 2 ditutup — entity_mesh terbukti + ditandai
+    2026-10-04 : arah WASD terukur di 8 yaw dan diperbaiki
 ```
 
 ## Yang TIDAK dikejar

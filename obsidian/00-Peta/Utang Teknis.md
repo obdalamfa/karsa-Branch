@@ -73,6 +73,30 @@ dengan artifact bukti 3,28 MB terunggah. Nama paket apt yang ditebak untuk
 | `motif_waras` mengotori keadaannya | scene ke-14 apa pun gagal palsu | [[Pemeriksaan motif mengotori keadaan]] |
 | regresi hanya jalan kalau diingat | jaring digantung tapi tidak dipasang | jalan otomatis di CI |
 
+## 🟠 Pemeriksaan `arah_maju` masih terkontaminasi antar-scene
+
+Dibuat 2026-10-04 untuk menjaga [[Arah WASD basis sumbu salah]]. Ia **menangkap
+bug sungguhan** (bug lama dipasang kembali → GAGAL 179°), tapi di larian 14
+scene ia menuduh enam scene yang sehat:
+
+```
+8/14 scene lulus, 6 pemeriksaan gagal
+town, beach  "yaw0: W menyimpang 180 deg"
+lake, cemetery, shop, studio   32-34 deg
+```
+
+`town` sendirian: LULUS. `town` sesudah `farm`: LULUS. Jadi kegagalannya
+bergantung **panjang larian**, bukan kode yang diperiksa — kontaminasi
+antar-scene yang belum ketemu sumbernya, meski posisi dan kecepatan pemain
+sudah disalin-dan-dipulihkan dan kamera disentak alih-alih dilerp.
+
+Statusnya sekarang **lapor-saja**: angkanya tercetak, tapi tidak memvonis.
+Naik pangkat jadi penjaga sungguhan begitu sumber kontaminasinya ketemu.
+
+Tersangka yang belum diperiksa: `camera_focus` yang hanya diperbarui di dalam
+`update()`, dan posisi pemain yang dipulihkan sebagai koordinat **lokal**
+sementara yang diukur koordinat **dunia**.
+
 ## 🟠 15 dari 16 probe yang dikutip kode tidak ada di repo
 
 ```
@@ -93,5 +117,5 @@ ikut masuk → [[2026-10-03 — Probe pertama yang bisa diperiksa]].
 
 ## 🔴 Dua utang besar yang sudah punya rumah sendiri
 
-- [[Arah WASD belum terverifikasi]] — jangan ubah tanda sebelum ada probe kokoh.
+- [[Arah WASD basis sumbu salah]] — jangan ubah tanda sebelum ada probe kokoh.
 - [[Tahap 3 — Performa]] — 4–29 FPS, belum pernah diprofil.

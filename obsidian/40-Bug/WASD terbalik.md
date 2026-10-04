@@ -4,7 +4,7 @@ tipe: bug
 status: selesai
 ditemukan: 2026-08-26
 commit_perbaikan: 09ef02f
-tindak_lanjut: "[[Arah WASD belum terverifikasi]]"
+tindak_lanjut: "[[Arah WASD basis sumbu salah]]"
 tags: [bug, kontrol, status/selesai]
 ---
 
@@ -35,7 +35,7 @@ keempat arah terbalik lagi — **dan itu sudah terjadi dua kali**.
 ## Status sekarang
 
 Kodenya sudah tidak rapuh, tapi kebenarannya **belum terbukti** →
-[[Arah WASD belum terverifikasi]].
+[[Arah WASD basis sumbu salah]].
 
 ## Tautan
 

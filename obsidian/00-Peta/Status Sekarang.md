@@ -26,6 +26,7 @@ tags: [moc, status]
 | ESC selalu bisa keluar dari mode panel apa pun | cek `bisa_keluar`, lulus di 14 scene |
 | Motif waras + benar-benar meluruh | cek `motif_waras`, lulus bebas urutan |
 | Save bolak-balik utuh | cek `save_bolak`, lulus di 14 scene |
+| **Arah WASD benar di semua yaw** | [[Arah WASD basis sumbu salah]] — diukur di 8 yaw oleh dua probe ter-commit |
 | Tidak ada entity bergeometri nol | cek `geom_nol`, lulus di 14 scene |
 | Game bisa boot di mesin bersih | [[Font HUD tidak ketemu di mesin bersih]] — diperbaiki |
 | Jaring regresi jalan otomatis | `.github/workflows/regresi.yml` |
@@ -51,11 +52,14 @@ Angka ms/frame berasal dari runner tanpa GPU (Mesa software). Ia berguna untuk
 
 | Hal | Berat | Catatan |
 |---|---|---|
-| Arah WASD belum terverifikasi benar | 🔴 | [[Arah WASD belum terverifikasi]] — regresi tidak menguji arah |
+| Arah WASD basis sumbu salah benar | 🔴 | [[Arah WASD basis sumbu salah]] — regresi tidak menguji arah |
 | 4–29 FPS di mesin pemilik, belum pernah diprofil di GPU | 🔴 | [[Tahap 3 — Performa]] |
+| Cek `arah_maju` masih lapor-saja, belum memvonis | 🟠 | menuduh 6 scene sehat di larian panjang → [[Utang Teknis]] |
 | `PLAY.md` menunjuk baris & flag yang sudah tidak ada | 🟡 | [[Utang Teknis]] |
 
 ## Yang baru saja lunas
+
+- **Arah WASD** 🔴 → selesai (kodenya; penjaganya belum). Basisnya membaca komponen `(.x,.y)` padahal bidang mendatar Ursina `(x,z)`; menyimpang sampai 180° dan di yaw 90/270 vektor "kanan" runtuh jadi nol. Diukur di 8 yaw, diperbaiki, dan dijaga pemeriksaan `arah_maju` yang **terbukti gagal** saat bug dipasang kembali → [[2026-10-04 — Arah WASD akhirnya terukur dan diperbaiki]].
 
 - **Tahap 2 — Verifikasi modul yatim**: yatim terakhir `entity_mesh.py` dibuktikan jalan (16 pemeriksaan) dan ditandai jujur di kepala modulnya; tidak disambungkan supaya tidak melompati urutan tahap → [[2026-10-03 — Tahap 2 ditutup, entity_mesh terbukti]].
 - **92 `.pyc`**: nol yang masih dilacak — base branch sudah melepasnya.
@@ -68,9 +72,10 @@ Angka ms/frame berasal dari runner tanpa GPU (Mesa software). Ia berguna untuk
 
 ## Langkah berikutnya yang masuk akal
 
-1. **Bangun probe arah yang kokoh**, baru sentuh tanda WASD → [[Arah WASD belum terverifikasi]]. Satu-satunya 🔴 yang bisa dikerjakan tanpa GPU.
-2. Profil di mesin ber-GPU, mulai optimasi aman → [[Tahap 3 — Performa]].
+1. Profil di mesin ber-GPU, mulai optimasi aman → [[Tahap 3 — Performa]]. Ini satu-satunya 🔴 yang tersisa, dan ia **butuh mesin pemilik** — tidak bisa dari sini.
+2. [[Tahap 4 — Wishes]] — bahan-bahannya kini semuanya terbukti hidup: motif, kandidat objek, antrian, dan autonomi.
 3. Perbaiki instruksi Vitaboy di `PLAY.md` yang menyuruh mengedit flag tidak ada → [[Utang Teknis]].
+4. Tulis ulang probe yang masih dibutuhkan dari 14 yang hilang → [[2026-10-03 — Probe pertama yang bisa diperiksa]].
 
 Dengan Tahap 5 lunas, [[Tahap 4 — Wishes]] jadi kandidat berikutnya yang paling
 mengubah rasa bermain: bahan-bahannya (motif, kandidat objek, antrian) kini

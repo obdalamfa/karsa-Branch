@@ -561,10 +561,52 @@ class Player3D(Entity):
                 # getForward() menunjuk menjauhi layar-atas. Sumbu kanan tidak
                 # kena efek ini. Keduanya diverifikasi pada yaw 0/90/215 lewat
                 # proyeksi lensa di _bench/probes/probe_screen.py.
-                fwd_x, fwd_z = -_f.x, -_f.y    # Panda3D Z-up: y mendatar = z Ursina
-                right_x, right_z = _r.x, _r.y
+                # DIPERBAIKI 2026-10-04. Dua baris ini dulu membaca komponen
+                # (.x, .y) dan menegasikan yang maju:
+                #     fwd_x, fwd_z = -_f.x, -_f.y
+                #     right_x, right_z = _r.x, _r.y
+                # Alasan yang ditulis dulu -- "Panda3D Z-up: y mendatar" --
+                # tidak berlaku di sini. `getQuat(render)` relatif terhadap
+                # AKAR URSINA, dan di Ursina sumbu mendatar adalah x dan z
+                # sementara y adalah sumbu ATAS. Jadi yang dibaca dulu justru
+                # komponen vertikal, dan basisnya ikut miring.
+                #
+                # Diukur di _bench/probes/probe_basis_kamera.py pada delapan
+                # yaw, dibandingkan dengan basis layar yang diturunkan dari
+                # posisi kamera (bukan dari tanda yang ditebak):
+                #
+                #   yaw    (.x,.y) dinegasikan       (.x,.z) apa adanya
+                #     0    tepat                     tepat
+                #    45    91,4 deg menyimpang       tepat
+                #    90   146,0 deg, "kanan" NOL     tepat
+                #   135   178,6 deg menyimpang       tepat
+                #   180   180,0 deg TERBALIK         tepat
+                #   225   178,6 deg menyimpang       tepat
+                #   270   146,0 deg menyimpang       tepat
+                #   315    91,4 deg menyimpang       tepat
+                #
+                # dot(maju, kanan) dulu sampai +-0,829: basis yang seharusnya
+                # tegak lurus miring sampai 56 derajat. Dengan (.x,.z) dot =
+                # 0,000 di kedelapan yaw. Pada yaw 90 dan 270 vektor "kanan"
+                # yang lama RUNTUH jadi (0,0) lalu jatuh ke cadangan (1,0) --
+                # itu sebabnya A/D selalu bergerak di sumbu X apa pun arah
+                # kamera.
+                #
+                # Kenapa yaw 0 dulu terasa benar: di sana, dan HANYA di sana,
+                # kedua rumus memberi angka yang sama. Itu sebabnya bug ini
+                # selamat dari dua kali perbaikan tanda -- yang diuji selalu
+                # yaw awal.
+                #
+                # Dijaga oleh pemeriksaan `arah_maju` di tools/regress.py, yang
+                # menguji PERILAKU (tekan W, ukur perpindahan) dan bukan rumus,
+                # supaya ia tidak bisa ikut salah bersama kode ini.
+                fwd_x, fwd_z = _f.x, _f.z
+                right_x, right_z = _r.x, _r.z
             except Exception:
-                # Cadangan kalau base belum ada (mis. di unit test murni)
+                # Cadangan kalau base belum ada (mis. di unit test murni).
+                # BELUM TERVERIFIKASI: probe arah menempuh jalur Panda3D di
+                # atas, jadi rumus cadangan ini tidak pernah ikut terukur.
+                # Jangan anggap ia benar sampai ada probe yang memaksanya.
                 cy = math.radians(camera.world_rotation_y)
                 fwd_x, fwd_z = math.sin(cy), math.cos(cy)
                 right_x, right_z = math.cos(cy), -math.sin(cy)

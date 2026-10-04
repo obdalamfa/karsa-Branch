@@ -47,7 +47,7 @@ keluarnya.
 
 Ketiganya memanggil `player.tick()` **langsung**, melewati gerbang mode di
 `app.py`. Alat ukur yang salah, bukan kode. Ini pelajaran yang sama dengan
-[[Arah WASD belum terverifikasi]]: probe yang tidak menempuh jalur asli
+[[Arah WASD basis sumbu salah]]: probe yang tidak menempuh jalur asli
 mengukur dunia yang tidak ada.
 
 Karena itu `tools/regress.py` sekarang punya pemeriksaan **`bisa_keluar`** yang

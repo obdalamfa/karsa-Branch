@@ -53,7 +53,7 @@ mulai dari yang ini.
 
 Lima belas probe yang hilang tidak bisa dipulihkan — sesinya sudah lewat. Yang
 bisa dilakukan: menulis ulang yang masih dibutuhkan saat klaimnya diuji ulang,
-dan itu paling mendesak untuk [[Arah WASD belum terverifikasi]], yang justru
+dan itu paling mendesak untuk [[Arah WASD basis sumbu salah]], yang justru
 gagal **karena** alat ukurnya tidak bisa dipercaya.
 
 ## Tautan

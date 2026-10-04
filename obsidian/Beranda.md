@@ -37,7 +37,7 @@ catatan ini tidak menggantikannya, ia menjelaskan *kenapa* kodenya begitu.
 - **Regresi**: **14/14 lulus**, terbukti dua kali — di mesin lokal dan di CI GitHub (4 larian hijau).
 - **Riwayat**: branch ini 5 commit di atas base; base sendiri sudah jauh (editor objek, otonomi NPC, harness gauntlet).
 - **Tahapan**: [[Tahap 0 — Amankan kerja|0]] ✅ · [[Tahap 1 — Jaring pengaman|1]] ✅ · [[Tahap 2 — Verifikasi modul yatim|2]] ✅ · [[Tahap 3 — Performa|3]] ⬜ · [[Tahap 4 — Wishes|4]] ⬜ · [[Tahap 5 — Autonomi|5]] ✅ · [[Tahap 6 — Traits dan moodlets|6]]–[[Tahap 8 — Audio|8]] ⬜
-- **Yang paling menghambat**: frame rate 4–29 FPS yang belum pernah diprofil → [[Tahap 3 — Performa]].
+- **Yang paling menghambat**: frame rate 4–29 FPS yang belum pernah diprofil → [[Tahap 3 — Performa]]. Satu-satunya 🔴 yang tersisa, dan ia butuh mesin ber-GPU.
 
 ---
 
@@ -53,6 +53,7 @@ TABLE status, ringkas FROM "10-Tahapan" SORT file.name ASC
 
 ## Jurnal sesi terbaru
 
+- [[2026-10-04 — Arah WASD akhirnya terukur dan diperbaiki]] — utang 🔴 tertua, tutup; penjaganya gagal tiga kali dulu
 - [[2026-10-03 — Tahap 2 ditutup, entity_mesh terbukti]] — yatim terakhir dibuktikan, 16 pemeriksaan
 - [[2026-10-03 — Probe pertama yang bisa diperiksa]] — 15 dari 16 probe yang dikutip kode tidak ada
 - [[2026-09-22 — Merge base, CI terbukti hijau]] — otonomi NPC masuk, tiga konflik diselesaikan
@@ -74,7 +75,7 @@ Semua sesi: folder `20-Sesi/`.
 [[Mesh NodePath dipakai bersama]] · [[WASD terbalik]] · [[Terjepit permanen]] ·
 [[Pendaratan scene di luar peta]] · [[Pemain beku saat panel terbuka]] ·
 [[Font HUD tidak ketemu di mesin bersih]] · [[Pemeriksaan motif mengotori keadaan]] ·
-[[Arah WASD belum terverifikasi]] 🔴
+[[Arah WASD basis sumbu salah]]
 
 ---
 

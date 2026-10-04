@@ -70,7 +70,7 @@ tapi kerja orang lain yang mendarat di branch sebelah — dan itulah alasan
 ## Yang belum beres
 
 - `entity_mesh.py` **masih yatim** (458 baris, nol pemanggil) — diperiksa lagi sesudah merge → [[Utang Teknis]].
-- [[Arah WASD belum terverifikasi]] masih terbuka; regresi tidak menguji arah.
+- [[Arah WASD basis sumbu salah]] masih terbuka; regresi tidak menguji arah.
 - 92 `.pyc` masih dilacak; `.gitignore` sudah ada tapi tidak berlaku surut.
 
 ## Tautan

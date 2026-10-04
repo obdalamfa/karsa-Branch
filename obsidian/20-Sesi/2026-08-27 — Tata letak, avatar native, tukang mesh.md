@@ -49,7 +49,7 @@ keempat arah WASD terbalik lagi — dan itu sudah terjadi dua kali.
 
 ## Yang belum beres, jujur dicatat
 
-- **Arah WASD masih belum terverifikasi benar.** Probe proyeksi layar menghasilkan angka yang saling bertentangan (W dan S sama-sama "atas"), jadi **alat ukurnya** yang tidak bisa dipercaya, bukan kodenya → [[Arah WASD belum terverifikasi]].
+- **Arah WASD masih belum terverifikasi benar.** Probe proyeksi layar menghasilkan angka yang saling bertentangan (W dan S sama-sama "atas"), jadi **alat ukurnya** yang tidak bisa dipercaya, bukan kodenya → [[Arah WASD basis sumbu salah]].
 - Ditemukan tapi belum diperbaiki di sesi ini: `player.tick()` hanya dipanggil kalau `panels.mode == 'hud'` → [[Pemain beku saat panel terbuka]].
 - `entity_mesh.py` mendarat **tanpa pemanggil** → [[Utang Teknis]].
 

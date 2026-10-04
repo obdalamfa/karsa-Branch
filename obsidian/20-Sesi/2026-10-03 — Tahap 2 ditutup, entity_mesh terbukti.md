@@ -75,7 +75,7 @@ Diperiksa terhadap repo, bukan terhadap catatan sebelumnya:
 
 ## Yang belum beres
 
-- [[Arah WASD belum terverifikasi]] — satu-satunya 🔴 yang bisa dikerjakan tanpa GPU, dan probe arahnya **hilang** bersama 14 probe lain → [[2026-10-03 — Probe pertama yang bisa diperiksa]]. Ini pekerjaan berikutnya.
+- [[Arah WASD basis sumbu salah]] — satu-satunya 🔴 yang bisa dikerjakan tanpa GPU, dan probe arahnya **hilang** bersama 14 probe lain → [[2026-10-03 — Probe pertama yang bisa diperiksa]]. Ini pekerjaan berikutnya.
 - [[Tahap 3 — Performa]] butuh mesin ber-GPU; tidak bisa dari sini.
 
 ## Tautan

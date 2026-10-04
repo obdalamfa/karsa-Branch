@@ -49,7 +49,7 @@ keluarnya**. Tiap pintu masuk ke mode wajib punya pemeriksaan jalan keluar.
 
 Ketiganya memanggil `player.tick()` **langsung**, melewati gerbang mode di
 `app.py`. **Alat ukur yang salah, bukan kode** — pelajaran yang sama dengan
-[[Arah WASD belum terverifikasi]].
+[[Arah WASD basis sumbu salah]].
 
 ## Yang menjaganya sekarang
 

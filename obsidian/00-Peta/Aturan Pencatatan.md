@@ -35,7 +35,7 @@ padahal belum, dan dua kali sebuah metode disisipkan di tengah fungsi sehingga
 fungsi induknya mati total. Karena itu:
 
 - **Selesai** hanya kalau ada larian `tools/regress.py`, probe di `_bench/`, atau angka.
-- **Belum terverifikasi** ditulis apa adanya, lengkap dengan alasan kenapa alat ukurnya tidak bisa dipercaya — contoh: [[Arah WASD belum terverifikasi]].
+- **Belum terverifikasi** ditulis apa adanya, lengkap dengan alasan kenapa alat ukurnya tidak bisa dipercaya — contoh: [[Arah WASD basis sumbu salah]].
 - Kalau pemeriksaan tidak bisa dijalankan di mesin itu, catat **itu** juga, jangan diam-diam mewarisi status lama.
 
 ## 3. Status hidup di satu tempat

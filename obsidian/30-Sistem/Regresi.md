@@ -30,6 +30,7 @@ Keluar dengan kode `1` kalau ada yang gagal, supaya bisa dipakai di skrip.
 | `bisa_keluar` | [[Pemain beku saat panel terbuka]] — ESC dari mode dialog/panel/pie |
 | `motif_waras` | mesin [[Motif]] baru; nilai harus tetap di −100..+100 |
 | `save_bolak` | format save berubah; save lama tidak boleh merusak loader |
+| `arah_maju` ⚠️ | [[Arah WASD basis sumbu salah]] — basis membaca komponen sumbu yang salah. **Lapor-saja**, belum memvonis: instrumennya masih terkontaminasi antar-scene |
 | `ms_frame` | 4–29 FPS, belum pernah diprofil → [[Tahap 3 — Performa]] |
 
 `ms_frame` dan jumlah entity dicatat sebagai **angka**, bukan lulus/gagal —
@@ -95,6 +96,40 @@ gagal, langkah CI yang hijau itu sendiri adalah bukti 14/14.
 Dua hal harus beres lebih dulu sebelum CI mungkin sama sekali:
 [[Font HUD tidak ketemu di mesin bersih]] dan `requirements.txt` yang tidak
 menyebut `pygame`/`pillow`.
+
+## `arah_maju`: penjaga yang harus diperbaiki tiga kali
+
+Pemeriksaan termuda di sini, dan tiga kali gagal sebagai penjaga sebelum
+berguna. Tiap kegagalan terukur, bukan dinalar:
+
+| Versi | Cacat | Buktinya |
+|---|---|---|
+| 1 | hanya menguji yaw yang sedang aktif | bug lama dipasang kembali → `farm` dan `town` **LULUS** |
+| 2 | meninggalkan bekas (pemain tergeser, kamera masih bergerak) | `beach` **LULUS** kalau pertama, **GAGAL** kalau keenam |
+| 3 | menghukum pemain yang **terhalang dinding** | `house` (ruang kecil) dilaporkan menyimpang 102° padahal cuma menabrak |
+
+| 4 | **masih terkontaminasi di larian panjang** | 14 scene → 6 GAGAL (dua "180°"); `town` sendirian **LULUS**, sesudah `farm` **LULUS** |
+
+Versi 4 menyapu tiga yaw, menyalin-dan-memulihkan posisi + kecepatan pemain,
+menyentak kamera alih-alih menunggu lerp, dan melaporkan `terhalang` alih-alih
+GAGAL kalau jarak jalan di bawah 1,5 satuan. Ia **menangkap bug sungguhan**:
+
+```
+dengan bug lama dipasang   farm GAGAL yaw135: W menyimpang 179 deg   exit 1
+dengan perbaikan, 3 scene  farm house beach LULUS                     exit 0
+```
+
+…tapi di larian 14 scene ia menuduh enam scene yang sehat. Karena kegagalannya
+bergantung panjang larian, bukan pada kode yang diperiksa, ia **diturunkan jadi
+lapor-saja**: angka penyimpangan tetap tercetak di kolom catatan, tapi tidak
+memvonis.
+
+**Penjaga yang belum pernah dilihat gagal bukan penjaga** — dan penjaga yang
+salah menuduh juga bukan penjaga: yang berikutnya akan mematikannya, lalu bug
+sungguhan lewat tanpa suara. Status terbukanya ada di [[Utang Teknis]].
+
+Yang membuktikan arah sekarang: `_bench/probes/probe_arah_wasd.py` dan
+`probe_basis_kamera.py`, keduanya ter-commit.
 
 ## Cacat alat ukur yang ditemukan pada dirinya sendiri
 

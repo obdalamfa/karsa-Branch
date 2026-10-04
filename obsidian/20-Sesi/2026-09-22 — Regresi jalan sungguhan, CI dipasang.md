@@ -95,7 +95,7 @@ mengetiknya. Jaring yang digantung tapi tidak pernah dipasang.
 
 - **Workflow-nya sendiri belum pernah jalan di GitHub.** Ia baru terbukti lewat perintah yang identik di mesin ini. Larian pertamanya di PR inilah buktinya — kalau merah, itu urusan sesi ini juga.
 - Nama paket apt (`libgl1`, `libglu1-mesa`, `libgl1-mesa-dri`) diambil untuk `ubuntu-latest`; belum diuji di runner sungguhan.
-- [[Arah WASD belum terverifikasi]] masih terbuka — regresi tidak menguji arah.
+- [[Arah WASD basis sumbu salah]] masih terbuka — regresi tidak menguji arah.
 - `entity_mesh.py` masih yatim → [[Utang Teknis]].
 
 ## Tautan

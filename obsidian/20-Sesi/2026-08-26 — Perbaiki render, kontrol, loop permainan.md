@@ -45,7 +45,7 @@ memakai proyeksi lensa Panda3D pada yaw 0°, 90°, dan 215°.
 ## Yang belum beres
 
 Verifikasi arah itu belakangan terbukti rapuh — lihat
-[[Arah WASD belum terverifikasi]]. Dan commit sebesar ini menyeret
+[[Arah WASD basis sumbu salah]]. Dan commit sebesar ini menyeret
 `__pycache__` masuk ke git ([[Utang Teknis]]).
 
 ## Tautan

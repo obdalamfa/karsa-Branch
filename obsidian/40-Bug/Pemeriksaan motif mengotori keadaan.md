@@ -62,7 +62,7 @@ Ini kali **ketiga** proyek ini tertipu alat ukurnya sendiri:
 | Kali | Kejadian |
 |---|---|
 | 1 | tiga probe memanggil `player.tick()` langsung → [[Pemain beku saat panel terbuka]] lolos |
-| 2 | probe proyeksi layar saling bertentangan → [[Arah WASD belum terverifikasi]] |
+| 2 | probe proyeksi layar saling bertentangan → [[Arah WASD basis sumbu salah]] |
 | 3 | pemeriksaan motif mengotori keadaannya sendiri (nota ini) |
 
 Aturan yang pantas ditarik: **pemeriksaan tidak boleh meninggalkan bekas pada

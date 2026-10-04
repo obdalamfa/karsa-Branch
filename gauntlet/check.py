@@ -161,8 +161,8 @@ with patch.object(state_module,'SAVE_FILE',str(save_path)):
     assert GameState.load_with_status()==(None,'absent')
 
     # 4. Field dinamis yang ditulis kode lain harus bertahan bolak-balik.
-    #    `animal_care` ditulis husbandry.care_of() tapi bukan field dataclass,
-    #    jadi dulu ditulis ke JSON lalu dibuang lagi saat dimuat.
+    #    `animal_care` (legacy, dulu ditulis husbandry.py yang sudah dihapus)
+    #    dulu ditulis ke JSON lalu dibuang lagi saat dimuat; save lama masih memuatnya.
     s.animal_care={'sapi_1':{'kenyang':0,'sakit':True}}
     assert s.save()
     ulang,status=GameState.load_with_status()

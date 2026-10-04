@@ -17,7 +17,9 @@ class FarmAnimal(BaseActor):
     """
     def __init__(self, state, actor_id, **kwargs):
         super().__init__(state, actor_id, **kwargs)
-        self.speed = NPC_SPEED / (TILE_SIZE * 20)
+        # Tile per detik, sama seperti npc.py dan mob.py (lihat komentar di
+        # npc.py): rumus lama 50x terlalu cepat membuat hewan ikut "meluncur".
+        self.speed = NPC_SPEED / TILE_SIZE
         self.animal_pen = (3, 3, 22, 12)  # default bounds
         self.ai_state = AnimalState.IDLE
         self._walk_anim_t = 0.0
@@ -367,8 +369,8 @@ class FarmAnimal(BaseActor):
         dx = self.target_x - self.logical_x
         dy = self.target_y - self.logical_y
         dist = math.hypot(dx, dy)
-        move = self.speed * (dt * 1000)
-        
+        move = self.speed * dt
+
         if dist <= move:
             self.logical_x, self.logical_y = float(self.target_x), float(self.target_y)
         elif dist > 0:

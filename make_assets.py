@@ -20,8 +20,16 @@ from PIL import Image, ImageDraw
 # Seed for deterministic generation
 random.seed(42)
 
-# Output Assets directory
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
+# Output Assets directory.
+#
+# Harus `assets/textures`, bukan `assets`. `main.py:23-25` memanggil skrip ini
+# sebagai jalur "self-heal" saat folder `assets/` tidak ada, tapi seluruh game
+# membaca tekstur dari `assets/textures/` (world.py, player.py, panels.py,
+# meshes.py). Dengan `OUT` menunjuk ke `assets/`, self-heal itu menghasilkan
+# PNG yang tidak dibaca siapa pun -- game menyala tanpa satu tekstur pun.
+# Keenam kategori generator di bawah semuanya tekstur: ground, structure,
+# resource, character, soil, misc.
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'textures')
 os.makedirs(OUT, exist_ok=True)
 
 # ─── REGISTRY SYSTEM ─────────────────────────────────────────────────────────

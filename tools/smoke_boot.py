@@ -276,15 +276,22 @@ _ent.load_model_file = lambda n: 'cube'          # stub: model selalu "ada"
 _props_default = _props.default_prop_builder
 _props.default_prop_builder = lambda world, scene: None  # isolasi scatter
 class _StubW:
-    def __init__(self, scn): self._obj_ents = []; self.scene_obj = scn
+    def __init__(self, scn):
+        self._obj_ents = []; self._tile_ents = []; self._wall_ents = []
+        self.scene_obj = scn
     def _create_entity(self, *a, **k): return object()
-from game.scenes.mountain import mountain_builder, build_mountain
+# `mountain` tidak lagi punya fungsi builder berdiri sendiri sejak digabung
+# dengan rock_sanctuary.build_mountain_landscape (lihat scene.builder di
+# game/scenes/mountain.py) -- builder-nya kini lambda yang sudah menutup
+# `scene`, jadi dipanggil lewat `scene.builder(world)`, bukan diimpor nama.
+from game.scenes.mountain import build_mountain
 from game.scenes.lake import lake_builder, build_lake
 from game.scenes.cemetery import cemetery_builder, build_cemetery
-for _nm, _bld, _build in (('mountain', mountain_builder, build_mountain),
-                          ('lake', lake_builder, build_lake),
-                          ('cemetery', cemetery_builder, build_cemetery)):
-    _w = _StubW(_build())
+_mountain_scene = build_mountain()
+for _nm, _bld, _scn in (('mountain', _mountain_scene.builder, _mountain_scene),
+                         ('lake', lake_builder, build_lake()),
+                         ('cemetery', cemetery_builder, build_cemetery())):
+    _w = _StubW(_scn)
     _bld(_w)
     assert len(_w._obj_ents) >= 8, f"dressing {_nm} terlalu sedikit ({len(_w._obj_ents)})"
     print(f"[OK] Dressing {_nm}: scatter menempatkan {len(_w._obj_ents)} props")

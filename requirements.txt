@@ -1,4 +1,28 @@
+# Dependensi untuk MENJALANKAN game (main.py / karsa_level_editor.py).
 ursina>=5.0.0
-pygame>=2.5.0
+
+# `game/sound.py` mengimpor pygame di level atas TANPA penjaga, dan
+# `game/player.py:26` mengimpor `.sound` -- jadi pygame wajib ada sebelum game
+# bisa diimpor sama sekali. Ia bukan sekadar "opsional untuk audio": tanpa
+# pygame, `import game.app` gagal total dan game tidak bisa dibuka.
+#
+# `ursina` TIDAK menariknya sebagai dependensi. Tanpa baris ini,
+# `pip install -r requirements.txt` menghasilkan repo yang tidak bisa dibuka.
+#
+# Di mesin ini yang terpasang `pygame-ce` (fork yang aktif dirawat). Paket
+# `pygame` biasa menyediakan modul `pygame` yang sama dan juga bisa dipakai --
+# pasang SALAH SATU, jangan keduanya.
+pygame-ce>=2.5.0
+
+# Tekstur: seluruh `assets/textures/` dibaca lewat PIL (world.py, panels.py,
+# player.py, meshes.py). `ursina` sudah menarik Pillow sebagai dependensi, tapi
+# disebut eksplisit karena kode game memakainya langsung.
+Pillow>=10.0.0
+
+# Hanya dibutuhkan `make_assets.py` (generator tekstur prosedural), yang
+# dipanggil `main.py` kalau folder `assets/` tidak ada. Tidak dipakai game saat
+# berjalan.
+numpy>=1.24
+
 # Hanya untuk build rilis (M7):
 # pyinstaller>=6.0

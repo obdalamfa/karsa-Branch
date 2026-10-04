@@ -486,6 +486,7 @@ def _skin_chrome(ent):
         ent.color = color.white
     return ent
 
+
 def _txt(text='', pos=(0, 0), scale=1.0, col=color.white, **kw):
     kw.setdefault('font', _FONT_NAME)
     return Text(text, parent=camera.ui, position=pos,
@@ -613,7 +614,6 @@ class UIManager:
         """
         TIME_C   = color.rgb(255, 255, 255)
         GOLD_C   = color.rgb(255, 215,  60)
-
         # ── Tepi layar yang sebenarnya ──
         # camera.ui membentang -aspect/2..+aspect/2 mendatar, BUKAN -0.5..0.5.
         # Angka mati 0.70 lahir dari menebak layar 16:9 lalu menjangkar teks di

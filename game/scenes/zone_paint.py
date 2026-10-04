@@ -253,6 +253,26 @@ class Zone:
     def covers(self, tx, ty):
         return self.x0 <= tx <= self.x1 and self.y0 <= ty <= self.y1
 
+    # ─── Bentuk data ────────────────────────────────────────────────────────
+    # Tujuh field, semuanya sudah JSON-native: `base` string, `light`/`dark`
+    # pasangan int. Tidak ada yang perlu diterjemahkan.
+    def to_dict(self) -> dict:
+        return {
+            'x0': self.x0, 'y0': self.y0, 'x1': self.x1, 'y1': self.y1,
+            'base': self.base,
+            'light': list(self.light),
+            'dark': list(self.dark),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Zone':
+        return cls(
+            data['x0'], data['y0'], data['x1'], data['y1'],
+            base=data.get('base', 'sand_ground'),
+            light=tuple(data.get('light', (150, 122, 92))),
+            dark=tuple(data.get('dark', (128, 102, 76))),
+        )
+
 
 # Palet zona baku. Semua diambil dari satu keluarga tanah supaya peta tidak
 # berubah jadi tambal sulam warna; yang membedakan zona adalah NILAI (terang

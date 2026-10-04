@@ -1273,7 +1273,7 @@ class UIManager:
         if s.tool_index in (2, 3):
             seed_name = CROPS.get(s.seed_key, {}).get('name', s.seed_key)
             seed_qty  = s.inventory.get(s.seed_key + '_seed', 0)
-            self._seed_txt.text = f'O/P: {seed_name} x{seed_qty}'
+            self._seed_txt.text = f'Q/R: {seed_name} x{seed_qty}'
         else:
             self._seed_txt.text = ''
 
@@ -1677,11 +1677,17 @@ class UIManager:
             s.npc_hearts[self._dialog_npc] = min(10, s.npc_hearts.get(self._dialog_npc, 0) + 0.1)
         self._set_dialog_visible(False)
         self.mode = 'hud'
-        if hasattr(self, 'player') and self.player:
-            if hasattr(self.player, '_check_quest_progress'):
-                self.player._check_quest_progress(self)
-            elif getattr(self.player, 'quest_controller', None):
-                self.player.quest_controller.check_quest_progress(self)
+        # Pola yang sama dengan interaction_controller.check_quests dan
+        # TimeController: `quest_manager` tidak pernah ada di Player3D (ia
+        # membuat `quest_controller`), dan `_check_quest_progress` juga tidak
+        # pernah ada di cabang mana pun. `hasattr` di atas dulu selalu False,
+        # jadi cabang itu mati; disederhanakan di sini supaya tidak ada lagi
+        # cabang mati yang terlihat seperti jalur yang hidup.
+        p = getattr(self, 'player', None)
+        if p is not None:
+            qc = getattr(p, 'quest_controller', None) or getattr(p, 'quest_manager', None)
+            if qc is not None:
+                qc.check_quest_progress(self)
 
     def _refresh_dialog_choices_ui(self):
         for i, ent in enumerate(self._dlg_choice_ents):
@@ -2222,11 +2228,10 @@ class UIManager:
                 "  WASD / Arrow  : Jalan\n"
                 "  Shift+WASD    : Lari (pakai energi)\n\n"
                 "── KAMERA ──\n"
-                "  Q / E  : Putar kamera kiri/kanan\n"
                 "  Klik kanan + geser : Putar bebas\n\n"
                 "── AKSI ──\n"
                 "  SPACE  : Pakai alat aktif\n"
-                "  R      : Interaksi NPC / objek\n"
+                "  E      : Pie Menu interaksi NPC\n"
                 "  Z      : Serang (butuh pedang)\n"
                 "  X      : Tambah/hapus tile ke Antrian\n"
                 "  C      : Jalankan semua Antrian Aksi\n"

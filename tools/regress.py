@@ -1169,7 +1169,7 @@ def main():
     # ada alat sama sekali: 0/14 palsu tidak bisa dibedakan dari kerusakan
     # sungguhan, dan itu melatih pemakainya untuk mengabaikan alarmnya.
     lingkungan = bool(baris) and gagal_total > 0 and all(
-        set(buruk) == {'frame_kosong'} for _n, _h, _ms, _e, buruk in baris)
+        set(buruk) == {'frame_kosong'} for _n, _h, _ms, _e, buruk, _j in baris)
     if lingkungan:
         print()
         print('=' * 78)

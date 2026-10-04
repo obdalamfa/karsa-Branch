@@ -51,21 +51,32 @@ class BaseActor(Entity):
         lf = min(1.0, dt * 8)
         self.x += dx * lf
         self.z += dz * lf
-        
+
         self.is_moving = abs(dx) > 0.015 or abs(dz) > 0.015
         if self.is_moving:
             self.actor_state = ActorState.MOVING
         elif self.actor_state == ActorState.MOVING:
             self.actor_state = ActorState.IDLE
-            
+
+        char = getattr(self, '_char', None)
         if self.is_moving:
-            if abs(dx) > abs(dz):
+            if char is not None:
+                # Putar menuju arah gerak alih-alih melompat ke 4 arah tetap.
+                tujuan = math.degrees(math.atan2(dx, dz))
+                beda = (tujuan - self.rotation_y + 180) % 360 - 180
+                self.rotation_y += beda * min(1.0, dt * 10)
+            elif abs(dx) > abs(dz):
                 self.rotation_y = 90 if dx > 0 else -90
             else:
                 self.rotation_y = 0 if dz > 0 else 180
             self._walk_t += dt * 10.0
         else:
             self._walk_t += dt * 1.8
+
+        if char is not None:
+            laju = math.hypot(dx * lf, dz * lf) / dt if dt > 0 else 0.0
+            char.update(dt, laju if self.is_moving else 0.0)
+            return
 
         # Animasi mesh-swap (aset <model>_idle/_walk1..4.obj). Jumlah frame
         # jalan mengikuti panjang _pose_names: 4 frame bila aset passing ada
@@ -90,4 +101,7 @@ class BaseActor(Entity):
 
     def on_destroy(self):
         """Cleanup logic when the actor is destroyed or removed from the scene."""
-        pass
+        char = getattr(self, '_char', None)
+        if char is not None:
+            char.hapus()
+            self._char = None

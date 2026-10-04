@@ -130,6 +130,20 @@ _KLIP_TSO = {
 }
 
 
+# Letak alat relatif tulang R_HAND rig karakter (dikalibrasi dengan render).
+_PEGANG_POS = (0.0, 0.0, 0.0)
+_PEGANG_ROT = (180.0, 0.0, 0.0)
+_PEGANG_SKALA = 1.0
+
+_KLIP_RIG = {
+    'hoe':   'hoe',
+    'water': 'water',
+    'swing': 'swing',
+    'mine':  'swing',
+    'down':  'hoe',
+}
+
+
 def _menuju(sekarang, tujuan, k, dt):
     """Bergerak menuju `tujuan` dengan laju k per detik, aman di frame rate mana pun.
 
@@ -290,9 +304,15 @@ class Player3D(Entity):
         self._pivot_neck = Entity(parent=p)
 
         self._use_mesh_swap = False
+        from .char_actor import build_char_actor
         from .entities import load_model_file, _baked_texture, _setup_pose_swap
-        p_mdl = load_model_file('player_idle') or load_model_file('player')
-        if p_mdl is not None:
+        self._char = build_char_actor(self, 'player')
+        p_mdl = None
+        if self._char is None:
+            p_mdl = load_model_file('player_idle') or load_model_file('player')
+        if self._char is not None:
+            self._is_vitaboy = False
+        elif p_mdl is not None:
             self.model = p_mdl
             tex = _baked_texture('player_baked')
             if tex is not None:
@@ -565,7 +585,10 @@ class Player3D(Entity):
                 # walau logika "tampil saat dipakai" sudah benar sepenuhnya.
                 induk = None
                 va = getattr(self, '_va', None)
-                if va is not None and hasattr(va, 'node_tangan'):
+                char = getattr(self, '_char', None)
+                if char is not None:
+                    induk = char.pegangan()
+                elif va is not None and hasattr(va, 'node_tangan'):
                     try:
                         induk = va.node_tangan()
                     except Exception:
@@ -575,7 +598,11 @@ class Player3D(Entity):
                     induk = getattr(self, '_pivot_shoulder_r', None) or self
                 alat = build_tool(kind, parent=induk)
                 if alat is not None:
-                    if di_tangan:
+                    if char is not None:
+                        alat.position = Vec3(*_PEGANG_POS)
+                        alat.rotation = Vec3(*_PEGANG_ROT)
+                        alat.scale = _PEGANG_SKALA
+                    elif di_tangan:
                         # Digantung di joint TANGAN: titiknya sudah tepat di
                         # telapak, jadi offset bahu yang lama (-0,34 pada Y)
                         # justru menjatuhkan alat ke pinggang. Yang tersisa
@@ -1064,6 +1091,10 @@ class Player3D(Entity):
                     self._pivot_shoulder_l.y = _GH + 1.55 + breathe
                     self._pivot_shoulder_r.y = _GH + 1.55 + breathe
 
+        char = getattr(self, '_char', None)
+        if char is not None:
+            char.update(dt, v_mag if moving_now else 0.0)
+
         # ── Mesh-swap animation (jika model player memakai mesh swap) ──
         if getattr(self, '_use_mesh_swap', False):
             names = getattr(self, '_pose_names', None)
@@ -1499,6 +1530,13 @@ class Player3D(Entity):
         self._attack_anim = float(ms)
         self._anim_dur    = float(ms)
         self._anim_mode   = mode
+
+        char = getattr(self, '_char', None)
+        if char is not None:
+            klip = _KLIP_RIG.get(mode)
+            if klip:
+                char.mainkan_sekali(klip)
+            return
 
         # Avatar TSO tidak digerakkan oleh pivot di bawah — pivot itu milik
         # humanoid prosedural. Untuk avatar TSO satu-satunya cara membuat aksi

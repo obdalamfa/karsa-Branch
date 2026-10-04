@@ -985,12 +985,15 @@ def main():
     import game.config as cfg
     cfg.SCREEN_W, cfg.SCREEN_H = W, H
 
+    # game.app HARUS diimpor sebelum game.scenes: ia menimpa color.rgb ke skala
+    # 0-255, dan props.py membangun warna atap saat diimpor. Urutan terbalik
+    # membuat setiap atap di tangkapan regress putih polos.
+    from game.app import Game3D
     from game.scenes import SCENES
     minta = [a for a in sys.argv[1:] if not a.startswith('-')]
     scenes = minta or [s for s in SCENES if s != 'dungeon']
 
     _pasang_save_fixture(ROOT / cfg.SAVE_FILE)
-    from game.app import Game3D
     t0 = time.time()
     try:
         g = Game3D()

@@ -32,6 +32,8 @@ TS = TILE_SIZE
 # Isi tuple: (curam, tebal_tepi, lebar_tepi, [(tekstur, tint), ...])
 # `curam` dikali HOUSE_H untuk tinggi puncak; `lebar_tepi` dikali ukuran badan.
 # Angka di komentar tiap varian = rata-rata tekstur → warna layar hasil kali.
+_REDAM_ATAP = 0.78
+
 PROFIL_ATAP = {
     'genteng': (0.60, 0.15, 1.20, [
         ('roof/adobetile',   color.rgb(238, 236, 232)),  # 180,115,83 -> 168,107,76
@@ -306,6 +308,10 @@ def _bangun_atap(world, cx, cz, sx, sz, alas_y, jenis, tinggi, undian):
     curam, tebal, lebar = PROFIL_ATAP[jenis][0:3]
     daftar = PROFIL_ATAP[jenis][3]
     tex, col = daftar[undian % len(daftar)]
+    # Atap menghadap matahari penuh (pengali cahaya ~1,37) dan teksturnya pucat;
+    # tanpa peredam ini di layar ia terbaca sebagai bidang putih tersiram cahaya.
+    col = color.rgba(col[0] * 255 * _REDAM_ATAP, col[1] * 255 * _REDAM_ATAP,
+                     col[2] * 255 * _REDAM_ATAP, 255)
     ents = []
 
     # Tepi atap: pelat datar yang menjorok keluar dinding. Ia yang membuat

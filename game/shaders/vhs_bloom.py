@@ -21,36 +21,12 @@ uniform float time;
 in vec2 uv;
 out vec4 fragColor;
 
-const int SAMPLES = 3;
-const float SPREAD = 0.0035;
-// Ambang dinaikkan 0,65 -> 0,80. Kulit yang tersinari punya luminans 0,85,
-// jadi dengan ambang lama WAJAH IKUT MEKAR — dan mekar itu menambahkannya
-// kembali ke atas 1,0 sehingga terpotong jadi putih, persis pemotongan yang
-// sudah ditutup di smooth_shader.py. Bloom seharusnya menangkap sumber
-// cahaya dan sorotan, bukan kulit orang.
-const float LUM_THRESHOLD = 0.80;
+// Resolusi piksel efektif — HALUS (butiran seperti pasir), gambar tetap jelas.
+const vec2 PIXEL_RES = vec2(960.0, 540.0);
 
-vec3 getBloom(vec2 coord) {
-    vec3 bloom = vec3(0.0);
-    float count = 0.0;
-    for(int i = -SAMPLES; i <= SAMPLES; i++) {
-        for(int j = -SAMPLES; j <= SAMPLES; j++) {
-            vec2 offset = vec2(float(i), float(j)) * SPREAD;
-            vec3 c = texture(tex, coord + offset).rgb;
-            float lum = dot(c, vec3(0.299, 0.587, 0.114));
-            // Lutut LUNAK, bukan saklar. Versi lama memakai `if (lum > ambang)`
-            // lalu menambahkan seluruh c*c*1.2: satu piksel yang kebetulan
-            // melewati ambang menyumbang sebanyak piksel yang jauh lebih
-            // terang. Sekarang yang mekar hanya KELEBIHAN terang di atas
-            // ambang, dan besarnya sebanding dengan kuadrat kelebihan itu,
-            // jadi tepian mekar melunak alih-alih membentuk batas keras.
-            float lebih = max(lum - LUM_THRESHOLD, 0.0)
-                        / max(1.0 - LUM_THRESHOLD, 1e-3);
-            bloom += c * (lebih * lebih);
-            count += 1.0;
-        }
-    }
-    return bloom / count;
+// Grain pseudo-acak per-piksel (tekstur "pasir" halus)
+float grain(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 void main() {
@@ -75,17 +51,11 @@ void main() {
     // 3. Kontras sangat lembut (hampir netral) — tidak memperkuat noise gelap
     c = (c - 0.5) * 1.02 + 0.5;
 
-    // Jaga RONA, sama seperti di smooth_shader.py. Bloom menambahkan cahaya
-    // di ATAS warna yang sudah ada, jadi tanpa ini ia mengembalikan persis
-    // pemotongan per-kanal yang baru saja ditutup di sana: kulit hangat
-    // dijadikan putih lagi oleh mekarnya sendiri. Kanal tertinggi didudukkan
-    // di 1,0 dan sisanya ikut turun dengan rasio yang sama.
-    float puncak = max(final_color.r, max(final_color.g, final_color.b));
-    if (puncak > 1.0) {
-        final_color /= puncak;
-    }
+    // 4. Vignette — bingkai suram menekan sudut layar
+    float v = length(uv - 0.5);
+    c *= smoothstep(1.15, 0.35, v) * 0.14 + 0.86;
 
-    fragColor = vec4(final_color, 1.0);
+    fragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
 }
 '''
 

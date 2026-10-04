@@ -71,10 +71,17 @@ def load_model_file(name: str):
         # Koreksi pitch otomatis untuk model OBJ buatan Blender yang sumbu tingginya di Y:
         if m and path == path_obj:
             try:
-                lo, hi = m.getTightBounds()
+                from panda3d.core import NodePath
+                mp = m if isinstance(m, NodePath) else NodePath(m)
+                lo, hi = mp.getTightBounds()
                 d = hi - lo
-                if d.y > d.z:
-                    m.setP(-90)
+                if name.startswith(('npc_', 'player')):
+                    # Loader OBJ Panda menghasilkan Z-atas, dunia Ursina Y-atas:
+                    # tanpa ini setiap karakter tergeletak rata dan tertutup tanah.
+                    if d.z > max(d.x, d.y):
+                        mp.setP(90)
+                elif d.y > d.z and isinstance(m, NodePath):
+                    mp.setP(-90)
             except Exception:
                 pass
         _MODEL_CACHE[name] = m
@@ -527,6 +534,13 @@ class EntitiesManager:
             # didahulukan; jalur Vitaboy dan manekin hanya untuk yang belum punya.
             baked = False
             if not is_animal and not is_guardian:
+                from .char_actor import build_char_actor
+                ca = build_char_actor(actor, f'npc_{actor_id}')
+                if ca is not None:
+                    actor._char = ca
+                    apr_list = None
+                    baked = True
+            if not baked and not is_animal and not is_guardian:
                 npc_mdl = load_model_file(f'npc_{actor_id}')
                 if npc_mdl is not None:
                     actor.model = npc_mdl
@@ -828,7 +842,7 @@ class EntitiesManager:
                 actor._lbl.position = (0, actor._label_y, 0)
                 
                 is_moving_now = abs(actor.logical_x - actor.target_x) > 0.02 or abs(actor.logical_y - actor.target_y) > 0.02
-                if is_moving_now:
+                if is_moving_now and getattr(actor, '_char', None) is None:
                     actor.rotation_y = math.degrees(math.atan2(actor.target_x - actor.logical_x, actor.target_y - actor.logical_y))
                 
                 if hasattr(actor, '_va') and actor._va:

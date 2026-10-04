@@ -53,6 +53,23 @@ def _ui(model='quad', **kw):
 
 _FONT_NAME = 'Montserrat-Bold.ttf'  # Ursina cari via glob(**) di asset_folder
 
+
+def _batas_ui():
+    """Setengah-lebar dan setengah-tinggi ruang `camera.ui` yang TERLIHAT.
+
+    Ruang UI Ursina setinggi 1,0 (y dari -0,5 sampai +0,5) tapi lebarnya
+    mengikuti rasio layar: x cuma sampai ±aspect/2. Pada 16:9 itu ±0,889,
+    pada 4:3 cuma ±0,667.
+
+    Angka tepi karena itu tidak boleh ditulis tetap. HUD versi lama menaruh
+    kolom kanan di x=0,70 dengan perataan KIRI: pada 16:9 tersisa 0,189 satuan
+    dan "Hari 1 | Musim Semi" sudah lewat tepi, pada 4:3 seluruh kolom itu ada
+    di luar layar. Diukur di tools/probe_hud.py: _date_txt sampai +1,001.
+    """
+    fs = camera.ui_lens.getFilmSize()
+    skala = camera.ui.getScale()[0]
+    return (fs[0] / 2.0) / skala, (fs[1] / 2.0) / skala
+
 def _txt(text='', pos=(0, 0), scale=1.0, col=color.white, **kw):
     kw.setdefault('font', _FONT_NAME)
     return Text(text, parent=camera.ui, position=pos,
@@ -92,6 +109,7 @@ class UIManager:
     def update(self, state, dt: float = 0):
         self.state = state
         if self.mode == 'hud':
+            self._pasang_tata_letak()
             self._refresh_hud()
             self._update_motive_panel()
             self._update_action_readout()
@@ -112,15 +130,24 @@ class UIManager:
         TIME_C   = color.rgb(255, 255, 255)
         GOLD_C   = color.rgb(255, 215,  60)
         
+        # Tepi layar yang sesungguhnya, bukan angka tetap. Lihat _batas_ui().
+        HX, HY = _batas_ui()
+        MARGIN = 0.028
+        X_R = HX - MARGIN
+
         # ── Kanan Atas: Jam & Tanggal ──
-        self._time_txt    = _txt('06:00',         pos=(0.70, 0.45), scale=1.3, col=TIME_C)
-        self._date_txt    = _txt('Hari 1 | Semi', pos=(0.70, 0.40), scale=0.8, col=color.rgb(170, 200, 255))
-        self._weather_txt = _txt('^ Cerah',       pos=(0.70, 0.36), scale=0.8, col=color.rgb(255, 240, 130))
-        self._scene_txt   = _txt('> Kebun',       pos=(0.70, 0.32), scale=0.8, col=color.rgb(140, 255, 160))
-        self._gold_txt    = _txt('§ 0G',          pos=(0.70, 0.28), scale=1.0, col=GOLD_C)
+        # origin=(0.5, 0) membuat x menjadi tepi KANAN teks, sehingga teks
+        # tumbuh ke kiri. Isi yang lebih panjang ("Hari 28 | Musim Gugur")
+        # memanjang ke dalam layar, bukan keluar dari layar.
+        RATA_KANAN = dict(origin=(0.5, 0))
+        self._time_txt    = _txt('06:00',         pos=(X_R, 0.45), scale=1.3, col=TIME_C, **RATA_KANAN)
+        self._date_txt    = _txt('Hari 1 | Semi', pos=(X_R, 0.40), scale=0.8, col=color.rgb(170, 200, 255), **RATA_KANAN)
+        self._weather_txt = _txt('^ Cerah',       pos=(X_R, 0.36), scale=0.8, col=color.rgb(255, 240, 130), **RATA_KANAN)
+        self._scene_txt   = _txt('> Kebun',       pos=(X_R, 0.32), scale=0.8, col=color.rgb(140, 255, 160), **RATA_KANAN)
+        self._gold_txt    = _txt('§ 0G',          pos=(X_R, 0.28), scale=1.0, col=GOLD_C, **RATA_KANAN)
 
         # ── Kiri Atas: Tool & Stamina ──
-        X_L = -0.85
+        X_L = -HX + MARGIN
         self._tool_name = _txt('Cangkul', pos=(X_L, 0.45), scale=1.1, col=color.rgb(255, 240, 100))
         self._seed_txt  = _txt('',        pos=(X_L, 0.41), scale=0.8, col=color.rgb(155, 255, 155))
         
@@ -145,7 +172,10 @@ class UIManager:
         from .motives import MOTIVES, LABELS
         self._motive_keys = MOTIVES
         self._NBAR_W = 0.20
-        self._NBAR_X = -0.86
+        # Panel latarnya 0,0285 satuan lebih lebar ke kiri daripada barnya,
+        # jadi barisnya disisipkan sedikit ke dalam supaya latar itu — bukan
+        # cuma barnya — tetap di dalam layar. Diukur di tools/probe_hud.py.
+        self._NBAR_X = X_L + 0.032
         self._NBAR_H = 0.018
         self._NBAR_GAP = 0.038      # cukup renggang agar label tidak tertimpa bar
         top_y = -0.06
@@ -190,10 +220,69 @@ class UIManager:
         self._flash_ent.enabled = False
 
         # ── Bawah Kanan: Action Prompts dinamis ───────
+        # Ditengahkan, bukan dipatok ke kanan: barisnya selebar ~0,93 satuan,
+        # dan dari x=0,60 ia berakhir di +1,067 — jauh di luar tepi 0,889.
         self._control_hint = _txt(
-            '', pos=(0.60, -0.45), scale=0.8,
+            '', pos=(0.0, -HY + 0.04), scale=0.8,
             col=color.rgb(220, 235, 255), origin=(0, 0)
         )
+
+        # Ukuran ruang UI BELUM final saat HUD dibangun: Ursina baru menerapkan
+        # rasio layar sesudahnya ("changed aspect ratio: 1.778 -> 1.778" di log
+        # muncul setelah konstruktor). Kalau posisi dipatok sekali di sini,
+        # seluruh HUD memakai ruang persegi sementara dan menumpuk di tengah
+        # layar — terlihat di tangkapan layar: kolom kanan menimpa kolom kiri.
+        #
+        # Jadi yang disimpan adalah JARAK tiap elemen ke tepinya, bukan posisi
+        # mutlaknya, lalu tepi itu dipasang ulang tiap kali ukurannya berubah.
+        self._jangkar = []
+        for nama in ('_time_txt', '_date_txt', '_weather_txt', '_scene_txt',
+                     '_gold_txt'):
+            e = getattr(self, nama, None)
+            if e is not None:
+                self._jangkar.append(('kanan', e, e.x - X_R))
+        kiri = ['_tool_name', '_seed_txt', '_hp_bar', '_hp_val', '_en_bar',
+                '_en_val', '_buff_txt', '_queue_txt', '_motive_panel_bg',
+                '_mood_lbl', '_mood_bg', '_mood_fill']
+        for nama in kiri:
+            e = getattr(self, nama, None)
+            if e is not None:
+                self._jangkar.append(('kiri', e, e.x - X_L))
+        for daftar in (self._need_lbl_ents, self._need_bg_ents,
+                       self._need_fill_ents):
+            for e in daftar:
+                self._jangkar.append(('kiri', e, e.x - X_L))
+        self._jangkar.append(('bawah', self._control_hint, 0.0))
+        self._hx_terpasang = None
+        self._pasang_tata_letak()
+
+    def _pasang_tata_letak(self):
+        """Tempelkan ulang HUD ke tepi layar yang berlaku SEKARANG.
+
+        Dipanggil sekali saat lahir dan tiap kali ukuran ruang UI berubah —
+        yaitu saat rasio layar akhirnya diterapkan, dan saat pemain mengubah
+        ukuran jendela. Murah: keluar cepat kalau tepinya tidak bergeser.
+        """
+        HX, HY = _batas_ui()
+        if self._hx_terpasang is not None and abs(HX - self._hx_terpasang) < 1e-6:
+            return
+        self._hx_terpasang = HX
+        MARGIN = 0.028
+        X_R, X_L = HX - MARGIN, -HX + MARGIN
+        for sisi, e, dx in self._jangkar:
+            if sisi == 'kanan':
+                e.x = X_R + dx
+            elif sisi == 'kiri':
+                e.x = X_L + dx
+            else:
+                e.x, e.y = 0.0, -HY + 0.04
+        # Dua nilai ini dipakai ULANG tiap frame oleh _refresh_hud dan
+        # _update_motive_panel untuk menumbuhkan bar dari tepi kirinya. Tanpa
+        # ikut diperbarui di sini, bar tetap memakai tepi lama: terlihat di
+        # tangkapan layar sebagai bar HP/EN yang melayang di tengah layar
+        # sementara angkanya sudah pindah ke pojok kiri.
+        self._NBAR_X = X_L + 0.032
+        self._BAR_X_LEFT = X_L
 
     # Warna termometer: hijau aman, kuning waspada, merah mendesak. Pemain harus
     # bisa membaca "yang mana yang gawat" tanpa membaca satu kata pun.
@@ -221,7 +310,7 @@ class UIManager:
             return
         q = getattr(getattr(self, 'player', None), 'queue', None)
         if q is None or not q.busy:
-            txt.text = ''
+            self._teks(txt, '')
             return
         cur = q.current
         bar_n = 10
@@ -229,7 +318,7 @@ class UIManager:
         bar = '#' * filled + '.' * (bar_n - filled)
         sisa = len(q.items) - 1
         ekor = f'  (+{sisa} antri)' if sisa > 0 else ''
-        txt.text = f'{cur.name}  [{bar}] {int(cur.progress*100)}%{ekor}'
+        self._teks(txt, f'{cur.name}  [{bar}] {int(cur.progress*100)}%{ekor}')
 
     def _update_motive_panel(self):
         """Isi termometer dari mesin motif. Bar diisi dari kiri; skala -100..+100
@@ -249,6 +338,27 @@ class UIManager:
         self._mood_fill.scale_x = max(0.001, self._NBAR_W * frac)
         self._mood_fill.x = self._NBAR_X + self._mood_fill.scale_x / 2
         self._mood_fill.color = self._motive_color(m)
+
+    @staticmethod
+    def _teks(ent, nilai):
+        """Set .text HANYA kalau isinya berubah.
+
+        Setter `.text` Ursina membongkar dan membangun ulang geometri teks tiap
+        kali dipanggil, tanpa memeriksa apakah nilainya sama. HUD ini memanggil
+        belasan setter tiap frame padahal jam, tanggal, cuaca dan nama alat
+        hampir selalu persis sama dengan frame sebelumnya.
+
+        tools/profil.py, scene mountain: panels.update 1,60 ms/frame dengan
+        text.py:82(text) 841 panggilan dan create_text_section 1442 panggilan
+        per 60 frame. Hampir semuanya membangun ulang teks yang tidak berubah.
+
+        Cache disimpan DI ENTITY, bukan di dict panel, supaya entity yang
+        dibangun ulang (ganti scene, ganti mode) otomatis mulai tanpa cache --
+        dict ber-key id() bisa salah cocok kalau id lama dipakai ulang.
+        """
+        if getattr(ent, '_teks_sekarang', None) != nilai:
+            ent.text = nilai
+            ent._teks_sekarang = nilai
 
     def _refresh_hud(self):
         s = self.state
@@ -270,47 +380,47 @@ class UIManager:
             self._hp_bar.color = color.rgb(255, 170, 30)
         else:
             self._hp_bar.color = color.rgb(220, 55, 55)
-        self._hp_val.text = f'{int(s.hp)}/{s.max_hp}'
+        self._teks(self._hp_val, f'{int(s.hp)}/{s.max_hp}')
 
         # EN bar
         en_r = max(0.001, s.energy / max(s.max_energy, 1))
         _shrink_bar(self._en_bar, BAR_X_LEFT, BAR_W, en_r)
         self._en_bar.color = color.rgb(220, 80, 55) if en_r <= 0.3 else color.rgb(55, 205, 75)
-        self._en_val.text = f'{int(s.energy)}/{s.max_energy}'
+        self._teks(self._en_val, f'{int(s.energy)}/{s.max_energy}')
 
         # Gold + buff (§ simbol web-style)
-        self._gold_txt.text = f'§ {s.gold}G'
-        self._buff_txt.text = '+'.join(b.upper() for b in s.buffs) if s.buffs else ''
+        self._teks(self._gold_txt, f'§ {s.gold}G')
+        self._teks(self._buff_txt, '+'.join(b.upper() for b in s.buffs) if s.buffs else '')
 
         # Active tool name
-        self._tool_name.text = self._TOOL_NAMES[min(s.tool_index, len(self._TOOL_NAMES) - 1)]
+        self._teks(self._tool_name, self._TOOL_NAMES[min(s.tool_index, len(self._TOOL_NAMES) - 1)])
 
         # Seed hint (shown when Tanam/Panen active)
         if s.tool_index in (2, 3):
             seed_name = CROPS.get(s.seed_key, {}).get('name', s.seed_key)
             seed_qty  = s.inventory.get(s.seed_key + '_seed', 0)
-            self._seed_txt.text = f'Q/R: {seed_name} x{seed_qty}'
+            self._teks(self._seed_txt, f'Q/R: {seed_name} x{seed_qty}')
         else:
-            self._seed_txt.text = '[1-8] pilih alat'
+            self._teks(self._seed_txt, '[1-8] pilih alat')
 
         # Time / weather
-        self._time_txt.text = s.get_time_str()
+        self._teks(self._time_txt, s.get_time_str())
         w_icons = {'Cerah': '^', 'Hujan': '~', 'Badai': '!', 'Mendung': '-', 'Berangin': '='}
-        self._weather_txt.text = f"{w_icons.get(s.weather, '?')} {s.weather}"
+        self._teks(self._weather_txt, f"{w_icons.get(s.weather, '?')} {s.weather}")
 
         # Date / scene
         season_n = SEASON_NAMES[s.season_index]
-        self._date_txt.text = f'Hari {s.day_in_season} | {season_n} Thn {s.year}'
+        self._teks(self._date_txt, f'Hari {s.day_in_season} | {season_n} Thn {s.year}')
         from .scenes import SCENES
         sc_display = SCENES.get(s.scene_name,
                      type('o', (object,), {'display': s.scene_name})()).display
-        self._scene_txt.text = f'> {sc_display}'
+        self._teks(self._scene_txt, f'> {sc_display}')
         
         # Action prompt dynamic
         if hasattr(s, 'action_prompt'):
-            self._control_hint.text = s.action_prompt
+            self._teks(self._control_hint, s.action_prompt)
         else:
-            self._control_hint.text = '[WASD] Jalan  ·  [SPACE] Pakai  ·  [E] Aksi  ·  [F1] Panduan  ·  [J] Jurnal  ·  [I] Inv'
+            self._teks(self._control_hint, '[WASD] Jalan  ·  [SPACE] Pakai  ·  [E] Aksi  ·  [F1] Panduan  ·  [J] Jurnal  ·  [I] Inv')
 
     # ─── PUBLIC: FLASH MESSAGE ───────────────────────────
     def flash_msg(self, text: str, duration: float = 1.2):

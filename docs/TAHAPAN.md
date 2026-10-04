@@ -84,7 +84,7 @@ daripada sistem yang belum dibuat.
 
 ---
 
-## Tahap 3 — Performa
+## Tahap 3 — Performa 🔄 SUDAH DIPROFIL, empat perbaikan mendarat
 
 4–29 FPS, belum pernah diprofil, jumlah entity terus naik (1126 di kandang).
 Setiap perbaikan visual dinikmati lewat slideshow.
@@ -93,6 +93,89 @@ Dua jalan: optimasi bertahap (batching, culling, kurangi entity) yang aman,
 atau perombakan renderer yang berisiko. Mulai dari yang pertama **sambil
 mengukur**. Kalau mentok di bawah 30 FPS, itu keputusan besar tentang seberapa
 jauh Ursina sanggup dibawa — dan itu keputusan pemilik, bukan keputusanku.
+
+### Alat ukurnya dulu: `tools/profil.py`
+
+Satu hal harus dibereskan sebelum satu baris pun dioptimalkan — **angka mana
+yang sah di kontainer tanpa GPU.** Alat ini memisahkan tiga, bukan satu:
+
+| kolom | isinya | sah di mesin pemilik? |
+|---|---|---|
+| LOGIKA | Python di dalam `Game3D.update` | ya |
+| URSINA | Python di luar update: loop per-entity Ursina | ya |
+| GAMBAR | di dalam `GraphicsEngine.renderFrame()` | **tidak** — llvmpipe |
+
+Versi pertama alat ini cuma punya LOGIKA dan "SISANYA", dan itu **menyesatkan
+diri sendiri**: SISANYA ikut menampung ~14 ms Python milik Ursina di bawah
+label "abaikan, itu llvmpipe". Padahal itu CPU murni dan berlaku di mesin mana
+pun. Kesalahan itu ketemu dari tabel panggilannya sendiri —
+`has_disabled_ancestor` 777 panggilan/frame tidak mungkin pekerjaan GPU.
+
+### Yang ditemukan, dan harganya
+
+Keempatnya satu pola yang sama: **nilai yang tidak berubah ditulis ulang tiap
+frame.** Tidak ada satu pun yang ditemukan dengan menebak; semuanya dari tabel
+panggilan.
+
+| temuan | harga (scene mountain) | perbaikannya |
+|---|---|---|
+| `grs_time`/`grs_wind` didorong ke 461 entity rumput satu-satu | 3,12 ms/frame, 922 panggilan `set_shader_input` | didorong **sekali** ke `scene`; Panda3D mewariskannya ke anak |
+| `.text` HUD di-set tiap frame walau jamnya sama | 1,32 ms/frame, 841 `text` + 1.442 `create_text_section` per 60 frame | set hanya kalau isinya berubah |
+| penghitung debug bawaan Ursina memindai seluruh `scene.entities` | 1,28 ms/frame + `enabled_getter` 5.669 panggilan/frame | dimatikan (`KARSA_DEBUG_COUNTER=1` untuk menghidupkan) |
+| `.enabled` 230 partikel cuaca ditulis ulang tiap frame walau cerah | 1,13 ms/frame, `stash()` 232 panggilan/frame | hanya saat cuacanya berganti |
+
+Yang ketiga bukan kode proyek ini melainkan **cacat di Ursina 7**
+(`window.py:180/190`): penjaganya menulis `self.entity_counter.i = 0` padahal
+yang diperiksa `self.entity_counter.t > 1`. Karena `t` tidak pernah direset,
+lewat satu detik pemindaiannya berjalan di **setiap** frame selamanya, bukan
+sekali sedetik seperti yang jelas dimaksud.
+
+### Hasilnya, diukur
+
+CPU (LOGIKA + URSINA, kolom yang sah di mana pun), scene mountain:
+**18,62 ms → 12,88 ms**, dan LOGIKA sendiri **7,78 ms → 1,91 ms**.
+
+`tools/regress.py`, ms/frame ujung-ke-ujung tanpa profiler menempel:
+
+| scene | sebelum | sesudah |
+|---|---|---|
+| farm | 70,3 | **42,0** |
+| town | 87,7 | **67,8** |
+| mountain | 72,5 | **48,0** |
+| beach | 96,3 | **60,9** |
+| house | 86,7 | **54,2** |
+| lake | 63,7 | **48,8** |
+
+14/14 scene masih lulus, 0 pemeriksaan gagal.
+
+**Angka ms/frame itu tetap didominasi llvmpipe** dan BUKAN ramalan FPS di mesin
+pemilik. Yang boleh dipercaya penuh cuma kolom CPU di atas.
+
+### Jaring pengamannya ikut tumbuh
+
+Optimasi rumput bisa gagal **tanpa error**: input shader per-entity menindih
+input induk, jadi satu panggilan `set_shader_input` yang kembali ke entity akan
+membekukan rumputnya diam-diam. Itu tidak boleh dijaga dengan niat baik, jadi
+`tools/probe_rumput.py` mengukurnya — menghitung piksel yang bergerak antara
+`grs_time` 0 dan 3,7, dan membandingkan kedua jalur berdampingan:
+
+```
+per-entity  0,590 ms/frame, 65.870 piksel berubah (maks kanal 147)
+scene       0,004 ms/frame, 66.008 piksel berubah (maks kanal 147)
+```
+
+Angka piksel yang praktis sama itu sekaligus **bukti uniform-nya memang sampai
+ke shader** — bukan diam-diam hilang. Sekarang jadi baris `rumput_hidup` di
+regress.
+
+### Yang masih tersisa
+
+Sisa CPU terbesar sekarang **loop per-entity Ursina sendiri** (`main.py:_update`
+plus `has_disabled_ancestor`/`enabled_getter` yang diseretnya): ±11 ms/frame di
+mountain, dan itu sebanding lurus dengan jumlah entity — 2.210 di mountain.
+Menurunkannya berarti benar-benar **mengurangi entity** (menggabung tile tanah
+jadi satu mesh), bukan lagi membuang panggilan yang terbuang. Itu perubahan
+struktural pada `world.py`, bukan tambalan, jadi berhenti di sini dulu.
 
 ---
 

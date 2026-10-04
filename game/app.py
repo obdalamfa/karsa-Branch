@@ -1,5 +1,6 @@
 import logging
 import math
+import os
 import random
 from pathlib import Path as _Path
 from PIL import Image as _PILImg
@@ -22,6 +23,16 @@ from . import grass_shader as _grass
 from .config import (SCREEN_W, SCREEN_H, CAM_LERP,
                      CAM_TARGET_LIFT, INGAME_MINUTES_PER_REAL_SECOND, FORCE_SLEEP_HOUR,
                      NEED_MAX, NEED_CRITICAL, NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG)
+
+# Font: Ursina 5 mencari file font dengan glob rekursif di asset_folder,
+# Ursina 7 menyerahkannya ke loader.loadFont yang HANYA melihat model-path
+# Panda3D. Daftarkan root dan assets/fonts sekali di sini supaya kedua versi
+# menemukan Montserrat-Bold.ttf — tanpa ini panels.py mati saat membangun HUD.
+from panda3d.core import getModelPath as _getModelPath  # noqa: E402
+_ROOT_DIR = _Path(__file__).resolve().parent.parent
+for _fp in (_ROOT_DIR, _ROOT_DIR / 'assets' / 'fonts'):
+    if _fp.is_dir():
+        _getModelPath().appendPath(str(_fp))
 
 # Ambang perubahan warna kabut sebelum di-push ulang ke shader semua entity.
 # 1,5/255 — di bawah satu langkah warna 8-bit, jadi tidak pernah terlihat.
@@ -49,7 +60,48 @@ class Game3D:
                           borderless=False)
         window.color = color.rgb(30, 20, 40)
         window.fps_counter.enabled = True
-        
+        # Tombol silang bawaan Ursina duduk tepat di pojok kanan atas ruang UI
+        # — persis di atas jam, elemen HUD yang paling sering dibaca. Jendela
+        # ini punya bingkai sendiri (borderless=False), jadi tombol itu tidak
+        # menambah apa pun selain menutupi angka jam.
+        try:
+            window.exit_button.enabled = False
+        except Exception:
+            pass
+
+        # Dua penghitung debug bawaan Ursina ("entities: N", "colliders: N")
+        # memindai SELURUH scene.entities tiap frame. Penjaganya ditulis
+        #
+        #     if self.entity_counter.t > 1:
+        #         ...scan...
+        #         self.entity_counter.i = 0     # <- 'i', bukan 't'
+        #
+        # jadi `t` tidak pernah direset: lewat satu detik, syaratnya benar
+        # selamanya dan pemindaiannya berjalan di SETIAP frame, bukan sekali
+        # sedetik seperti yang jelas dimaksud. (Ursina 7.0, window.py:180/190.)
+        #
+        # Harganya di scene mountain (2.210 entity), terukur tools/profil.py:
+        #   window.py:180 <listcomp>   0,95 ms/frame
+        #   window.py:190 <listcomp>   0,33 ms/frame
+        # plus yang diseretnya: enabled_getter 5.669 panggilan/frame,
+        # collider_getter 2.490/frame, has_disabled_ancestor 777/frame.
+        #
+        # Itu bukan biaya menggambar — itu CPU murni, dan berlaku juga di mesin
+        # ber-GPU. Dimatikan, bukan diperbaiki: angkanya tidak pernah dipakai
+        # game ini, dan `fps_counter` yang memang dipakai tetap hidup.
+        # KARSA_DEBUG_COUNTER=1 menghidupkannya kembali kalau sewaktu-waktu
+        # perlu melihat jumlah entity.
+        if not os.environ.get('KARSA_DEBUG_COUNTER'):
+            for _nama in ('entity_counter', 'collider_counter'):
+                _c = getattr(window, _nama, None)
+                if _c is None:
+                    continue
+                try:
+                    _c.update = lambda: None   # penjaga rusak: lumpuhkan loop-nya
+                    _c.enabled = False
+                except Exception:
+                    pass
+
         # Pencahayaan — arah lebih datar agar detail karakter chibi terlihat
         self.sun = DirectionalLight(shadows=False)
         self.sun.look_at(Vec3(-1, -1.5, -0.8))
@@ -131,6 +183,12 @@ class Game3D:
                 drop.setLightOff()
             self.snow_drops.append(drop)
 
+        # Keadaan nyala/mati partikel cuaca yang terakhir benar-benar
+        # dikirim ke entity. None = belum pernah, jadi frame pertama
+        # selalu menulis sekali.
+        self._hujan_nyala = None
+        self._salju_nyala = None
+
         # Inisialisasi suara prosedural (pygame.mixer, tidak konflik dengan panda3d audio)
         from .sound import init_sound, build_sounds, _build_ambients, set_ambient_for_scene
         if init_sound():
@@ -193,6 +251,13 @@ class Game3D:
         self.camera_pitch   = 34.0   # sudut baca ala life-sim isometrik
         self.camera_dist    = 19.0
 
+        # Bingkai kamera SEBELUM frame pertama. Seluruh blok pengikut kamera
+        # ada di dalam gerbang `mode == 'hud'`, jadi selama chargen terbuka
+        # kamera tidak pernah bergerak: pemain baru melihat sudut default
+        # Ursina yang menatap titik nol, bukan karakternya sendiri — padahal
+        # chargen justru layar untuk melihat karakter itu.
+        self._snap_camera_to_player()
+
         # Chargen — muncul jika first run (char_name kosong) atau tekan F2
         self._chargen: ChargenScreen = None
         if not self.state.char_name:
@@ -201,8 +266,14 @@ class Game3D:
         # Inisialisasi lingkungan langsung sesuai waktu awal (bukan fade dari gelap)
         self._init_env()
 
-        # Terapkan VHS/Bloom shader jika menggunakan OpenGL
-        if self._use_unlit_sh:
+        # Terapkan VHS/Bloom shader jika menggunakan OpenGL.
+        #
+        # KARSA_NO_POST=1 mematikannya. Dipakai untuk memisahkan "scene-nya yang
+        # salah" dari "pasca-prosesnya yang salah" — tanpa saklar ini keduanya
+        # cuma bisa dibedakan dengan menyunting kode di tengah penyelidikan,
+        # dan itu mengubah barang yang sedang diukur.
+        import os as _os
+        if self._use_unlit_sh and not _os.environ.get('KARSA_NO_POST'):
             try:
                 from .shaders.vhs_bloom import vhs_bloom_shader
                 camera.shader = vhs_bloom_shader
@@ -222,6 +293,7 @@ class Game3D:
 
         # Update UI HUD
         self.panels.update(s, dt)
+        self._pulihkan_mode_yatim()
 
         # ── MENJAUH MEMBATALKAN PIE MENU ───────────────────────────────
         # Pie menu objek dibuka dengan E dan sebelumnya hanya bisa ditutup
@@ -424,20 +496,38 @@ class Game3D:
             is_snowing  = is_winter and s.weather in ('Hujan', 'Mendung', 'Badai') and not is_indoor
             is_raining_ = is_raining and not is_winter
 
-            # Animasi Hujan
-            for drop in self.rain_drops:
-                drop.enabled = is_raining_
-                if is_raining_:
+            # `.enabled` hanya DIUBAH saat cuacanya berganti, tidak ditulis ulang
+            # tiap frame. Setter `.enabled` Ursina tidak punya jalan pintas untuk
+            # nilai yang sama: ia tetap membaca getter (yang memanggil
+            # has_disabled_ancestor) lalu memanggil stash()/unstash() pada
+            # NodePath. Dengan 150 tetes hujan + 80 butir salju itu 230 kali
+            # per frame bahkan saat cuacanya cerah dan tidak ada yang berubah.
+            #
+            # Terukur di scene town lewat tools/profil.py: stash 232
+            # panggilan/frame (0,83 ms) + enabled_setter 233/frame (0,30 ms).
+            if self._hujan_nyala != is_raining_:
+                self._hujan_nyala = is_raining_
+                for drop in self.rain_drops:
+                    drop.enabled = is_raining_
+
+            # Animasi Hujan — syaratnya di LUAR loop: saat cerah, 150 tetes
+            # tidak perlu disentuh sama sekali.
+            if is_raining_:
+                for drop in self.rain_drops:
                     drop.y -= 25 * dt
                     if drop.y < -0.5:
                         drop.x = self.player.x + random.uniform(-15, 15)
                         drop.z = self.player.z + random.uniform(-15, 15)
                         drop.y = random.uniform(10, 25)
 
-            # Animasi Salju
-            for drop in self.snow_drops:
-                drop.enabled = is_snowing
-                if is_snowing:
+            # Animasi Salju — alasan penjaga yang sama seperti hujan di atas.
+            if self._salju_nyala != is_snowing:
+                self._salju_nyala = is_snowing
+                for drop in self.snow_drops:
+                    drop.enabled = is_snowing
+
+            if is_snowing:
+                for drop in self.snow_drops:
                     drop.y -= 3.2 * dt
                     drop.x += math.sin(self._grass_time * 0.9 + drop.z * 0.3) * 0.6 * dt
                     drop.rotation_z += 22 * dt
@@ -617,6 +707,41 @@ class Game3D:
                     self.player._set_initial_rotation()
                     self._init_env()
                     self.panels.flash_msg("[F9] Game Dimuat!")
+
+    def _pulihkan_mode_yatim(self):
+        """Kembalikan ke HUD kalau mode aktif kehilangan UI pemiliknya.
+
+        Semua yang menggerakkan dunia — waktu, pemain, entitas, kamera —
+        ada di dalam gerbang `mode == 'hud'`. Itu memang disengaja: panel
+        terbuka berarti permainan berhenti. Konsekuensinya, mode yang
+        tertinggal tanpa UI yang menampakkannya membekukan game TOTAL tanpa
+        satu pun petunjuk di layar, dan tidak ada tombol yang bisa
+        mengeluarkan pemain karena input pun ikut dibajak mode itu.
+
+        Ini bukan kemungkinan yang dikarang: satu exception di tengah dialog
+        atau pie menu sudah cukup untuk meninggalkan mode tanpa pemilik, dan
+        laporan "jalan saja tidak bisa" persis berbentuk seperti itu. Biarkan
+        game menyembuhkan dirinya sendiri di frame berikutnya.
+        """
+        p = self.panels
+        mode = p.mode
+        if mode == 'hud':
+            return
+        yatim = False
+        if mode == 'chargen':
+            yatim = self._chargen is None
+        elif mode == 'pie':
+            yatim = not getattr(p, '_pie_options', None)
+        elif mode == 'panel':
+            yatim = getattr(p, '_panel_name', None) is None
+        elif mode == 'dialog':
+            bg = getattr(p, '_dlg_bg', None)
+            yatim = bg is None or not getattr(bg, 'enabled', False)
+        else:
+            yatim = True    # mode yang tidak dikenal sama sekali
+        if yatim:
+            logging.warning(f"Mode UI '{mode}' tidak punya pemilik — kembali ke HUD.")
+            p.mode = 'hud'
 
     # ─── CHARACTER CREATION ─────────────────────────────────
     def _open_chargen(self):

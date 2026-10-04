@@ -2,7 +2,7 @@
 judul: Arah WASD akhirnya terukur dan diperbaiki
 tipe: sesi
 tanggal: 2026-10-04
-commit:
+commit: 2274f39
 tags: [sesi, bug, kontrol, bukti]
 ---
 

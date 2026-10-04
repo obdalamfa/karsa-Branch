@@ -94,8 +94,10 @@ Keluar dengan kode 1 kalau ada yang GAGAL, supaya bisa dipakai di skrip.
 """
 from __future__ import annotations
 
+import atexit
 import json
 import os
+import shutil
 import sys
 import time
 import traceback
@@ -953,6 +955,26 @@ def cek_sims_tersambung():
     return _ok(f'{len(modul)} modul sims_* semuanya punya pemanggil')
 
 
+_SAVE_FIXTURE: Path | None = None
+
+
+def _pasang_save_fixture(save: Path):
+    # Save pemain tidak di-track git; tanpa karakter, layar buat-karakter
+    # menutupi dunia dan setiap cek berbasis piksel gagal palsu.
+    global _SAVE_FIXTURE
+    if save.exists():
+        return
+    shutil.copyfile(ROOT / 'tools' / 'fixtures' / 'regress_save.json', save)
+    _SAVE_FIXTURE = save
+    atexit.register(_buang_save_fixture)
+
+
+def _buang_save_fixture():
+    # Dipanggil eksplisit sebelum os._exit, yang melewati atexit.
+    if _SAVE_FIXTURE is not None:
+        _SAVE_FIXTURE.unlink(missing_ok=True)
+
+
 def main():
     from ursina import application
     application.asset_folder = ROOT
@@ -967,6 +989,7 @@ def main():
     minta = [a for a in sys.argv[1:] if not a.startswith('-')]
     scenes = minta or [s for s in SCENES if s != 'dungeon']
 
+    _pasang_save_fixture(ROOT / cfg.SAVE_FILE)
     from game.app import Game3D
     t0 = time.time()
     try:
@@ -1027,6 +1050,7 @@ def main():
             print('Coba lagi dengan:  python tools/regress.py --offscreen')
             print('=' * 78)
             sys.stdout.flush()
+            _buang_save_fixture()
             os._exit(2)
 
     from ursina import scene as uscene
@@ -1244,6 +1268,7 @@ def main():
     sys.stdout.flush()
     # Kode 2 dibedakan dari 1: 1 berarti ada scene yang benar-benar rusak,
     # 2 berarti hasilnya tidak sah karena lingkungan. CI bisa membedakannya.
+    _buang_save_fixture()
     os._exit(2 if lingkungan else (1 if gagal_total else 0))
 
 

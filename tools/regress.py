@@ -30,6 +30,12 @@ bukan pada kemungkinan yang dikarang:
                  membalik tanda sampai terasa benar. Diukur sekali di akhir
                  lewat tools/probe_arah.py, alat ukur yang sama dengan probe
                  manual, supaya tidak ada dua kebenaran.
+  rumput_hidup   uniform `grs_time` sekarang didorong SEKALI ke `scene`, bukan
+                 ke tiap entity rumput (147x lebih murah). Yang membuatnya aman
+                 cuma satu syarat: tidak boleh ada input per-entity yang
+                 menindihnya. Kalau ada, rumputnya membeku TANPA error — jadi
+                 diukur, lewat tools/probe_rumput.py, dengan menghitung piksel
+                 yang bergerak.
 
 Pemakaian:
     python tools/regress.py                 semua scene
@@ -390,6 +396,18 @@ def main():
         hud_baris.append(('?', f'probe HUD gagal jalan: {e}'))
         gagal_total += 1
 
+    # ── animasi rumput masih hidup (sekali saja, butuh render penuh) ──
+    rumput_baris = []
+    try:
+        from probe_rumput import uji_rumput
+        ok, catatan = uji_rumput(g, 'farm')
+        rumput_baris.append((ok, catatan))
+        if not ok:
+            gagal_total += 1
+    except Exception as e:
+        rumput_baris.append((False, f'probe rumput gagal jalan: {e}'))
+        gagal_total += 1
+
     # ── laporan ──
     # Empat belas scene kosong SEKALIGUS bukan cacat scene: game ini terbukti
     # merender semuanya di `gauntlet/check.py`. Yang terjadi adalah jendelanya
@@ -427,6 +445,9 @@ def main():
     tanda_arah = 'LULUS' if all(ok for _, ok, _ in arah_baris) else 'GAGAL'
     rangkum = ', '.join(f'{k.upper()}={c.split(" ")[0]}' for k, ok, c in arah_baris)
     print(f'{"arah WASD":14s} {tanda_arah:>7s} {"":>9s} {"":>7s}  {rangkum[:44]}')
+    ok_rumput, catatan_rumput = rumput_baris[0] if rumput_baris else (True, '-')
+    tanda_rumput = 'LULUS' if ok_rumput else 'GAGAL'
+    print(f'{"rumput hidup":14s} {tanda_rumput:>7s} {"":>9s} {"":>7s}  {catatan_rumput[:44]}')
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)
     print(f'{n_lulus}/{len(baris)} scene lulus, {gagal_total} pemeriksaan gagal, '
@@ -449,6 +470,8 @@ def main():
             catatan = '; '.join(f'`{k}` {hasil[k][1]}' for k in buruk) or '-'
             f.write(f'| {nama} | {tanda} | {ms:.1f} | {n_ent} | {jenuh:.0%} | {catatan} |\n')
         f.write(f'\n## HUD\n\n{ring_hud}\n')
+        f.write(f'\n## Animasi rumput\n\n'
+                f'{"LULUS" if ok_rumput else "**GAGAL**"} — {catatan_rumput}\n')
         f.write('\n## Arah WASD\n\n| tombol | hasil | catatan |\n|---|---|---|\n')
         for k, ok, c in arah_baris:
             f.write(f'| {k.upper()} | {"LULUS" if ok else "**GAGAL**"} | {c} |\n')

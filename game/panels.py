@@ -310,7 +310,7 @@ class UIManager:
             return
         q = getattr(getattr(self, 'player', None), 'queue', None)
         if q is None or not q.busy:
-            txt.text = ''
+            self._teks(txt, '')
             return
         cur = q.current
         bar_n = 10
@@ -318,7 +318,7 @@ class UIManager:
         bar = '#' * filled + '.' * (bar_n - filled)
         sisa = len(q.items) - 1
         ekor = f'  (+{sisa} antri)' if sisa > 0 else ''
-        txt.text = f'{cur.name}  [{bar}] {int(cur.progress*100)}%{ekor}'
+        self._teks(txt, f'{cur.name}  [{bar}] {int(cur.progress*100)}%{ekor}')
 
     def _update_motive_panel(self):
         """Isi termometer dari mesin motif. Bar diisi dari kiri; skala -100..+100
@@ -338,6 +338,27 @@ class UIManager:
         self._mood_fill.scale_x = max(0.001, self._NBAR_W * frac)
         self._mood_fill.x = self._NBAR_X + self._mood_fill.scale_x / 2
         self._mood_fill.color = self._motive_color(m)
+
+    @staticmethod
+    def _teks(ent, nilai):
+        """Set .text HANYA kalau isinya berubah.
+
+        Setter `.text` Ursina membongkar dan membangun ulang geometri teks tiap
+        kali dipanggil, tanpa memeriksa apakah nilainya sama. HUD ini memanggil
+        belasan setter tiap frame padahal jam, tanggal, cuaca dan nama alat
+        hampir selalu persis sama dengan frame sebelumnya.
+
+        tools/profil.py, scene mountain: panels.update 1,60 ms/frame dengan
+        text.py:82(text) 841 panggilan dan create_text_section 1442 panggilan
+        per 60 frame. Hampir semuanya membangun ulang teks yang tidak berubah.
+
+        Cache disimpan DI ENTITY, bukan di dict panel, supaya entity yang
+        dibangun ulang (ganti scene, ganti mode) otomatis mulai tanpa cache --
+        dict ber-key id() bisa salah cocok kalau id lama dipakai ulang.
+        """
+        if getattr(ent, '_teks_sekarang', None) != nilai:
+            ent.text = nilai
+            ent._teks_sekarang = nilai
 
     def _refresh_hud(self):
         s = self.state
@@ -359,47 +380,47 @@ class UIManager:
             self._hp_bar.color = color.rgb(255, 170, 30)
         else:
             self._hp_bar.color = color.rgb(220, 55, 55)
-        self._hp_val.text = f'{int(s.hp)}/{s.max_hp}'
+        self._teks(self._hp_val, f'{int(s.hp)}/{s.max_hp}')
 
         # EN bar
         en_r = max(0.001, s.energy / max(s.max_energy, 1))
         _shrink_bar(self._en_bar, BAR_X_LEFT, BAR_W, en_r)
         self._en_bar.color = color.rgb(220, 80, 55) if en_r <= 0.3 else color.rgb(55, 205, 75)
-        self._en_val.text = f'{int(s.energy)}/{s.max_energy}'
+        self._teks(self._en_val, f'{int(s.energy)}/{s.max_energy}')
 
         # Gold + buff (§ simbol web-style)
-        self._gold_txt.text = f'§ {s.gold}G'
-        self._buff_txt.text = '+'.join(b.upper() for b in s.buffs) if s.buffs else ''
+        self._teks(self._gold_txt, f'§ {s.gold}G')
+        self._teks(self._buff_txt, '+'.join(b.upper() for b in s.buffs) if s.buffs else '')
 
         # Active tool name
-        self._tool_name.text = self._TOOL_NAMES[min(s.tool_index, len(self._TOOL_NAMES) - 1)]
+        self._teks(self._tool_name, self._TOOL_NAMES[min(s.tool_index, len(self._TOOL_NAMES) - 1)])
 
         # Seed hint (shown when Tanam/Panen active)
         if s.tool_index in (2, 3):
             seed_name = CROPS.get(s.seed_key, {}).get('name', s.seed_key)
             seed_qty  = s.inventory.get(s.seed_key + '_seed', 0)
-            self._seed_txt.text = f'Q/R: {seed_name} x{seed_qty}'
+            self._teks(self._seed_txt, f'Q/R: {seed_name} x{seed_qty}')
         else:
-            self._seed_txt.text = '[1-8] pilih alat'
+            self._teks(self._seed_txt, '[1-8] pilih alat')
 
         # Time / weather
-        self._time_txt.text = s.get_time_str()
+        self._teks(self._time_txt, s.get_time_str())
         w_icons = {'Cerah': '^', 'Hujan': '~', 'Badai': '!', 'Mendung': '-', 'Berangin': '='}
-        self._weather_txt.text = f"{w_icons.get(s.weather, '?')} {s.weather}"
+        self._teks(self._weather_txt, f"{w_icons.get(s.weather, '?')} {s.weather}")
 
         # Date / scene
         season_n = SEASON_NAMES[s.season_index]
-        self._date_txt.text = f'Hari {s.day_in_season} | {season_n} Thn {s.year}'
+        self._teks(self._date_txt, f'Hari {s.day_in_season} | {season_n} Thn {s.year}')
         from .scenes import SCENES
         sc_display = SCENES.get(s.scene_name,
                      type('o', (object,), {'display': s.scene_name})()).display
-        self._scene_txt.text = f'> {sc_display}'
+        self._teks(self._scene_txt, f'> {sc_display}')
         
         # Action prompt dynamic
         if hasattr(s, 'action_prompt'):
-            self._control_hint.text = s.action_prompt
+            self._teks(self._control_hint, s.action_prompt)
         else:
-            self._control_hint.text = '[WASD] Jalan  ·  [SPACE] Pakai  ·  [E] Aksi  ·  [F1] Panduan  ·  [J] Jurnal  ·  [I] Inv'
+            self._teks(self._control_hint, '[WASD] Jalan  ·  [SPACE] Pakai  ·  [E] Aksi  ·  [F1] Panduan  ·  [J] Jurnal  ·  [I] Inv')
 
     # ─── PUBLIC: FLASH MESSAGE ───────────────────────────
     def flash_msg(self, text: str, duration: float = 1.2):

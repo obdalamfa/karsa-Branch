@@ -132,15 +132,41 @@ def get_grass_shader():
     return _grass_shader
 
 
-def _induk_uniform():
-    """Node tempat uniform rumput dipasang SEKALI, bukan per entity.
+# Uniform `grs_time`/`grs_wind` didorong SEKALI ke `ursina.scene`, bukan ke tiap
+# entity rumput. Panda3D mewariskan shader input ke seluruh anak NodePath, jadi
+# satu panggilan menjangkau semua tutup rumput sekaligus.
+#
+# Kenapa diubah: tools/profil.py menunjuk update_time sebagai 3,12 ms dari
+# 7,78 ms LOGIKA di scene mountain -- 40% seluruh waktu Python game, habis di
+# 461 entity x 2 uniform = 922 panggilan set_shader_input tiap frame.
+# tools/probe_rumput.py mengukur keduanya berdampingan di scene farm:
+#
+#   per-entity  0,590 ms/frame, 65.870 piksel berubah (maks kanal 147)
+#   scene       0,004 ms/frame, 66.008 piksel berubah (maks kanal 147)
+#
+# Jadi animasinya BUKAN dibuang -- jumlah piksel yang bergerak praktis sama,
+# dan itu yang membuktikan uniform-nya memang sampai ke shader. Yang hilang
+# cuma 147x biayanya.
+#
+# SATU SYARAT yang harus dijaga: input per-entity MENINDIH input induk. Begitu
+# ada kode lain yang memanggil `e.set_shader_input('grs_time', ...)` pada entity
+# rumput, entity itu berhenti membaca nilai dari `scene` dan rumputnya membeku
+# di nilai terakhirnya. Jangan lakukan itu; regress menjaganya lewat uji_rumput.
+_wind_terakhir = None
 
-    Shader input di Panda3D diwariskan ke seluruh keturunan node. Jadi satu
-    assignment di `scene` sampai ke semua rumput di bawahnya, dan tidak ada
-    alasan menyentuh tiap entity satu per satu.
-    """
-    from ursina import scene
-    return scene
+
+def _dorong(time: float, wind: float):
+    """Dorong kedua uniform ke scene. True kalau berhasil."""
+    global _wind_terakhir
+    try:
+        from ursina import scene as _scene
+        _scene.set_shader_input('grs_time', time)
+        if wind != _wind_terakhir:
+            _scene.set_shader_input('grs_wind', wind)
+            _wind_terakhir = wind
+        return True
+    except Exception:
+        return False
 
 
 def apply_to_entities(entities: list, time: float = 0.0, wind: float = 0.06):
@@ -150,9 +176,8 @@ def apply_to_entities(entities: list, time: float = 0.0, wind: float = 0.06):
     time     : nilai waktu animasi (detik real)
     wind     : kekuatan angin (0 = tidak ada, 0.1 = sepoi, 0.3 = kencang)
 
-    Shader-nya dipasang per entity — memang harus, itu yang menentukan entity
-    mana yang melambai. Tapi NILAI uniform-nya tidak: itu sama untuk semua
-    rumput dan dipasang sekali di induknya (lihat update_time).
+    Shader-nya tetap dipasang per entity -- itu memang milik tiap NodePath.
+    Yang pindah ke `scene` cuma nilai uniform-nya.
     """
     sh = get_grass_shader()
     if sh is None:
@@ -160,35 +185,19 @@ def apply_to_entities(entities: list, time: float = 0.0, wind: float = 0.06):
     for e in entities:
         try:
             e.shader = sh
-            # Uniform SENGAJA tidak dipasang di sini. Input yang dipasang di
-            # entity MENIMPA input dari induknya, jadi satu saja yang
-            # tertinggal di sini sudah cukup membuat rumput itu membeku
-            # sementara yang lain melambai.
         except Exception:
             pass
-    update_time(entities, time, wind)
+    global _wind_terakhir
+    _wind_terakhir = None   # scene baru: paksa wind terdorong sekali
+    _dorong(time, wind)
 
 
 def update_time(entities: list, time: float, wind: float = 0.06):
-    """Update uniform `grs_time` dan `grs_wind`. Dipanggil tiap frame.
+    """Update uniform `grs_time` dan `grs_wind` tiap frame.
 
-    Dulu ini melintasi seluruh daftar rumput dan memanggil set_shader_input
-    dua kali per entity. Di scene `mountain` itu 488 entity x 2 = 976
-    panggilan PER FRAME, dan cProfile menunjukkannya sebagai satu-satunya
-    biaya Python terbesar di luar render: 39.320 panggilan dalam 40 frame,
-    ~12,5 ms per frame — untuk memasang dua angka yang sama ke semua orang.
-
-    Sekarang dua panggilan, titik. Shader input diwariskan ke keturunan, dan
-    tiap rumput ada di bawah `scene`.
-
-    `entities` dipertahankan di tanda tangan supaya pemanggil lama tidak
-    perlu diubah, dan supaya nol-rumput tetap berarti nol kerja.
+    `entities` cuma dipakai untuk tahu scene ini punya rumput atau tidak;
+    nilainya didorong ke `scene`, bukan ke tiap anggota list.
     """
     if _grass_failed or not entities:
         return
-    try:
-        induk = _induk_uniform()
-        induk.set_shader_input('grs_time', time)
-        induk.set_shader_input('grs_wind', wind)
-    except Exception:
-        pass
+    _dorong(time, wind)

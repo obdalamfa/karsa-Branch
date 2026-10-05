@@ -610,13 +610,45 @@ class World3D:
     # supaya tetap benar saat kamera diputar.
     CUTAWAY_STUB = 0.42          # tinggi sisa dinding yang dipangkas (world units)
 
-    def update_wall_cutaway(self, cam_pos, focus_pos):
-        """Pangkas dinding yang menghalangi pandangan ke titik fokus.
+    # Setengah lebar koridor pandang, dalam world unit. Dinding di luar koridor
+    # ini TIDAK memangkas dirinya walau ia lebih dekat ke kamera daripada
+    # pemain — karena ia tidak menghalangi apa pun.
+    #
+    # Kenapa angkanya ada: aturan lama memangkas SELURUH setengah-ruang di
+    # depan fokus, tanpa memandang jarak menyamping. Di rumah itu tidak
+    # kelihatan salah — dindingnya sedikit dan memang mengelilingi satu
+    # ruangan. Di gua ia menghancurkan bentuk ruangannya, karena di gua
+    # dinding BUKAN pembatas ruangan, dinding ADALAH ruangannya: 46-57% peta
+    # gua bertingkat adalah batu padat.
+    #
+    # Terukur sebelum perbaikan (tools/probe_gua.py): gua bertingkat memangkas
+    # 41-48% seluruh dindingnya sekaligus, gua Sang Hyang 67%. Yang tersisa di
+    # layar bukan gua melainkan lapangan datar bertabur tunggul setinggi lutut.
+    #
+    # 1,15 tile: cukup lebar untuk menelan satu dinding penuh (1 tile) beserta
+    # sedikit kelonggaran supaya dinding yang menghalangi separuh tubuh pemain
+    # ikut terpangkas, cukup sempit supaya dinding di sebelahnya tetap berdiri.
+    CUTAWAY_RADIUS = TS * 1.15
 
-        Sebuah dinding dipangkas kalau ia berada di sisi kamera relatif terhadap
-        fokus, diukur sepanjang sumbu pandang mendatar. Murah: hanya beberapa
-        puluh dinding per scene, dan kita lewati seluruhnya kalau arah pandang
-        belum berubah cukup jauh sejak frame sebelumnya.
+    def update_wall_cutaway(self, cam_pos, focus_pos):
+        """Pangkas dinding yang benar-benar MENGHALANGI pandangan ke fokus.
+
+        Syaratnya tiga, dan ketiganya harus benar:
+
+          1. dinding berada di DEPAN kamera (bukan di belakangnya),
+          2. lebih dekat ke kamera daripada fokus, diukur sepanjang sumbu
+             pandang mendatar,
+          3. dan jaraknya MENYAMPING dari garis kamera-ke-fokus lebih kecil
+             dari `CUTAWAY_RADIUS`.
+
+        Syarat ketiga itu yang dulu tidak ada, dan ketiadaannya yang membuat gua
+        kehilangan bentuk. Tanpa syarat itu aturannya berbunyi "pangkas semua
+        yang lebih dekat ke kamera daripada pemain" — di gua, itu berarti
+        memangkas seluruh baji peta di depan pemain, termasuk batu yang jaraknya
+        belasan tile ke samping dan tidak menghalangi apa-apa.
+
+        Murah: hanya beberapa ratus dinding per scene, dan seluruhnya dilewati
+        kalau arah pandang belum berubah cukup jauh sejak frame sebelumnya.
         """
         if not self._wall_ents:
             return
@@ -627,24 +659,31 @@ class World3D:
             return
         vx /= mag; vz /= mag
 
-        # Proyeksi fokus ke sumbu pandang — dinding dengan proyeksi lebih kecil
-        # berada di depan fokus (lebih dekat ke kamera) dan karenanya menghalangi.
+        # Dua sumbu: `proj` sepanjang arah pandang, `perp` tegak lurus padanya.
+        # Keduanya dihitung dari vektor yang sama, jadi tidak ada sudut yang
+        # perlu ditebak saat kamera diputar.
         f_proj = focus_pos[0] * vx + focus_pos[2] * vz
+        f_perp = -focus_pos[0] * vz + focus_pos[2] * vx
+        cam_proj = cam_pos[0] * vx + cam_pos[2] * vz
 
-        state = (round(vx, 2), round(vz, 2), round(f_proj, 1))
+        state = (round(vx, 2), round(vz, 2), round(f_proj, 1), round(f_perp, 1))
         if state == self._cutaway_state:
             return
         self._cutaway_state = state
 
         stub = self.CUTAWAY_STUB
+        radius = self.CUTAWAY_RADIUS
         for rec in self._wall_ents:
             e, full_h, full_y = rec[0], rec[1], rec[2]
             if not e:
                 continue
             proj = e.x * vx + e.z * vz
+            perp = -e.x * vz + e.z * vx
             # Ambang setengah tile: dinding tepat sejajar fokus dibiarkan berdiri
             # supaya ruangan tetap punya batas yang terbaca.
-            cut = proj < f_proj - TS * 0.5
+            cut = (proj > cam_proj
+                   and proj < f_proj - TS * 0.5
+                   and abs(perp - f_perp) < radius)
             want_h = stub if cut else full_h
             if abs(e.scale_y - want_h) > 1e-3:
                 e.scale_y = want_h

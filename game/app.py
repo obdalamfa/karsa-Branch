@@ -109,6 +109,39 @@ class Game3D:
             except Exception:
                 pass
         
+        # Dua penghitung debug bawaan Ursina ("entities: N", "colliders: N")
+        # memindai SELURUH scene.entities tiap frame. Penjaganya ditulis
+        #
+        #     if self.entity_counter.t > 1:
+        #         ...scan...
+        #         self.entity_counter.i = 0     # <- 'i', bukan 't'
+        #
+        # jadi `t` tidak pernah direset: lewat satu detik, syaratnya benar
+        # selamanya dan pemindaiannya berjalan di SETIAP frame, bukan sekali
+        # sedetik seperti yang jelas dimaksud. (Ursina 7.0, window.py:180/190.)
+        #
+        # Harganya di scene mountain (2.210 entity), terukur tools/profil.py:
+        #   window.py:180 <listcomp>   0,95 ms/frame
+        #   window.py:190 <listcomp>   0,33 ms/frame
+        # plus yang diseretnya: enabled_getter 5.669 panggilan/frame,
+        # collider_getter 2.490/frame, has_disabled_ancestor 777/frame.
+        #
+        # Itu bukan biaya menggambar — itu CPU murni, dan berlaku juga di mesin
+        # ber-GPU. Dimatikan, bukan diperbaiki: angkanya tidak pernah dipakai
+        # game ini, dan `fps_counter` yang memang dipakai tetap hidup.
+        # KARSA_DEBUG_COUNTER=1 menghidupkannya kembali kalau sewaktu-waktu
+        # perlu melihat jumlah entity.
+        if not os.environ.get('KARSA_DEBUG_COUNTER'):
+            for _nama in ('entity_counter', 'collider_counter'):
+                _c = getattr(window, _nama, None)
+                if _c is None:
+                    continue
+                try:
+                    _c.update = lambda: None   # penjaga rusak: lumpuhkan loop-nya
+                    _c.enabled = False
+                except Exception:
+                    pass
+
         # Pencahayaan — arah lebih datar agar detail karakter chibi terlihat
         self.sun = DirectionalLight(shadows=False)
         self.sun.look_at(Vec3(-1, -1.5, -0.8))
@@ -189,6 +222,12 @@ class Game3D:
             if not _use_unlit_sh and hasattr(drop, 'setLightOff'):
                 drop.setLightOff()
             self.snow_drops.append(drop)
+
+        # Keadaan nyala/mati partikel cuaca yang terakhir benar-benar
+        # dikirim ke entity. None = belum pernah, jadi frame pertama
+        # selalu menulis sekali.
+        self._hujan_nyala = None
+        self._salju_nyala = None
 
         # Inisialisasi suara prosedural (pygame.mixer, tidak konflik dengan panda3d audio)
         from .sound import init_sound, build_sounds, _build_ambients, set_ambient_for_scene
@@ -309,6 +348,20 @@ class Game3D:
             # Sengaja di luar gerbang 'hud' di bawah: dunia memang harus beku,
             # tapi kamera sinema justru satu-satunya yang masih harus bergerak.
             self.sinema.tick(dt)
+        # ── Keinginan yang terpenuhi dibayar SEKALI PER DETIK ──────────
+        # Bukan tiap frame. `periksa()` murah (paling banyak empat janji),
+        # tapi pelajaran Tahap 3 jelas: pekerjaan yang diulang 60 kali sedetik
+        # untuk hasil yang sama adalah cara paling mudah membuang milidetik.
+        # Satu detik cukup cepat supaya hadiahnya terasa datang dari perbuatan
+        # — pemain memanen tomat kelima dan pesannya muncul sebelum ia
+        # memindahkan jari.
+        self._jeda_keinginan = getattr(self, '_jeda_keinginan', 0.0) + dt
+        if self._jeda_keinginan >= 1.0:
+            self._jeda_keinginan = 0.0
+            try:
+                self.panels._bayar_keinginan()
+            except Exception as e:
+                logging.warning('[KEINGINAN] periksa gagal: %s', e)
 
         # ── MENJAUH MEMBATALKAN PIE MENU ───────────────────────────────
         # Pie menu objek dibuka dengan E dan sebelumnya hanya bisa ditutup
@@ -572,20 +625,38 @@ class Game3D:
             is_snowing  = is_winter and s.weather in ('Hujan', 'Mendung', 'Badai') and not is_indoor
             is_raining_ = is_raining and not is_winter
 
-            # Animasi Hujan
-            for drop in self.rain_drops:
-                drop.enabled = is_raining_
-                if is_raining_:
+            # `.enabled` hanya DIUBAH saat cuacanya berganti, tidak ditulis ulang
+            # tiap frame. Setter `.enabled` Ursina tidak punya jalan pintas untuk
+            # nilai yang sama: ia tetap membaca getter (yang memanggil
+            # has_disabled_ancestor) lalu memanggil stash()/unstash() pada
+            # NodePath. Dengan 150 tetes hujan + 80 butir salju itu 230 kali
+            # per frame bahkan saat cuacanya cerah dan tidak ada yang berubah.
+            #
+            # Terukur di scene town lewat tools/profil.py: stash 232
+            # panggilan/frame (0,83 ms) + enabled_setter 233/frame (0,30 ms).
+            if self._hujan_nyala != is_raining_:
+                self._hujan_nyala = is_raining_
+                for drop in self.rain_drops:
+                    drop.enabled = is_raining_
+
+            # Animasi Hujan — syaratnya di LUAR loop: saat cerah, 150 tetes
+            # tidak perlu disentuh sama sekali.
+            if is_raining_:
+                for drop in self.rain_drops:
                     drop.y -= 25 * dt
                     if drop.y < -0.5:
                         drop.x = self.player.x + random.uniform(-15, 15)
                         drop.z = self.player.z + random.uniform(-15, 15)
                         drop.y = random.uniform(10, 25)
 
-            # Animasi Salju
-            for drop in self.snow_drops:
-                drop.enabled = is_snowing
-                if is_snowing:
+            # Animasi Salju — alasan penjaga yang sama seperti hujan di atas.
+            if self._salju_nyala != is_snowing:
+                self._salju_nyala = is_snowing
+                for drop in self.snow_drops:
+                    drop.enabled = is_snowing
+
+            if is_snowing:
+                for drop in self.snow_drops:
                     drop.y -= 3.2 * dt
                     drop.x += math.sin(self._grass_time * 0.9 + drop.z * 0.3) * 0.6 * dt
                     drop.rotation_z += 22 * dt
@@ -666,6 +737,16 @@ class Game3D:
                 # Input panel hanya menerima angka 1-9, jadi daftar yang lebih
                 # panjang dari sembilan baris butuh halaman.
                 self.panels.market_page(-1 if key == 'q' else 1)
+            elif (self.panels._panel_name == 'wishes'
+                  and key in ('a', 'b', 'c')):
+                # Hadiah dipilih dengan huruf, bukan angka: angka 1-9 di panel
+                # ini sudah dipakai untuk menjanjikan tawaran dan melupakan
+                # janji, dan memakai angka yang sama untuk tiga arti berbeda
+                # adalah cara tercepat membuat pemain membeli hadiah padahal
+                # ingin berjanji.
+                msg = self.panels.beli_hadiah_keinginan(key)
+                if msg:
+                    self.panels.flash_msg(msg)
             elif key.isdigit():
                 msg = self.panels.panel_action(int(key))
                 if msg:
@@ -716,7 +797,13 @@ class Game3D:
                 self.panels.open_panel('relations')
             elif key == 'n':
                 self.panels.open_panel('catatan')
-            elif key == 'l':
+            elif key == 'p':
+                # Keinginan. 'p' satu-satunya huruf yang tersisa: a/d/s/w gerak,
+                # sisanya dipakai menu atau aksi pemain.
+                self.panels.open_panel('wishes')
+            elif key == 'f4':
+                # Ekosistem dulu di 'l', tapi 'l' sudah ditangkap Bangun/Beli di
+                # atas sehingga cabang ini tidak pernah tercapai.
                 self.panels.open_panel('ekosistem')
             elif key == 'k':
                 if self.state.scene_name == 'shop':

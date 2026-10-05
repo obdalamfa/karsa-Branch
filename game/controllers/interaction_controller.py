@@ -143,6 +143,12 @@ class InteractionController:
                     if crop_name == 'lobak':
                         s.stats['lobak_harvested'] = s.stats.get('lobak_harvested', 0) + 1
                     s.stats['harvested'] = s.stats.get('harvested', 0) + 1
+                    # Penghitung PER TANAMAN. Sebelumnya hanya lobak punya
+                    # penghitungnya sendiri, jadi tidak ada cara mengukur
+                    # kemajuan untuk 16 tanaman lain — dan keinginan seperti
+                    # "Panen 5 Tomat" (game/wishes.py) tidak mungkin dinilai.
+                    per = s.stats.setdefault('panen_tanaman', {})
+                    per[crop_name] = per.get(crop_name, 0) + 1
                     del s.soil[soil_key]
                     self.player._spend_energy(2)
                     s.senang = min(NEED_MAX, s.senang + 8)

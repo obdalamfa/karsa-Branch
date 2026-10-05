@@ -72,17 +72,51 @@ class TimeController:
         s.day           += 1
         s.day_in_season += 1
 
-        # Satu malam berlalu untuk ternak: kenyang turun, yang terlalu lama
-        # dilalaikan jatuh sakit, yang terawat siap dipanen hasilnya.
-        # game/husbandry.py sudah lengkap tapi tidak ada pemanggilnya sama
-        # sekali — tanpa baris ini, merawat hewan tidak berakibat apa pun.
-        try:
-            from ..husbandry import daily_tick as _ternak_tick
-            self._ternak_pagi = _ternak_tick(s)
-        except Exception as e:
-            import logging
-            logging.warning(f"[TERNAK] daily_tick gagal: {e}")
-            self._ternak_pagi = None
+        # ── husbandry.daily_tick SENGAJA TIDAK dipanggil di sini ──────────
+        #
+        # Baris pemanggilnya pernah ada, dengan alasan yang benar: "husbandry.py
+        # sudah lengkap tapi tidak ada pemanggilnya sama sekali." Yang terlewat
+        # adalah bahwa yang tersambung cuma SEPARUH sistemnya — peluruhannya,
+        # bukan perawatannya. `husbandry.feed`, `water` dan `clean` tidak punya
+        # pemanggil di seluruh game/, jadi takaran yang turun 45-55 tiap malam
+        # tidak punya apa pun yang bisa mengisinya kembali.
+        #
+        # Akibatnya terukur, bukan dikhawatirkan. `tools/verifikasi.py`
+        # menjalankan delapan ternak tanpa aksi pemain (satu-satunya permainan
+        # yang mungkin, karena aksinya tidak terjangkau):
+        #
+        #     hari 3  kenyang semua ternak menyentuh 0
+        #     hari 4  KEDELAPAN ternak sakit permanen
+        #     hari 6  hati SEMUA hewan menyentuh 0
+        #
+        # Dan `_ternak_pagi`, satu-satunya hasil berguna dari tick itu
+        # (ringkasan 'lapar/sakit/siap' untuk diberitahukan pagi hari), ditulis
+        # lalu tidak pernah dibaca siapa pun. Jadi yang mendarat di permainan
+        # cuma efek sampingnya: hewan sakit permanen dan hubungan yang hancur,
+        # tanpa satu pun pintu untuk mencegahnya.
+        #
+        # Menjalankan peluruhan tanpa perawatan LEBIH buruk daripada tidak
+        # menjalankannya. Jadi dihentikan — bukan dihapus. Modulnya utuh dan
+        # siap; yang kurang tiga sambungan di pie menu kandang
+        # (game/controllers/interaction_controller.py, tempat 'Beri Makan' dan
+        # 'Ambil Hasil' sekarang memakai jalur `economy.py`):
+        #
+        #     Beri Makan   -> husbandry.feed(s, animal_id)
+        #     Beri Minum   -> husbandry.water(s, animal_id)   (aksi baru)
+        #     Bersihkan    -> husbandry.clean(s, animal_id)   (aksi baru)
+        #     Ambil Hasil  -> husbandry.collect(s, animal_id)
+        #
+        # Begitu keempatnya tersambung, baris di bawah ini boleh hidup kembali
+        # dan `verifikasi.py` akan berhenti menandainya:
+        #
+        #     from ..husbandry import daily_tick
+        #     self._ternak_pagi = daily_tick(s)
+        #
+        # Tapi menyambungkannya berarti memilih husbandry.py sebagai sumber
+        # kebenaran ternak dan memensiunkan jalur `economy.animals` — dua sistem
+        # itu tidak sepakat soal bebek, kambing dan domba (lihat verifikasi.py).
+        # Memilih salah satu keputusan pemilik, bukan efek samping perbaikan bug.
+        self._ternak_pagi = None
         s.time_minutes   = 360.0
         s.energy         = s.max_energy
         s.hp             = s.max_hp

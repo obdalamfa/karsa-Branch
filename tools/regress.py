@@ -30,6 +30,12 @@ bukan pada kemungkinan yang dikarang:
                  membalik tanda sampai terasa benar. Diukur sekali di akhir
                  lewat tools/probe_arah.py, alat ukur yang sama dengan probe
                  manual, supaya tidak ada dua kebenaran.
+  bentuk_gua     cutaway dinding ala Sims 1 benar untuk rumah, tapi di gua
+                 dinding BUKAN pembatas ruangan — dinding ADALAH ruangannya.
+                 Aturan lama memangkas 53-72% seluruh dinding gua sekaligus,
+                 menyisakan lapangan datar bertabur tunggul. Diperiksa dua
+                 angka sekaligus: gua tetap berbentuk DAN pemain tidak
+                 tertutup batu; memperbaiki satu saja menukar cacat.
   panel_wishes   mesin Keinginan (Tahap 4) benar tapi tak terjangkau adalah
                  kegagalan yang TIDAK terlihat sebagai error — persis yang
                  terjadi pada husbandry.py. Diperiksa lewat jalur tombol
@@ -433,6 +439,24 @@ def main():
         wish_baris.append((False, f'probe keinginan gagal jalan: {e}'))
         gagal_total += 1
 
+    # ── bentuk gua vs keterlihatan pemain ──
+    # Dua angka yang harus benar BERSAMAAN: gua tetap berbentuk, dan pemain
+    # tidak tertutup batu. Memperbaiki satu saja menukar cacat dengan cacat.
+    gua_baris = []
+    try:
+        import probe_gua
+        probe_gua.uji_gua(g)
+        buruk_g = [(n, k) for n, ok, k in probe_gua.hasil if not ok]
+        n_g = len(probe_gua.hasil)
+        gua_baris.append((not buruk_g,
+                          f'{n_g - len(buruk_g)}/{n_g} pemeriksaan gua lulus'
+                          + ('; ' + '; '.join(f'{n}: {k}' for n, k in buruk_g[:2])
+                             if buruk_g else '')))
+        gagal_total += len(buruk_g)
+    except Exception as e:
+        gua_baris.append((False, f'probe gua gagal jalan: {e}'))
+        gagal_total += 1
+
     # ── laporan ──
     # Empat belas scene kosong SEKALIGUS bukan cacat scene: game ini terbukti
     # merender semuanya di `gauntlet/check.py`. Yang terjadi adalah jendelanya
@@ -442,8 +466,15 @@ def main():
     # Alat yang melaporkan 0/14 karena lingkungan lebih berbahaya daripada tidak
     # ada alat sama sekali: 0/14 palsu tidak bisa dibedakan dari kerusakan
     # sungguhan, dan itu melatih pemakainya untuk mengabaikan alarmnya.
+    # `baris` berisi tuple ENAM elemen (nama, hasil, ms, entity, buruk, jenuh);
+    # baris ini dulu membongkarnya jadi lima dan meledak dengan
+    # "too many values to unpack". Tidak pernah terlihat karena hanya dijalankan
+    # saat `gagal_total > 0` -- jadi alat ini akan CRASH persis pada saat ia
+    # paling dibutuhkan, yaitu ketika ada yang benar-benar gagal, dan menelan
+    # laporan kegagalan yang sudah susah payah dikumpulkan. Dibongkar lewat
+    # indeks supaya penambahan kolom berikutnya tidak mengulanginya.
     lingkungan = bool(baris) and gagal_total > 0 and all(
-        set(buruk) == {'frame_kosong'} for _n, _h, _ms, _e, buruk in baris)
+        set(b[4]) == {'frame_kosong'} for b in baris)
     if lingkungan:
         print()
         print('=' * 78)
@@ -476,6 +507,9 @@ def main():
     ok_wish, catatan_wish = wish_baris[0] if wish_baris else (True, '-')
     print(f'{"panel wishes":14s} {"LULUS" if ok_wish else "GAGAL":>7s} '
           f'{"":>9s} {"":>7s}  {catatan_wish[:44]}')
+    ok_gua, catatan_gua = gua_baris[0] if gua_baris else (True, '-')
+    print(f'{"bentuk gua":14s} {"LULUS" if ok_gua else "GAGAL":>7s} '
+          f'{"":>9s} {"":>7s}  {catatan_gua[:44]}')
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)
     print(f'{n_lulus}/{len(baris)} scene lulus, {gagal_total} pemeriksaan gagal, '
@@ -502,6 +536,8 @@ def main():
                 f'{"LULUS" if ok_rumput else "**GAGAL**"} — {catatan_rumput}\n')
         f.write(f'\n## Panel Keinginan\n\n'
                 f'{"LULUS" if ok_wish else "**GAGAL**"} — {catatan_wish}\n')
+        f.write(f'\n## Bentuk gua\n\n'
+                f'{"LULUS" if ok_gua else "**GAGAL**"} — {catatan_gua}\n')
         f.write('\n## Arah WASD\n\n| tombol | hasil | catatan |\n|---|---|---|\n')
         for k, ok, c in arah_baris:
             f.write(f'| {k.upper()} | {"LULUS" if ok else "**GAGAL**"} | {c} |\n')

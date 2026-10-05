@@ -1,13 +1,21 @@
 ---
 judul: Status Sekarang
 tipe: peta
-diperbarui: 2026-09-22
+diperbarui: 2026-10-05
 commit_acuan: 342facf (merge base + kerja sesi 2026-09-22)
 regresi: 14/14 lulus — lokal DAN di CI GitHub (2026-09-22)
 tags: [moc, status]
 ---
 
 # Status Sekarang
+
+> [!warning] Pembaruan 2026-10-05 (branch `integrasi/satu`, commit 17d570b)
+> Regresi **tidak lagi 14/14**: swarga gagal `cahaya_global` (sudah gagal sebelum
+> 17d570b, belum diselidiki); `hud_terbaca` gagal acak di larian penuh tapi
+> lulus per scene. Yang baru berdiri: karakter beragam suku, wajah chibi per
+> gender, topi model Blender yang pas ([[Topi diukur dari kepala sebelum diperbesar]]),
+> kotak dialog berpotret, jadwal warga lintas scene, layar Buat Karakter.
+> Belum: suasana semua scene setara farm, animasi pakai alat, pohon/gua Blender.
 
 > [!success] Regresi sudah dijalankan sungguhan
 > **14/14 scene lulus, 0 pemeriksaan gagal** — dua kali: di mesin sesi ini, dan

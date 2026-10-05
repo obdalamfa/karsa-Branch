@@ -833,6 +833,10 @@ class Game3D:
                 # Ekosistem dulu di 'l', tapi 'l' sudah ditangkap Bangun/Beli di
                 # atas sehingga cabang ini tidak pernah tercapai.
                 self.panels.open_panel('ekosistem')
+            elif key == 'f6':
+                # Papan Permintaan Warga. Dua cabang sama-sama mengklaim 'p'
+                # (Keinginan dan Papan); huruf sudah habis, F6 masih kosong.
+                self.panels.open_panel('papan')
             elif key == 'k':
                 if self.state.scene_name == 'shop':
                     self.panels.open_panel('shop')

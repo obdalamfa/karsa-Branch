@@ -461,6 +461,10 @@ class World3D:
         # Dinding dilacak terpisah supaya bisa dipotong (wall cutaway ala Sims 1):
         # (entity, tinggi_penuh, y_penuh, tx, ty)
         self._wall_ents: list   = []
+        # Hiasan yang menempel di muka dalam dinding (lis, jendela, kusen
+        # pintu), per ubin dinding: (tx, ty) -> [entity]. Ikut disembunyikan
+        # saat dindingnya dipangkas -- kalau tidak, jendela melayang di udara.
+        self._wall_decor: dict  = {}
         self._cutaway_state     = None   # cache arah kamera terakhir
         self.ground_collider = None
         # Craig-Macomber pattern: cache tinggi surface per tile (tx,ty) → float
@@ -806,6 +810,8 @@ class World3D:
             if abs(e.scale_y - want_h) > 1e-3:
                 e.scale_y = want_h
                 e.y = want_h / 2 + GROUND_H if cut else full_y
+                for d in self._wall_decor.get((rec[3], rec[4]), ()):
+                    d.enabled = not cut
 
     def _clear(self):
         for e in self._tile_ents + self._obj_ents:
@@ -832,6 +838,7 @@ class World3D:
         # daftarnya yang dikosongkan supaya tidak menunjuk entity mati.
         self._sebaran_ents.clear()
         self._wall_ents.clear()
+        self._wall_decor.clear()
         self._cutaway_state = None
         self._tile_heights.clear()
         
@@ -901,7 +908,9 @@ class World3D:
         if sc.indoor:
             from ursina import PointLight, scene
             pl = PointLight(parent=scene, position=(w * TS / 2.0, 5, h * TS / 2.0))
-            pl.color = color.rgb(255, 40, 200) # Neon magenta indoor
+            # Lampu kuning hangat ruangan berpenghuni. Dulu magenta neon --
+            # sisa eksperimen "Digital Alice" yang membuat rumah terasa klub.
+            pl.color = color.rgb(255, 214, 160)
             pl.shadows = True
             self._obj_ents.append(pl)
 
@@ -935,7 +944,12 @@ class World3D:
                            else TEX_RUMPUT)
 
         # Pick tint based on tile type so indoor rooms aren't all white
-        if tid == FL or (tid in BLOCKING and default_tex == 'floor_wood'):
+        # Di dalam ruangan SEMUA ubin berlantai kayu memakai papan catur kayu,
+        # bukan cuma FL dan ubin pemblokir: kursi (CHR) bukan keduanya, jadi
+        # dulu tiap kursi berdiri di atas petak hijau rumput.
+        if default_tex == 'floor_wood' and tid == D:
+            tint = _c(112, 84, 60)          # tanah bedeng rumah kaca
+        elif tid == FL or default_tex == 'floor_wood':
             tint = _cb_floor(tx, ty)
         elif tid == CV_F or (tid in BLOCKING and default_tex == 'cave_floor'):
             tint = _cb_cave(tx, ty)
@@ -1256,6 +1270,10 @@ class World3D:
         self._obj_ents.append(e)
 
     def _make_blocking_obj(self, tid, wx, wz):
+        if getattr(self.scene_obj, 'builder_name', '') == 'interior':
+            from .scenes.interior import TILES as _INTERIOR_TILES
+            if tid in _INTERIOR_TILES:
+                return    # rupa dari model Blender, lihat scenes/interior.py
         if tid in (TR, PALM, DT, LN, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS, H, FP, GR, TV, CHR, CAL):
             # Handled by Scene builder/props.py
             return

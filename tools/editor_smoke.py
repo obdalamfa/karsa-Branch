@@ -61,12 +61,15 @@ def main() -> int:
     cek('satu entity per ubin',
         lapis.jumlah_entity() == 28 * 20, f"dapat {lapis.jumlah_entity()}")
     cek('zona terbaca', ringkas['zona'] == 4, str(ringkas['zona']))
-    cek('portal terbaca', ringkas['portal'] == 4, str(ringkas['portal']))
+    # 5: dua ubin ambang rumah (pintunya di tengah blok 4 ubin) + rumah kaca + 2 ke desa
+    cek('portal terbaca', ringkas['portal'] == 5, str(ringkas['portal']))
     cek('sumber dari berkas data', panel.sesi.sumber == 'data',
         str(panel.sesi.sumber))
 
     from ursina_editor.karsa_tiles import palet
-    cek('palet mencakup 51 ubin', len(palet()) == 51, str(len(palet())))
+    from game.config import TILE_IDS
+    cek(f'palet mencakup {len(TILE_IDS)} ubin', len(palet()) == len(TILE_IDS),
+        str(len(palet())))
 
     # Klik pada sesuatu yang bukan ubin harus ditolak, bukan crash.
     cek('klik bukan-ubin ditolak', panel.sesi.klik(object()) is False)

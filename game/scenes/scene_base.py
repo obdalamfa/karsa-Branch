@@ -45,7 +45,7 @@ SCENE_VERSION = 1
 # Nama builder yang sah. Ditulis sebagai nama, bukan referensi fungsi, supaya
 # modul ini tidak mengimpor props/rock_sanctuary/beach di level atas -- itu
 # akan membuat siklus impor, karena ketiganya mengimpor scene_base.
-BUILDER_NAMES = ('default', 'beach', 'mountain', 'cave')
+BUILDER_NAMES = ('default', 'beach', 'mountain', 'cave', 'interior')
 
 _ID_TO_KEY = {value: name for name, value in TILE_IDS.items()}
 
@@ -129,6 +129,9 @@ def resolve_builder(name: str, scene):
     if name == 'beach':
         from .beach import beach_builder
         return beach_builder
+    if name == 'interior':
+        from .interior import build_interior
+        return lambda world: build_interior(world, scene)
     from .props import default_prop_builder
     return lambda world: default_prop_builder(world, scene)
 
@@ -546,3 +549,37 @@ def _add_indoor_atmosphere(world, scene, theme='default'):
                       (dx_t * TS, GROUND_H + 0.010, dz_t * TS),
                       (TS * 0.40, 0.015, TS * 0.35), None, color.rgb(115, 108, 95))
             world._obj_ents.append(dust)
+
+
+# ─── Ruangan dari denah ASCII ───────────────────────────────────────────────
+# Huruf denah -> nama ubin. Denah ditulis sebagai GAMBAR supaya tata letak bisa
+# dibaca dan diperiksa dengan mata: daftar koordinat (x, y, ubin) yang lama
+# menyembunyikan konter yang menutup satu baris penuh dan pintu yang
+# mendaratkan pemain di luar peta.
+DENAH = {
+    '#': 'WL', '.': 'FL', 'D': 'DR', 'B': 'BD', 'S': 'ST', 'T': 'TB',
+    'c': 'CHR', 'V': 'TV', 'K': 'BS', 'M': 'MR', 'F': 'FP', 'J': 'CL',
+    'P': 'PP', 'C': 'CH', 'N': 'CT', 'R': 'SH', 'L': 'CAL', 'd': 'D',
+    'k': 'KLK', 'w': 'WC', 'u': 'SWR',
+}
+
+
+def ruang_denah(name, display, denah, portal_exit):
+    """Ruangan dalam dari denah ASCII, dirender oleh builder 'interior'.
+
+    Satu-satunya `D` di denah adalah pintu; portal keluarnya dipasang di sana.
+    Ubin tepat di dalam pintu harus lantai kosong -- itu titik mendarat pemain
+    yang masuk, dan portal di scene luar harus menunjuk ke situ.
+    `tools/interior_check.py` membuktikan semua ini.
+    """
+    baris = denah.strip().splitlines()
+    lebar = len(baris[0])
+    assert all(len(r) == lebar for r in baris), f'{name}: denah tidak persegi'
+    tiles = [[TILE_IDS[DENAH[ch]] for ch in r] for r in baris]
+    pintu = [(x, y) for y, r in enumerate(baris) for x, ch in enumerate(r) if ch == 'D']
+    assert len(pintu) == 1, f'{name}: harus tepat satu pintu'
+    px, py = pintu[0]
+    portals = [(px, py, portal_exit[0], portal_exit[1], portal_exit[2])]
+    sc = Scene(name, display, tiles, portals, indoor=True, builder_name='interior')
+    sc.builder = resolve_builder('interior', sc)
+    return sc

@@ -105,13 +105,18 @@ _TILE_ORDER = (
     'G D P W FL WL TR H MB DR FN GT BD ST TB BS MR FP CL PP CH CT SH GR LN DT '
     'CV_W CV_F PEN STR_T DCK BOT LLY CRYS ORE_TBG ORE_BSI ORE_EMS ORE_KRS '
     'ORE_MTH STAIRS_DOWN STAIRS_UP MINED SD LGH_B LGH_F CLOUD GOLD_W PALM TV '
-    'CHR CAL'
+    'CHR CAL '
+    # Ubin yang ditambah sesudah format berkas scene lahir. Tanpa nama di sini
+    # mereka tidak bisa disimpan ke berkas scene sama sekali -- `tile_key`
+    # mengembalikan UNKNOWN_63 dan kulkas/kloset/pancuran hilang dari data.
+    'WARUNG RUMAH_PG UNION_HL SHRINE DEBRIS LAUNDRY GRAFFITI_W '
+    'SHOP_EXT CLINIC_EXT SMITH_EXT GREENHOUSE_EXT KUIL KLK WC SWR'
 ).split()
 
 TILE_IDS = {name: globals()[name] for name in _TILE_ORDER}
 
-assert len(TILE_IDS) == 51 and set(TILE_IDS.values()) == set(range(51)), (
-    'TILE_IDS tidak cocok dengan 51 ID ubin di tuple-unpack atas'
+assert len(TILE_IDS) == 66 and set(TILE_IDS.values()) == set(range(66)), (
+    'TILE_IDS tidak cocok dengan 66 ID ubin di atas'
 )
 
 WALKABLE  = [G, D, P, FL, DR, GT, CV_F, STR_T, DCK, LLY, MINED, STAIRS_DOWN, STAIRS_UP, SD, CLOUD]

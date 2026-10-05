@@ -71,6 +71,10 @@ class InteractionController:
         if tool == 'Cangkul':
             if tid in TILLABLE and s.energy >= 2:
                 soil = s.soil.setdefault(soil_key, {})
+                if soil.get('mati'):
+                    # Bongkar tanaman mati (kekeringan) agar petak bisa
+                    # ditanami ulang. Lihat crops.status_line().
+                    soil.clear()
                 soil['tilled'] = True
                 soil.setdefault('nutrients', 3)     # Sakuna: kesuburan tanah
                 soil['weeds'] = 0
@@ -126,6 +130,7 @@ class InteractionController:
                 sound_play('blocked', 0.6)
 
         elif tool == 'Panen':
+            from ..crops import is_ready, harvest
             soil = s.soil.get(soil_key)
             if soil and soil.get('crop'):
                 crop_data = CROPS.get(soil['crop'], {})

@@ -14,7 +14,7 @@ Struktur Y (vertikal):
 import math, os
 from pathlib import Path
 from PIL import Image
-from ursina import Entity, Vec3, color, destroy, Texture
+from ursina import Entity, Vec3, color, destroy, Texture, scene
 from ursina.models.procedural.cylinder import Cylinder
 
 from .config import (TILE_SIZE, GROUND_H, WALL_H, TREE_H, HOUSE_H, OBJ_H, SMALL_OBJ_H,
@@ -482,6 +482,108 @@ class World3D:
         if hasattr(self.scene_obj, 'builder') and self.scene_obj.builder:
             self.scene_obj.builder(self)
         self._build_objects()
+        self._satukan_ubin()
+        self._lepas_dari_loop_ursina()
+
+    def _satukan_ubin(self):
+        """Gabungkan ubin statis jadi satu mesh per keadaan render.
+
+        Diukur di farm: 1.008 GeomNode digambar terpisah, 673 di antaranya
+        ubin tanah yang tidak pernah berubah setelah scene dibangun, dan
+        renderFrame memakan 38 dari ~50 ms per frame -- ~19 FPS di mesin
+        pemilik. Satu draw call per ubin adalah ongkos CPU, bukan GPU, jadi
+        resolusi lebih kecil pun tidak menolong.
+
+        Salinan visualnya dikumpulkan di satu node lalu `flattenStrong()`
+        menggabungkan yang teksturnya sama. Entity aslinya TIDAK dihapus,
+        hanya disembunyikan: collider-nya tetap dipakai klik mouse, dan
+        `_clear()` tetap menghancurkannya seperti biasa. Air, rumput, dinding
+        (cutaway) dan tanah garapan ada di daftar lain, jadi tidak tersentuh.
+        """
+        lama = getattr(self, '_ubin_statis', None)
+        if lama is not None:
+            lama.removeNode()
+        self._ubin_statis = None
+        from panda3d.core import ColorScaleAttrib, TextureAttrib, RenderState
+
+        def _sidik(e):
+            # Ubin hanya boleh dilebur dengan ubin yang shader input-nya sama.
+            return tuple(sorted((k, str(v)) for k, v in
+                                (getattr(e, '_shader_inputs', {}) or {}).items()))
+
+        calon = [e for e in self._tile_ents
+                 if e.enabled and e.model is not None and not e.is_hidden()]
+        if len(calon) < 32:
+            return
+        acuan = _sidik(calon[0])
+        calon = [e for e in calon if _sidik(e) == acuan]
+        akar = scene.attachNewNode('ubin_statis')
+        bersama = None
+        for e in calon:
+            # Yang disalin GeomNode-nya saja dengan transform dunianya. Menyalin
+            # entity utuh membawa simpul perantara Ursina yang tidak mau dilebur
+            # flatten -- terukur 673 simpul masuk, 673 keluar.
+            for gnp in e.findAllMatches('**/+GeomNode'):
+                st = gnp.getNetState()
+                if bersama is None:
+                    # Shader, lampu, kabut: SATU kali di induk. Panda hanya
+                    # melebur geom yang state-nya objek yang sama, dan shader
+                    # input tiap entity Ursina adalah objek tersendiri -- 673
+                    # state "identik" yang tetap jadi 673 draw call.
+                    # Transparansi 'dual' sengaja dibuang: tanah buram, dan dual
+                    # menggambar tiap ubin dua kali plus mengurutkannya.
+                    bersama = st
+                    for jenis in ('ColorScaleAttrib', 'TextureAttrib',
+                                  'TransparencyAttrib', 'ColorAttrib'):
+                        from panda3d import core as _pc
+                        bersama = bersama.removeAttrib(getattr(_pc, jenis))
+                    akar.setState(bersama)
+                c = gnp.copyTo(akar)
+                # Per ubin cuma teksturnya. Warnanya (ColorScaleAttrib ber-flag
+                # "off" yang tidak bisa dipanggang flatten) dipindah jadi
+                # ColorScale biasa supaya flatten menulisnya ke warna vertex;
+                # smooth_shader menghitung ColorScale x warna vertex, jadi hasil
+                # di layar sama.
+                tx = st.getAttrib(TextureAttrib)
+                c.setState(RenderState.make(tx) if tx is not None
+                           else RenderState.makeEmpty())
+                cs = st.getAttrib(ColorScaleAttrib)
+                if cs is not None and cs.hasScale():
+                    c.setColorScale(cs.getScale())
+                c.setMat(gnp.getMat(scene))
+            e.hide()
+        akar.flattenStrong()
+        self._ubin_statis = akar
+
+    def _lepas_dari_loop_ursina(self):
+        """Keluarkan entity statis dari loop update per-entity Ursina.
+
+        Tiap frame Ursina memeriksa SETIAP entity di `scene.entities` --
+        enabled, ignore, has_disabled_ancestor, hasattr(update), scripts,
+        shader -- walau entity itu tidak punya apa pun untuk dijalankan.
+        Diukur di farm: 17 ms per frame di loop itu, lebih dari tiga kali
+        seluruh logika game (5 ms). Ubin, properti, pagar, dan rumah tidak
+        punya update; mereka cuma digambar.
+
+        Hanya Entity POLOS yang dikeluarkan: tanpa method update, tanpa
+        script, tanpa shader berinput kontinu. Entity tetap di scene graph
+        (tetap tampil, collider tetap kena klik), dan destroy() Ursina tetap
+        aman karena pembersihannya memakai uji keanggotaan.
+        """
+        from ursina import scene as _sc
+        kandidat = set()
+        for daftar in (self._tile_ents, self._obj_ents, self._wall_ents):
+            for e in daftar:
+                if type(e) is not Entity:
+                    continue
+                if 'update' in e.__dict__ or getattr(e, 'scripts', None):
+                    continue
+                sh = getattr(e, 'shader', None)
+                if sh is not None and getattr(sh, 'continuous_input', None):
+                    continue
+                kandidat.add(id(e))
+        if kandidat:
+            _sc.entities = [e for e in _sc.entities if id(e) not in kandidat]
 
     def _build_objects(self):
         """Render objek terpasang bebas (`Scene.objects`).
@@ -698,6 +800,9 @@ class World3D:
     def _clear(self):
         for e in self._tile_ents + self._obj_ents:
             destroy(e)
+        if getattr(self, '_ubin_statis', None) is not None:
+            self._ubin_statis.removeNode()
+            self._ubin_statis = None
         for e in self._soil_ents.values():
             destroy(e)
         # Satu petak sekarang berisi BANYAK entity (batang, daun, buah,

@@ -528,10 +528,18 @@ class Game3D:
                         self.camera_pitch += mouse.velocity[1] * 200
                 else:
                     self._right_mouse_down = False
-                    mouse.locked = False
+                    if mouse.locked:
+                        mouse.locked = False
             else:
                 self._right_mouse_down = False
-                mouse.locked = False
+                # Hanya saat berubah. Setter `mouse.locked` Ursina memanggil
+                # win.requestProperties() DAN menandai "mouse terkunci frame
+                # lalu", yang membuat mouse.update() melewati posisi kursor.
+                # Disetel tiap frame, keduanya terjadi tiap frame: jendela
+                # Windows diminta ulang propertinya 20x sedetik (renderFrame
+                # 17 -> 40 ms) dan posisi mouse tidak pernah diperbarui.
+                if mouse.locked:
+                    mouse.locked = False
 
             # Kunci sudut kemiringan (pitch) agar tidak terbalik atau menembus tanah
             self.camera_pitch = max(5.0, min(80, self.camera_pitch))

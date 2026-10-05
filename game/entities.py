@@ -48,7 +48,6 @@ def _model_instance(cached):
 # Warna sRGB dari material utama .mtl (Kd linear -> sRGB) untuk model yang
 # diekspor tanpa `usemtl`. genderuwo: GW_Fur (0.0685, 0.0577, 0.0523).
 _WARNA_TANPA_MATERIAL = {
-    'mob_genderuwo': (0.29, 0.265, 0.25),
 }
 
 
@@ -97,11 +96,16 @@ def load_model_file(name: str):
                 mp = m if isinstance(m, NodePath) else NodePath(m)
                 lo, hi = mp.getTightBounds()
                 d = hi - lo
-                if name.startswith(('npc_', 'player', 'mob_', 'naga')):
+                if name.startswith(('npc_', 'player')):
                     # Loader OBJ Panda menghasilkan Z-atas, dunia Ursina Y-atas:
                     # tanpa ini setiap karakter tergeletak rata dan tertutup tanah.
                     if d.z > max(d.x, d.y):
                         mp.setP(90)
+                elif name.startswith(('mob_', 'naga')):
+                    # Monster diekspor Y-atas (tools/blender_mob_gua.py) dan
+                    # Assimp memuatnya sudah tegak. Tebakan `d.y > d.z` di bawah
+                    # memiringkan model yang lebih lebar daripada tingginya.
+                    pass
                 elif d.y > d.z and isinstance(m, NodePath):
                     mp.setP(-90)
             except Exception:

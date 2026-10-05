@@ -176,6 +176,14 @@ def _menuju(sekarang, tujuan, k, dt):
 class Player3D(Entity):
     """Player sebagai Ursina Entity. Root di y=0, semua bagian sebagai child."""
 
+    # Tinggi sendi untuk animasi napas/jalan. Rakitan voxel menimpanya dengan
+    # proporsinya sendiri; jalur avatar Vitaboy tidak membangun tubuh voxel
+    # tapi tetap menjalankan animasi yang sama pada `self.body` kosong, jadi
+    # tanpa nilai bawaan ini tick() melempar AttributeError tiap frame.
+    _Y_BADAN  = _GH + 1.18
+    _Y_KEPALA = _GH + 1.70
+    _Y_BAHU   = _GH + 1.28
+
     def __init__(self, state, world):
         super().__init__()
         self.state = state

@@ -1191,12 +1191,12 @@ class UIManager:
             frac = max(0.0, min(1.0, (v + 100.0) / 200.0))
             fill = self._need_fill_ents[i]
             fill.scale_x = max(0.001, self._NBAR_W * frac)
-            fill.x = self._NBAR_BAR_X + fill.scale_x / 2
+            fill.x = self._NBAR_X + fill.scale_x / 2
             fill.color = self._motive_color(v)
         m = eng.mood
         frac = max(0.0, min(1.0, (m + 100.0) / 200.0))
         self._mood_fill.scale_x = max(0.001, self._NBAR_W * frac)
-        self._mood_fill.x = self._NBAR_BAR_X + self._mood_fill.scale_x / 2
+        self._mood_fill.x = self._NBAR_X + self._mood_fill.scale_x / 2
         self._mood_fill.color = self._motive_color(m)
 
     @staticmethod

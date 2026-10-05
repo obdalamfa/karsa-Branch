@@ -119,11 +119,14 @@ def celup(parts, kata_kunci, warna, nama_baru):
                     px = list(src.pixels)
                     img = src.copy()
                     img.name = nama_baru
-                    w = [lin(c) for c in warna]
+                    w = [c / 255.0 for c in warna]     # piksel sRGB: jangan dilinearkan
                     for i in range(0, len(px), 4):
+                        r, g, b = px[i], px[i + 1], px[i + 2]
+                        if r > g * 1.15 and g > b * 1.05 and r - b > 0.06:
+                            continue                      # kulit dibiarkan
                         # luma mempertahankan lipatan kain, warna menggantikan hue
-                        l = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]
-                        k = min(1.0, l * 1.6)
+                        l = 0.299 * r + 0.587 * g + 0.114 * b
+                        k = min(1.0, 0.55 + l * 0.9)
                         px[i], px[i + 1], px[i + 2] = w[0] * k, w[1] * k, w[2] * k
                     img.pixels = px
                     img.filepath_raw = os.path.join(TEX_DIR, nama_baru + '.png')
@@ -172,7 +175,18 @@ def mesh_dari(verts, faces, nama, m, tebal=0.0):
 # ─── PETAPA SRIMANA: duduk bersila di atas teratai ──────────────────────────
 def petapa():
     rig, parts = gandakan('npc_pak_guru', 'npc_petapa_srimana')
-    celup(parts, '_body', (214, 150, 52), 'petapa_jubah')
+    # kepala TSO pak_guru membawa kacamata sebagai mesh kedua; pertapa tidak
+    # Kacamata pak_guru adalah mesh '_head' yang PENDEK (5,7 cm, 520 verteks);
+    # kepalanya justru '_head.001'. Dipilih dari tinggi, bukan dari nama.
+    def _tinggi(o):
+        zs = [v.co.z for v in o.data.vertices]
+        return max(zs) - min(zs)
+    kepala_kepala = [o for o in parts if '_head' in o.name]
+    kacamata = [min(kepala_kepala, key=_tinggi)] if len(kepala_kepala) > 1 else []
+    parts = [o for o in parts if o not in kacamata]
+    for o in kacamata:
+        bpy.data.objects.remove(o, do_unlink=True)
+    celup(parts, '_body', (232, 168, 60), 'petapa_jubah')
     # teratai: kelopak dua lapis + alas
     kelopak = mat_polos('teratai_kelopak', (232, 168, 186))
     kelopak2 = mat_polos('teratai_dalam', (246, 214, 222))
@@ -271,17 +285,24 @@ def dewa_angin():
         c = bpy.context.active_object
         c.data.materials.append(emas)
         tempel_tulang(c, rig, 'HEAD')
-    # selendang melengkung dari bahu ke belakang (angin)
-    titik = [(-0.22, 0.05, 1.42), (-0.32, 0.25, 1.30), (-0.30, 0.45, 1.10),
-             (0.0, 0.55, 1.0), (0.30, 0.45, 1.10), (0.32, 0.25, 1.30), (0.22, 0.05, 1.42)]
-    verts, faces = [], []
-    for i, (x, y, z) in enumerate(titik):
-        verts += [(x, y, z + 0.06), (x, y, z - 0.06)]
-        if i:
-            a = 2 * (i - 1)
-            faces.append((a, a + 1, a + 3, a + 2))
-    s = mesh_dari(verts, faces, 'selendang', selendang, tebal=0.01)
-    tempel_tulang(s, rig, 'SPINE2')
+    # selendang melingkar di bahu, dua ujungnya terjuntai di punggung dan
+    # tertiup ke samping -- penanda "angin" tanpa satu pun efek partikel
+    bpy.ops.mesh.primitive_torus_add(major_radius=0.2, minor_radius=0.035, location=(0, 0.02, 1.42),
+                                     major_segments=24, minor_segments=8)
+    t = bpy.context.view_layer.objects.active
+    t.scale = (1.0, 0.8, 0.55)
+    t.data.materials.append(selendang)
+    tempel_tulang(t, rig, 'SPINE2')
+    for sx in (-1, 1):
+        verts, faces = [], []
+        titik = [(sx * 0.12, 0.14, 1.38), (sx * 0.2, 0.22, 1.18), (sx * 0.34, 0.3, 0.98), (sx * 0.5, 0.36, 0.84)]
+        for i, (x, y, z) in enumerate(titik):
+            verts += [(x - 0.05, y, z), (x + 0.05, y, z)]
+            if i:
+                a = 2 * (i - 1)
+                faces.append((a, a + 1, a + 3, a + 2))
+        e = mesh_dari(verts, faces, 'selendang_juntai', selendang, tebal=0.01)
+        tempel_tulang(e, rig, 'SPINE2')
     return rig
 
 

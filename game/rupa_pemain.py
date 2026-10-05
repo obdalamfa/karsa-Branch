@@ -228,6 +228,7 @@ def terapkan(char_actor, state):
             img = _warnai(src.copy(), char_actor._topeng, {'kulit': kulit, 1: baju, 2: celana})
         elif 'head' in nama:
             img = _warnai(src.copy(), None, {'kulit': kulit, 'rambut': rambut})
+            img = wajah_chibi(img, 'pemain', rambut, kulit=kulit)
         else:
             continue
         # TextureStage ASLI: stage bawaan membaca kolom 'texcoord', padahal UV
@@ -244,6 +245,7 @@ def terapkan(char_actor, state):
         if gnp.getName() == 'Mesh' and not gnp.findAllTextures():
             # prioritas 1: warna material tangan dipanggang di level geom
             gnp.setColor(kulit[0] / 255.0, kulit[1] / 255.0, kulit[2] / 255.0, 1, 1)
+    besarkan_kepala(char_actor)
     pasang_aksesori(char_actor, AKSESORI[getattr(state, 'char_hat', 0) % len(AKSESORI)][1])
 
 
@@ -306,7 +308,9 @@ def pasang_aksesori(char_actor, jenis, warna=None, skala=1.0):
     # Ruang aktor: Y atas. Dasar topi duduk di bawah puncak kepala supaya
     # mahkotanya MENUTUP ubun-ubun, bukan bertengger di atasnya.
     r = lebar * 0.5 * skala
-    dasar = top - tinggi * 0.22
+    # 0,3: rambut TSO yang jabrik/bersanggul menonjol di atas mesh kepala;
+    # topi harus sedikit menekannya, bukan bertengger di ujungnya.
+    dasar = top - tinggi * 0.3
 
     def bagian(model, pos, sk, rgb, rot=(0, 0, 0)):
         e = Entity(model=model, color=color.rgb(*rgb))
@@ -320,24 +324,43 @@ def pasang_aksesori(char_actor, jenis, warna=None, skala=1.0):
         return warna or bawaan
 
     if jenis == 'caping':
-        bagian(Cone(16, height=1, radius=1), (cx, dasar, cz), (r * 2.7, tinggi * 0.55 * skala, r * 2.7), W((200, 172, 110)))
+        # kerucut anyaman + pita tepi tipis
+        bagian(Cone(20, height=1, radius=1), (cx, top - tinggi * 0.2, cz), (r * 2.7, tinggi * 0.55 * skala, r * 2.7), W((200, 172, 110)))
+        bagian(Cylinder(20, start=0, height=1, radius=1), (cx, top - tinggi * 0.21, cz), (r * 2.72, tinggi * 0.02, r * 2.72), (150, 120, 70))
     elif jenis == 'bucket':
         bagian(Cylinder(16, start=0, height=1, radius=1), (cx, dasar, cz), (r * 1.12, tinggi * 0.3, r * 1.12), W((98, 104, 70)))
         bagian(Cone(16, height=1, radius=1), (cx, dasar - tinggi * 0.04, cz), (r * 1.9, tinggi * 0.18, r * 1.9), W((98, 104, 70)))
     elif jenis == 'peci':
-        bagian(Cylinder(16, start=0, height=1, radius=1), (cx, dasar + tinggi * 0.02, cz), (r * 1.06, tinggi * 0.36, r * 0.92), W((30, 30, 34)))
+        bagian(Cylinder(18, start=0, height=1, radius=1), (cx, dasar + tinggi * 0.02, cz), (r * 1.06, tinggi * 0.28, r * 0.92), W((30, 30, 34)))
+        bagian(Cylinder(18, start=0, height=1, radius=1), (cx, dasar + tinggi * 0.02, cz), (r * 1.075, tinggi * 0.025, r * 0.935), (64, 56, 46))
     elif jenis == 'ikat':
         bagian(Cylinder(16, start=0, height=1, radius=1), (cx, top - tinggi * 0.38, cz), (r * 1.08, tinggi * 0.12, r * 1.08), W((150, 70, 52)))
     elif jenis == 'koboi':
-        bagian(Cylinder(18, start=0, height=1, radius=1), (cx, dasar, cz), (r * 2.1, tinggi * 0.05, r * 1.8), W((110, 76, 50)))
-        bagian(Cylinder(16, start=0, height=1, radius=1), (cx, dasar, cz), (r * 1.0, tinggi * 0.5, r * 0.85), W((110, 76, 50)))
+        # tepi lebar, mahkota rendah berlekuk, pita kulit gelap
+        bagian(Cylinder(20, start=0, height=1, radius=1), (cx, dasar, cz), (r * 2.05, tinggi * 0.035, r * 1.7), W((110, 76, 50)))
+        bagian(Cylinder(16, start=0, height=1, radius=1), (cx, dasar, cz), (r * 0.98, tinggi * 0.34, r * 0.84), W((110, 76, 50)))
+        bagian('sphere', (cx, dasar + tinggi * 0.34, cz), (r * 1.9, tinggi * 0.14, r * 1.6), W((110, 76, 50)))
+        bagian(Cylinder(16, start=0, height=1, radius=1), (cx, dasar + tinggi * 0.03, cz), (r * 1.0, tinggi * 0.07, r * 0.86), (46, 32, 24))
     elif jenis == 'baret':
         bagian('sphere', (cx + r * 0.15, top - tinggi * 0.06, cz), (r * 2.3, tinggi * 0.3, r * 2.2), W((150, 52, 60)))
     elif jenis == 'bandana':
         bagian('sphere', (cx, top - tinggi * 0.2, cz), (r * 2.12, tinggi * 0.62, r * 2.15), W((170, 44, 40)))
     elif jenis == 'tricorn':
-        bagian(Cone(3, height=1, radius=1), (cx, dasar, cz), (r * 2.1, tinggi * 0.32, r * 2.1), W((28, 26, 30)))
-        bagian(Cylinder(16, start=0, height=1, radius=1), (cx, dasar + tinggi * 0.02, cz), (r * 1.05, tinggi * 0.05, r * 1.05), (196, 160, 70))
+        # Topi bajak laut: mahkota hitam yang MENUTUP seluruh ubun-ubun (tricorn
+        # pipih lama membiarkan kubah kepala putih menyembul, kepala dan topi
+        # terbaca terpisah), tepi lebar dilipat naik, pita emas, tengkorak.
+        hitam = W((26, 24, 28))
+        bagian(Cylinder(18, start=0, height=1, radius=1), (cx, dasar - tinggi * 0.04, cz), (r * 1.14, tinggi * 0.5, r * 1.1), hitam)
+        bagian('sphere', (cx, dasar + tinggi * 0.44, cz), (r * 2.25, tinggi * 0.3, r * 2.15), hitam)
+        bagian(Cylinder(24, start=0, height=1, radius=1), (cx, dasar - tinggi * 0.04, cz), (r * 2.0, tinggi * 0.035, r * 1.85), hitam)
+        for sx in (-1, 1):
+            bagian(Cylinder(12, start=0, height=1, radius=1), (cx + sx * r * 1.45, dasar + tinggi * 0.1, cz),
+                   (r * 0.62, tinggi * 0.035, r * 1.55), hitam, rot=(0, 0, sx * -55))
+        bagian(Cylinder(18, start=0, height=1, radius=1), (cx, dasar + tinggi * 0.02, cz), (r * 1.16, tinggi * 0.06, r * 1.12), (196, 160, 70))
+        # tengkorak di depan (glTF menghadap -Z ruang aktor)
+        bagian('sphere', (cx, dasar + tinggi * 0.28, cz - r * 1.12), (r * 0.36, r * 0.32, r * 0.08), (236, 232, 220))
+        for sx in (-1, 1):
+            bagian('sphere', (cx + sx * r * 0.11, dasar + tinggi * 0.29, cz - r * 1.18), (r * 0.08, r * 0.08, r * 0.04), (26, 24, 28))
     elif jenis == 'pita':
         for sx in (-1, 1):
             bagian('sphere', (cx + sx * r * 0.45, top - tinggi * 0.02, cz + r * 0.5), (r * 0.55, tinggi * 0.18, r * 0.25), W((222, 92, 120)))
@@ -358,7 +381,7 @@ def pasang_aksesori(char_actor, jenis, warna=None, skala=1.0):
 # terbaca satu suku. Warna kulit tiap warga mengikuti keragaman Nusantara.
 KULIT_NPC = {
     'raka': (226, 188, 156),        # Tionghoa-Indonesia
-    'kapten_kuro': (234, 204, 178), # Jepang
+    'kapten_kuro': (220, 184, 150), # Jepang
     'sari': (214, 170, 130),        # Sunda
     'cici': (220, 176, 138),        # Sunda
     'maya': (196, 142, 102),        # Bali
@@ -386,6 +409,47 @@ TOPI_NPC = {
 }
 
 _CACHE_TEKSTUR = {}
+
+# Kepala sedikit diperbesar lewat sendi HEAD. Versi chibi lama memakai 2,90x
+# dan terbaca kebesaran; ini cukup untuk proporsi ramah tanpa jadi boneka.
+SKALA_KEPALA = 1.16
+
+
+# Iris cokelat tua yang wajar untuk warga Nusantara; satu dua yang lebih terang.
+_IRIS_NUSANTARA = ((58, 38, 28), (72, 46, 30), (46, 32, 26), (88, 60, 38), (40, 30, 30))
+
+
+def wajah_chibi(src, kunci, rambut=None, kulit=None):
+    """Lukis wajah chibi (game/wajah.py) ke tekstur kepala TSO.
+
+    Struktur muka dari versi kepala chibi -- mata besar berkilau, hidung
+    titik, mulut kecil, alis berkarakter, variasi per orang -- tapi mata
+    diperkecil dan dipipihkan sedikit supaya tidak melotot pada kepala yang
+    tidak lagi 2,9x.
+    """
+    from .wajah import lukis_wajah_chibi, varian_wajah
+    v = dict(varian_wajah(kunci))
+    v['mata_global'] = 0.68
+    v['mata_pipih'] = 0.84
+    v['iris'] = _IRIS_NUSANTARA[sum(map(ord, kunci)) % len(_IRIS_NUSANTARA)]
+    if kulit is not None:
+        v['kulit_tetap'] = kulit
+    v['lewati_rambut'] = True
+    if rambut is not None:
+        v['rambut'] = rambut
+    return lukis_wajah_chibi(src.convert('RGB'), v).convert('RGBA')
+
+
+def besarkan_kepala(char_actor, skala=SKALA_KEPALA):
+    a = char_actor.actor
+    if getattr(char_actor, '_kepala_dikendali', None) is not None:
+        return
+    try:
+        j = a.controlJoint(None, 'modelRoot', 'HEAD')
+        j.setScale(skala)
+        char_actor._kepala_dikendali = j
+    except Exception:
+        char_actor._kepala_dikendali = None
 # Warga yang pakaiannya SEWARNA kulit aslinya (mantel cokelat Kapten): tekstur
 # badannya tidak dicelup, cukup wajah dan tangan -- lengannya tertutup kain.
 _KULIT_WAJAH_SAJA = {'kapten_kuro'}
@@ -444,11 +508,19 @@ def terapkan_npc(char_actor, npc_id):
                 src = _ke_pil(texs[0])
                 if src is None:
                     continue
-                tex = _dari_pil(_warnai(src, None, {'kulit': kulit, '_acuan': acuan}), f'{npc_id}_{nama}_kulit')
+                # Kulit dicelup DULU, wajah chibi dilukis di atasnya: urutan
+                # sebaliknya membuat celup (berbobot kabur) melunturkan mata.
+                img = _warnai(src, None, {'kulit': kulit, '_acuan': acuan})
+                # Mesh '_hair' TSO adalah cangkang kepala utuh yang teksturnya ikut
+                # memuat lukisan wajah lama -- tanpa ini Maya dkk. tetap berwajah TSO.
+                if ('head' in nama or 'hair' in nama) and not gnp.isHidden():
+                    img = wajah_chibi(img, npc_id, kulit=kulit)
+                tex = _dari_pil(img, f'{npc_id}_{nama}_kulit')
                 _CACHE_TEKSTUR[kunci] = tex
             stages = gnp.findAllTextureStages()
             if stages:
                 gnp.setTexture(stages[0], tex, 1)
+    besarkan_kepala(char_actor)
     topi = TOPI_NPC.get(npc_id)
     if topi is not None:
         pasang_aksesori(char_actor, topi[0], topi[1], topi[2])

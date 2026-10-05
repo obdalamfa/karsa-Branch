@@ -443,10 +443,13 @@ def lukis_wajah_chibi(img, varian=None):
     # ditambahkan SESUDAH, jadi jarak antar warga tidak ikut termampatkan.
     kulit_asli = _cuplik_kulit(src, W, H)
     kulit = _geser_rgb(_campur(kulit_asli, (255, 219, 178), 0.38), v['kulit_geser'])
+    if v.get('kulit_tetap'):            # jalur rig GLB: warna suku apa adanya
+        kulit = tuple(v['kulit_tetap'])
 
     # ── 0. Rambut: warna per-orang, bayangan aslinya dijaga ──────────────────
     lum_kulit = kulit_asli[0] * 0.299 + kulit_asli[1] * 0.587 + kulit_asli[2] * 0.114
-    src = _warnai_rambut(src, v['rambut'], ambang_kulit=lum_kulit, batas_y=0.80)
+    if not v.get('lewati_rambut'):      # jalur rig GLB mewarnai rambut sendiri
+        src = _warnai_rambut(src, v['rambut'], ambang_kulit=lum_kulit, batas_y=0.80)
 
     hasil = src.copy()
 
@@ -519,8 +522,11 @@ def lukis_wajah_chibi(img, varian=None):
     # jarak percakapan adalah kontras gelap-terang di dalam bola matanya,
     # bukan gradasi halus di dalam satu rona.
     pupil = _campur(iris, (16, 12, 20), 0.78)
-    ms = v['mata_skala']
-    rx, ry = MATA_RX * ms, MATA_RY * ms
+    # `mata_global` / `mata_pipih`: penyesuaian jalur rig GLB (rupa_pemain).
+    # Pada kepala berskala wajar mata bawaan terbaca melotot -- diperkecil dan
+    # sedikit dipipihkan, variasi per orang tetap dari `mata_skala`.
+    ms = v['mata_skala'] * v.get('mata_global', 1.0)
+    rx, ry = MATA_RX * ms, MATA_RY * ms * v.get('mata_pipih', 1.0)
     for fx in (MATA_X_KIRI, MATA_X_KANAN):
         x0, y0 = (fx - rx) * W, (MATA_Y - ry) * H
         x1, y1 = (fx + rx) * W, (MATA_Y + ry) * H

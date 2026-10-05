@@ -79,6 +79,9 @@ def _tube(points, radii, sides=9, flatten=1.0):
     return Mesh(vertices=vertices,triangles=triangles,normals=normals,mode='triangle')
 
 
+SKALA_NAGA = 1.5
+
+
 def build_guardian(actor, kind):
     root=Entity(parent=actor,y=GROUND_H)
     actor._guardian_motion = root
@@ -90,7 +93,7 @@ def build_guardian(actor, kind):
     # diambil dari `hasattr(actor, '_guardian_visual')`, yang hanya benar secara
     # kebetulan karena cabang naga_bijak `return` lebih awal.
     actor._guardian_floats = (kind != 'naga_bijak')
-    _contact_shadow(actor, 1.15 if kind == 'naga_bijak' else .60)
+    _contact_shadow(actor, 1.15 * SKALA_NAGA if kind == 'naga_bijak' else .60)
 
     def tube(points,radii,tint,sides=9,flatten=1.,glowing=False):
         entity=Entity(parent=root,model=_tube(points,radii,sides,flatten),color=color.rgb(*tint))
@@ -103,6 +106,9 @@ def build_guardian(actor, kind):
     jade,light_jade=(72,166,139),(108,195,157)
     gold,ivory=(208,160,68),(243,221,161)
     if kind=='naga_bijak':
+        # Diperbesar atas permintaan pemilik: pada 1x ia setinggi pemain
+        # dan tidak terbaca sebagai dewa penjaga gua.
+        root.scale = SKALA_NAGA
         # Thin tail flows into a complete coil, then a poised S-shaped neck.
         path,widths=[],[]
         for i in range(39):
@@ -131,7 +137,7 @@ def build_guardian(actor, kind):
             tube([(x,y+widths[i]*.85,z),(x*.96,y+widths[i]+.19,z*.96)],[.11,.001],gold,4,.45)
         for y,z in ((1.03,.25),(1.32,.13),(1.58,.08)):
             tube([(-.13,y,z),(-.13,y+.12,z-.22)],[.11,.001],gold,4,.5)
-        return 2.8
+        return 2.8 * SKALA_NAGA
 
     # Curled flame tongues and an incandescent core, rather than stacked balls.
     tube([(0,.48,0),(0,.84,0),(.02,1.20,0),(-.10,1.54,0),(.08,1.94,0),(.03,2.40,0)],

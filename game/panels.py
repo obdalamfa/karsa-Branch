@@ -1081,6 +1081,31 @@ class UIManager:
                 bawah = min(bawah, e.y - (e.height * e.scale_y) / 2)
         self._pas_scrim(self._scrim_kiri, X_L, kanan, Y_T, bawah, pad=0.008)
 
+        # Pelacak tutorial/quest: di BAWAH blok kiri-atas, bukan di koordinat
+        # mati. Ia dulu dipatok ke (-0.868, 0.434) dari tata letak HUD lama,
+        # dan HUD baru menaruh roda alat persis di sana -- judul tutorial
+        # menindih ikon alat dan nama "Hadiah".
+        if getattr(self, '_obj_bg', None) is not None:
+            atas = bawah - 0.008 - 0.012
+            ada_hint = bool(str(self._obj_hint.text).strip())
+            h = 0.092 if ada_hint else 0.066
+            # Lebar mengikuti baris terpanjang: petunjuk tutorial sering lebih
+            # panjang dari kotak 0,385 dan menjulur keluar alasnya.
+            w = max(0.385, 0.019 + max(
+                self._lebar(t) for t in (self._obj_title, self._obj_step,
+                                         self._obj_hint)
+                if str(t.text).strip()) if any(
+                str(t.text).strip() for t in (self._obj_title, self._obj_step,
+                                              self._obj_hint)) else 0.385)
+            self._obj_bg.scale_x = self._obj_rust.scale_x = w
+            self._obj_rust.position = (X_L + w / 2, atas - 0.003)
+            self._obj_bg.position = (X_L + w / 2, atas - h / 2)
+            self._obj_bg.scale_y = h
+            tx = X_L + 0.0095
+            self._obj_title.position = (tx, atas - 0.010)
+            self._obj_step.position = (tx, atas - 0.036)
+            self._obj_hint.position = (tx, atas - 0.064)
+
         # Kanan bawah: alas dipas ke petunjuk tombol, bukan selebar layar.
         ch = self._control_hint
         if str(ch.text).strip():
@@ -1252,11 +1277,12 @@ class UIManager:
         if getattr(self, '_obj_title', None):
             from .tutorial import tracker_lines
             title, step, hint = tracker_lines(s)
-            self._obj_title.text = title
-            self._obj_step.text = step
-            self._obj_hint.text = hint
-            self._obj_hint.enabled = bool(hint)
-            self._obj_bg.scale_y = 0.092 if hint else 0.066
+            self._teks(self._obj_title, title)
+            self._teks(self._obj_step, step)
+            self._teks(self._obj_hint, hint)
+            if self._obj_hint.enabled != bool(hint) or step != self._obj_last:
+                self._obj_hint.enabled = bool(hint)
+                self._tata_ulang_hud()      # ukuran kotaknya ikut teks
             if self._obj_last is not None and self._obj_last != step:
                 self.emote('v Selesai!', color.rgb(140, 220, 140), 1.4)
                 sound_play('menu_select', 0.7)
@@ -1786,11 +1812,20 @@ class UIManager:
     # ─── PUBLIC: PANEL ───────────────────────────────────
     def _build_panel_bg(self):
         # Lapisan peredup layar penuh (paling belakang)
-        self._panel_bg = _ui(scale=(1.5, 1.2), position=(0, 0),
-                              color=color.rgb(10, 5, 20, 210), z=0.2)
-        # Bingkai chrome TSO di depan peredup, di belakang konten/teks (M3-A)
-        self._panel_frame = _skin_chrome(_ui(scale=(1.18, 1.02), position=(0, 0),
-                                             color=color.rgb(20, 16, 14, 240), z=0.1))
+        # Selebar LAYAR, bukan 1,5: camera.ui membentang -aspect/2..+aspect/2,
+        # dan pada 16:9 itu 1,78 -- peredup 1,5 menyisakan pita terang di
+        # kiri dan kanan.
+        from ursina import window as _win
+        self._panel_bg = _ui(scale=(_win.aspect_ratio + 0.2, 1.2), position=(0, 0),
+                              color=color.rgb(10, 9, 12, 200), z=0.2)
+        # Alas panel polos dengan garis karat di atas -- bahasa yang sama
+        # dengan pelacak tutorial dan alas HUD. Tekstur chrome TSO yang lama
+        # punya margin transparan lebar, jadi yang tampil cuma kotak krem
+        # kecil di tengah, dan bagian dalamnya yang gelap menindih teks.
+        self._panel_frame = _ui(scale=(1.18, 1.02), position=(0, 0),
+                                color=color.rgb(20, 19, 18, 235), z=0.1)
+        self._panel_garis = _ui(scale=(1.18, 0.008), position=(0, 0.506),
+                                color=color.rgb(150, 96, 60), z=0.09)
         self._panel_title = _txt('', pos=(-0.45, 0.44), scale=1.2,
                                   col=color.rgb(220, 190, 255))
         self._panel_body  = _txt('', pos=(-0.45, 0.36), scale=0.80,
@@ -1865,8 +1900,20 @@ class UIManager:
 
     def _set_panel_visible(self, v: bool):
         for e in (self._panel_bg, self._panel_frame, self._panel_title,
-                  self._panel_body, self._panel_hint):
-            e.enabled = v
+                  self._panel_body, self._panel_hint,
+                  getattr(self, '_panel_garis', None)):
+            if e is not None:
+                e.enabled = v
+        # HUD dan pelacak tutorial minggir selama panel terbuka: keduanya
+        # duduk di kiri-atas, tempat judul dan isi panel juga mulai, dan
+        # tulisannya saling tindih.
+        if hasattr(self, '_time_txt'):
+            self.set_hud_visible(not v)
+        for nama in ('_obj_bg', '_obj_rust', '_obj_title', '_obj_step', '_obj_hint'):
+            e = getattr(self, nama, None)
+            if e is not None:
+                e.enabled = (not v) and (nama != '_obj_hint'
+                                         or bool(str(e.text).strip()))
         if not v:
             self._hide_inventory_grid()
 
@@ -2032,7 +2079,21 @@ class UIManager:
         self._set_panel_visible(True)
         self.mode = 'panel'
 
+    # Font HUD tidak punya karakter garis-kotak (U+2500..U+257F); tiap "─"
+    # sampai ke layar sebagai kotak kosong, jadi "── TUGAS UTAMA ──" terbaca
+    # "□□ TUGAS UTAMA □□". Diterjemahkan di satu tempat untuk semua panel.
+    _GARIS = {c: ('|' if c in '│┃║' else '-') for c in map(chr, range(0x2500, 0x2580))}
+    _GARIS = str.maketrans(_GARIS)
+
     def _render_panel(self, name: str):
+        self._render_panel_isi(name)
+        for e in (self._panel_title, self._panel_body, self._panel_hint):
+            t = str(e.text)
+            t2 = t.translate(self._GARIS)
+            if t2 != t:
+                e.text = t2
+
+    def _render_panel_isi(self, name: str):
         s = self.state
         titles = {
             'inventory': 'Inventori',

@@ -106,3 +106,12 @@ lembah_karsa_3d_save.json.tmp
 # sesi menyunting, bukan bagian dari game.
 ursina_editor/scene.json
 ursina_editor/exported_scene.py
+
+# ── Sampah sesi ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.log
+
+# ── Lingkungan virtual ──────────────────────────────────────────────────────
+.venv/
+venv/

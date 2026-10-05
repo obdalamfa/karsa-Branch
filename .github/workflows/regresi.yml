@@ -1,0 +1,54 @@
+# Jaring pengaman proyek, dijalankan otomatis.
+#
+# Sebelum workflow ini, tools/regress.py hanya bekerja kalau ada orang yang
+# ingat mengetiknya. Itu jaring yang digantung tapi tidak pernah dipasang:
+# dua kali verifikasi manual di proyek ini sudah gagal justru karena "sudah
+# diperiksa" ternyata berarti "diperiksa dengan mata".
+#
+# Regresi butuh konteks OpenGL sungguhan, jadi runner diberi display maya
+# (Xvfb) dan driver Mesa software. Angka ms/frame dari sini dirender lewat
+# CPU, jadi ia TIDAK sebanding dengan FPS di mesin ber-GPU — pakai hanya
+# untuk melihat tren naik/turun antar-commit, bukan sebagai FPS sebenarnya.
+name: Regresi
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  regresi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Pasang OpenGL software + display maya
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xvfb libgl1 libglu1-mesa libgl1-mesa-dri
+
+      - name: Pasang dependensi Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Jalankan regresi semua scene
+        run: xvfb-run -a -s "-screen 0 1024x768x24" python tools/regress.py
+
+      - name: Simpan bukti (tangkapan layar + laporan)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bukti-regresi
+          path: _bench/regress/
+          if-no-files-found: warn
+          retention-days: 14

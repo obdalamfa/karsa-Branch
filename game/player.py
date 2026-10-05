@@ -802,7 +802,10 @@ class Player3D(Entity):
                 fwd_x, fwd_z = _wt.x - _w0.x, _wt.z - _w0.z
                 right_x, right_z = _wr.x - _wt.x, _wr.z - _wt.z
             except Exception:
-                # Cadangan kalau base belum ada (mis. di unit test murni)
+                # Cadangan kalau base belum ada (mis. di unit test murni).
+                # BELUM TERVERIFIKASI: probe arah menempuh jalur Panda3D di
+                # atas, jadi rumus cadangan ini tidak pernah ikut terukur.
+                # Jangan anggap ia benar sampai ada probe yang memaksanya.
                 cy = math.radians(camera.world_rotation_y)
                 fwd_x, fwd_z = math.sin(cy), math.cos(cy)
                 right_x, right_z = math.cos(cy), -math.sin(cy)

@@ -102,6 +102,11 @@ bukan pada kemungkinan yang dikarang:
                  menindihnya. Kalau ada, rumputnya membeku TANPA error — jadi
                  diukur, lewat tools/probe_rumput.py, dengan menghitung piksel
                  yang bergerak.
+  arah_maju      basis arah gerak membaca komponen sumbu yang salah, jadi WASD
+                 menyimpang 91-180 derajat di yaw selain 0. Selamat dari DUA
+                 kali perbaikan tanda karena yang diuji selalu yaw awal.
+                 LAPOR SAJA untuk sekarang: instrumennya masih terkontaminasi
+                 antar-scene di larian panjang (lihat catatannya di fungsi).
 
 Pemakaian:
     python tools/regress.py                 semua scene
@@ -256,6 +261,134 @@ def cek_pemain_valid(g):
         if not (0 <= tx < cols and 0 <= ty < rows):
             return _fail(f'pemain di luar peta ({tx},{ty}) peta {cols}x{rows}')
     return _ok(f'({tx},{ty})')
+
+
+def cek_arah_maju(g):
+    """W harus menggerakkan pemain ke ATAS LAYAR, bukan ke arah lain.
+
+    Menguji PERILAKU, bukan rumus: tombol ditahan lewat `held_keys` dan
+    frame dijalankan lewat jalur asli, lalu perpindahan dunia dibandingkan
+    dengan arah kamera->fokus di bidang tanah. Rumus basisnya TIDAK disalin ke
+    sini -- salinan yang ikut salah tidak menjaga apa pun.
+
+    Kegagalan nyata yang melatarinya: basis arah gerak membaca komponen (.x,.y)
+    padahal bidang mendatar Ursina adalah (x,z), jadi di yaw selain 0 arah WASD
+    menyimpang 91-180 derajat dan di yaw 90/270 vektor "kanan" runtuh jadi nol.
+    Bug itu selamat dari DUA kali perbaikan tanda karena yang diuji selalu yaw
+    awal, satu-satunya sudut di mana rumus lama kebetulan benar. Diukur di
+    _bench/probes/probe_basis_kamera.py dan _bench/probes/probe_arah_wasd.py.
+    """
+    import math as _m
+    from ursina import held_keys, camera
+    from direct.showbase.ShowBaseGlobal import base as _b
+
+    if getattr(g.panels, 'mode', 'hud') != 'hud':
+        return _ok('dilewati: panel terbuka')
+
+    # DIUJI DI BEBERAPA YAW, dan itu bukan kelebihan -- itu syarat.
+    # Versi pertama pemeriksaan ini hanya memakai yaw yang sedang aktif, dan
+    # TERBUKTI TIDAK MENANGKAP bug yang melahirkannya: dengan rumus lama
+    # dipasang kembali, farm dan town tetap LULUS. Sebabnya persis jebakan yang
+    # menyelamatkan bug itu dua kali -- di yaw awal kedua rumus memberi angka
+    # yang sama. Penjaga yang hanya menguji yaw awal menjaga apa pun kecuali
+    # bug ini.
+    # KEADAAN DISALIN DAN DIPULIHKAN. Versi kedua pemeriksaan ini tidak
+    # melakukannya, dan akibatnya terukur: `beach` LULUS kalau dijalankan
+    # pertama, GAGAL kalau dijalankan keenam -- pemain sudah tergeser dan
+    # kamera masih dalam perjalanan dari pemeriksaan scene SEBELUMNYA. Itu
+    # cacat yang sama persis dengan `motif_waras` dulu: pemeriksaan yang
+    # meninggalkan bekas pada apa yang diperiksanya.
+    yaw_asli = getattr(g, 'camera_yaw', None)
+    pos_asli = tuple(g.player.position)
+    vel_asli = (g.player.velocity_x, g.player.velocity_z)
+    buruk = []
+    diuji = []
+    try:
+        for yaw in (yaw_asli if yaw_asli is not None else 0.0, 135.0, 270.0):
+            if yaw_asli is not None:
+                g.camera_yaw = yaw
+                for _ in range(30):
+                    _b.taskMgr.step()
+
+            for k in ('w', 'a', 's', 'd', 'shift'):
+                held_keys[k] = 0
+            # Tiap yaw diukur dari TITIK YANG SAMA, bukan dari tempat yaw
+            # sebelumnya berhenti.
+            g.player.position = pos_asli
+            g.player.velocity_x = g.player.velocity_z = 0.0
+            if hasattr(g, '_snap_camera_to_player'):
+                g._snap_camera_to_player()
+            for _ in range(5):
+                _b.taskMgr.step()
+
+            x0, _, z0 = g.player.world_position
+            held_keys['w'] = 1
+            for _ in range(40):
+                _b.taskMgr.step()
+            held_keys['w'] = 0
+            x1, _, z1 = g.player.world_position
+            g.player.velocity_x = g.player.velocity_z = 0.0
+
+            dx, dz = x1 - x0, z1 - z0
+            jarak = _m.hypot(dx, dz)
+            # Jalan bebas 40 frame memberi 3-4 satuan. Jarak jauh di bawah itu
+            # berarti pemain TERHALANG, dan arah sisa geraknya adalah hasil
+            # menggeser dinding -- bukan jawaban soal basis arah. `house` ruang
+            # kecil: terukur 102 derajat menyimpang hanya karena pemainnya
+            # menabrak. Pemeriksaan yang menghukum itu melaporkan bug yang
+            # tidak ada.
+            if jarak < 1.5:
+                diuji.append(f'{yaw:.0f}:terhalang({jarak:.1f}u)')
+                continue
+
+            cx, _, cz = camera.world_position
+            ux, uz = g.camera_focus[0] - cx, g.camera_focus[2] - cz
+            nu = _m.hypot(ux, uz)
+            if nu < 1e-4:
+                continue                      # kamera tegak lurus: tak terukur
+            cos = max(-1.0, min(1.0, (dx * ux + dz * uz) / (jarak * nu)))
+            beda = _m.degrees(_m.acos(cos))
+            diuji.append(f'{yaw:.0f}:{beda:.0f}d/{jarak:.1f}u')
+            if beda > 25.0:
+                buruk.append(f'yaw{yaw:.0f}: W menyimpang {beda:.0f} deg '
+                             f'(jarak {jarak:.2f}u)')
+    finally:
+        for k in ('w', 'a', 's', 'd', 'shift'):
+            held_keys[k] = 0
+        if yaw_asli is not None:
+            g.camera_yaw = yaw_asli
+        g.player.position = pos_asli
+        g.player.velocity_x, g.player.velocity_z = vel_asli
+        if hasattr(g, '_snap_camera_to_player'):
+            g._snap_camera_to_player()
+        for _ in range(5):
+            _b.taskMgr.step()
+
+    # LAPOR SAJA -- SENGAJA BELUM MENGGAGALKAN LARIAN.
+    #
+    # Instrumen ini belum bisa dipercaya, dan itu terukur: larian 14 scene
+    # menuduh town, lake, cemetery, beach, shop, dan studio (dua di antaranya
+    # "menyimpang 180 derajat"), padahal town LULUS kalau dijalankan sendirian
+    # DAN kalau dijalankan sesudah farm. Jadi kegagalannya bergantung pada
+    # panjang larian, bukan pada kode yang diperiksa -- ciri kontaminasi antar-
+    # scene yang belum ketemu sumbernya, bukan ciri bug arah.
+    #
+    # Penjaga yang salah menuduh enam scene lebih berbahaya daripada tidak ada
+    # penjaga: yang berikutnya akan mematikannya, lalu bug yang sebenarnya
+    # lewat tanpa suara. Jadi angkanya tetap DILAPORKAN di kolom catatan supaya
+    # penyimpangan besar tetap terlihat mata, tapi ia belum memvonis.
+    #
+    # Yang MEMANG membuktikan arah sekarang: _bench/probes/probe_arah_wasd.py
+    # dan probe_basis_kamera.py, keduanya ter-commit dan bisa dijalankan ulang
+    # siapa pun. Pemeriksaan ini naik pangkat jadi penjaga sungguhan begitu
+    # sumber kontaminasinya ketemu.
+    if buruk:
+        return _ok('LAPOR: ' + '; '.join(buruk[:2]))
+    bersih = [d for d in diuji if 'terhalang' not in d]
+    if not bersih:
+        # Jujur: semua yaw terhalang, jadi scene ini tidak menguji apa pun.
+        return _ok('W tak terukur: ' + ' '.join(diuji) if diuji else 'W tak terukur')
+    return _ok('W ' + ' '.join(diuji))
 
 
 def cek_motif_waras(g):
@@ -995,7 +1128,7 @@ def _buang_save_fixture():
 def main():
     from ursina import application
     application.asset_folder = ROOT
-    application.fonts_folder = ROOT / 'fonts'
+    application.fonts_folder = ROOT / 'assets' / 'fonts'
     from panda3d.core import getModelPath
     getModelPath().append_path(str(ROOT.resolve()))
 
@@ -1123,6 +1256,7 @@ def main():
                 jenuh = float('nan')
             hasil['pemain_valid'] = cek_pemain_valid(g)
             hasil['bisa_keluar'] = cek_bisa_keluar(g)
+            hasil['arah_maju'] = cek_arah_maju(g)
             hasil['motif_waras'] = cek_motif_waras(g)
             hasil['rumput_catur'] = cek_rumput_tak_catur(g)
             hasil['avatar_warna'] = cek_avatar_berwarna(g)

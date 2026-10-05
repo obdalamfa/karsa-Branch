@@ -529,6 +529,7 @@ class UIManager:
     # ─── PUBLIC: UPDATE ──────────────────────────────────
     def update(self, state, dt: float = 0):
         self.state = state
+        self._tick_ketik(dt)
         if self.mode == 'hud':
             # Petunjuk tombol punya UMUR. Setelah 30 detik ia padam sendiri;
             # pemain yang sudah tahu SPACE itu 'pakai' tidak perlu diberi
@@ -1536,28 +1537,94 @@ class UIManager:
         self.flash_msg(text, duration)
 
     # ─── PUBLIC: DIALOG ──────────────────────────────────
+    # Kotak percakapan ala Harvest Moon: kertas krem berbingkai kayu, potret
+    # pembicara di kiri, papan nama menempel di tepi atas, teks muncul huruf
+    # demi huruf. Geometri dipusatkan di sini supaya mode pilihan dan mode
+    # biasa memakai kotak yang sama (dulu tiap cabang menggeser kotaknya
+    # sendiri dengan angka mati).
+    _DLG_W, _DLG_H, _DLG_Y = 1.24, 0.30, -0.33
+    _POT = 0.235
+
     def _build_dialog_box(self):
-        # Background kotak dialog diperkecil
-        self._dlg_bg = _ui(scale=(0.70, 0.18), position=(0, -0.38),
-                            color=color.rgb(15, 8, 30, 220))
-        self._dlg_border = _ui(scale=(0.71, 0.19), position=(0, -0.38),
-                                color=color.rgb(100, 70, 160, 180))
-        self._dlg_name = _txt('', pos=(-0.33, -0.31), scale=0.90,
-                               col=color.rgb(220, 190, 255))
-        self._dlg_text = _txt('', pos=(-0.33, -0.36), scale=0.85,
-                               col=color.rgb(230, 220, 255))
-        self._dlg_cont = _txt('[E / SPACE: lanjut]', pos=(0.15, -0.44),
-                               scale=0.70, col=color.rgb(150, 130, 200))
+        W, H, Y = self._DLG_W, self._DLG_H, self._DLG_Y
+        kayu, krem = color.rgb(96, 64, 40), color.rgb(242, 230, 204)
+        self._dlg_border = _ui(scale=(W + 0.022, H + 0.022), position=(0, Y),
+                               color=kayu, z=0.06)
+        self._dlg_bg = _ui(scale=(W, H), position=(0, Y), color=krem, z=0.05)
+        x_pot = -W / 2 + 0.03 + self._POT / 2
+        self._dlg_bingkai = _ui(scale=(self._POT + 0.016, self._POT + 0.016),
+                                position=(x_pot, Y), color=kayu, z=0.04)
+        self._dlg_potret_bg = _ui(scale=(self._POT, self._POT), position=(x_pot, Y),
+                                  color=color.rgb(206, 190, 160), z=0.035)
+        self._dlg_potret = _ui(scale=(self._POT, self._POT), position=(x_pot, Y),
+                               color=color.white, z=0.03)
+        x_teks = x_pot + self._POT / 2 + 0.035
+        self._DLG_X_TEKS = x_teks
+        self._dlg_papan = _ui(scale=(0.26, 0.05), position=(x_teks + 0.13, Y + H / 2 + 0.012),
+                              color=color.rgb(150, 96, 60), z=0.02)
+        self._dlg_name = _txt('', pos=(x_teks + 0.13, Y + H / 2 + 0.012), scale=0.85,
+                              col=color.rgb(250, 238, 214), origin=(0, 0))
+        self._dlg_text = _txt('', pos=(x_teks, Y + H / 2 - 0.05), scale=0.86,
+                              col=color.rgb(58, 40, 28))
+        self._dlg_text.text = ' '          # wordwrap Ursina butuh raw_text
+        self._dlg_text.wordwrap = 46
+        self._dlg_cont = _txt('[E / SPASI: lanjut]', pos=(W / 2 - 0.03, Y - H / 2 + 0.03),
+                              scale=0.62, col=color.rgb(130, 96, 66), origin=(0.5, 0))
         self._dlg_choice_ents = [
-            _txt('', pos=(-0.33, -0.34 - i * 0.035), scale=0.80, col=color.rgb(200, 185, 230))
+            _txt('', pos=(x_teks, Y - 0.02 - i * 0.04), scale=0.80, col=color.rgb(80, 56, 36))
             for i in range(3)
         ]
+        self._dlg_penuh = ''
+        self._dlg_ketik = 0.0
         self._set_dialog_visible(False)
 
+    def _pasang_potret(self, npc_id):
+        from pathlib import Path
+        p = Path(__file__).resolve().parent.parent / 'assets' / 'textures' / 'potret' / f'{npc_id}.png'
+        cache = self.__dict__.setdefault('_potret_cache', {})
+        if npc_id not in cache:
+            tex = None
+            if p.exists():
+                try:
+                    from PIL import Image
+                    tex = Texture(Image.open(p).convert('RGBA'))
+                except Exception:
+                    tex = None
+            cache[npc_id] = tex
+        tex = cache[npc_id]
+        self._dlg_potret.texture = tex
+        self._dlg_potret.enabled = tex is not None and self._dlg_bg.enabled
+        return tex is not None
+
+    def _ketik(self, teks):
+        """Mulai efek mesin ketik untuk satu baris."""
+        self._dlg_penuh = teks
+        self._dlg_ketik = 0.0
+        self._dlg_text.text = ''
+
+    def ketik_selesai(self) -> bool:
+        return len(self._dlg_text.text) >= len(self._dlg_penuh)
+
+    def tuntaskan_ketik(self):
+        self._dlg_text.text = self._dlg_penuh
+
+    def _tick_ketik(self, dt):
+        if self.mode != 'dialog' or self.ketik_selesai():
+            return
+        self._dlg_ketik += dt * 55.0          # huruf per detik
+        n = min(len(self._dlg_penuh), int(self._dlg_ketik))
+        if n != len(self._dlg_text.text):
+            self._dlg_text.text = self._dlg_penuh[:n]
+
     def _set_dialog_visible(self, v: bool):
-        for e in (self._dlg_bg, self._dlg_border,
+        for e in (self._dlg_bg, self._dlg_border, self._dlg_bingkai,
+                  self._dlg_potret_bg, self._dlg_papan,
                   self._dlg_name, self._dlg_text, self._dlg_cont):
             e.enabled = v
+        if v and self._dialog_npc:
+            self._pasang_potret(self._dialog_npc)
+        else:
+            self._dlg_potret.enabled = False
         for e in self._dlg_choice_ents:
             e.enabled = v if (self._dlg_choices_active and v) else False
 
@@ -1614,6 +1681,14 @@ class UIManager:
                 if chosen is None:
                     chosen = talks_raw.get('default', [["..."]])
                 self._dialog_lines = [chosen[dial_idx % len(chosen)]]
+                # Pembuka sesuai jam, tempat, dan kegiatan (game/percakapan.py)
+                try:
+                    from .percakapan import pembuka
+                    awal = pembuka(npc_id, state)
+                except Exception:
+                    awal = None
+                if awal:
+                    self._dialog_lines.insert(0, [awal])
             else:
                 # Legacy list format fallback
                 self._dialog_lines = [talks_raw[dial_idx % len(talks_raw)]]
@@ -1633,7 +1708,7 @@ class UIManager:
             # Branching node dictionary
             text = line.get('text', '')
             self._dlg_name.text = name
-            self._dlg_text.text = text
+            self._ketik(text)
 
             # Filter valid choices by condition
             choices = line.get('choices', [])
@@ -1663,23 +1738,13 @@ class UIManager:
                 self._dlg_choices_active = True
 
                 # Expand dialog UI size for choices
-                self._dlg_bg.scale_y = 0.26
-                self._dlg_bg.y = -0.34
-                self._dlg_border.scale_y = 0.27
-                self._dlg_border.y = -0.34
                 self._dlg_cont.text = '[Tekan 1-3 atau Arrow+Space]'
-                self._dlg_text.y = -0.27
 
                 self._refresh_dialog_choices_ui()
             else:
                 self._dlg_choices_active = False
                 self._dlg_choices = []
-                self._dlg_bg.scale_y = 0.18
-                self._dlg_bg.y = -0.38
-                self._dlg_border.scale_y = 0.19
-                self._dlg_border.y = -0.38
-                self._dlg_cont.text = '[E / SPACE: lanjut]'
-                self._dlg_text.y = -0.36
+                self._dlg_cont.text = '[E / SPASI: lanjut]'
                 for ent in self._dlg_choice_ents:
                     ent.enabled = False
 
@@ -1688,18 +1753,13 @@ class UIManager:
             # Legacy simple text line
             self._dlg_choices_active = False
             self._dlg_choices = []
-            self._dlg_bg.scale_y = 0.18
-            self._dlg_bg.y = -0.38
-            self._dlg_border.scale_y = 0.19
-            self._dlg_border.y = -0.38
-            self._dlg_cont.text = '[E / SPACE: lanjut]'
-            self._dlg_text.y = -0.36
+            self._dlg_cont.text = '[E / SPASI: lanjut]'
             for ent in self._dlg_choice_ents:
                 ent.enabled = False
 
             text = ' '.join(line) if isinstance(line, list) else line
             self._dlg_name.text = name
-            self._dlg_text.text = text
+            self._ketik(text)
             self._set_dialog_visible(True)
 
     def advance_dialog(self) -> bool:

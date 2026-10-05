@@ -456,6 +456,78 @@ def pita(rig):
         tempel(o, rig, 'HEAD')
 
 
+# ─── keragaman warna kulit ─────────────────────────────────────────────────
+# Semua tekstur kepala TSO yang dipakai berkulit cokelat sampai gelap, jadi
+# seluruh desa terbaca satu suku. Piksel KULIT dipetakan ke warna sasaran
+# sambil mempertahankan terang-gelapnya (bayangan wajah tetap ada); rambut,
+# mata, dan bibir yang tidak lolos uji kulit tidak disentuh.
+KULIT = {
+    'npc_raka':        (226, 188, 156),   # Tionghoa-Indonesia
+    'npc_kapten_kuro': (234, 204, 178),   # Jepang
+    'npc_sari':        (214, 170, 130),   # Sunda
+    'npc_cici':        (220, 176, 138),   # Sunda
+    'npc_maya':        (196, 142, 102),   # Bali
+    'npc_pak_guru':    (192, 138, 100),   # Minang
+    'npc_kru_kuro':    (184, 140, 98),    # Arab-Indonesia
+    'npc_joko':        (170, 118, 82),    # Bugis
+    'npc_bowo':        (164, 112, 78),    # Jawa
+    'npc_arya':        (158, 106, 74),    # Batak
+    'npc_budi':        (136, 90, 62),     # Jawa
+    'npc_mbok_jum':    (142, 98, 70),     # Jawa
+    'npc_jaka_ronda':  (110, 72, 50),     # Ambon
+    'npc_ningsih':     (92, 60, 42),      # Papua
+}
+
+
+def _kulit(r, g, b):
+    return r > g * 1.08 and g > b * 1.02 and r - b > 0.05 and r > 0.12
+
+
+def warnai_kulit(rig, nama):
+    sasaran = KULIT.get(nama)
+    if sasaran is None:
+        return
+    t = [c / 255.0 for c in sasaran]
+    lt = 0.299 * t[0] + 0.587 * t[1] + 0.114 * t[2]
+    for o in [o for o in bpy.data.objects if o.parent == rig and o.type == 'MESH']:
+        for slot in o.material_slots:
+            if slot.material is None or not slot.material.use_nodes:
+                continue
+            m = slot.material.copy()
+            slot.material = m
+            tex = [n for n in m.node_tree.nodes if n.type == 'TEX_IMAGE' and n.image is not None]
+            if not tex:
+                # tangan: material polos warna kulit
+                if '_skin' in m.name or 'hand' in o.name:
+                    b = m.node_tree.nodes.get('Principled BSDF')
+                    if b is not None:
+                        b.inputs['Base Color'].default_value = (lin(sasaran[0]), lin(sasaran[1]), lin(sasaran[2]), 1)
+                    m.diffuse_color = (lin(sasaran[0]), lin(sasaran[1]), lin(sasaran[2]), 1)
+                continue
+            for n in tex:
+                src = n.image
+                px = list(src.pixels)
+                lum = [0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]
+                       for i in range(0, len(px), 4) if _kulit(px[i], px[i + 1], px[i + 2])]
+                if len(lum) < 20:
+                    continue
+                lum.sort()
+                acuan = lum[len(lum) // 2] or 0.01
+                for i in range(0, len(px), 4):
+                    r, g, b = px[i], px[i + 1], px[i + 2]
+                    if not _kulit(r, g, b):
+                        continue
+                    f = (0.299 * r + 0.587 * g + 0.114 * b) / acuan
+                    px[i], px[i + 1], px[i + 2] = (min(1, t[0] * f), min(1, t[1] * f), min(1, t[2] * f))
+                img = src.copy()
+                img.name = f'{nama}_kulit_{src.name.split(".")[0]}'
+                img.pixels = px
+                img.filepath_raw = os.path.join(TEX_DIR, img.name + '.png')
+                img.file_format = 'PNG'
+                img.save()
+                n.image = img
+
+
 SERAGAM = {
     'player':          lambda r: caping(r),
     'npc_ningsih':     lambda r: caping(r),
@@ -480,6 +552,7 @@ def ekspor(nama):
     rig.location = (0, 0, 0)
     bpy.context.view_layer.update()
     SERAGAM[nama](rig)
+    warnai_kulit(rig, nama)
     buat_siklus_jalan(rig)
     ad = rig.animation_data or rig.animation_data_create()
     for t in list(ad.nla_tracks):

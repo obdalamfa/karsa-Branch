@@ -765,7 +765,12 @@ class Game3D:
                     self.panels.confirm_dialog_choice()
             else:
                 if key in ('space', 'e', 'enter'):
-                    self.panels.advance_dialog()
+                    # Teks yang masih diketik dituntaskan dulu; tekan sekali
+                    # lagi baru lanjut -- seperti kotak dialog Harvest Moon.
+                    if not self.panels.ketik_selesai():
+                        self.panels.tuntaskan_ketik()
+                    else:
+                        self.panels.advance_dialog()
             return
 
         if self.panels.mode == 'pie':

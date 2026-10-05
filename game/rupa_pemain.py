@@ -136,29 +136,67 @@ def _dari_pil(img, nama):
 
 
 def _warnai(img, topeng, peta):
-    """peta: {nilai_topeng|'kulit'|'rambut': rgb}. Mengembalikan gambar baru."""
-    px = img.load()
-    tp = topeng.load() if topeng is not None else None
-    W, H = img.size
-    cache = {k: tuple(c / 255.0 for c in v) for k, v in peta.items()}
-    for y in range(H):
-        for x in range(W):
-            r, g, b, a = px[x, y]
-            r, g, b = r / 255.0, g / 255.0, b / 255.0
-            l = 0.299 * r + 0.587 * g + 0.114 * b
-            if 'kulit' in cache and _kulit(r, g, b):
-                t = cache['kulit']; f = min(1.6, l / 0.42)
-            elif 'rambut' in cache and ((l < 0.24 and max(r, g, b) - min(r, g, b) < 0.045)
-                                        or b > r * 1.15):
-                # kebiruan di tekstur kepala = topi bawaan TSO; ikut warna rambut
-                t = cache['rambut']; f = 0.6 + l * 1.6
-            elif tp is not None and tp[x, y] in cache:
-                t = cache[tp[x, y]]; f = 0.45 + l * 1.1
-            else:
-                continue
-            px[x, y] = (min(255, int(t[0] * f * 255)), min(255, int(t[1] * f * 255)),
-                        min(255, int(t[2] * f * 255)), a)
-    return img
+    """peta: {nilai_topeng|'kulit'|'rambut': rgb}. Mengembalikan gambar baru.
+
+    Vektor numpy: loop per piksel Python memakan ~0,3 s per tekstur 256 px,
+    terlalu mahal kalau tiap warga di scene ikut diwarnai saat scene dimuat.
+    """
+    import numpy as np
+    from PIL import Image
+    a = np.asarray(img.convert('RGBA'), dtype=np.float32) / 255.0
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    l = 0.299 * r + 0.587 * g + 0.114 * b
+    out = a.copy()
+    sudah = np.zeros(l.shape, bool)
+
+    def isi(mask, rgb, f):
+        t = np.array(rgb, np.float32) / 255.0
+        m = mask & ~sudah
+        for k in range(3):
+            out[..., k][m] = np.clip(t[k] * f[m], 0, 1)
+        return sudah | m
+
+    if 'kulit' in peta:
+        kulit = (r > g * 1.06) & (g > b * 1.02) & (r > 0.06) & (b >= r * 0.26) & ((r - b) > 0.025)
+        acuan = peta.get('_acuan')
+        t = np.array(peta['kulit'], np.float32) / 255.0
+        if acuan is not None:
+            # Bobot LEMBUT menurut jarak kroma ke kulit asli warga ini: batas
+            # tegas membuat kulit belang-belang (sebagian piksel tercelup,
+            # tetangganya tidak), sedangkan uji generik saja ikut mencelup
+            # kain cokelat/jingga (mantel Kapten, baju Maya).
+            jum = r + g + b + 1e-5
+            ar, ag, ab_, al = acuan
+            aj = ar + ag + ab_ + 1e-5
+            jarak = np.abs(r / jum - ar / aj) + np.abs(g / jum - ag / aj)
+            kulit_longgar = (r > g * 0.98) & (g > b * 0.95) & (b >= r * 0.2)
+            w = np.clip(1.0 - (jarak - 0.06) / 0.14, 0, 1)
+            w *= np.clip((l - al * 0.15) / (al * 0.2), 0, 1)
+            w *= kulit_longgar
+            # diburamkan: bayangan dan noda di kulit TSO punya kroma sedikit
+            # lain, dan tanpa ini mereka tertinggal sebagai bintik gelap.
+            from PIL import Image as _I, ImageFilter as _F
+            wi = _I.fromarray((w * 255).astype(np.uint8), 'L').filter(_F.GaussianBlur(1.6))
+            w = np.minimum(1.0, np.asarray(wi, np.float32) / 255.0 * 1.25)
+            f = np.minimum(1.25, l / max(al, 1e-3))   # di atas ini kulit terang jadi putih kapur
+        else:
+            m = l[kulit]
+            f = np.minimum(1.7, l / (float(np.median(m)) if m.size else 0.42))
+            w = kulit.astype(np.float32)
+        for k in range(3):
+            baru = np.clip(t[k] * f, 0, 1)
+            out[..., k] = out[..., k] * (1 - w) + baru * w
+        sudah = sudah | (w > 0.5)
+    if 'rambut' in peta:
+        sat = a[..., :3].max(-1) - a[..., :3].min(-1)
+        rambut = ((l < 0.24) & (sat < 0.045)) | (b > r * 1.15)
+        sudah = isi(rambut, peta['rambut'], 0.6 + l * 1.6)
+    if topeng is not None:
+        tp = np.asarray(topeng)
+        for nilai, rgb in peta.items():
+            if isinstance(nilai, int) and not isinstance(nilai, bool):
+                sudah = isi(tp == nilai, rgb, 0.45 + l * 1.1)
+    return Image.fromarray((out * 255).astype(np.uint8), 'RGBA')
 
 
 def terapkan(char_actor, state):
@@ -212,58 +250,205 @@ def terapkan(char_actor, state):
 # ─── aksesori kepala ──────────────────────────────────────────────────────
 def _kepala_bounds(a):
     """(pusat_x, puncak_y, pusat_z, lebar) kepala dalam ruang aktor."""
+    # Kepala = node 'head' TERTINGGI yang tampil. Node pertama bisa saja
+    # kacamata TSO (5 cm) -- peci Pak Hadi lalu terpasang setinggi mata.
+    calon = []
     for gnp in a.findAllMatches('**/+GeomNode'):
-        if 'head' in gnp.getName():
+        if 'head' in gnp.getName() and not gnp.isHidden():
             lo, hi = gnp.getTightBounds(a)
-            return ((lo.x + hi.x) / 2, hi.y, (lo.z + hi.z) / 2, hi.x - lo.x, hi.y - lo.y)
+            calon.append((hi.y - lo.y, lo, hi))
+    if calon:
+        _t, lo, hi = max(calon, key=lambda c: c[0])
+        return ((lo.x + hi.x) / 2, hi.y, (lo.z + hi.z) / 2, hi.x - lo.x, hi.y - lo.y)
     lo, hi = a.getTightBounds()
     return (0, hi.y, 0, 0.2, 0.25)
 
 
-def pasang_aksesori(char_actor, jenis):
-    from ursina import Entity, color, Mesh
+def _sembunyikan_topi_panggang(a, kepala_tengah):
+    """Penutup kepala hasil Blender (Cone/Torus/Cylinder/... di atas kepala)
+    disembunyikan: posisinya dihitung dari pose istirahat dan sering melayang
+    beberapa senti di atas rambut. Kerudung dan aksesori badan dibiarkan."""
+    for gnp in a.findAllMatches('**/+GeomNode'):
+        nm = gnp.getName()
+        if any(k in nm for k in ('head', 'hair', 'body', 'kerudung', 'Mesh', 'mesh_geom')):
+            continue
+        if gnp.findAllTextures():
+            continue
+        try:
+            lo, hi = gnp.getTightBounds(a)
+        except Exception:
+            continue
+        if (lo.y + hi.y) / 2 > kepala_tengah:
+            gnp.hide()
+
+
+def pasang_aksesori(char_actor, jenis, warna=None, skala=1.0):
+    import math
+    from ursina import Entity, color
     from ursina.models.procedural.cone import Cone
     from ursina.models.procedural.cylinder import Cylinder
     a = char_actor.actor
-    # caping panggaan dari Blender disembunyikan: pilihan pemain yang menang
-    for nm in ('Cone', 'Torus'):
-        for np in a.findAllMatches(f'**/{nm}'):
-            np.hide()
     lama = getattr(char_actor, '_aksesori', None)
     if lama is not None:
         lama.removeNode()
     char_actor._aksesori = None
+    cx, top, cz, lebar, tinggi = _kepala_bounds(a)
+    # Topi panggang selalu disembunyikan pada pemain (pilihan chargen yang
+    # menang) dan pada warga yang diberi topi runtime.
+    # batas seperempat bawah kepala: peci Blender Pak Hadi jatuh setinggi mata
+    _sembunyikan_topi_panggang(a, top - tinggi * 0.75)
     if jenis is None:
         return
-    cx, top, cz, lebar, tinggi = _kepala_bounds(a)
     kar = a.find('**/+Character')
     sendi = a.exposeJoint(kar.attachNewNode('kepala_aks'), 'modelRoot', 'HEAD')
     akar = NodePath('aksesori')
     akar.reparentTo(a)
-    # Ruang aktor: Y atas. Dasar topi duduk sedikit di bawah puncak kepala
-    # supaya mahkotanya MENUTUP ubun-ubun, bukan bertengger di atasnya.
-    r = lebar * 0.5
+    # Ruang aktor: Y atas. Dasar topi duduk di bawah puncak kepala supaya
+    # mahkotanya MENUTUP ubun-ubun, bukan bertengger di atasnya.
+    r = lebar * 0.5 * skala
     dasar = top - tinggi * 0.22
 
-    def bagian(model, pos, skala, rgb, rot=(0, 0, 0)):
+    def bagian(model, pos, sk, rgb, rot=(0, 0, 0)):
         e = Entity(model=model, color=color.rgb(*rgb))
         e.reparentTo(akar)
         e.setPos(pos[0], pos[1], pos[2])
-        e.setScale(*skala)
+        e.setScale(*sk)
         e.setHpr(*rot)
         return e
 
+    def W(bawaan):
+        return warna or bawaan
+
     if jenis == 'caping':
-        bagian(Cone(16, height=1, radius=1), (cx, dasar, cz), (r * 2.7, tinggi * 0.55, r * 2.7), (200, 172, 110))
+        bagian(Cone(16, height=1, radius=1), (cx, dasar, cz), (r * 2.7, tinggi * 0.55 * skala, r * 2.7), W((200, 172, 110)))
     elif jenis == 'bucket':
-        bagian(Cylinder(16, start=0, height=1, radius=1), (cx, dasar, cz), (r * 1.12, tinggi * 0.42, r * 1.12), (98, 104, 70))
-        bagian(Cone(16, height=1, radius=1), (cx, dasar - tinggi * 0.04, cz), (r * 1.9, tinggi * 0.18, r * 1.9), (98, 104, 70))
+        bagian(Cylinder(16, start=0, height=1, radius=1), (cx, dasar, cz), (r * 1.12, tinggi * 0.3, r * 1.12), W((98, 104, 70)))
+        bagian(Cone(16, height=1, radius=1), (cx, dasar - tinggi * 0.04, cz), (r * 1.9, tinggi * 0.18, r * 1.9), W((98, 104, 70)))
     elif jenis == 'peci':
-        bagian(Cylinder(16, start=0, height=1, radius=1), (cx, dasar + tinggi * 0.02, cz), (r * 1.06, tinggi * 0.36, r * 0.92), (30, 30, 34))
+        bagian(Cylinder(16, start=0, height=1, radius=1), (cx, dasar + tinggi * 0.02, cz), (r * 1.06, tinggi * 0.36, r * 0.92), W((30, 30, 34)))
     elif jenis == 'ikat':
-        bagian(Cylinder(16, start=0, height=1, radius=1), (cx, top - tinggi * 0.38, cz), (r * 1.08, tinggi * 0.12, r * 1.08), (150, 70, 52))
+        bagian(Cylinder(16, start=0, height=1, radius=1), (cx, top - tinggi * 0.38, cz), (r * 1.08, tinggi * 0.12, r * 1.08), W((150, 70, 52)))
     elif jenis == 'koboi':
-        bagian(Cylinder(18, start=0, height=1, radius=1), (cx, dasar, cz), (r * 2.1, tinggi * 0.05, r * 1.8), (110, 76, 50))
-        bagian(Cylinder(16, start=0, height=1, radius=1), (cx, dasar, cz), (r * 1.0, tinggi * 0.5, r * 0.85), (110, 76, 50))
+        bagian(Cylinder(18, start=0, height=1, radius=1), (cx, dasar, cz), (r * 2.1, tinggi * 0.05, r * 1.8), W((110, 76, 50)))
+        bagian(Cylinder(16, start=0, height=1, radius=1), (cx, dasar, cz), (r * 1.0, tinggi * 0.5, r * 0.85), W((110, 76, 50)))
+    elif jenis == 'baret':
+        bagian('sphere', (cx + r * 0.15, top - tinggi * 0.06, cz), (r * 2.3, tinggi * 0.3, r * 2.2), W((150, 52, 60)))
+    elif jenis == 'bandana':
+        bagian('sphere', (cx, top - tinggi * 0.2, cz), (r * 2.12, tinggi * 0.62, r * 2.15), W((170, 44, 40)))
+    elif jenis == 'tricorn':
+        bagian(Cone(3, height=1, radius=1), (cx, dasar, cz), (r * 2.1, tinggi * 0.32, r * 2.1), W((28, 26, 30)))
+        bagian(Cylinder(16, start=0, height=1, radius=1), (cx, dasar + tinggi * 0.02, cz), (r * 1.05, tinggi * 0.05, r * 1.05), (196, 160, 70))
+    elif jenis == 'pita':
+        for sx in (-1, 1):
+            bagian('sphere', (cx + sx * r * 0.45, top - tinggi * 0.02, cz + r * 0.5), (r * 0.55, tinggi * 0.18, r * 0.25), W((222, 92, 120)))
+    elif jenis == 'mahkota':
+        for k, (rr, hh) in enumerate(((1.08, 0.2), (0.85, 0.2), (0.55, 0.22))):
+            bagian(Cylinder(10, start=0, height=1, radius=1), (cx, dasar + tinggi * (0.02 + 0.18 * k), cz), (r * rr, tinggi * hh, r * rr), W((214, 172, 72)))
+    elif jenis == 'mahkota_bunga':
+        for k in range(8):
+            t = k / 8 * math.tau
+            bagian('sphere', (cx + math.cos(t) * r * 1.0, top - tinggi * 0.12, cz + math.sin(t) * r * 1.0),
+                   (r * 0.38, r * 0.38, r * 0.38), W((240, 214, 120)) if k % 2 else (226, 140, 170))
     akar.wrtReparentTo(sendi)
     char_actor._aksesori = akar
+
+
+# --- warga desa ---------------------------------------------------------------
+# Semua tekstur kepala TSO berkulit cokelat sampai gelap, jadi seluruh desa
+# terbaca satu suku. Warna kulit tiap warga mengikuti keragaman Nusantara.
+KULIT_NPC = {
+    'raka': (226, 188, 156),        # Tionghoa-Indonesia
+    'kapten_kuro': (234, 204, 178), # Jepang
+    'sari': (214, 170, 130),        # Sunda
+    'cici': (220, 176, 138),        # Sunda
+    'maya': (196, 142, 102),        # Bali
+    'pak_guru': (192, 138, 100),    # Minang
+    'kru_kuro': (184, 140, 98),     # Arab-Indonesia
+    'joko': (170, 118, 82),         # Bugis
+    'bowo': (164, 112, 78),         # Jawa
+    'arya': (158, 106, 74),         # Batak
+    'budi': (136, 90, 62),          # Jawa
+    'mbok_jum': (142, 98, 70),      # Jawa
+    'jaka_ronda': (110, 72, 50),    # Ambon
+    'ningsih': (92, 60, 42),        # Papua
+    'bidadari': (236, 214, 196),
+    'dewa_angin': (206, 170, 136),
+}
+# (jenis, warna atau None, skala)
+TOPI_NPC = {
+    'ningsih': ('caping', None, 1.0), 'bowo': ('caping', None, 0.85),
+    'budi': ('koboi', None, 1.0), 'joko': ('bucket', None, 1.0),
+    'arya': ('bucket', (120, 84, 50), 1.0), 'maya': ('baret', None, 1.0),
+    'pak_guru': ('peci', None, 1.0), 'jaka_ronda': ('peci', None, 1.0),
+    'kapten_kuro': ('tricorn', None, 1.0), 'kru_kuro': ('bandana', None, 1.0),
+    'cici': ('pita', None, 1.0), 'dewa_angin': ('mahkota', None, 1.0),
+    'bidadari': ('mahkota_bunga', None, 1.0),
+}
+
+_CACHE_TEKSTUR = {}
+# Warga yang pakaiannya SEWARNA kulit aslinya (mantel cokelat Kapten): tekstur
+# badannya tidak dicelup, cukup wajah dan tangan -- lengannya tertutup kain.
+_KULIT_WAJAH_SAJA = {'kapten_kuro'}
+
+
+def _acuan_kulit(a):
+    """(r, g, b, luma) median kulit dari tekstur KEPALA warga ini."""
+    import numpy as np
+    for gnp in a.findAllMatches('**/+GeomNode'):
+        if 'head' not in gnp.getName():
+            continue
+        texs = gnp.findAllTextures()
+        if not texs:
+            continue
+        img = _ke_pil(texs[0])
+        if img is None:
+            continue
+        x = np.asarray(img.convert('RGB'), np.float32) / 255.0
+        r, g, b = x[..., 0], x[..., 1], x[..., 2]
+        m = (r > g * 1.06) & (g > b * 1.02) & (r > 0.06) & (b >= r * 0.26)
+        if m.sum() < 30:
+            continue
+        rr, gg, bb = float(np.median(r[m])), float(np.median(g[m])), float(np.median(b[m]))
+        return (rr, gg, bb, 0.299 * rr + 0.587 * gg + 0.114 * bb)
+    return None
+
+
+def terapkan_npc(char_actor, npc_id):
+    """Warna kulit sesuai suku + topi yang diukur dari kepala sungguhan."""
+    if char_actor is None:
+        return
+    a = char_actor.actor
+    kulit = KULIT_NPC.get(npc_id)
+    if npc_id == 'pak_guru':
+        # kepala TSO-nya membawa kacamata las sebagai mesh '_head' yang pendek
+        kepala = [g for g in a.findAllMatches('**/+GeomNode') if 'head' in g.getName()]
+        if len(kepala) > 1:
+            def _t(g):
+                lo, hi = g.getTightBounds(a)
+                return hi.y - lo.y
+            min(kepala, key=_t).hide()
+    acuan = _acuan_kulit(a) if kulit is not None else None
+    if kulit is not None:
+        for gnp in a.findAllMatches('**/+GeomNode'):
+            texs = gnp.findAllTextures()
+            nama = gnp.getName()
+            if not texs:
+                if nama == 'Mesh':
+                    gnp.setColor(kulit[0] / 255.0, kulit[1] / 255.0, kulit[2] / 255.0, 1, 1)
+                continue
+            if 'body' in nama and npc_id in _KULIT_WAJAH_SAJA:
+                continue
+            kunci = (npc_id, nama)
+            tex = _CACHE_TEKSTUR.get(kunci)
+            if tex is None:
+                src = _ke_pil(texs[0])
+                if src is None:
+                    continue
+                tex = _dari_pil(_warnai(src, None, {'kulit': kulit, '_acuan': acuan}), f'{npc_id}_{nama}_kulit')
+                _CACHE_TEKSTUR[kunci] = tex
+            stages = gnp.findAllTextureStages()
+            if stages:
+                gnp.setTexture(stages[0], tex, 1)
+    topi = TOPI_NPC.get(npc_id)
+    if topi is not None:
+        pasang_aksesori(char_actor, topi[0], topi[1], topi[2])

@@ -762,6 +762,13 @@ class EntitiesManager:
             ca = build_char_actor(actor, f'npc_{actor_id}')
             if ca is not None:
                 actor._char = ca
+                # warna kulit per suku + topi yang pas di kepala
+                try:
+                    from .rupa_pemain import terapkan_npc
+                    terapkan_npc(ca, actor_id)
+                except Exception:
+                    import logging
+                    logging.warning('rupa warga %s gagal', actor_id, exc_info=True)
                 apr_list = None
                 baked = True
         if not baked and not is_animal and not is_guardian:

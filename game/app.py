@@ -407,13 +407,6 @@ class Game3D:
                 except Exception:
                     self.panels.mode = 'hud'
 
-        # Mode Bangun/Beli (Sims S7): selama panel terbuka, seluruh tombol
-        # milik panel itu. Tanpa rute ini `open_buy()` membuka panel yang tidak
-        # bisa dinavigasi maupun ditutup.
-        if self.panels.mode == 'buy':
-            self.panels.buy_input(key, self.player, self.world)
-            return
-
         # ── PERCAKAPAN TIDAK MEMBEKUKAN ORANGNYA ───────────────────────
         # Semua di bawah ini digerbangi mode == 'hud', jadi selama kotak
         # dialog terbuka dunia berhenti total: pemain dan lawan bicaranya
@@ -610,9 +603,15 @@ class Game3D:
                     target_sky = color.rgb(248, 138, 88) if not is_raining else color.rgb(115, 82, 82)
                     target_cloud = color.rgb(255, 195, 148, 145) if not is_raining else color.rgb(135, 108, 102, 195)
                 else:
-                    # Malam: biru gelap lembut (bukan hitam total)
-                    target_sun   = color.rgb(35, 48, 92)
-                    target_amb   = color.rgb(28, 28, 52, 255)
+                    # Malam: biru rembulan. Angka lamanya (35,48,92 / 28,28,52)
+                    # ditulis dengan komentar "bukan hitam total" — dan memang
+                    # tidak pernah terbukti salah, karena sampai sekarang
+                    # cahaya adegan TIDAK PERNAH sampai ke satu entitas pun.
+                    # Begitu jalurnya dibuka, terukur: rumput jatuh ke
+                    # 21,29,8 pada 22:00 dan hewannya nyaris tidak terlihat.
+                    # Malam harus redup, bukan buta.
+                    target_sun   = color.rgb(62, 82, 140)
+                    target_amb   = color.rgb(54, 58, 95, 255)
                     target_sky   = color.rgb(18, 12, 42)
                     target_cloud = color.rgb(45, 45, 72, 75)
             
@@ -730,6 +729,14 @@ class Game3D:
         if self.panels.mode == 'chargen':
             if self._chargen:
                 self._chargen.handle_input(key)
+            return
+
+        # Mode Bangun/Beli (Sims S7): selama panel terbuka, seluruh tombol
+        # milik panel itu. Rute ini dulu ada di update(), tempat `key`
+        # tidak ada -- NameError tiap frame begitu panel dibuka. Tanpa rute ini `open_buy()` membuka panel yang tidak
+        # bisa dinavigasi maupun ditutup.
+        if self.panels.mode == 'buy':
+            self.panels.buy_input(key, self.player, self.world)
             return
 
         # Sinema mengunci semuanya: cuma lanjut dan lewati yang diterima.
@@ -1047,8 +1054,9 @@ class Game3D:
             sky_col   = color.rgb(248, 138, 88)
             cloud_col = color.rgb(255, 195, 148, 145)
         else:
-            sun_col   = color.rgb(35, 48, 92)
-            amb_col   = color.rgb(28, 28, 52, 255)
+            # Sama dengan blok transisi di update() — dua tempat, satu angka.
+            sun_col   = color.rgb(62, 82, 140)
+            amb_col   = color.rgb(54, 58, 95, 255)
             sky_col   = color.rgb(18, 12, 42)
             cloud_col = color.rgb(45, 45, 72, 75)
 
@@ -1140,6 +1148,34 @@ class Game3D:
         if actor is not None and hasattr(actor, 'tick_percakapan'):
             actor.tick_percakapan(dt, p.x, p.z)
 
+        # Wajah harus tetap jalan selama modal terbuka. Loop entitas dan
+        # player.tick() sengaja TIDAK dipanggil di sini (itu akan memajukan
+        # waktu permainan dan menerima input gerak), dan akibatnya terukur:
+        # rentang tinggi mata 0,09881 saat main biasa, 0,00000 begitu kotak
+        # dialog terbuka. Orang yang berhenti berkedip TEPAT saat diajak
+        # bicara adalah tanda uncanny yang paling mudah dilihat pemain,
+        # justru pada saat ia menatap wajah itu paling lama.
+        #
+        # Yang berbicara adalah WARGANYA: baris dialog di sini isinya ucapan
+        # warga, dan giliran pemain muncul sebagai daftar pilihan. Jadi mulut
+        # warga bergerak selama baris ditampilkan, dan berhenti saat pilihan
+        # aktif — pemain sedang memilih, bukan berbicara.
+        pilihan = bool(getattr(self.panels, '_dlg_choices_active', False))
+        # Modal membekukan entities.update(), jadi kehangatan warga harus
+        # dipasang di sini juga — kalau tidak, wajahnya justru kehilangan
+        # tanda hati persis saat pemain sedang menatapnya.
+        if lawan and actor is not None:
+            _w = getattr(actor, '_wajah', None)
+            if _w is not None:
+                _w.set_hati(min(1.0, self.state.npc_hearts.get(lawan, 0) / 10.0))
+        for e in (actor, p):
+            w = getattr(e, '_wajah', None) if e is not None else None
+            if w is not None:
+                w.tick(dt)
+        w_actor = getattr(actor, '_wajah', None) if actor is not None else None
+        if w_actor is not None:
+            w_actor.set_bicara(not pilihan)
+
     def mulai_pose_bicara(self, npc_id: str) -> None:
         """Pasang pose bicara pada pemain dan pose dengar pada lawan bicara."""
         from . import care_anim
@@ -1166,6 +1202,12 @@ class Game3D:
         for actor in self.entities.actors.values():
             if hasattr(actor, 'akhiri_percakapan'):
                 actor.akhiri_percakapan()
+            w = getattr(actor, '_wajah', None)
+            if w is not None:
+                w.set_bicara(False)
+        w = getattr(self.player, '_wajah', None)
+        if w is not None:
+            w.set_bicara(False)
 
     def _snap_camera_to_player(self):
         """Tempatkan kamera langsung di posisi idealnya, tanpa lerp.

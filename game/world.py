@@ -728,7 +728,21 @@ class World3D:
     def _build_tiles(self):
         sc = self.scene_obj
         is_dungeon = (self.scene_name == 'dungeon' and self.state.dungeon_tiles)
-        default_tex = 'cave_floor' if is_dungeon else ('floor_wood' if sc.indoor else 'grass')
+        # Di luar ruang, default_tex dulu 'grass' — dan grass.png di repo ini
+        # tekstur DEBUG: hitam bergaris magenta, rata-rata (44,14,46). Baris
+        # 511 memakainya apa adanya untuk setiap tile penghalang yang bukan
+        # pagar, jadi tiap pohon, tunggul, lentera dan peti berdiri di atas
+        # kotak hitam. Kontras hitam-pekat lawan rumput terang itu pula yang
+        # memicu aberasi kromatik di post-process, sehingga di layar muncul
+        # garis magenta di sekeliling kotaknya.
+        #
+        # Perbaikan satu baris ini persis yang diminta docstring
+        # `zone_paint.patch_tile()`: "Perbaikan sebenarnya satu baris di
+        # game/world.py (pakai 'grass_tso'/'sand_ground' sebagai default_tex
+        # luar ruang)." Tambalan di props.py boleh dicabut sesudah ini.
+        _rumput = 'snow_ground' if self.state.season_index == 3 else 'grass_tso'
+        default_tex = ('cave_floor' if is_dungeon
+                       else ('floor_wood' if sc.indoor else _rumput))
 
         tiles_to_build = self.state.dungeon_tiles if is_dungeon else sc.tiles
         h = len(tiles_to_build)
@@ -824,6 +838,11 @@ class World3D:
                 # selebar TS * 1.005, jadi tepinya menjorok ~1 cm ke tile ini.
                 # Kalau tingginya PERSIS sama, dua bidang jadi sebidang dan
                 # z-fighting bikin garis belang di kaki tiang.
+                #
+                # Dulu cabang ini cuma untuk _FENCE_LIKE, dan sisanya ditambal
+                # dari luar oleh `zone_paint.patch_tile()` — satu entity
+                # tambahan per pohon/tunggul/lentera/peti. Tambalan itu sudah
+                # dicabut; docstring-nya sendiri menyebutnya sementara.
                 gh = GROUND_H + 0.042
                 ge = _e('cube', (wx, gh / 2, wz), (TS, gh, TS),
                         TEX_SALJU if self.state.season_index == 3 else TEX_RUMPUT,

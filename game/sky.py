@@ -158,12 +158,14 @@ def _sky_palette(hour: float, weather: str):
         pal = _lerp_pal(_SKY_MORNING, _SKY_DAY, (hour - 7.0) / 4.0)
     elif hour < 17.0:
         pal = _SKY_DAY
-    elif hour < 19.0:
-        pal = _lerp_pal(_SKY_DAY, _SKY_DUSK, (hour - 17.0) / 2.0)
+    elif hour < 18.0:
+        pal = _lerp_pal(_SKY_DAY, _SKY_DUSK, (hour - 16.0) / 2.0)
+    elif hour < 19.3:
+        pal = _lerp_pal(_SKY_DUSK, _SKY_EVENING, (hour - 18.0) / 1.3)
     elif hour < 21.0:
-        pal = _lerp_pal(_SKY_DUSK, _SKY_EVENING, (hour - 19.0) / 2.0)
+        pal = _lerp_pal(_SKY_EVENING, _SKY_NIGHT, (hour - 19.3) / 1.7)
     else:
-        pal = _lerp_pal(_SKY_EVENING, _SKY_NIGHT, (hour - 21.0) / 3.0)
+        pal = _SKY_NIGHT
 
     mul = _WEATHER_MUL.get(weather, 1.0)
     zenith  = tuple(c * mul for c in pal[0])

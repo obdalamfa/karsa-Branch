@@ -71,6 +71,16 @@ def _tex(name: str):
                 t.filtering = True
             else:
                 t.filtering = False
+            # Mengecil SELALU lewat mipmap, apa pun pembesarannya. Tanpa ini
+            # tekstur tanah resolusi tinggi dicuplik satu titik per piksel
+            # layar, dan titik itu berganti begitu kamera bergeser beberapa
+            # milimeter -- seluruh tanah berkerlip saat pemain berjalan
+            # (laporan pemilik: "layar seperti kedip-kedip"). Pembesaran
+            # tidak disentuh, jadi tekstur piksel tetap tajam dari dekat.
+            # Anisotropik menjaga ubin yang dilihat miring tidak jadi buram.
+            from panda3d.core import SamplerState
+            t._texture.setMinfilter(SamplerState.FT_linear_mipmap_linear)
+            t._texture.setAnisotropicDegree(4)
             _TEX_CACHE[name] = t
             return t
         except Exception:

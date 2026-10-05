@@ -420,7 +420,7 @@ class UIManager:
         if hasattr(s, 'action_prompt'):
             self._teks(self._control_hint, s.action_prompt)
         else:
-            self._teks(self._control_hint, '[WASD] Jalan  ·  [SPACE] Pakai  ·  [E] Aksi  ·  [F1] Panduan  ·  [J] Jurnal  ·  [I] Inv')
+            self._teks(self._control_hint, '[WASD] Jalan  ·  [SPACE] Pakai  ·  [E] Aksi  ·  [L] Keinginan  ·  [F1] Panduan  ·  [I] Inv')
 
     # ─── PUBLIC: FLASH MESSAGE ───────────────────────────
     def flash_msg(self, text: str, duration: float = 1.2):
@@ -734,6 +734,7 @@ class UIManager:
             'crafting':  'Bengkel Pak Budi',
             'help':      'Panduan Kontrol',
             'catatan':   'Catatan Lembah',
+            'wishes':    'Keinginan & Kebahagiaan',
         }
         self._panel_title.text = titles.get(name, name.capitalize())
         # Update hint sesuai panel
@@ -744,8 +745,24 @@ class UIManager:
             self._panel_hint.text = '[1-9: Olah]   [Q/R: halaman]   [ESC: Tutup]'
         elif name == 'crafting':
             self._panel_hint.text = '[1-5: Pickaxe]   [6-9: Pedang]   [ESC: Tutup]'
+        elif name == 'wishes':
+            self._panel_hint.text = ('[1-5: janjikan]   [6-9: lupakan janji]'
+                                     '   [A/B/C: beli hadiah]   [ESC: Tutup]')
         else:
             self._panel_hint.text = '[ESC: tutup]'
+
+        if name == 'wishes':
+            # Seluruh isinya dirakit di game/wishes.py, bukan di sini. Panel
+            # hanya mencetak; mesinnya tidak tahu soal UI dan UI tidak punya
+            # aturan sendiri. Kalau keduanya punya aturan, keduanya akan
+            # menyimpang — itu persis yang terjadi pada economy.py vs
+            # husbandry.py (lihat docs/TAHAPAN.md Tahap 2).
+            from .wishes import baris_panel
+            # Janji yang sudah terpenuhi dibayar SEBELUM dipajang, kalau tidak
+            # pemain melihat bar penuh yang menolak selesai.
+            self._bayar_keinginan()
+            self._panel_body.text = '\n'.join(baris_panel(s))
+            return
 
         if name == 'inventory':
             # Tas dulu mencetak kunci dict mentah tanpa harga ('lobak_seed: 3').
@@ -898,6 +915,7 @@ class UIManager:
                 "── MENU ──\n"
                 "  I: Inventori   M: Peta\n"
                 "  J: Quest       H: Relasi NPC\n"
+                "  L: Keinginan & Kebahagiaan\n"
                 "  N: Catatan Lembah (lore)\n"
                 "  K: Warung, beli & JUAL (di Warung)\n"
                 "  O: Dapur, olah hasil panen (di Rumah)\n"
@@ -1053,7 +1071,62 @@ class UIManager:
             return self._process_item(idx)
         elif self._panel_name == 'crafting':
             return self._craft_item(idx)
+        elif self._panel_name == 'wishes':
+            return self._aksi_keinginan(idx)
         return ''
+
+    # ─── KEINGINAN (Tahap 4) ─────────────────────────────
+    def _bayar_keinginan(self) -> list:
+        """Bayar janji yang sudah terpenuhi, dan beri tahu pemain.
+
+        Dipanggil dari dua tempat: tiap kali panel Keinginan digambar, dan
+        sekali per DETIK dari `Game3D.update` — bukan tiap frame. Yang kedua
+        itu yang membuat hadiahnya terasa datang dari perbuatan; tanpa itu
+        pemain baru tahu keinginannya selesai saat kebetulan membuka panel.
+
+        Sekali per detik, bukan per frame, karena pelajaran Tahap 3: pekerjaan
+        yang diulang 60 kali sedetik untuk hasil yang sama adalah cara paling
+        mudah membuang milidetik (lihat `_teks()` di berkas ini).
+        """
+        from .wishes import periksa
+        lunas = periksa(self.state)
+        for p in lunas:
+            self.flash_msg(f"Keinginan terpenuhi: {p['teks']}  "
+                           f"+{p['bayar']} Kebahagiaan", 3.0)
+        if lunas:
+            from .sound import play as sound_play
+            try:
+                sound_play('magic', 0.8)
+            except Exception:
+                pass
+        return lunas
+
+    def _aksi_keinginan(self, idx: int) -> str:
+        """1-5 janjikan tawaran, 6-9 lupakan janji ke-1..4."""
+        from . import wishes as w
+        s = self.state
+        if 1 <= idx <= w.TAWARAN:
+            kandidat = w.tawaran(s)
+            if idx > len(kandidat):
+                return 'Tidak ada tawaran di nomor itu.'
+            _ok, pesan = w.janjikan(s, kandidat[idx - 1])
+            self._render_panel('wishes')
+            return pesan
+        if 6 <= idx <= 5 + w.SLOT_JANJI:
+            _ok, pesan = w.lupakan(s, idx - 6)
+            self._render_panel('wishes')
+            return pesan
+        return ''
+
+    def beli_hadiah_keinginan(self, huruf: str) -> str:
+        """Tombol a/b/c di panel Keinginan."""
+        from . import wishes as w
+        i = ord(huruf) - ord('a')
+        if not 0 <= i < len(w.HADIAH):
+            return ''
+        _ok, pesan = w.beli_hadiah(self.state, w.HADIAH[i]['id'])
+        self._render_panel('wishes')
+        return pesan
 
     def _buy_shop_item(self, idx: int) -> str:
         s = self.state

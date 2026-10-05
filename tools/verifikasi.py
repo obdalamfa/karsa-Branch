@@ -376,6 +376,65 @@ def uji_perawatan_terjangkau():
             f'{hari_semua_sakit}, hati nol di hari {hari_hati_nol}')
 
 
+def uji_quest_terjangkau():
+    """Alur cerita utama: objeknya dibuat, tapi tidak ada yang memanggilnya.
+
+    Ditemukan saat menyurvei untuk Tahap 4 (Keinginan), dan bentuknya persis
+    sama dengan kasus husbandry: kelasnya lengkap, instansnya dibuat, yang
+    hilang cuma sambungannya -- dan kegagalannya TIDAK terlihat sebagai error,
+    karena pengirimnya memakai `hasattr` lalu diam kalau tidak ketemu.
+    """
+    import re
+    teks_player = _tanpa_komentar(
+        (ROOT / 'game' / 'player.py').read_text(encoding='utf-8', errors='replace'))
+    punya = {n for n in ('quest_controller', 'quest_manager',
+                         '_check_quest_progress')
+             if re.search(rf'self\s*\.\s*{n}\s*=', teks_player)
+             or re.search(rf'def\s+{n}\b', teks_player)}
+
+    dicari = set()
+    for p in (ROOT / 'game').rglob('*.py'):
+        t = _tanpa_komentar(p.read_text(encoding='utf-8', errors='replace'))
+        for n in ('quest_manager', '_check_quest_progress', 'quest_controller'):
+            if re.search(rf'(player|self)\s*\.\s*{n}\b', t) and p.name != 'player.py':
+                dicari.add(n)
+
+    nyasar = dicari - punya
+    if not nyasar:
+        return f'pengirim quest memakai nama yang ada: {", ".join(sorted(dicari))}'
+
+    lanjut = []
+    # Kalau disambungkan, dua cacat berikutnya langsung menunggu. Dibuktikan,
+    # bukan dikira: jalankan pengontrolnya pada state yang memenuhi syarat.
+    try:
+        from game.state import GameState
+        from game.controllers.quest_controller import QuestController
+        s = GameState()
+        s.mail_read = True
+        s.stats['lobak_harvested'] = 5
+        s.stats['earned'] = 1000
+        QuestController(s).check_quest_progress()
+    except Exception as ex:
+        lanjut.append(f'{type(ex).__name__}: {ex}')
+
+    from game.data import QUEST_STAGES
+    bentuk = type(QUEST_STAGES).__name__
+
+    lapor('RUSAK', 'alur cerita utama tidak pernah maju',
+          f"`player.py` membuat `self.quest_controller`, tapi pengirimnya "
+          f"mencari {', '.join(sorted(nyasar))} -- nama yang tidak ada pada "
+          f"Player. Keduanya dijaga `hasattr`, jadi `check_quests()` DIAM: "
+          f"tidak ada error, tidak ada log, quest_stage cuma tidak pernah "
+          f"naik. Menyambungkannya saja TIDAK cukup dan akan mengubah diam "
+          f"jadi crash: QUEST_STAGES bertipe {bentuk} tapi dibaca "
+          f"`QUEST_STAGES.get(...)`"
+          + (f" ({lanjut[0]})" if lanjut else '')
+          + ", dan tahap 2->3 membaca `s.npc_relations` yang tidak ada di "
+            "GameState -- ambangnya 15 sementara `npc_hearts` berskala 0-10, "
+            "jadi angkanya pun harus diputuskan ulang. Memperbaiki separuhnya "
+            "mengulang persis kesalahan husbandry.")
+    return f'pengirim mencari {", ".join(sorted(nyasar))}; yang ada quest_controller'
+
 def uji_benih_terjangkau():
     """crops.py menyiapkan 16 baris toko tapi tidak memasangnya."""
     import game.crops as c
@@ -495,6 +554,7 @@ PEMERIKSAAN = [
     ('dua sistem ternak',    uji_dua_sistem_ternak),
     ('perawatan terjangkau', uji_perawatan_terjangkau),
     ('benih baru terjangkau', uji_benih_terjangkau),
+    ('alur quest terjangkau', uji_quest_terjangkau),
     ('siklus tanam penuh',   uji_siklus_tanam),
 ]
 

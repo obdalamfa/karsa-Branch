@@ -288,7 +288,7 @@ struktural pada `world.py`, bukan tambalan, jadi berhenti di sini dulu.
 
 ---
 
-## Tahap 4 — Wishes
+## Tahap 4 — Wishes ✅ SELESAI
 
 **Ini yang membuat game punya alasan untuk dipedulikan.** Sekarang sudah ada
 kebutuhan, objek, aksi, antrian — tapi pemain bisa main lima menit lalu
@@ -300,6 +300,124 @@ memberi arah **tanpa** mencabut kebebasan — dan "kebebasannya seru" adalah
 kata-kata pemilik sendiri.
 
 Prioritas tertinggi setelah fondasi bersih. Di atas seni apa pun.
+
+### Kenapa bukan quest
+
+Quest sudah ada di proyek ini — `quest_controller.py`, sebelas tahap berurutan
+— dan ia **tidak** menjawab "terus?", karena quest memberi satu jalan yang sama
+untuk semua pemain. Wishes bekerja dengan arah berlawanan:
+
+    quest     : game yang memutuskan, pemain mengikuti
+    keinginan : pemain yang memutuskan, game membayar
+
+### Mekanismenya, empat langkah — dan yang keempat tidak boleh ditunda
+
+```
+1. muncul   keinginan kontekstual — hanya yang masuk akal SEKARANG
+2. janji    pemain memilih sendiri empat yang mau dikejar
+3. bayar    memenuhinya membayar Kebahagiaan
+4. belanja  Kebahagiaan ditukar jadi kemampuan permanen
+```
+
+Tanpa langkah 4, Kebahagiaan cuma angka yang naik, dan angka yang tidak bisa
+dibelanjakan tidak memberi arah apa pun. Jadi hadiahnya ikut dibangun sekarang,
+bukan dijanjikan untuk nanti.
+
+### Tiga keputusan yang menentukan apakah ini jujur
+
+**1. Garis dasar dicatat saat DIJANJIKAN.** Ini intinya. Kalau "hasilkan 600G"
+diukur dari `stats['earned']` apa adanya, pemain yang sudah pernah menjual
+10.000G menyelesaikannya seketika tanpa melakukan apa pun — sistemnya membayar
+pemain untuk masa lalunya. Jadi tiap janji menyimpan angka awalnya sendiri, dan
+kemajuan selalu selisih terhadap angka itu. Diuji langsung:
+`earned = 10.000`, janji "600G" → **0/600**, dan baru selesai pada 600 yang
+benar-benar baru.
+
+**2. Tawaran tetap sepanjang satu hari-game.** Diundi dari benih
+`(tahun, hari)`. Tawaran yang berubah tiap kali panel dibuka mengajarkan pemain
+membuka-tutup panel sampai dapat yang enak — itu mesin judi, bukan pilihan.
+
+**3. Empat slot, bukan delapan.** Kalau semua keinginan bisa dijanjikan
+sekaligus, tidak ada yang ditolak — dan kalau tidak ada yang ditolak, tidak ada
+keputusan.
+
+Dua jenis keinginan, karena memang ada dua bentuk: **tambah** dihitung dari
+selisih ("panen 5 tomat"), **ambang** dari nilai mutlak ("capai 4 hati dengan
+Sari"). Keinginan ambang tidak pernah ditawarkan kalau pemain sudah
+melewatinya — kalau tidak, ia selesai di detik yang sama ia dijanjikan.
+
+### Isinya
+
+Dua belas jenis keinginan di lima kategori (Tani, Ekonomi, Sosial, Ternak,
+Petualangan), semuanya bergerbang relevansi: "Panen 5 Tomat" tidak muncul tanpa
+benih tomat, keinginan tambang tidak muncul tanpa pickaxe, keinginan bertarung
+tidak muncul tanpa pedang.
+
+Tiga hadiah, dan tiap satu menunjuk field yang **terbukti dibaca** kode
+permainan:
+
+| hadiah | efek | field |
+|---|---|---|
+| Napas Panjang | +10 energi maksimum, maks 5× | `max_energy` |
+| Badan Kuat | +15 HP maksimum, maks 4× | `max_hp` |
+| Pulih Cepat | +0,4 HP/detik saat diam, maks 3× | `hp_regen_rate` |
+
+Syarat "terbukti dibaca" itu diperiksa otomatis, dan alasannya ada di repo ini:
+`state.upgrades` (hoe/water/bag/axe) duduk di save sejak lama dan **tidak
+dibaca di mana pun**. Menjual "upgrade cangkul" sebagai hadiah akan mengambil
+Kebahagiaan pemain dan memberi nol. `max_energy` dipilih sebagai hadiah utama
+karena doktrin `economy.py` sendiri: *"Energi, bukan waktu, adalah sumber daya
+langka."*
+
+### Dua alat, karena ada dua hal berbeda yang bisa gagal
+
+| alat | yang dibuktikan |
+|---|---|
+| `tools/uji_wishes.py` | **mesinnya benar** — 41 pemeriksaan, murni logika, tanpa jendela |
+| `tools/probe_wishes.py` | **pemain bisa mencapainya** — 12 pemeriksaan lewat jalur tombol sungguhan di permainan yang berjalan |
+
+Yang kedua ada karena kegagalan jenis itu sudah terjadi di proyek ini dan tidak
+terlihat sebagai error apa pun: `husbandry.py` lengkap dan benar, tapi tidak
+ada yang memanggilnya. Jadi probe menekan tombol sungguhan — `[l]` membuka,
+`[1]` berjanji, `[6]` melupakan, `[a]` membeli, `ESC` menutup — lalu memeriksa
+seluruh teks panel ada **di dalam** layar lewat `getTightBounds`, dan bahwa
+panelnya benar-benar mengubah piksel (97,1%). Keduanya masuk `regress.py`.
+
+### Yang ketangkap saat mengujinya
+
+Keinginan sosial **tidak pernah muncul**: `wishes.py` mengimpor `NPCS` dari
+`data.py`, dan dict itu tidak ada — namanya `HUMAN_NPCS`. Tidak terlihat
+sebagai error karena `tawaran()` sengaja menangkap exception per-keinginan
+supaya satu templat rusak tidak mengosongkan seluruh papan. Ketahuan dari uji,
+bukan dari memainkannya.
+
+Dan satu lulus palsu lagi di alatnya sendiri, arah sebaliknya: pemeriksa
+"hadiah menunjuk field hidup" memakai pola `\.max_energy`, padahal
+tokenizer-nya menyambung token dengan spasi sehingga `s.max_energy` menjadi
+`s . max_energy`. Ketiga hadiah dinyatakan menunjuk field mati padahal
+ketiganya dibaca.
+
+### Temuan di luar Tahap 4: alur cerita utama tidak pernah maju
+
+Ditemukan saat menyurvei quest agar Wishes tidak menduplikasinya. `player.py`
+membuat `self.quest_controller`, tapi semua pengirimnya mencari
+`quest_manager` atau `_check_quest_progress` — dua nama yang **tidak ada** pada
+Player. Keduanya dijaga `hasattr`, jadi `check_quests()` diam: tidak ada error,
+tidak ada log, `quest_stage` cuma tidak pernah naik.
+
+**Tidak diperbaiki, dan sengaja.** Menyambungkan pengirimnya saja mengubah diam
+jadi crash: `QUEST_STAGES` bertipe `list` tapi dibaca `QUEST_STAGES.get(...)`
+(terbukti: `AttributeError: 'list' object has no attribute 'get'`), dan tahap
+2→3 membaca `s.npc_relations` yang tidak ada — ambangnya 15 sementara
+`npc_hearts` berskala 0–10, jadi angkanya harus diputuskan ulang. Memperbaiki
+separuhnya mengulang persis kesalahan husbandry. Sekarang tercatat sebagai
+RUSAK di `verifikasi.py`, lengkap dengan buktinya.
+
+Karena temuan itu, **`tools/verifikasi.py` sekarang keluar dengan kode 1** — itu
+satu cacat nyata yang menunggu keputusan pemilik, bukan alat yang rusak.
+
+**Status:** `uji_wishes.py` 41/41 · `probe_wishes.py` 12/12 ·
+`regress.py` 14/14 scene, 0 pemeriksaan gagal.
 
 ---
 

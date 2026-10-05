@@ -30,6 +30,11 @@ bukan pada kemungkinan yang dikarang:
                  membalik tanda sampai terasa benar. Diukur sekali di akhir
                  lewat tools/probe_arah.py, alat ukur yang sama dengan probe
                  manual, supaya tidak ada dua kebenaran.
+  panel_wishes   mesin Keinginan (Tahap 4) benar tapi tak terjangkau adalah
+                 kegagalan yang TIDAK terlihat sebagai error — persis yang
+                 terjadi pada husbandry.py. Diperiksa lewat jalur tombol
+                 sungguhan: [l] membuka, [1] berjanji, [6] melupakan,
+                 [a] membeli hadiah, ESC menutup.
   rumput_hidup   uniform `grs_time` sekarang didorong SEKALI ke `scene`, bukan
                  ke tiap entity rumput (147x lebih murah). Yang membuatnya aman
                  cuma satu syarat: tidak boleh ada input per-entity yang
@@ -408,6 +413,26 @@ def main():
         rumput_baris.append((False, f'probe rumput gagal jalan: {e}'))
         gagal_total += 1
 
+    # ── panel Keinginan terjangkau pemain (Tahap 4) ──
+    # Mesinnya diuji terpisah di tools/uji_wishes.py; yang diperiksa di sini
+    # keterjangkauannya lewat jalur tombol sungguhan. Sistem yang benar tapi
+    # tak terjangkau sudah pernah terjadi di proyek ini (husbandry.py), dan
+    # kegagalannya tidak kelihatan sebagai error apa pun.
+    wish_baris = []
+    try:
+        import probe_wishes
+        probe_wishes.uji_panel_hidup(g)
+        buruk_w = [(n, k) for n, ok, k in probe_wishes.hasil if not ok]
+        n_w = len(probe_wishes.hasil)
+        wish_baris.append((not buruk_w,
+                           f'{n_w - len(buruk_w)}/{n_w} pemeriksaan panel lulus'
+                           + ('; ' + '; '.join(f'{n}: {k}' for n, k in buruk_w[:2])
+                              if buruk_w else '')))
+        gagal_total += len(buruk_w)
+    except Exception as e:
+        wish_baris.append((False, f'probe keinginan gagal jalan: {e}'))
+        gagal_total += 1
+
     # ── laporan ──
     # Empat belas scene kosong SEKALIGUS bukan cacat scene: game ini terbukti
     # merender semuanya di `gauntlet/check.py`. Yang terjadi adalah jendelanya
@@ -448,6 +473,9 @@ def main():
     ok_rumput, catatan_rumput = rumput_baris[0] if rumput_baris else (True, '-')
     tanda_rumput = 'LULUS' if ok_rumput else 'GAGAL'
     print(f'{"rumput hidup":14s} {tanda_rumput:>7s} {"":>9s} {"":>7s}  {catatan_rumput[:44]}')
+    ok_wish, catatan_wish = wish_baris[0] if wish_baris else (True, '-')
+    print(f'{"panel wishes":14s} {"LULUS" if ok_wish else "GAGAL":>7s} '
+          f'{"":>9s} {"":>7s}  {catatan_wish[:44]}')
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)
     print(f'{n_lulus}/{len(baris)} scene lulus, {gagal_total} pemeriksaan gagal, '
@@ -472,6 +500,8 @@ def main():
         f.write(f'\n## HUD\n\n{ring_hud}\n')
         f.write(f'\n## Animasi rumput\n\n'
                 f'{"LULUS" if ok_rumput else "**GAGAL**"} — {catatan_rumput}\n')
+        f.write(f'\n## Panel Keinginan\n\n'
+                f'{"LULUS" if ok_wish else "**GAGAL**"} — {catatan_wish}\n')
         f.write('\n## Arah WASD\n\n| tombol | hasil | catatan |\n|---|---|---|\n')
         for k, ok, c in arah_baris:
             f.write(f'| {k.upper()} | {"LULUS" if ok else "**GAGAL**"} | {c} |\n')

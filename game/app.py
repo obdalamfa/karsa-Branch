@@ -295,6 +295,21 @@ class Game3D:
         self.panels.update(s, dt)
         self._pulihkan_mode_yatim()
 
+        # ── Keinginan yang terpenuhi dibayar SEKALI PER DETIK ──────────
+        # Bukan tiap frame. `periksa()` murah (paling banyak empat janji),
+        # tapi pelajaran Tahap 3 jelas: pekerjaan yang diulang 60 kali sedetik
+        # untuk hasil yang sama adalah cara paling mudah membuang milidetik.
+        # Satu detik cukup cepat supaya hadiahnya terasa datang dari perbuatan
+        # — pemain memanen tomat kelima dan pesannya muncul sebelum ia
+        # memindahkan jari.
+        self._jeda_keinginan = getattr(self, '_jeda_keinginan', 0.0) + dt
+        if self._jeda_keinginan >= 1.0:
+            self._jeda_keinginan = 0.0
+            try:
+                self.panels._bayar_keinginan()
+            except Exception as e:
+                logging.warning('[KEINGINAN] periksa gagal: %s', e)
+
         # ── MENJAUH MEMBATALKAN PIE MENU ───────────────────────────────
         # Pie menu objek dibuka dengan E dan sebelumnya hanya bisa ditutup
         # dengan memilih atau ESC. Karena mode non-'hud' membekukan pemain
@@ -603,6 +618,16 @@ class Game3D:
                 # Input panel hanya menerima angka 1-9, jadi daftar yang lebih
                 # panjang dari sembilan baris butuh halaman.
                 self.panels.market_page(-1 if key == 'q' else 1)
+            elif (self.panels._panel_name == 'wishes'
+                  and key in ('a', 'b', 'c')):
+                # Hadiah dipilih dengan huruf, bukan angka: angka 1-9 di panel
+                # ini sudah dipakai untuk menjanjikan tawaran dan melupakan
+                # janji, dan memakai angka yang sama untuk tiga arti berbeda
+                # adalah cara tercepat membuat pemain membeli hadiah padahal
+                # ingin berjanji.
+                msg = self.panels.beli_hadiah_keinginan(key)
+                if msg:
+                    self.panels.flash_msg(msg)
             elif key.isdigit():
                 msg = self.panels.panel_action(int(key))
                 if msg:
@@ -647,6 +672,10 @@ class Game3D:
                 self.panels.open_panel('relations')
             elif key == 'n':
                 self.panels.open_panel('catatan')
+            elif key == 'l':
+                # 'l' karena i/j/h/k/m/n/o/u sudah terpakai dan a/d/s/w adalah
+                # gerak. Satu-satunya huruf bebas lain adalah 'p'.
+                self.panels.open_panel('wishes')
             elif key == 'k':
                 if self.state.scene_name == 'shop':
                     self.panels.open_panel('shop')

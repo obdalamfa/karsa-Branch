@@ -438,7 +438,15 @@ class EntitiesManager:
                 old_target_x = pos.get('target_x', pos['x'])
                 old_target_y = pos.get('target_y', pos['y'])
 
+                pos['tujuan'] = [target_scene, tx, ty]
                 if pos['scene'] != target_scene:
+                    # Warga BERJALAN ke scene tujuan lewat portal (perjalanan.py).
+                    # Teleport hanya untuk yang tidak punya rute -- hewan, penunggu,
+                    # dan 'hidden' -- atau yang tidak bisa berjalan sendiri.
+                    from .perjalanan import rute
+                    if npc_id in HUMAN_NPCS and rute(pos['scene'], target_scene):
+                        pos['activity'] = 'walking'
+                        continue
                     pos['scene'] = target_scene
                     pos['x'] = tx
                     pos['y'] = ty
@@ -460,6 +468,104 @@ class EntitiesManager:
                 pos['sched_x'] = tx
                 pos['sched_y'] = ty
                 pos['activity'] = current[4]
+                # Aktor yang sedang tampil memegang salinan titik jadwalnya
+                # sendiri dan menimpa pos tiap frame; tanpa ini jadwal di scene
+                # yang sama tidak pernah dijalankan selama pemain melihatnya.
+                aktor = self.actors.get(npc_id)
+                if isinstance(aktor, NPC) and npc_id not in ('naga_bijak', 'banaspati'):
+                    if (abs(aktor.sched_x - tx) > 0.1 or abs(aktor.sched_y - ty) > 0.1) \
+                            and self.brains is not None:
+                        jalur = self.brains.plan_path(aktor.logical_x, aktor.logical_y, tx, ty)
+                        if jalur:
+                            aktor.path = list(jalur)
+                            aktor.auto_inter, aktor.use_timer = None, 0.0
+                    aktor.sched_x, aktor.sched_y = tx, ty
+                    aktor.activity = current[4]
+
+    def _tick_perjalanan(self, dt: float):
+        """Majukan warga yang sedang berjalan ke scene lain (game/perjalanan.py).
+
+        Di scene pemain aktornya berjalan sungguhan ke pintu lewat pathfinding
+        lalu menghilang di sana; di scene lain posisinya maju lurus dengan
+        kecepatan jalan. Tiba di scene pemain = aktornya dibangun di pintu masuk
+        dan langsung berjalan ke tujuannya.
+        """
+        from .perjalanan import lompatan_berikut, maju_lurus, JARAK_TIBA
+        s = self.state
+        for npc_id, pos in s.npc_positions.items():
+            tujuan = pos.get('tujuan')
+            if not tujuan or pos.get('scene') == tujuan[0] or npc_id not in HUMAN_NPCS:
+                continue
+            hop = lompatan_berikut(pos)
+            if hop is None:
+                continue
+            px, py, nxt, ax, ay = hop
+            aktor = self.actors.get(npc_id)
+            if aktor is not None and pos.get('scene') == self.scene_name:
+                d = math.hypot(aktor.logical_x - px, aktor.logical_y - py)
+                if d > JARAK_TIBA:
+                    if getattr(aktor, '_menuju', None) != (px, py):
+                        aktor._menuju = (px, py)
+                        aktor.auto_inter, aktor.use_timer = None, 0.0
+                        aktor.activity = 'walking'
+                        aktor.sched_x, aktor.sched_y = px, py
+                        jalur = (self.brains.plan_path(aktor.logical_x, aktor.logical_y, px, py)
+                                 if self.brains is not None else None)
+                        aktor.path = list(jalur) if jalur else []
+                        if not jalur:
+                            aktor.target_x, aktor.target_y = float(px), float(py)
+                    continue
+                # tiba di pintu: keluar dari scene pemain
+                self._hapus_aktor(npc_id)
+            elif not maju_lurus(pos, px, py, dt):
+                continue
+            # menyeberang
+            pos['scene'] = nxt
+            pos['x'] = pos['target_x'] = float(ax)
+            pos['y'] = pos['target_y'] = float(ay)
+            pos.pop('path', None)
+            sampai = (nxt == tujuan[0])
+            if sampai:
+                pos['sched_x'], pos['sched_y'] = tujuan[1], tujuan[2]
+            if nxt == self.scene_name:
+                self._bangun_aktor(npc_id, pos)
+                baru = self.actors.get(npc_id)
+                if isinstance(baru, NPC):
+                    if sampai:
+                        gx, gy = tujuan[1], tujuan[2]
+                        baru.activity = self._aktivitas_jadwal(npc_id)
+                    else:
+                        h2 = lompatan_berikut(pos)
+                        gx, gy = (h2[0], h2[1]) if h2 else (ax, ay)
+                        baru._menuju = (gx, gy)
+                        baru.activity = 'walking'
+                    baru.sched_x, baru.sched_y = gx, gy
+                    jalur = (self.brains.plan_path(ax, ay, gx, gy)
+                             if self.brains is not None else None)
+                    baru.path = list(jalur) if jalur else []
+            elif sampai:
+                # tiba di scene yang tidak dilihat pemain: langsung ke titiknya
+                pos['x'] = pos['target_x'] = float(tujuan[1])
+                pos['y'] = pos['target_y'] = float(tujuan[2])
+            if sampai:
+                pos['activity'] = self._aktivitas_jadwal(npc_id)
+
+    def _aktivitas_jadwal(self, npc_id):
+        hour = self.state.get_hour()
+        cur = None
+        for entry in SCHEDULES.get(npc_id, []):
+            if entry[0] <= hour:
+                cur = entry
+        return cur[4] if cur else ''
+
+    def _hapus_aktor(self, npc_id):
+        a = self.actors.pop(npc_id, None)
+        if a is None:
+            return
+        ch = getattr(a, '_char', None)
+        if ch is not None:
+            ch.hapus()
+        destroy(a)
 
     def _spawn_wild_state(self):
         """Isi dunia pertama kali dari tabel populasi ekologi.
@@ -548,189 +654,7 @@ class EntitiesManager:
                     pos['y'] = pos['target_y'] = ny
                     pos.pop('path', None)
 
-            # Determine class
-            if actor_id in ANIMAL_NPCS:
-                actor = FarmAnimal(s, actor_id)
-            else:
-                actor = NPC(s, actor_id)
-                
-            if actor_id in ('naga_bijak', 'banaspati'):
-                pos['x'] = pos['target_x'] = pos.get('sched_x', pos['x'])
-                pos['y'] = pos['target_y'] = pos.get('sched_y', pos['y'])
-                pos.pop('path', None)
-            actor.logical_x = pos['x']
-            actor.logical_y = pos['y']
-            actor.target_x = pos.get('target_x', pos['x'])
-            actor.target_y = pos.get('target_y', pos['y'])
-            if hasattr(actor, 'path') and 'path' in pos:
-                actor.path = list(pos['path'])
-            if hasattr(actor, 'sched_x'):
-                actor.sched_x = pos.get('sched_x', pos['x'])
-                actor.sched_y = pos.get('sched_y', pos['y'])
-                actor.activity = pos.get('activity', '')
-            
-            # Position visually
-            actor.position = (actor.logical_x * TS, 0, actor.logical_y * TS)
-            
-            # Setup Model
-            lbl_y, lbl_scale = GH + 3.1, 5
-            is_animal = actor_id in ANIMAL_NPCS
-            if is_animal:
-                # Hewan memakai rig prosedural berskala meter. Sebelum ini
-                # get_npc_model_name() mengembalikan 'humanoid' untuk SEMUA
-                # hewan — sapi, ayam dan kucing memakai mesh manusia yang sama.
-                from .animal_models import build_animal
-                h = build_animal(actor, ANIMAL_NPCS[actor_id].get('type', ''),
-                                 kunci=actor_id)
-                # Hewan dibangun menghadap +Z (konvensi base_actor.sync_visuals),
-                # dan kamera default juga memandang ke +Z — jadi pada rotation_y
-                # 0 pemain selalu melihat PUNGGUNG hewan, sementara kepala,
-                # tanduk, paruh dan moncong (satu-satunya yang membedakan
-                # spesies) menghadap menjauh. Putar ke arah kamera, dengan
-                # variasi deterministik supaya sekandang tidak seragam.
-                # (sum(ord) — bukan hash(), yang di-randomisasi per proses)
-                actor.rotation_y = 180 + (sum(map(ord, actor_id)) % 5 - 2) * 22
-                # Nameplate duduk tepat di atas hewan. Di ketinggian manusia
-                # (3,1 m) label ayam melayang lepas dari badannya sehingga
-                # pemain tidak bisa memasangkan nama dengan bentuk.
-                lbl_y, lbl_scale = h + 0.45, 2.6
-            is_guardian = actor_id in ('naga_bijak', 'banaspati')
-            if is_guardian:
-                from .guardian_models import build_guardian
-                lbl_y = build_guardian(actor, actor_id)
-                lbl_scale = 5.0
-            actor._label_y = lbl_y
-            apr_list = None if is_animal or is_guardian else resolve_outfit(actor_id, default=False)
-            # Vitaboy memuat aset TSO asli dari path absolut mesin tertentu
-            # (vitaboy/tso_paths.py). Tanpa try/except, satu mesin tanpa TSO
-            # membuat load_scene() crash total dan game tidak bisa dibuka sama
-            # sekali. Pembungkus gagal-lunak ini WAJIB dipertahankan.
-            # Model Blender ter-rig (npc_<id>.obj + tekstur baked + pose jalan)
-            # didahulukan; jalur Vitaboy dan manekin hanya untuk yang belum punya.
-            baked = False
-            if not is_animal and not is_guardian:
-                from .char_actor import build_char_actor
-                ca = build_char_actor(actor, f'npc_{actor_id}')
-                if ca is not None:
-                    actor._char = ca
-                    apr_list = None
-                    baked = True
-            if not baked and not is_animal and not is_guardian:
-                npc_mdl = load_model_file(f'npc_{actor_id}')
-                if npc_mdl is not None:
-                    actor.model = npc_mdl
-                    tex = _baked_texture(f'npc_{actor_id}_baked')
-                    if tex is not None:
-                        actor.texture = tex
-                        actor.color = color.white
-                    actor.scale = 1.0
-                    _setup_pose_swap(actor, f'npc_{actor_id}')
-                    apr_list = None
-                    baked = True
-            if apr_list:
-                try:
-                    from .vitaboy_npc import build_vitaboy_human_npc
-                    from .wajah import tinggi_varian
-                    # Tinggi badan ikut jadi ciri orang. Di patokan Story of
-                    # Seasons, Takakura yang pendek bungkuk di samping pemuda
-                    # yang tegak sudah bisa dibedakan dari siluetnya saja,
-                    # sebelum wajahnya kelihatan. Pengalinya 0,90-1,12 —
-                    # cukup untuk terbaca, tidak cukup untuk membuat pintu,
-                    # papan nama atau tinggi kamera meleset.
-                    sc = 0.19 if actor_id in ('cici', 'bowo') else 0.32
-                    sc *= tinggi_varian(actor_id)
-                    # Pabrik memilih backend sendiri: Character Panda3D (skinning
-                    # C++, 0,288 ms/avatar) kalau bisa, jatuh ke skinning Python
-                    # (6,387 ms/avatar) kalau tidak. Lihat vitaboy_npc.py.
-                    actor._va = build_vitaboy_human_npc(actor, actor_id, scale=sc,
-                                                       apr_list=apr_list)
-                    if actor._va is None:
-                        raise RuntimeError('kedua backend avatar gagal')
-                    actor.model = 'cube'  # dummy parent
-                    actor.color = color.clear # hide dummy
-                except Exception as e:
-                    import logging
-                    logging.warning(
-                        f"Vitaboy gagal untuk '{actor_id}' ({e}); pakai model biasa.")
-                    actor._va = None
-                    apr_list = None
-            if not apr_list and not is_animal and not is_guardian and not baked:
-                model_name = get_npc_model_name(actor_id)
-                panda_model = load_model_file(model_name)
-                if not panda_model:
-                    model_name = 'humanoid'
-                    panda_model = load_model_file(model_name)
-                if panda_model:
-                    # Mesh humanoid tidak punya warna sama sekali, dan satu
-                    # mesh cuma punya satu entity.color. Tanpa ini setiap
-                    # warga desa sampai ke layar sebagai gumpalan PUTIH POLOS
-                    # di mesin tanpa instalasi TSO — bukan karena avatarnya
-                    # hilang, tapi karena tidak ada yang pernah memberitahu
-                    # warnanya. Diwarnai per-vertex, jadi kulit, baju, celana
-                    # dan rambut muat dalam SATU entity. Lihat human_paint.py
-                    # untuk kenapa bukan lima entity.
-                    warnai = (model_name == 'humanoid')
-                    if warnai:
-                        try:
-                            from .human_paint import paint_humanoid, palet_untuk
-                            warnai = paint_humanoid(panda_model, palet_untuk(actor_id))
-                        except Exception as e:
-                            import logging
-                            logging.warning(f"human_paint gagal untuk '{actor_id}': {e}")
-                            warnai = False
-                        # Proporsi chibi juga di jalur cadangan. Di mesin tanpa
-                        # instalasi TSO SEMUA warga lewat sini, dan kalau hanya
-                        # avatar TSO yang dibuat chibi maka mesin itu diam-diam
-                        # menampilkan desa berproporsi dewasa. Lihat wajah.py.
-                        try:
-                            from .wajah import chibikan_humanoid
-                            chibikan_humanoid(panda_model)
-                        except Exception as e:
-                            import logging
-                            logging.warning(f"chibikan_humanoid gagal '{actor_id}': {e}")
-                    actor.model = panda_model
-                    actor.scale = 1.0
-                    if warnai:
-                        # WAJIB, dan bukan sekadar hiasan. Lampu di scene ini
-                        # memicu setShaderAuto() Panda3D (lihat app.py:74), dan
-                        # shader hasil generator itu MENGABAIKAN kolom warna
-                        # vertex — diuji: mesh yang sudah diwarnai tetap keluar
-                        # putih pucat sampai smooth_shader dipasang. Yang membaca
-                        # p3d_Color cuma smooth_shader, jadi tanpa baris ini
-                        # seluruh kerja pewarnaan tidak sampai ke layar.
-                        try:
-                            from .smooth_shader import apply_smooth
-                            apply_smooth(actor, has_texture=False)
-                        except Exception:
-                            pass
-                else:
-                    # Fallback model if missing
-                    panda_fallback = load_model_file('humanoid')
-                    if panda_fallback:
-                        actor.model = panda_fallback
-                    else:
-                        actor.model = 'cube'
-                lbl_y = _dandani_manekin(actor, actor_id)
-            # Setup Label
-            all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
-            name = all_d.get(actor_id, {}).get('name', actor_id)
-            actor._lbl = Text(name, parent=actor, billboard=True,
-                             position=(0, lbl_y, 0),
-                             scale=lbl_scale, color=color.rgb(255, 240, 160),
-                             background=True)
-
-            # Label aksi saat NPC "memakai" perabot: nama interaksinya
-            # ("Masak", "Tidur", ...) muncul di atas nameplate selama
-            # `use_timer > 0`, lalu hilang. Membuat otonomi terbaca pemain
-            # tanpa perlu aset animasi baru. Hewan tidak memakai perabot.
-            if isinstance(actor, NPC):
-                actor._use_lbl = Text('', parent=actor, billboard=True,
-                                      position=(0, lbl_y + 0.8, 0),
-                                      scale=lbl_scale * 0.55,
-                                      color=color.white, background=True)
-                actor._use_lbl.enabled = False
-
-            self.actors[actor_id] = actor
+            self._bangun_aktor(actor_id, pos)
 
         # Old saves can contain plants on terrain that is now a cliff.
         if self.scene_name == 'mountain':
@@ -766,6 +690,196 @@ class EntitiesManager:
             
         # Spawn Mobs
         self._spawn_mobs_for_scene()
+
+    def _bangun_aktor(self, actor_id, pos):
+        """Bangun satu aktor (NPC/hewan/penunggu) dari entri npc_positions.
+
+        Dipakai load_scene DAN saat warga tiba di scene pemain lewat portal
+        di tengah permainan (perjalanan antar-scene, lihat game/perjalanan.py)."""
+        s = self.state
+        # Determine class
+        if actor_id in ANIMAL_NPCS:
+            actor = FarmAnimal(s, actor_id)
+        else:
+            actor = NPC(s, actor_id)
+            
+        if actor_id in ('naga_bijak', 'banaspati'):
+            pos['x'] = pos['target_x'] = pos.get('sched_x', pos['x'])
+            pos['y'] = pos['target_y'] = pos.get('sched_y', pos['y'])
+            pos.pop('path', None)
+        actor.logical_x = pos['x']
+        actor.logical_y = pos['y']
+        actor.target_x = pos.get('target_x', pos['x'])
+        actor.target_y = pos.get('target_y', pos['y'])
+        if hasattr(actor, 'path') and 'path' in pos:
+            actor.path = list(pos['path'])
+        if hasattr(actor, 'sched_x'):
+            actor.sched_x = pos.get('sched_x', pos['x'])
+            actor.sched_y = pos.get('sched_y', pos['y'])
+            actor.activity = pos.get('activity', '')
+        
+        # Position visually
+        actor.position = (actor.logical_x * TS, 0, actor.logical_y * TS)
+        
+        # Setup Model
+        lbl_y, lbl_scale = GH + 3.1, 5
+        is_animal = actor_id in ANIMAL_NPCS
+        if is_animal:
+            # Hewan memakai rig prosedural berskala meter. Sebelum ini
+            # get_npc_model_name() mengembalikan 'humanoid' untuk SEMUA
+            # hewan — sapi, ayam dan kucing memakai mesh manusia yang sama.
+            from .animal_models import build_animal
+            h = build_animal(actor, ANIMAL_NPCS[actor_id].get('type', ''),
+                             kunci=actor_id)
+            # Hewan dibangun menghadap +Z (konvensi base_actor.sync_visuals),
+            # dan kamera default juga memandang ke +Z — jadi pada rotation_y
+            # 0 pemain selalu melihat PUNGGUNG hewan, sementara kepala,
+            # tanduk, paruh dan moncong (satu-satunya yang membedakan
+            # spesies) menghadap menjauh. Putar ke arah kamera, dengan
+            # variasi deterministik supaya sekandang tidak seragam.
+            # (sum(ord) — bukan hash(), yang di-randomisasi per proses)
+            actor.rotation_y = 180 + (sum(map(ord, actor_id)) % 5 - 2) * 22
+            # Nameplate duduk tepat di atas hewan. Di ketinggian manusia
+            # (3,1 m) label ayam melayang lepas dari badannya sehingga
+            # pemain tidak bisa memasangkan nama dengan bentuk.
+            lbl_y, lbl_scale = h + 0.45, 2.6
+        is_guardian = actor_id in ('naga_bijak', 'banaspati')
+        if is_guardian:
+            from .guardian_models import build_guardian
+            lbl_y = build_guardian(actor, actor_id)
+            lbl_scale = 5.0
+        actor._label_y = lbl_y
+        apr_list = None if is_animal or is_guardian else resolve_outfit(actor_id, default=False)
+        # Vitaboy memuat aset TSO asli dari path absolut mesin tertentu
+        # (vitaboy/tso_paths.py). Tanpa try/except, satu mesin tanpa TSO
+        # membuat load_scene() crash total dan game tidak bisa dibuka sama
+        # sekali. Pembungkus gagal-lunak ini WAJIB dipertahankan.
+        # Model Blender ter-rig (npc_<id>.obj + tekstur baked + pose jalan)
+        # didahulukan; jalur Vitaboy dan manekin hanya untuk yang belum punya.
+        baked = False
+        if not is_animal and not is_guardian:
+            from .char_actor import build_char_actor
+            ca = build_char_actor(actor, f'npc_{actor_id}')
+            if ca is not None:
+                actor._char = ca
+                apr_list = None
+                baked = True
+        if not baked and not is_animal and not is_guardian:
+            npc_mdl = load_model_file(f'npc_{actor_id}')
+            if npc_mdl is not None:
+                actor.model = npc_mdl
+                tex = _baked_texture(f'npc_{actor_id}_baked')
+                if tex is not None:
+                    actor.texture = tex
+                    actor.color = color.white
+                actor.scale = 1.0
+                _setup_pose_swap(actor, f'npc_{actor_id}')
+                apr_list = None
+                baked = True
+        if apr_list:
+            try:
+                from .vitaboy_npc import build_vitaboy_human_npc
+                from .wajah import tinggi_varian
+                # Tinggi badan ikut jadi ciri orang. Di patokan Story of
+                # Seasons, Takakura yang pendek bungkuk di samping pemuda
+                # yang tegak sudah bisa dibedakan dari siluetnya saja,
+                # sebelum wajahnya kelihatan. Pengalinya 0,90-1,12 —
+                # cukup untuk terbaca, tidak cukup untuk membuat pintu,
+                # papan nama atau tinggi kamera meleset.
+                sc = 0.19 if actor_id in ('cici', 'bowo') else 0.32
+                sc *= tinggi_varian(actor_id)
+                # Pabrik memilih backend sendiri: Character Panda3D (skinning
+                # C++, 0,288 ms/avatar) kalau bisa, jatuh ke skinning Python
+                # (6,387 ms/avatar) kalau tidak. Lihat vitaboy_npc.py.
+                actor._va = build_vitaboy_human_npc(actor, actor_id, scale=sc,
+                                                   apr_list=apr_list)
+                if actor._va is None:
+                    raise RuntimeError('kedua backend avatar gagal')
+                actor.model = 'cube'  # dummy parent
+                actor.color = color.clear # hide dummy
+            except Exception as e:
+                import logging
+                logging.warning(
+                    f"Vitaboy gagal untuk '{actor_id}' ({e}); pakai model biasa.")
+                actor._va = None
+                apr_list = None
+        if not apr_list and not is_animal and not is_guardian and not baked:
+            model_name = get_npc_model_name(actor_id)
+            panda_model = load_model_file(model_name)
+            if not panda_model:
+                model_name = 'humanoid'
+                panda_model = load_model_file(model_name)
+            if panda_model:
+                # Mesh humanoid tidak punya warna sama sekali, dan satu
+                # mesh cuma punya satu entity.color. Tanpa ini setiap
+                # warga desa sampai ke layar sebagai gumpalan PUTIH POLOS
+                # di mesin tanpa instalasi TSO — bukan karena avatarnya
+                # hilang, tapi karena tidak ada yang pernah memberitahu
+                # warnanya. Diwarnai per-vertex, jadi kulit, baju, celana
+                # dan rambut muat dalam SATU entity. Lihat human_paint.py
+                # untuk kenapa bukan lima entity.
+                warnai = (model_name == 'humanoid')
+                if warnai:
+                    try:
+                        from .human_paint import paint_humanoid, palet_untuk
+                        warnai = paint_humanoid(panda_model, palet_untuk(actor_id))
+                    except Exception as e:
+                        import logging
+                        logging.warning(f"human_paint gagal untuk '{actor_id}': {e}")
+                        warnai = False
+                    # Proporsi chibi juga di jalur cadangan. Di mesin tanpa
+                    # instalasi TSO SEMUA warga lewat sini, dan kalau hanya
+                    # avatar TSO yang dibuat chibi maka mesin itu diam-diam
+                    # menampilkan desa berproporsi dewasa. Lihat wajah.py.
+                    try:
+                        from .wajah import chibikan_humanoid
+                        chibikan_humanoid(panda_model)
+                    except Exception as e:
+                        import logging
+                        logging.warning(f"chibikan_humanoid gagal '{actor_id}': {e}")
+                actor.model = panda_model
+                actor.scale = 1.0
+                if warnai:
+                    # WAJIB, dan bukan sekadar hiasan. Lampu di scene ini
+                    # memicu setShaderAuto() Panda3D (lihat app.py:74), dan
+                    # shader hasil generator itu MENGABAIKAN kolom warna
+                    # vertex — diuji: mesh yang sudah diwarnai tetap keluar
+                    # putih pucat sampai smooth_shader dipasang. Yang membaca
+                    # p3d_Color cuma smooth_shader, jadi tanpa baris ini
+                    # seluruh kerja pewarnaan tidak sampai ke layar.
+                    try:
+                        from .smooth_shader import apply_smooth
+                        apply_smooth(actor, has_texture=False)
+                    except Exception:
+                        pass
+            else:
+                # Fallback model if missing
+                panda_fallback = load_model_file('humanoid')
+                if panda_fallback:
+                    actor.model = panda_fallback
+                else:
+                    actor.model = 'cube'
+            lbl_y = _dandani_manekin(actor, actor_id)
+        # Setup Label
+        all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
+        name = all_d.get(actor_id, {}).get('name', actor_id)
+        actor._lbl = Text(name, parent=actor, billboard=True,
+                         position=(0, lbl_y, 0),
+                         scale=lbl_scale, color=color.rgb(255, 240, 160),
+                         background=True)
+
+        # Label aksi saat NPC "memakai" perabot: nama interaksinya
+        # ("Masak", "Tidur", ...) muncul di atas nameplate selama
+        # `use_timer > 0`, lalu hilang. Membuat otonomi terbaca pemain
+        # tanpa perlu aset animasi baru. Hewan tidak memakai perabot.
+        if isinstance(actor, NPC):
+            actor._use_lbl = Text('', parent=actor, billboard=True,
+                                  position=(0, lbl_y + 0.8, 0),
+                                  scale=lbl_scale * 0.55,
+                                  color=color.white, background=True)
+            actor._use_lbl.enabled = False
+
+        self.actors[actor_id] = actor
 
     def spawn_mobs(self, mob_specs: list):
         self.state.mobs = mob_specs
@@ -845,6 +959,7 @@ class EntitiesManager:
         if self.brains is not None:
             self.brains.tick(dt)
 
+        self._tick_perjalanan(dt)
         self._npc_sched_t += dt
         if self._npc_sched_t >= 30 or s.get_hour() != self._npc_sched_hour:
             self._npc_sched_t = 0

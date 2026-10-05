@@ -17,6 +17,16 @@ _LAJU_ACUAN = 3.0
 _BAUR = 0.18
 
 
+# Gaya per tokoh yang tidak dipanggang ke rig: skala dan tinggi melayang
+# (meter di atas tanah). Bidadari peri kecil yang terbang; dewa angin
+# mengambang sejengkal. Diayun naik-turun pelan supaya terbaca melayang,
+# bukan tersangkut di udara.
+_GAYA = {
+    'npc_bidadari':   {'skala': 0.6, 'melayang': 0.9},
+    'npc_dewa_angin': {'skala': 1.0, 'melayang': 0.25},
+}
+
+
 def actor_path(name):
     p = _ACTOR_DIR / f'{name}.glb'
     return p if p.exists() else None
@@ -54,8 +64,12 @@ class CharActor:
         self.actor.reparentTo(parent)
         # Model menghadap -Z; entity game menganggap rotation_y 0 = menghadap +Z.
         self.actor.setH(180)
-        self.actor.setScale(SKALA)
+        gaya = _GAYA.get(name, {})
+        self.actor.setScale(SKALA * gaya.get('skala', 1.0))
         self._ke_tengah(parent)
+        self._melayang = gaya.get('melayang', 0.0)
+        self._y_dasar = self.actor.getY()
+        self._t_ayun = 0.0
         _warnai_material_polos(self.actor)
         self.anims = set(self.actor.getAnimNames())
         self.actor.enableBlend()
@@ -89,6 +103,11 @@ class CharActor:
 
     def update(self, dt, laju):
         """laju: kecepatan dunia sekarang (0 = diam)."""
+        if self._melayang:
+            import math
+            self._t_ayun += dt
+            self.actor.setY(self._y_dasar + self._melayang
+                            + math.sin(self._t_ayun * 1.6) * 0.08)
         if self._sekali is not None:
             ctrl = self.actor.getAnimControl(self._sekali)
             if ctrl is not None and ctrl.isPlaying():

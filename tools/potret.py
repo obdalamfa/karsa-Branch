@@ -19,6 +19,9 @@ ROOT = Path(__file__).resolve().parent.parent
 ACTORS = ROOT / 'assets' / 'models' / 'actors'
 OUT = ROOT / 'assets' / 'textures' / 'potret'
 
+# Sistem koordinat SAMA dengan game (ursina/window.py): tanpa ini topi OBJ
+# dimuat tegak ke Z sementara rig GLB tegak ke Y, dan topi terlihat rebah.
+loadPrcFileData('', 'coordinate-system y-up-left')
 loadPrcFileData('', 'window-type offscreen')
 loadPrcFileData('', 'win-size 256 256')
 loadPrcFileData('', 'framebuffer-alpha 1')
@@ -31,6 +34,7 @@ from panda3d.core import (AmbientLight, DirectionalLight, Filename,  # noqa: E40
                           LVector3, NodePath, PNMImage, Vec4, AntialiasAttrib)
 
 sys.path.insert(0, str(ROOT))
+import game  # noqa: E402  (Assimp untuk OBJ topi)
 from game.char_actor import _warnai_material_polos           # noqa: E402
 
 
@@ -62,6 +66,30 @@ def main(nama):
         if 'idle' in anim:
             a.pose('idle', 0)
         a.update()
+        base.graphicsEngine.renderFrame()   # sendi harus sudah berpose sebelum topi ditempel
+        # Wajah chibi, warna kulit suku, dan topi -- sama persis dengan sosok
+        # yang berjalan di desa (game/rupa_pemain.py).
+        if n == 'player':
+            # topi bawaan GLB disembunyikan; topi pemain dipilih di chargen
+            from game.rupa_pemain import pasang_aksesori
+
+            class _CP:
+                pass
+            cp = _CP(); cp.actor = a
+            pasang_aksesori(cp, None)
+        if n.startswith('npc_'):
+            try:
+                from game.rupa_pemain import terapkan_npc
+
+                class _CA:
+                    pass
+                ca = _CA(); ca.actor = a
+                terapkan_npc(ca, n[4:])
+            except Exception as e:
+                print('rupa gagal', n, e)
+        # sayap bidadari menutup latar potret dengan bidang putih
+        for g in a.findAllMatches('**/sayap*'):
+            g.hide()
         kar = a.find('**/+Character')
         sendi = a.exposeJoint(kar.attachNewNode('kepala'), 'modelRoot', 'HEAD')
         base.graphicsEngine.renderFrame()
@@ -74,7 +102,7 @@ def main(nama):
             base.cam.setPos(pusat + LVector3(0.2, -1.0, 0.04))
         else:
             pusat = LVector3(kp.x, kp.y + 0.09, kp.z)
-            base.cam.setPos(pusat + LVector3(0.2, 0.04, 1.0))
+            base.cam.setPos(pusat + LVector3(0.2, 0.04, -1.0))
         base.cam.lookAt(pusat)
         for _ in range(2):
             base.graphicsEngine.renderFrame()

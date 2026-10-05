@@ -69,7 +69,7 @@ def _kulit(r, g, b):
             and b >= r * 0.26 and (r - b) > 0.025)
 
 
-def _segitiga(geom_node):
+def _segitiga(geom_node, lengkap=False):
     """(uv0, uv1, uv2, tinggi_rata) untuk tiap segitiga di GeomNode."""
     out = []
     n = geom_node.node()
@@ -96,7 +96,11 @@ def _segitiga(geom_node):
                     continue
                 idx = [prim.getVertex(j) for j in range(a, b)]
                 h = sum(pos[i].y for i in idx) / 3.0      # glTF Y-atas
-                out.append(([uv[i] for i in idx], h))
+                if lengkap:
+                    out.append(([uv[i] for i in idx], h,
+                                sum(pos[i].x for i in idx) / 3.0, sum(pos[i].z for i in idx) / 3.0))
+                else:
+                    out.append(([uv[i] for i in idx], h))
     return out
 
 
@@ -108,6 +112,34 @@ def _gambar_topeng(tris, w, h, batas_pinggul):
     for uvs, tinggi in tris:
         nilai = 1 if tinggi >= batas_pinggul else 2
         d.polygon([(u * w, (1.0 - v) * h) for (u, v) in uvs], fill=nilai)
+    return tp
+
+
+def _topeng_rambut(gnp, ukuran, garis=0.70, pinggir=0.60, samping=False):
+    """Topeng 'L' rambut kepala TSO dari tinggi segitiga relatif tinggi mesh
+    (0 = dagu, 1 = ubun-ubun): >= garis -> 2, >= pinggir -> 1.
+    samping: rambut bob/panjang yang turun di sisi dan belakang kepala --
+    segitiga jauh dari garis tengah wajah atau di belakang ikut jadi 2."""
+    from PIL import Image, ImageDraw
+    tris = _segitiga(gnp, lengkap=True)
+    w, h = ukuran
+    tp = Image.new('L', (w, h), 0)
+    if not tris:
+        return tp
+    y0, y1 = min(t[1] for t in tris), max(t[1] for t in tris)
+    x0, x1 = min(t[2] for t in tris), max(t[2] for t in tris)
+    z0, z1 = min(t[3] for t in tris), max(t[3] for t in tris)
+    cx, lx = (x0 + x1) / 2, max(x1 - x0, 1e-5)
+    d = ImageDraw.Draw(tp)
+    for uvs, t, x, z in sorted(tris, key=lambda q: q[1]):
+        rel = (t - y0) / max(y1 - y0, 1e-5)
+        nilai = 2 if rel >= garis else (1 if rel >= pinggir else 0)
+        if samping and rel >= 0.18:
+            # wajah rig menghadap +Z: belakang = z rendah
+            if abs(x - cx) > lx * 0.36 or (z - z0) / max(z1 - z0, 1e-5) < 0.45:
+                nilai = 2
+        if nilai:
+            d.polygon([(u * w, (1.0 - v) * h) for (u, v) in uvs], fill=nilai)
     return tp
 
 
@@ -187,6 +219,21 @@ def _warnai(img, topeng, peta):
             baru = np.clip(t[k] * f, 0, 1)
             out[..., k] = out[..., k] * (1 - w) + baru * w
         sudah = sudah | (w > 0.5)
+    if 'rambut_npc' in peta and '_topeng_rambut' in peta:
+        # Topeng dari GEOMETRI (lihat _topeng_rambut): 2 = pasti rambut (di atas
+        # garis rambut), 1 = pinggiran dahi -- di situ hanya piksel bukan kulit.
+        # Deteksi warna saja gagal: rambut pirang Cici sekroma kulitnya.
+        tp = np.asarray(peta['_topeng_rambut'].resize(img.size))
+        bukan_kulit = (w < 0.4) if peta.get('_acuan') is not None and 'kulit' in peta else True
+        m = (tp == 2) | ((tp == 1) & bukan_kulit)
+        m &= a[..., 3] > 0.5
+        if m.any():
+            ml = float(np.median(l[m]))
+            t2 = np.array(peta['rambut_npc'], np.float32) / 255.0
+            f2 = np.clip(l / max(ml, 1e-3), 0.5, 1.6)
+            for k in range(3):
+                out[..., k][m] = np.clip(t2[k] * f2[m], 0, 1)
+            sudah = sudah | m
     if 'rambut' in peta:
         sat = a[..., :3].max(-1) - a[..., :3].min(-1)
         rambut = ((l < 0.24) & (sat < 0.045)) | (b > r * 1.15)
@@ -261,7 +308,17 @@ def _kepala_bounds(a):
             calon.append((hi.y - lo.y, lo, hi))
     if calon:
         _t, lo, hi = max(calon, key=lambda c: c[0])
-        return ((lo.x + hi.x) / 2, hi.y, (lo.z + hi.z) / 2, hi.x - lo.x, hi.y - lo.y)
+        # Rambut TSO (mesh '_hair', sanggul, topi bawaan yang dilukis) menonjol
+        # di luar mesh kepala; topi harus melingkupi gabungan keduanya, kalau
+        # tidak sanggul dan jambul menembus topi.
+        x0, x1, z0, z1, y1 = lo.x, hi.x, lo.z, hi.z, hi.y
+        for gnp in a.findAllMatches('**/+GeomNode'):
+            if 'hair' in gnp.getName() and not gnp.isHidden():
+                l2, h2 = gnp.getTightBounds(a)
+                x0, x1 = min(x0, l2.x), max(x1, h2.x)
+                z0, z1 = min(z0, l2.z), max(z1, h2.z)
+                y1 = max(y1, h2.y)
+        return ((x0 + x1) / 2, y1, (z0 + z1) / 2, max(x1 - x0, (z1 - z0) * 0.9), y1 - lo.y)
     lo, hi = a.getTightBounds()
     return (0, hi.y, 0, 0.2, 0.25)
 
@@ -284,7 +341,66 @@ def _sembunyikan_topi_panggang(a, kepala_tengah):
             gnp.hide()
 
 
-def pasang_aksesori(char_actor, jenis, warna=None, skala=1.0):
+_WARNA_TOPI = {'bucket': (98, 104, 70), 'bandana': (170, 44, 40), 'koboi': (112, 78, 52)}
+_MODEL_TOPI = {}
+
+
+def _warna_material_topi(np_):
+    """Warna Kd .mtl -> ColorAttrib di tiap geom.
+
+    Assimp menaruh MaterialAttrib di NODE, bukan di geom, jadi pengubah milik
+    char_actor (yang hanya membaca state geom) melewatkannya dan topi tampil
+    putih polos. Di sini state node dan geom digabung dulu.
+    """
+    from panda3d.core import MaterialAttrib, ColorAttrib, TextureAttrib
+    from .char_actor import _linear_ke_srgb
+    for gnp in np_.findAllMatches('**/+GeomNode'):
+        gn = gnp.node()
+        st_node = gnp.getNetState()
+        for i in range(gn.getNumGeoms()):
+            st = st_node.compose(gn.getGeomState(i))
+            if not st.hasAttrib(MaterialAttrib):
+                continue
+            mt = st.getAttrib(MaterialAttrib).getMaterial()
+            c = mt.getBaseColor() if mt.hasBaseColor() else mt.getDiffuse()
+            w = (_linear_ke_srgb(c[0]), _linear_ke_srgb(c[1]), _linear_ke_srgb(c[2]), 1.0)
+            gn.setGeomState(i, gn.getGeomState(i).setAttrib(ColorAttrib.makeFlat(w)))
+
+
+def _model_topi(berkas):
+    """Salinan model topi Blender, atau None kalau berkasnya tidak ada."""
+    from pathlib import Path
+    if berkas not in _MODEL_TOPI:
+        p = Path(__file__).resolve().parent.parent / 'assets' / 'models' / 'topi' / f'{berkas}.obj'
+        m = None
+        if p.exists():
+            try:
+                from direct.showbase.ShowBaseGlobal import base
+                from panda3d.core import Filename
+                # loadModel(noCache): cache .bam Panda menyimpan hasil loader OBJ
+                # bawaan yang mengabaikan .mtl (lihat game/__init__.py)
+                m = base.loader.loadModel(Filename.fromOsSpecific(str(p)), noCache=True)
+                if m is not None:
+                    _warna_material_topi(m)
+            except Exception:
+                m = None
+        _MODEL_TOPI[berkas] = m
+    m = _MODEL_TOPI[berkas]
+    return m.copyTo(NodePath('topi')) if m is not None else None
+
+
+def _tempel(a, akar, sendi):
+    """Gantung topi di sendi kepala. Sendi yang diekspos baru memuat skala
+    besarkan_kepala setelah karakter diperbarui; kalau tidak, wrtReparentTo
+    memakai transform basi dan topi ikut membesar SETELAH diletakkan."""
+    try:
+        a.update(force=True)
+    except Exception:
+        pass
+    akar.wrtReparentTo(sendi)
+
+
+def pasang_aksesori(char_actor, jenis, warna=None, skala=1.0, turun_extra=0.0):
     import math
     from ursina import Entity, color
     from ursina.models.procedural.cone import Cone
@@ -295,6 +411,27 @@ def pasang_aksesori(char_actor, jenis, warna=None, skala=1.0):
         lama.removeNode()
     char_actor._aksesori = None
     cx, top, cz, lebar, tinggi = _kepala_bounds(a)
+    # Kotak batas di atas diukur dari pose ISTIRAHAT, padahal besarkan_kepala
+    # sudah menskalakan sendi HEAD. Tanpa koreksi ini rambut menembus topi
+    # dan tepi caping jatuh setinggi mata.
+    sk_kepala = 1.0
+    j = getattr(char_actor, '_kepala_dikendali', None)
+    if j is not None:
+        sk_kepala = j.getScale().y
+        try:
+            from panda3d.core import LMatrix4f
+            kar0 = a.find('**/+Character')
+            jt = a.getJoints(jointName='HEAD')[0]
+            m = LMatrix4f()
+            jt.getNetTransform(m)
+            piv = a.getRelativePoint(kar0, m.getRow3(3))
+            cx = piv.x + (cx - piv.x) * sk_kepala
+            cz = piv.z + (cz - piv.z) * sk_kepala
+            top = piv.y + (top - piv.y) * sk_kepala
+            lebar *= sk_kepala
+            tinggi *= sk_kepala
+        except Exception:
+            pass
     # Topi panggang selalu disembunyikan pada pemain (pilihan chargen yang
     # menang) dan pada warga yang diberi topi runtime.
     # batas seperempat bawah kepala: peci Blender Pak Hadi jatuh setinggi mata
@@ -323,6 +460,41 @@ def pasang_aksesori(char_actor, jenis, warna=None, skala=1.0):
     def W(bawaan):
         return warna or bawaan
 
+    # Model Blender (tools/blender_topi.py) didahulukan: satuan "jari-jari
+    # kepala = 1", alas di y = 0, menghadap -Z -- cukup diskalakan r dan
+    # diletakkan di dasar. Primitif di bawah hanya cadangan.
+    berkas = {'tricorn': 'bajak_laut'}.get(jenis, jenis)
+    mdl = _model_topi(berkas)
+    if mdl is not None:
+        mdl.reparentTo(akar)
+        turun = {'caping': 0.1, 'mahkota_bunga': 0.12, 'mahkota': 0.08, 'ikat': 0.35,
+                 'bandana': 0.12, 'pita': 0.0}.get(jenis, 0.0) + turun_extra
+        # Rambut TSO menonjol di luar mesh kepala: model sedikit lebih besar
+        # dan alasnya lebih tinggi daripada topi primitif, kalau tidak
+        # mahkotanya tenggelam di rambut dan yang terlihat cuma tepinya.
+        dasar_m = top - tinggi * (0.2 + turun)
+        sk = r * 1.18
+        mdl.setPos(cx, dasar_m, cz)
+        # Menghadap: model diekspor dengan depan -Z, tapi di ruang aktor wajah
+        # rig menghadap +Z -- tanpa putaran ini simpul bandana ada di dahi
+        # dan tengkorak topi bajak laut di belakang kepala.
+        mdl.setH(180)
+        # Tinggi mahkota diregang kalau rambut (sanggul, jambul) lebih tinggi
+        # daripada topi; kalau tidak ujung rambut menembus puncaknya.
+        try:
+            lo_m, hi_m = mdl.getTightBounds(mdl)
+            hm = max(hi_m.y, 1e-3)
+        except Exception:
+            hm = 0.8
+        fy = max(1.0, min(1.8, (top + tinggi * 0.04 - dasar_m) / (hm * sk)))
+        mdl.setScale(sk, sk * fy, sk)
+        if warna is not None:
+            bawaan = _WARNA_TOPI.get(berkas)
+            if bawaan:
+                mdl.setColorScale(*(w / max(b, 1) for w, b in zip(warna, bawaan)), 1)
+        _tempel(a, akar, sendi)
+        char_actor._aksesori = akar
+        return
     if jenis == 'caping':
         # kerucut anyaman + pita tepi tipis
         bagian(Cone(20, height=1, radius=1), (cx, top - tinggi * 0.2, cz), (r * 2.7, tinggi * 0.55 * skala, r * 2.7), W((200, 172, 110)))
@@ -372,7 +544,7 @@ def pasang_aksesori(char_actor, jenis, warna=None, skala=1.0):
             t = k / 8 * math.tau
             bagian('sphere', (cx + math.cos(t) * r * 1.0, top - tinggi * 0.12, cz + math.sin(t) * r * 1.0),
                    (r * 0.38, r * 0.38, r * 0.38), W((240, 214, 120)) if k % 2 else (226, 140, 170))
-    akar.wrtReparentTo(sendi)
+    _tempel(a, akar, sendi)
     char_actor._aksesori = akar
 
 
@@ -395,18 +567,33 @@ KULIT_NPC = {
     'jaka_ronda': (110, 72, 50),    # Ambon
     'ningsih': (92, 60, 42),        # Papua
     'bidadari': (236, 214, 196),
+    'petapa_srimana': (120, 82, 58),  # pertapa tua, legam terbakar matahari
     'dewa_angin': (206, 170, 136),
 }
-# (jenis, warna atau None, skala)
+# (jenis, warna atau None, skala[, turun]) -- turun: tambahan untuk rambut
+# jabrik yang membuat puncak mesh kepala jauh di atas tengkorak (Pak Hadi).
 TOPI_NPC = {
-    'ningsih': ('caping', None, 1.0), 'bowo': ('caping', None, 0.85),
-    'budi': ('koboi', None, 1.0), 'joko': ('bucket', None, 1.0),
-    'arya': ('bucket', (120, 84, 50), 1.0), 'maya': ('baret', None, 1.0),
-    'pak_guru': ('peci', None, 1.0), 'jaka_ronda': ('peci', None, 1.0),
+    'ningsih': ('caping', None, 1.0), 'bowo': ('caping', None, 1.0),
+    'budi': ('koboi', None, 1.0),
+    # Pak Hadi tanpa peci: jambul jabriknya geometri kepala, peci apa pun
+    # menempel seperti piring di belakangnya.
     'kapten_kuro': ('tricorn', None, 1.0), 'kru_kuro': ('bandana', None, 1.0),
     'cici': ('pita', None, 1.0), 'dewa_angin': ('mahkota', None, 1.0),
     'bidadari': ('mahkota_bunga', None, 1.0),
 }
+
+# Topi hanya untuk yang punya alasan: caping petani, koboi, bajak laut,
+# mahkota swarga, pita Cici. Sisanya memperlihatkan rambutnya.
+
+# Rambut TSO bawaan (merah jabrik, pirang) tidak cocok dengan sukunya;
+# dicelup lewat topeng rambut yang sama dengan pemain.
+RAMBUT_NPC = {
+    'pak_guru': (34, 30, 28), 'petapa_srimana': (200, 196, 188),
+    'cici': (52, 36, 26), 'kru_kuro': (30, 26, 24),
+    'arya': (46, 32, 24), 'maya': (40, 28, 22),
+}
+
+_RAMBUT_SAMPING = {'cici'}
 
 _CACHE_TEKSTUR = {}
 
@@ -416,6 +603,9 @@ SKALA_KEPALA = 1.16
 
 
 # Iris cokelat tua yang wajar untuk warga Nusantara; satu dua yang lebih terang.
+# Warga perempuan: bibir berisi, bulu mata lentik, alis tipis melengkung.
+PEREMPUAN = {'sari', 'maya', 'ningsih', 'mbok_jum', 'cici', 'bidadari'}
+
 _IRIS_NUSANTARA = ((58, 38, 28), (72, 46, 30), (46, 32, 26), (88, 60, 38), (40, 30, 30))
 
 
@@ -435,6 +625,7 @@ def wajah_chibi(src, kunci, rambut=None, kulit=None):
     if kulit is not None:
         v['kulit_tetap'] = kulit
     v['lewati_rambut'] = True
+    v['gender'] = 'p' if kunci in PEREMPUAN else 'l'
     if rambut is not None:
         v['rambut'] = rambut
     return lukis_wajah_chibi(src.convert('RGB'), v).convert('RGBA')
@@ -510,17 +701,20 @@ def terapkan_npc(char_actor, npc_id):
                     continue
                 # Kulit dicelup DULU, wajah chibi dilukis di atasnya: urutan
                 # sebaliknya membuat celup (berbobot kabur) melunturkan mata.
-                img = _warnai(src, None, {'kulit': kulit, '_acuan': acuan})
+                peta = {'kulit': kulit, '_acuan': acuan}
+                if npc_id in RAMBUT_NPC and ('head' in nama or 'hair' in nama):
+                    peta['rambut_npc'] = RAMBUT_NPC[npc_id]
+                    peta['_topeng_rambut'] = _topeng_rambut(gnp, src.size, samping=npc_id in _RAMBUT_SAMPING)
+                img = _warnai(src, None, peta)
                 # Mesh '_hair' TSO adalah cangkang kepala utuh yang teksturnya ikut
                 # memuat lukisan wajah lama -- tanpa ini Maya dkk. tetap berwajah TSO.
                 if ('head' in nama or 'hair' in nama) and not gnp.isHidden():
-                    img = wajah_chibi(img, npc_id, kulit=kulit)
+                    img = wajah_chibi(img, npc_id, rambut=RAMBUT_NPC.get(npc_id), kulit=kulit)
                 tex = _dari_pil(img, f'{npc_id}_{nama}_kulit')
                 _CACHE_TEKSTUR[kunci] = tex
             stages = gnp.findAllTextureStages()
             if stages:
                 gnp.setTexture(stages[0], tex, 1)
     besarkan_kepala(char_actor)
-    topi = TOPI_NPC.get(npc_id)
-    if topi is not None:
-        pasang_aksesori(char_actor, topi[0], topi[1], topi[2])
+    # Tanpa entri tetap dipanggil: topi panggang GLB yang melayang ikut hilang.
+    pasang_aksesori(char_actor, *TOPI_NPC.get(npc_id, (None,)))

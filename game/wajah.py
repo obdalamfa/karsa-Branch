@@ -504,10 +504,31 @@ def lukis_wajah_chibi(img, varian=None):
         busur = (200, 340)
     else:
         busur = (0, 180)      # garis nyaris lurus
-    d.arc([(WAJAH_CX - lm) * W, (MULUT_Y - 0.026) * H,
-           (WAJAH_CX + lm) * W, (MULUT_Y + 0.026) * H],
-          start=busur[0], end=busur[1], fill=mulut + (255,),
-          width=max(3, int(W * 0.013)))
+    perempuan = v.get('gender') == 'p'
+    if perempuan:
+        # Bibir kecil berisi: bibir bawah lebih penuh dari atas, warna mawar
+        # kalem, garis tengah gelap yang ikut melengkung sesuai watak.
+        bibir = _campur(kulit, (176, 72, 84), 0.62)
+        bl = lm * 0.82
+        d.ellipse([(WAJAH_CX - bl) * W, (MULUT_Y - 0.016) * H,
+                   (WAJAH_CX + bl) * W, (MULUT_Y + 0.004) * H], fill=_geser(bibir, -14) + (255,))
+        d.ellipse([(WAJAH_CX - bl * 0.86) * W, (MULUT_Y - 0.002) * H,
+                   (WAJAH_CX + bl * 0.86) * W, (MULUT_Y + 0.024) * H], fill=bibir + (255,))
+        d.arc([(WAJAH_CX - bl) * W, (MULUT_Y - 0.018) * H,
+               (WAJAH_CX + bl) * W, (MULUT_Y + 0.014) * H],
+              start=busur[0], end=busur[1], fill=(92, 34, 40, 255), width=max(2, int(W * 0.007)))
+        # kilau kecil di bibir bawah
+        d.ellipse([(WAJAH_CX - bl * 0.25) * W, (MULUT_Y + 0.006) * H,
+                   (WAJAH_CX + bl * 0.05) * W, (MULUT_Y + 0.013) * H], fill=(236, 190, 190, 150))
+    else:
+        # Laki-laki: garis mulut lebih lebar dan tegas, bibir bawah tipis.
+        d.arc([(WAJAH_CX - lm * 1.12) * W, (MULUT_Y - 0.026) * H,
+               (WAJAH_CX + lm * 1.12) * W, (MULUT_Y + 0.026) * H],
+              start=busur[0], end=busur[1], fill=_geser(mulut, -16) + (255,),
+              width=max(3, int(W * 0.014)))
+        d.line([(WAJAH_CX - lm * 0.4) * W, (MULUT_Y + 0.036) * H,
+                (WAJAH_CX + lm * 0.4) * W, (MULUT_Y + 0.036) * H],
+               fill=_geser(kulit, -30) + (160,), width=max(2, int(W * 0.006)))
 
     # ── 5. Mata ──────────────────────────────────────────────────────────────
     # Bentuk patokan: bola besar, iris berwarna yang mengisi hampir seluruh
@@ -550,7 +571,16 @@ def lukis_wajah_chibi(img, varian=None):
         # garis bulu mata di tepi atas
         d.arc([x0 - W * 0.006, y0 - H * 0.010, x1 + W * 0.006, y1 + H * 0.004],
               start=185, end=355, fill=(28, 22, 26, 255),
-              width=max(2, int(W * 0.009 * ms)))
+              width=max(2, int(W * (0.013 if perempuan else 0.007) * ms)))
+        if perempuan:
+            # bulu mata lentik di sudut luar
+            luar = 1 if fx > WAJAH_CX else -1
+            ex = (fx + luar * rx * 1.02) * W
+            ey = (MATA_Y - ry * 0.55) * H
+            for k in range(3):
+                d.line([ex - luar * k * W * 0.012, ey - k * H * 0.004,
+                        ex + luar * W * (0.022 - k * 0.004), ey - H * (0.026 + k * 0.006)],
+                       fill=(28, 22, 26, 255), width=max(2, int(W * 0.006)))
 
     # ── 6. Alis ──────────────────────────────────────────────────────────────
     # Tebalnya sampai 2,5x, dan sudutnya boleh menukik ke dalam. Ini ciri
@@ -561,8 +591,8 @@ def lukis_wajah_chibi(img, varian=None):
     # alis" karena memang tidak ada yang bisa dilihat. Sekarang alis selalu
     # dibawa jauh ke gelap, jadi kontrasnya datang dari NILAI, bukan dari rona.
     alis = _campur(v['rambut'], (14, 10, 12), 0.62)
-    tebal = v['alis_tebal']
-    sud = v['alis_sudut']
+    tebal = v['alis_tebal'] * (0.62 if perempuan else 1.2)
+    sud = v['alis_sudut'] + (-6 if perempuan else 0)     # perempuan: lengkung naik
     for sisi, fx in ((-1, MATA_X_KIRI), (1, MATA_X_KANAN)):
         miring = sisi * sud
         d.arc([(fx - 0.052) * W, (ALIS_Y - 0.030) * H,

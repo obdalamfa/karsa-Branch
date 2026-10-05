@@ -45,6 +45,13 @@ def _model_instance(cached):
         return cached
 
 
+# Warna sRGB dari material utama .mtl (Kd linear -> sRGB) untuk model yang
+# diekspor tanpa `usemtl`. genderuwo: GW_Fur (0.0685, 0.0577, 0.0523).
+_WARNA_TANPA_MATERIAL = {
+    'mob_genderuwo': (0.29, 0.265, 0.25),
+}
+
+
 def load_model_file(name: str):
     """Load model from assets/models/."""
     if not name: return None
@@ -73,7 +80,16 @@ def load_model_file(name: str):
             ldr = Loader.getGlobalPtr()
             
         fn = Filename.fromOsSpecific(str(path))
-        m = ldr.loadSync(fn) if hasattr(ldr, 'loadSync') else ldr.loadModel(fn)
+        # Tanpa cache .bam di disk: cache menyimpan hasil loader OBJ bawaan
+        # (satu geom, .mtl diabaikan) dan terus mengembalikannya walau
+        # loadernya sudah diganti Assimp (lihat game/__init__.py).
+        from panda3d.core import LoaderOptions
+        opsi = LoaderOptions(LoaderOptions.LF_search | LoaderOptions.LF_report_errors
+                             | LoaderOptions.LF_no_cache)
+        if hasattr(ldr, 'loadSync'):
+            m = ldr.loadSync(fn, opsi)
+        else:
+            m = ldr.loadModel(fn, noCache=True)
         # Koreksi pitch otomatis untuk model OBJ buatan Blender yang sumbu tingginya di Y:
         if m and path == path_obj:
             try:
@@ -81,13 +97,31 @@ def load_model_file(name: str):
                 mp = m if isinstance(m, NodePath) else NodePath(m)
                 lo, hi = mp.getTightBounds()
                 d = hi - lo
-                if name.startswith(('npc_', 'player')):
+                if name.startswith(('npc_', 'player', 'mob_', 'naga')):
                     # Loader OBJ Panda menghasilkan Z-atas, dunia Ursina Y-atas:
                     # tanpa ini setiap karakter tergeletak rata dan tertutup tanah.
                     if d.z > max(d.x, d.y):
                         mp.setP(90)
                 elif d.y > d.z and isinstance(m, NodePath):
                     mp.setP(-90)
+            except Exception:
+                pass
+        # Warna model OBJ/GLB tinggal di Material (Kd di .mtl), dan shader
+        # game hanya membaca warna vertex x ColorScale -- tanpa ini seluruh
+        # monster gua, makhluk halus, dan NPC cadangan tampil sebagai siluet
+        # PUTIH POLOS. Jalan yang sama dengan karakter ter-rig (char_actor).
+        if m:
+            try:
+                from panda3d.core import NodePath
+                from .char_actor import _warnai_material_polos
+                mp = m if isinstance(m, NodePath) else NodePath(m)
+                _warnai_material_polos(mp)
+                # Remodel Blender 15ae0a9 (dewa/petapa/genderuwo) diekspor
+                # TANPA `usemtl`: .mtl-nya lengkap, tapi tidak satu face pun
+                # menunjuk ke sana. Sampai diekspor ulang, model itu diberi
+                # warna material utamanya dari .mtl-nya sendiri.
+                if name in _WARNA_TANPA_MATERIAL:
+                    mp.setColor(*_WARNA_TANPA_MATERIAL[name], 1.0)
             except Exception:
                 pass
         _MODEL_CACHE[name] = m
@@ -755,6 +789,14 @@ class EntitiesManager:
             if panda_model:
                 actor.model = panda_model
                 actor.scale = sc
+                if kind == 'kelelawar':
+                    # Kelelawar TERBANG. Modelnya pipih bersayap lebar dengan
+                    # separuh badan di bawah titik nol, jadi di lantai yang
+                    # terlihat cuma ujung telinganya menyembul.
+                    try:
+                        actor.model.setY(1.4)
+                    except Exception:
+                        pass
             else:
                 # Empat dari tujuh mob (`tikus_gua`, `banaspati`, `kuntilanak`,
                 # `leak`) tidak punya mesh sendiri dan jatuh ke humanoid.obj.

@@ -55,6 +55,7 @@ class CharActor:
         # Model menghadap -Z; entity game menganggap rotation_y 0 = menghadap +Z.
         self.actor.setH(180)
         self.actor.setScale(SKALA)
+        self._ke_tengah(parent)
         _warnai_material_polos(self.actor)
         self.anims = set(self.actor.getAnimNames())
         self.actor.enableBlend()
@@ -64,6 +65,27 @@ class CharActor:
                 self.actor.loop(a)
                 self.actor.setControlEffect(a, self._bobot[a])
         self._sekali = None
+
+    def _ke_tengah(self, parent):
+        """Tarik model ke titik asal entity-nya, di bidang mendatar.
+
+        Kelima belas .glb diekspor dari satu berkas Blender tempat semua tokoh
+        berdiri berjajar, dan posisi jajarannya ikut terekspor: Arya bergeser
+        1,3 m, Cici 10,4 m, Bowo 11,7 m dari titik entity-nya. Akibatnya
+        warga terlihat berdiri jauh dari tempat yang dipakai jadwal, pie menu,
+        dan kamera -- di layar mereka seperti hilang. Tinggi tidak disentuh:
+        telapak memang di y 0.
+        """
+        try:
+            b = self.actor.getTightBounds(parent)
+        except Exception:
+            b = None
+        if not b:
+            return
+        lo, hi = b
+        cx, cz = (lo.x + hi.x) / 2, (lo.z + hi.z) / 2
+        p = self.actor.getPos()
+        self.actor.setPos(p.x - cx, p.y, p.z - cz)
 
     def update(self, dt, laju):
         """laju: kecepatan dunia sekarang (0 = diam)."""

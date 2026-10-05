@@ -100,10 +100,10 @@ def uji_panel_hidup(g):
     sebelum = _tangkap('wishes_hud')
 
     # 1. tombol pembuka
-    g.input('l')
+    g.input('p')
     for _ in range(3):
         base.taskMgr.step()
-    cek('tekan [l] membuka panel Keinginan',
+    cek('tekan [p] membuka panel Keinginan',
         g.panels.mode == 'panel' and g.panels._panel_name == 'wishes',
         f"mode={g.panels.mode} nama={getattr(g.panels, '_panel_name', None)}")
 
@@ -155,7 +155,7 @@ def uji_panel_hidup(g):
         f'mode={g.panels.mode}')
 
     # 6. seluruh teks panel di dalam layar
-    g.input('l')
+    g.input('p')
     for _ in range(3):
         base.taskMgr.step()
     _render(4)

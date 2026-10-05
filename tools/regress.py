@@ -94,7 +94,7 @@ bukan pada kemungkinan yang dikarang:
   panel_wishes   mesin Keinginan (Tahap 4) benar tapi tak terjangkau adalah
                  kegagalan yang TIDAK terlihat sebagai error — persis yang
                  terjadi pada husbandry.py. Diperiksa lewat jalur tombol
-                 sungguhan: [l] membuka, [1] berjanji, [6] melupakan,
+                 sungguhan: [p] membuka, [1] berjanji, [6] melupakan,
                  [a] membeli hadiah, ESC menutup.
   rumput_hidup   uniform `grs_time` sekarang didorong SEKALI ke `scene`, bukan
                  ke tiap entity rumput (147x lebih murah). Yang membuatnya aman

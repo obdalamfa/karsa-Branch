@@ -173,7 +173,15 @@ def item_name(item_id: str) -> str:
     return item_id.replace('_', ' ').title()
 
 
+PENGALI_JUAL = 1.0      # keahlian 'Lidah Pedagang' (game/keahlian.py)
+
+
 def sell_price(item_id: str) -> int:
+    v = _sell_price_dasar(item_id)
+    return int(round(v * PENGALI_JUAL)) if v else v
+
+
+def _sell_price_dasar(item_id: str) -> int:
     """Harga yang dibayar Warung Bu Sari. 0 = tidak laku dijual.
 
     ITEM_VALUES dibangun SEKALI saat modul ini diimpor. Tapi `crops.py`

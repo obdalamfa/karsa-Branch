@@ -685,7 +685,9 @@ class InteractionController:
             panels.flash_msg("Terlalu lelah untuk memancing.", 1.0)
             return True
 
-        s.energy = max(0, s.energy - fs.EN_LEMPAR)
+        from ..keahlian import punya
+        biaya = fs.EN_LEMPAR * (0.5 if punya(s, 'pancing') else 1.0)   # Sabar Memancing
+        s.energy = max(0, s.energy - biaya)
         air = fs.perairan_untuk(s, self.world)
 
         # Apakah lemparan ini akan berbuah sudah diputuskan SEKARANG, bukan saat
@@ -857,7 +859,9 @@ class InteractionController:
             return
 
         s.inventory[gift] -= 1
-        s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1.0)
+        from ..keahlian import punya
+        naik = 1.5 if punya(s, 'ramah') else 1.0     # keahlian Ramah Tamah
+        s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + naik)
         # Denyut senang di wajahnya. Ditaruh di state — bukan di actor —
         # karena jalur hadiah tidak memegang entities_mgr, dan menambahkan
         # parameter ke seluruh rantai panggilan demi satu angka tidak sepadan.

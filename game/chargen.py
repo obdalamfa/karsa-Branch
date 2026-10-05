@@ -88,232 +88,218 @@ def _txt(text='', pos=(0, 0), scale=1.0, col=color.white, **kw):
 
 
 class ChargenScreen:
-    """Layar pembuatan karakter — keyboard-driven overlay.
+    """Layar Buat Karakter: panel opsi di kiri, pratinjau hidup di tengah.
 
-    Dipanggil dari app.py pada first run. Memanggil on_confirm(state)
-    setelah pemain tekan Enter.
+    Pratinjaunya adalah pemain SUNGGUHAN di dunia -- kamera didekatkan ke
+    depannya selama layar terbuka -- jadi yang dilihat pemain persis yang akan
+    ia mainkan. Pilihan diterapkan lewat game/rupa_pemain.py (tekstur + topi)
+    dan keahlian lewat game/keahlian.py.
+
+    Kontrol: Atas/Bawah pindah baris, Kiri/Kanan ganti nilai, ketik di baris
+    Nama, Z/C putar pratinjau, Enter mulai, ESC kembali ke bawaan.
     """
 
     _NAME_MAX = 18
+    _BARIS = ('name', 'skin', 'hair', 'shirt', 'pants', 'hat', 'perk')
+    _LABEL = ('Nama', 'Kulit', 'Rambut', 'Baju', 'Celana', 'Aksesori', 'Keahlian')
 
-    def __init__(self, state, on_confirm, player=None):
-        self.state      = state
+    def __init__(self, state, on_confirm, player=None, app=None):
+        from . import rupa_pemain as rp
+        from .keahlian import KEAHLIAN
+        self._daftar = {
+            'skin': rp.KULIT, 'hair': rp.RAMBUT, 'shirt': rp.BAJU,
+            'pants': rp.CELANA, 'hat': rp.AKSESORI,
+            'perk': [(nama, None) for _k, nama, _d in KEAHLIAN],
+        }
+        self._keahlian = KEAHLIAN
+        self.state = state
         self.on_confirm = on_confirm
-        self.player     = player
-
-        # Nilai saat ini per opsi
+        self.player = player
+        self.app = app
         self._cursor = 0
         self._name_buf = (state.char_name or 'Petani Muda')[:self._NAME_MAX]
-        self._vals = [
-            None,              # name
-            state.char_skin,
-            state.char_hair,
-            state.char_shirt,
-            state.char_pants,
-            state.char_hat,
-        ]
-        self._ents: list = []
-        self._row_lbl: list = []    # Text per baris (label)
-        self._row_val: list = []    # Text per baris (value)
-        self._row_sw:  list = []    # Entity swatch per baris (warna)
-        self._row_hi:  list = []    # Entity highlight per baris
-        self._cursor_bar = None
-
+        self._vals = {
+            'skin': state.char_skin, 'hair': state.char_hair, 'shirt': state.char_shirt,
+            'pants': state.char_pants, 'hat': state.char_hat,
+            'perk': getattr(state, 'char_perk', 0),
+        }
+        for k, lst in self._daftar.items():
+            self._vals[k] %= len(lst)
+        self._ents = []
+        self._rows = []
+        self._putar = 200.0
+        self._simpan_kamera()
         self._build()
-        self._refresh()
+        self._refresh(rupa=True)
 
-    # ─── BUILD UI ──────────────────────────────────────────────────────────
+    # -- kamera pratinjau ---------------------------------------------------
+    def _simpan_kamera(self):
+        a = self.app
+        if a is None:
+            return
+        self._kamera_lama = (a.camera_dist, a.camera_pitch, a.camera_yaw)
+        # Cukup jauh untuk seluruh badan + topi; geser kamera sedikit ke kiri
+        # (yaw negatif) supaya pemain berdiri di sebelah kanan panel opsi.
+        a.camera_dist, a.camera_pitch, a.camera_yaw = 6.2, 4.0, -14.0
+        try:
+            a._snap_camera_to_player()
+        except Exception:
+            pass
+        # HUD minggir: bilah HP, roda alat, dan pelacak tutorial duduk di
+        # kiri-atas, persis di bawah panel ini.
+        self._sembunyikan_hud(True)
+
+    def _sembunyikan_hud(self, ya):
+        a = self.app
+        p = getattr(a, 'panels', None) if a is not None else None
+        if p is None:
+            return
+        try:
+            p.set_hud_visible(not ya)
+        except Exception:
+            pass
+        for nama in ('_obj_bg', '_obj_rust', '_obj_title', '_obj_step', '_obj_hint'):
+            e = getattr(p, nama, None)
+            if e is not None:
+                e.enabled = not ya
+
+    def _pulihkan_kamera(self):
+        a = self.app
+        if a is None or not hasattr(self, '_kamera_lama'):
+            return
+        a.camera_dist, a.camera_pitch, a.camera_yaw = self._kamera_lama
+        self._sembunyikan_hud(False)
+
+    # -- UI -------------------------------------------------------------------
     def _build(self):
-        # Layer gelap di belakang
-        bg = _ui(scale=(1.10, 1.02), position=(0, 0),
-                 color=color.rgb(8, 5, 22, 232))
-        border = _ui(scale=(0.84, 0.92), position=(0, 0),
-                     color=color.rgb(90, 60, 160, 190))
-        inner = _ui(scale=(0.82, 0.90), position=(0, 0),
-                    color=color.rgb(12, 8, 28, 230))
-        self._ents += [bg, border, inner]
+        kayu, krem = color.rgb(96, 64, 40), color.rgb(242, 230, 204)
+        tinta, pudar = color.rgb(58, 40, 28), color.rgb(140, 110, 80)
+        X0, W = -0.80, 0.62                  # panel kiri: -0.80 .. -0.18
+        cx = X0 + W / 2
+        self._ents += [
+            _ui(scale=(W + 0.024, 0.90), position=(cx, 0.0), color=kayu, z=0.06),
+            _ui(scale=(W, 0.876), position=(cx, 0.0), color=krem, z=0.05),
+            _ui(scale=(0.30, 0.06), position=(cx, 0.452), color=color.rgb(150, 96, 60), z=0.04),
+        ]
+        self._ents.append(_txt('BUAT KARAKTER', pos=(cx, 0.452), scale=0.62,
+                               col=color.rgb(250, 238, 214), origin=(0, 0)))
+        self._ents.append(_txt('Siapa yang datang ke Lembah Karsa?', pos=(cx, 0.395),
+                               scale=0.40, col=pudar, origin=(0, 0)))
+        y0, dy = 0.32, 0.082
+        for i, lab in enumerate(self._LABEL):
+            y = y0 - i * dy
+            sorot = _ui(scale=(W - 0.04, 0.07), position=(cx, y), color=color.rgb(214, 196, 160), z=0.045)
+            sorot.enabled = False
+            lbl = _txt(lab, pos=(X0 + 0.035, y), scale=0.46, col=pudar, origin=(-0.5, 0))
+            kiri = _txt('«', pos=(X0 + 0.24, y), scale=0.5, col=pudar, origin=(0, 0))
+            kanan = _txt('»', pos=(X0 + W - 0.035, y), scale=0.5, col=pudar, origin=(0, 0))
+            sw = _ui(scale=(0.036, 0.036), position=(X0 + 0.285, y), color=color.gray, z=0.03)
+            val = _txt(' ', pos=(X0 + 0.315, y), scale=0.46, col=tinta, origin=(-0.5, 0))
+            self._rows.append((sorot, lbl, kiri, kanan, sw, val))
+            self._ents += [sorot, lbl, kiri, kanan, sw, val]
+        y_desk = y0 - len(self._LABEL) * dy - 0.01
+        self._ents.append(_ui(scale=(W - 0.04, 0.003), position=(cx, y_desk + 0.03), color=kayu, z=0.04))
+        self._desk = _txt(' ', pos=(X0 + 0.035, y_desk), scale=0.40, col=tinta, origin=(-0.5, 0.5))
+        self._desk.wordwrap = 34
+        self._ents.append(self._desk)
+        self._ents.append(_txt('Atas/Bawah pilih  -  Kiri/Kanan ubah  -  Z/C putar',
+                               pos=(cx, -0.385), scale=0.36, col=pudar, origin=(0, 0)))
+        self._ents.append(_txt('[Enter] Mulai bermain', pos=(cx, -0.42), scale=0.46,
+                               col=color.rgb(150, 96, 60), origin=(0, 0)))
 
-        # Judul
-        title = _txt('BUAT KARAKTER', pos=(-0.33, 0.415), scale=1.30,
-                      col=color.rgb(240, 210, 80), origin=(0, 0))
-        sub = _txt('Lembah Karsa', pos=(-0.33, 0.375), scale=0.75,
-                    col=color.rgb(160, 140, 200), origin=(0, 0))
-        self._ents += [title, sub]
-
-        # Garis pemisah
-        sep = _ui(scale=(0.80, 0.003), position=(0, 0.355),
-                   color=color.rgb(130, 90, 200, 180))
-        self._ents.append(sep)
-
-        # Baris opsi
-        ROW_START_Y = 0.270
-        ROW_STEP    = 0.098
-        for i in range(len(_OPT_KEYS)):
-            y = ROW_START_Y - i * ROW_STEP
-
-            # Highlight baris (awalnya tidak terlihat)
-            hi = _ui(scale=(0.80, 0.082), position=(0, y + 0.005),
-                      color=color.rgb(80, 50, 140, 90))
-            hi.enabled = False
-            self._row_hi.append(hi)
-            self._ents.append(hi)
-
-            # Label
-            lbl = _txt(_OPT_LABELS[i], pos=(-0.38, y + 0.016), scale=0.82,
-                        col=color.rgb(165, 148, 195))
-            self._row_lbl.append(lbl)
-            self._ents.append(lbl)
-
-            # Swatch warna (hanya untuk non-name; hat juga punya warna)
-            sw = _ui(model='quad', scale=(0.042, 0.052),
-                      position=(-0.13, y + 0.005),
-                      color=color.rgb(60, 50, 80))
-            self._row_sw.append(sw)
-            self._ents.append(sw)
-
-            # Nilai
-            val = _txt('', pos=(-0.08, y + 0.016), scale=0.84,
-                        col=color.white)
-            self._row_val.append(val)
-            self._ents.append(val)
-
-        # Garis bawah + hint
-        sep2 = _ui(scale=(0.80, 0.003), position=(0, -0.372),
-                    color=color.rgb(130, 90, 200, 180))
-        hint = _txt('[Up/Down] Pindah   [</> Arah] Ubah   [Enter] Mulai',
-                     pos=(-0.40, -0.400), scale=0.66,
-                     col=color.rgb(140, 125, 180), origin=(0, 0))
-        hint2 = _txt('[ESC] Reset ke default',
-                      pos=(-0.40, -0.428), scale=0.62,
-                      col=color.rgb(120, 108, 155), origin=(0, 0))
-        self._ents += [sep2, hint, hint2]
-
-    def _refresh(self):
-        """Update semua teks & swatch sesuai nilai saat ini."""
-        for i in range(len(_OPT_KEYS)):
-            hi = self._row_hi[i]
-            hi.enabled = (i == self._cursor)
-            if i == self._cursor:
-                hi.color = color.rgb(95, 58, 175, 115)
-
-            if i == 0:
-                # Nama — tampilkan dengan kursor berkedip
-                cursor_char = '_' if self._cursor == 0 else ''
-                self._row_val[i].text = self._name_buf + cursor_char
-                self._row_sw[i].color  = color.rgb(60, 50, 80)
-                self._row_lbl[i].color = (color.rgb(255, 240, 120)
-                                           if i == self._cursor
-                                           else color.rgb(165, 148, 195))
+    def _refresh(self, rupa=False):
+        sorot_lbl, pudar = color.rgb(150, 96, 60), color.rgb(140, 110, 80)
+        for i, key in enumerate(self._BARIS):
+            sorot, lbl, kiri, kanan, sw, val = self._rows[i]
+            aktif = i == self._cursor
+            sorot.enabled = aktif
+            lbl.color = sorot_lbl if aktif else pudar
+            if key == 'name':
+                val.text = (self._name_buf + ('_' if aktif else '')) or ' '
+                sw.enabled = kiri.enabled = kanan.enabled = False
                 continue
-
-            presets = _OPT_PRESETS[i]
-            v       = self._vals[i]
-            entry   = presets[v]
-
-            if i == len(_OPT_KEYS) - 1:   # Hat: (name, tint, tex, ...)
-                name, tint_rgb = entry[0], entry[1]
-                val_text = f'[A] {name}  {v+1}/{len(presets)} [D]'
-                swatch_col = (color.rgb(*tint_rgb) if tint_rgb
-                               else color.rgb(40, 35, 52))
-            else:                          # color preset: (name, rgb)
-                name, rgb = entry
-                val_text = f'[A] {name}  {v+1}/{len(presets)} [D]'
-                swatch_col = color.rgb(*rgb)
-
-            self._row_val[i].text = val_text
-            self._row_sw[i].color  = swatch_col
-            self._row_lbl[i].color = (color.rgb(255, 240, 120)
-                                       if i == self._cursor
-                                       else color.rgb(165, 148, 195))
-
-        # Update preview karakter jika ada
-        if self.player:
+            nama, nilai = self._daftar[key][self._vals[key]]
+            val.text = nama
+            kiri.enabled = kanan.enabled = aktif
+            if isinstance(nilai, tuple):
+                sw.enabled = True
+                sw.color = color.rgb(*nilai)
+            else:
+                sw.enabled = False
+        _k, nama, desk = self._keahlian[self._vals['perk']]
+        self._desk.text = f'{nama}: {desk}'
+        if rupa and self.player is not None:
             try:
                 self.player.apply_appearance(self._to_state())
             except Exception:
                 pass
+        if self.player is not None:
+            self.player.rotation_y = self._putar
 
     def _to_state(self):
-        """Buat objek proxy state dengan nilai chargen saat ini."""
         class _S:
             pass
         s = _S()
-        s.char_name  = self._name_buf
-        s.char_skin  = self._vals[1]
-        s.char_hair  = self._vals[2]
-        s.char_shirt = self._vals[3]
-        s.char_pants = self._vals[4]
-        s.char_hat   = self._vals[5]
+        s.char_name = self._name_buf
+        s.char_skin, s.char_hair = self._vals['skin'], self._vals['hair']
+        s.char_shirt, s.char_pants = self._vals['shirt'], self._vals['pants']
+        s.char_hat, s.char_perk = self._vals['hat'], self._vals['perk']
         return s
 
-    # ─── INPUT ─────────────────────────────────────────────────────────────
+    # -- INPUT ----------------------------------------------------------------
     def handle_input(self, key) -> bool:
-        """Return True jika input dikonsumsi."""
+        key_baris = self._BARIS[self._cursor]
         if key == 'escape':
             self._reset_defaults()
             return True
-
-        if key in ('up arrow', 'w'):
-            self._cursor = max(0, self._cursor - 1)
+        if key == 'up arrow' or (key == 'w' and key_baris != 'name'):
+            self._cursor = (self._cursor - 1) % len(self._BARIS)
             self._refresh()
             return True
-
-        if key in ('down arrow', 's'):
-            self._cursor = min(len(_OPT_KEYS) - 1, self._cursor + 1)
+        if key == 'down arrow' or (key == 's' and key_baris != 'name'):
+            self._cursor = (self._cursor + 1) % len(self._BARIS)
             self._refresh()
             return True
-
-        if key in ('enter', ):
+        if key == 'enter':
             self._confirm()
             return True
-
-        if self._cursor == 0:
-            # Mode ketik nama
+        if key_baris != 'name' and key in ('z', 'c'):
+            self._putar = (self._putar + (-30 if key == 'z' else 30)) % 360
+            self._refresh()
+            return True
+        if key_baris == 'name':
             if key == 'backspace':
                 self._name_buf = self._name_buf[:-1]
-                self._refresh()
-                return True
-            if key == 'space':
-                if len(self._name_buf) < self._NAME_MAX:
-                    self._name_buf += ' '
-                self._refresh()
-                return True
-            if len(key) == 1 and (key.isalpha() or key.isdigit()):
-                if len(self._name_buf) < self._NAME_MAX:
-                    c = key.upper() if held_keys.get('shift') else key
-                    self._name_buf += c
-                self._refresh()
-                return True
-        else:
-            # Mode pilih nilai
-            if key in ('left arrow', 'a', 'q'):
-                n = _OPT_COUNT[self._cursor]
-                self._vals[self._cursor] = (self._vals[self._cursor] - 1) % n
-                self._refresh()
-                return True
-            if key in ('right arrow', 'd', 'r'):
-                n = _OPT_COUNT[self._cursor]
-                self._vals[self._cursor] = (self._vals[self._cursor] + 1) % n
-                self._refresh()
-                return True
-
+            elif key == 'space' and len(self._name_buf) < self._NAME_MAX:
+                self._name_buf += ' '
+            elif len(key) == 1 and (key.isalpha() or key.isdigit()) and len(self._name_buf) < self._NAME_MAX:
+                self._name_buf += key.upper() if held_keys.get('shift') else key
+            else:
+                return False
+            self._refresh()
+            return True
+        if key in ('left arrow', 'a', 'right arrow', 'd'):
+            n = len(self._daftar[key_baris])
+            arah = -1 if key in ('left arrow', 'a') else 1
+            self._vals[key_baris] = (self._vals[key_baris] + arah) % n
+            self._refresh(rupa=key_baris != 'perk')
+            return True
         return False
 
-    # ─── HELPERS ───────────────────────────────────────────────────────────
     def _reset_defaults(self):
-        self._name_buf  = 'Petani Muda'
-        self._vals[1:]  = [0, 0, 0, 0, 0]
-        self._cursor    = 0
-        self._refresh()
+        self._name_buf = 'Petani Muda'
+        for k in self._vals:
+            self._vals[k] = 0
+        self._cursor = 0
+        self._refresh(rupa=True)
 
     def _confirm(self):
         s = self.state
-        s.char_name  = self._name_buf.strip() or 'Petani Muda'
-        s.char_skin  = self._vals[1]
-        s.char_hair  = self._vals[2]
-        s.char_shirt = self._vals[3]
-        s.char_pants = self._vals[4]
-        s.char_hat   = self._vals[5]
+        s.char_name = self._name_buf.strip() or 'Petani Muda'
+        s.char_skin, s.char_hair = self._vals['skin'], self._vals['hair']
+        s.char_shirt, s.char_pants = self._vals['shirt'], self._vals['pants']
+        s.char_hat, s.char_perk = self._vals['hat'], self._vals['perk']
+        self._pulihkan_kamera()
         self.destroy_all()
         self.on_confirm(s)
 
@@ -324,7 +310,4 @@ class ChargenScreen:
             except Exception:
                 pass
         self._ents.clear()
-        self._row_lbl.clear()
-        self._row_val.clear()
-        self._row_sw.clear()
-        self._row_hi.clear()
+        self._rows.clear()

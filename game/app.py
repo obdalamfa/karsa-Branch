@@ -306,6 +306,8 @@ class Game3D:
         # Terapkan penampilan tersimpan (jika sudah pernah chargen)
         if self.state.char_name:
             self.player.apply_appearance(self.state)
+        from .keahlian import terapkan_awal
+        terapkan_awal(self.state, self.player)
 
         # Grass shader — terapkan ke entity rumput yang sudah dibangun
         # Mesh sebaran ikut dapat grass_shader: vertex shader-nya menggeser
@@ -1005,12 +1007,15 @@ class Game3D:
             self.state,
             on_confirm=self._on_chargen_confirm,
             player=self.player,
+            app=self,
         )
         self.panels.mode = 'chargen'
 
     def _on_chargen_confirm(self, state):
         self._chargen = None
         self.player.apply_appearance(state)
+        from .keahlian import terapkan_awal
+        terapkan_awal(self.state, self.player)
         if hasattr(self, 'player') and self.player:
             self.player._set_initial_rotation()
         self.panels.mode = 'hud'

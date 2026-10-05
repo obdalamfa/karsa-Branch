@@ -504,6 +504,17 @@ class Player3D(Entity):
     # ─── APPEARANCE (chargen) ────────────────────────────
     def apply_appearance(self, state):
         """Terapkan pilihan karakter dari chargen ke model yang sudah dibangun."""
+        # Rig GLB (jalur utama sekarang): pewarnaan tekstur + aksesori kepala
+        # di game/rupa_pemain.py. Cabang voxel/Vitaboy di bawah tidak pernah
+        # menyentuh model ini, jadi tanpa baris ini chargen tidak berefek.
+        if getattr(self, '_char', None) is not None:
+            from . import rupa_pemain
+            try:
+                rupa_pemain.terapkan(self._char, state)
+            except Exception:
+                import logging
+                logging.warning('rupa pemain gagal diterapkan', exc_info=True)
+            return
         sk = getattr(state, 'char_skin',  0)
         hr = getattr(state, 'char_hair',  0)
         sh = getattr(state, 'char_shirt', 0)
@@ -1758,7 +1769,9 @@ class Player3D(Entity):
         return tx + dx, ty + dz
 
     def _spend_energy(self, n: int):
-        actual = max(1, round(n * self.state.mood_energy_multiplier()))
+        from .keahlian import punya
+        hemat = 0.75 if punya(self.state, 'kerbau') else 1.0     # Tenaga Kerbau
+        actual = max(1, round(n * hemat * self.state.mood_energy_multiplier()))
         self.state.energy = max(0, self.state.energy - actual)
 
     def _try_sleep(self, panels):

@@ -175,6 +175,8 @@ class GameState:
     char_shirt: int = 0
     char_pants: int = 0
     char_hat:   int = 0
+    char_perk:  int = 0          # indeks game.keahlian.KEAHLIAN
+    keahlian_terpasang: str = ''  # penanda supaya bonus maks tidak dobel
 
     # ─── Keinginan (Tahap 4, game/wishes.py) ───
     # `janji` = daftar keinginan yang sedang dikejar, tiap entri membawa garis

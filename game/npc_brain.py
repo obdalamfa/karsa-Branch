@@ -136,6 +136,37 @@ def _motif_dari_otak(ent: BehaviorEntity) -> Motives:
     for key_otak, nama in _MOTIVE_BRIDGE.items():
         setattr(mv, nama, float(ent.get_motive(key_otak)))
     return mv
+def _kepribadian(npc_id: str) -> dict:
+    """Active dan Outgoing per warga, diturunkan dari namanya.
+
+    `Motives` punya dua sifat kepribadian skala TS1 (0..1000) dan SETIAP warga
+    dibangun dengan nilai bawaan 500 — tidak ada satu pun yang menyetelnya.
+    Akibatnya keempat belas warga secara angka tidak bisa dibedakan: terukur di
+    tools/proto_wish.py, keempat warga di scene farm melaporkan motif yang
+    persis sama sampai satu desimal pada jam yang sama (+29,0 lalu +15,0).
+    Desa berisi empat belas salinan orang yang sama.
+
+    Diturunkan dari sum(ord(nama)) — bukan hash(), yang di-randomisasi tiap
+    proses, jadi Sari akan jadi orang yang berbeda tiap kali permainan dibuka.
+    Pola yang sama sudah dipakai untuk arah hadap hewan di entities.py.
+
+    Rentangnya sengaja tidak 0..1000 penuh: 250..750 menjaga tiap warga tetap
+    manusia, bukan karikatur yang tidak pernah bicara atau tidak pernah diam.
+
+    JUJUR SOAL YANG MANA YANG HIDUP hari ini:
+      outgoing  HIDUP — ia mengalikan laju luruh Sosial, jadi warga periang
+                benar-benar lebih cepat kesepian dan lebih sering mencari orang.
+      active    MATI — satu-satunya pemakainya adalah laju luruh Nyaman, dan
+                Nyaman sudah jadi moodlet (#6), jadi cabang itu tidak pernah
+                dijalankan lagi. Tetap disetel supaya sifatnya ada saat ada
+                yang memakainya, dan supaya tidak ada yang menyimpulkan dari
+                nilai 500 seragam bahwa kepribadian memang tidak dimaksudkan.
+    """
+    h = sum(map(ord, npc_id))
+    return {
+        'active':   250 + (h * 37) % 501,
+        'outgoing': 250 + (h * 91) % 501,
+    }
 
 
 class NPCBrains:
@@ -169,7 +200,7 @@ class NPCBrains:
             ent.on_animation_change(lambda anim, _id=npc_id: self._on_anim(_id, anim))
             self.vm.add_entity(ent)
             self._brains[npc_id] = ent
-            self._motif[npc_id] = Motives()
+            self._motif[npc_id] = Motives(**_kepribadian(npc_id))
 
     def _on_anim(self, npc_id: str, anim_name: str):
         self._anim_hint[npc_id] = anim_name
@@ -207,6 +238,15 @@ class NPCBrains:
             # sebenarnya berlangsung 420 detik real, bukan 7 jam dalam game.
             menit = dt * INGAME_MINUTES_PER_REAL_SECOND
             if mv is not None:
+                # Warga ikut tidur, dan datanya sudah ada sejak lama: SCHEDULES
+                # menandai dua belas baris dengan aktivitas 'sleeping', dan
+                # _update_npc_schedules menyalin aktivitas itu ke
+                # npc_positions tiap 30 detik. Yang tidak pernah ada adalah
+                # yang membaca tanda itu — `asleep` tetap False seumur hidup
+                # mereka, jadi energi warga cuma bisa turun dan satu-satunya
+                # jalan naiknya adalah aksi *Istirahat* di _CADANGAN.
+                pos = getattr(self.state, 'npc_positions', {}).get(npc_id)
+                mv.asleep = bool(pos and pos.get('activity') == 'sleeping')
                 mv.tick(menit)
             self._maju_interaksi(npc_id, menit)
             # Auto-queue aksi paling urgent kalau idle DAN tidak sedang

@@ -68,6 +68,14 @@ class GameState:
     # -- sehingga seluruh akumulasi kelalaian ternak dibuang setiap kali save
     # dimuat, dan model biaya peternakan jadi tidak berarti.
     animal_care:     dict = field(default_factory=dict)
+
+    # id hewan yang SEDANG ditunggangi, '' kalau pemain berjalan kaki.
+    # Ditaruh di state, bukan di Player3D, karena tiga sistem lain
+    # harus tahu: entities.py membekukan AI hewan itu dan menempelkannya
+    # ke pemain, _update_npc_schedules berhenti menariknya pulang ke
+    # jadwalnya, dan penyimpanan ikut membawanya sehingga memuat game
+    # tidak menurunkan pemain di tengah jalan.
+    menunggang:      str = ''
     soil:            dict = field(default_factory=dict)
     npc_hearts:      dict = field(default_factory=dict)
     npc_dialog_index:dict = field(default_factory=dict)
@@ -194,6 +202,17 @@ class GameState:
     # Sinema yang sudah pernah ditonton, supaya adegan pembuka tidak main lagi
     # tiap kali save dimuat. List, bukan set — save memakai json.dump.
     sinema_selesai: list = field(default_factory=list)
+
+    # ─── WISHES ──────────────────────────────────────────
+    # Tekad tidak pernah meluruh — itu yang membedakannya dari delapan motif,
+    # dan itu sebabnya ia terasa seperti membangun sesuatu alih-alih seperti
+    # hari yang lancar. Dibelanjakan untuk perabot dan resep, karena neraca
+    # motif (#6) diseimbangkan di sekitar suplai perabot: perabot yang lebih
+    # baik adalah satu-satunya hal yang menurunkan 54,5% hidup yang habis
+    # mengurus motif.
+    tekad:       int  = 0
+    wishes:      dict = field(default_factory=dict)   # janji / ambang / selesai
+    aksi_hitung: dict = field(default_factory=dict)   # nama aksi -> jumlah tuntas
     post_game:      bool = False                        # True after quest_stage reaches 11
     side_quests: dict = field(default_factory=dict)
     lighthouse_fixed: bool = False                      # True after repairing lighthouse on the beach

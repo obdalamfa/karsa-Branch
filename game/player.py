@@ -50,6 +50,18 @@ _UPPER_ARM_LEN  = 0.46
 _FOREARM_LEN    = 0.38
 _TORSO_Y        = (_HIP_Y + _SHOULDER_Y) * 0.5
 
+# ── MENUNGGANG ──────────────────────────────────────────────────────────────
+# Tinggi sadel diturunkan dari rig kuda yang sebenarnya, bukan dikira-kira:
+# _kuda() di animal_models.py menaruh kotak badan di y 1,22 dengan tinggi 0,68,
+# jadi punggungnya di 1,22 + 0,34 = 1,56 m di atas kaki kuda. Panggul pemain
+# duduk 1,02 m di atas titik asalnya (PEL_Y = _GH + 0,82), jadi titik asal
+# pemain harus naik 1,56 - 1,02 = 0,54 supaya ia duduk DI punggung dan bukan
+# menembusnya. Ditambah 0,06 untuk tebal sadel.
+TINGGI_SADEL = 0.60
+# Kuda pengganti berjalan kaki, bukan pengganti sapu terbang: 1,9x itu sedikit
+# di bawah sapu (2,2x) dan jelas di atas lari (PLAYER_RUN_MULTIPLIER).
+LAJU_KUDA    = 1.9
+
 # Palet hangat ala FreeSO — earth tones
 SKIN_COLOR   = color.rgb(230, 190, 148)
 BODY_COLOR   = color.rgb(175, 135,  95)   # default sebelum chargen
@@ -222,6 +234,18 @@ class Player3D(Entity):
         self.path_grid = None
         self.mover = None
 
+        # entities.py menyimpan satu slot modul berisi pemain yang aktif, dan
+        # docstring-nya berbunyi "Dipanggil Player3D.__init__" — tapi tidak ada
+        # satu pun pemanggilnya di seluruh repo, jadi slot itu selalu None.
+        # Akibatnya dua hal diam-diam mati: warga tidak pernah menoleh ke
+        # pemain (head-seek keluar di baris pertama karena _lihat_pemain None),
+        # dan hewan tunggangan tidak punya sumber posisi untuk diikuti.
+        try:
+            from .entities import daftarkan_pemain
+            daftarkan_pemain(self)
+        except Exception:
+            pass
+
         self._is_flying = False
         self._broom_ent = None
         self._slide_cooldown_ms = 0.0
@@ -345,18 +369,52 @@ class Player3D(Entity):
             skin  = SKIN_COLOR
             cloth = self._shirt_col
 
-            PEL_Y, WST_Y, CHEST_Y = _GH + 0.96, _GH + 1.16, _GH + 1.42
-            NECK_Y, HEAD_Y        = _GH + 1.62, _GH + 1.89
-            SHOULDER_Y, HIP_Y     = _GH + 1.55, _GH + 0.88
+            # ── PROPORSI CHIBI ──────────────────────────────────
+            # Sebelumnya kepala 0,45 tinggi pada badan setinggi 2,115 — nisbah
+            # kepala-badan 1 : 4,7, yaitu proporsi orang dewasa realistis.
+            # Patokan kita bukan itu: Story of Seasons dan sekelasnya memakai
+            # chibi sekitar 1 : 3, dan nisbah itulah yang membuat orang terbaca
+            # sebagai orang dari jarak main — wajahnya cukup besar untuk punya
+            # arah hadap, badannya cukup kecil untuk tidak menutupi wajahnya.
+            #
+            # Tinggi TOTAL sengaja dipertahankan ~2,1: kamera, collider, tinggi
+            # pintu, dan seluruh animasi alat dikalibrasi ke angka itu.
+            # Kepalanya membesar dengan MEMENDEKKAN kaki dan torso, bukan
+            # dengan meninggikan orangnya.
+            #
+            #   kaki  : sepatu 0,10 + betis 0,30 + paha 0,34  = 0,74
+            #   torso : pinggul 0,74 -> leher 1,40            = 0,66
+            #   kepala: 1,40 .. 2,00                          = 0,60
+            #   total 2,00   ->  0,60 / 2,00 = 1 : 3,33
+            PEL_Y, WST_Y, CHEST_Y = _GH + 0.82, _GH + 0.98, _GH + 1.18
+            NECK_Y, HEAD_Y        = _GH + 1.40, _GH + 1.70
+            SHOULDER_Y, HIP_Y     = _GH + 1.28, _GH + 0.74
+
+            # Tinggi torso/kepala/bahu disimpan karena blok ANIMASI di bawah
+            # menulis ulang ketiganya tiap frame. Dulu angkanya ditulis mati di
+            # sana (_GH+1,42 badan, _GH+1,89 kepala, _GH+1,55 bahu) — angka
+            # rangka LAMA. Jadi begitu proporsi chibi dipasang, animasi menarik
+            # torso naik 0,24 m dan kepala naik 0,19 m dari pinggul yang tetap
+            # di 0,74: badannya putus di pinggang, dan tidak ada satu pun frame
+            # permainan yang memakai proporsi yang tertulis di atas. Sekarang
+            # animasi membaca dari sini, jadi mengubah proporsi cukup di satu
+            # tempat dan tidak bisa lagi diam-diam dibatalkan.
+            self._Y_BADAN    = CHEST_Y
+            self._Y_KEPALA   = HEAD_Y
+            self._Y_BAHU     = SHOULDER_Y
 
             # Destroy the default dummy body, and recreate body properly
             if hasattr(self, 'body') and self.body:
                 destroy(self.body)
 
-            # Build body boxes
-            self.belt = _part_box(Vec3(0, PEL_Y, 0), (0.42, 0.18, 0.28), pants, parent=p)
-            self.waist = _part_box(Vec3(0, WST_Y, 0), (0.40, 0.22, 0.26), cloth, parent=p)
-            self.body = _part_box(Vec3(0, CHEST_Y, 0), (0.52, 0.30, 0.30), cloth, parent=p)
+            # Build body boxes. Torso memakai `chibi_torso` — mesh
+            # superellipsoid bertepi dibevel yang sudah ada di meshes.py sejak
+            # lama, lengkap dengan dispatch-nya di _part(), dan TIDAK PERNAH
+            # dipanggil satu kali pun: seluruh badan dibangun dari kubus polos.
+            self.belt = _part_box(Vec3(0, PEL_Y, 0), (0.40, 0.16, 0.26), pants, parent=p)
+            self.waist = _part_box(Vec3(0, WST_Y, 0), (0.38, 0.20, 0.25), cloth, parent=p)
+            self.body = _part('chibi_torso', Vec3(0, CHEST_Y, 0),
+                              (0.50, 0.34, 0.30), None, cloth, parent=p)
 
             # Leher dan kerah. Leher lama 0,14 lebar berdiri di antara dada
             # 0,52 dan kepala 0,35, jadi kepalanya terbaca melayang di atas
@@ -393,37 +451,37 @@ class Player3D(Entity):
 
             # Arms
             for side, sx in (('l', -1), ('r', 1)):
-                piv_sh = Entity(parent=p, position=Vec3(sx * 0.30, SHOULDER_Y, 0))
+                piv_sh = Entity(parent=p, position=Vec3(sx * 0.26, SHOULDER_Y, 0))
                 setattr(self, f'_pivot_shoulder_{side}', piv_sh)
 
-                ua = _part_box(Vec3(0, -0.16, 0), (0.14, 0.32, 0.16), cloth, parent=piv_sh)
+                ua = _part_box(Vec3(0, -0.13, 0), (0.13, 0.26, 0.15), cloth, parent=piv_sh)
                 setattr(self, f'upper_arm_{side}', ua)
 
-                piv_el = Entity(parent=piv_sh, position=Vec3(0, -0.32, 0))
+                piv_el = Entity(parent=piv_sh, position=Vec3(0, -0.26, 0))
                 setattr(self, f'_pivot_elbow_{side}', piv_el)
 
-                fa = _part_box(Vec3(0, -0.15, 0), (0.13, 0.30, 0.14), skin, parent=piv_el)
+                fa = _part_box(Vec3(0, -0.11, 0), (0.12, 0.22, 0.13), skin, parent=piv_el)
                 setattr(self, f'forearm_{side}', fa)
 
-                hd = _part_box(Vec3(0, -0.36, 0), (0.14, 0.12, 0.14), skin, parent=piv_el)
+                hd = _part_box(Vec3(0, -0.27, 0), (0.14, 0.13, 0.14), skin, parent=piv_el)
                 setattr(self, f'hand_{side}', hd)
                 setattr(self, f'_arm_{side}', ua)
 
             # Legs
             for side, sx in (('l', -1), ('r', 1)):
-                piv_hip = Entity(parent=p, position=Vec3(sx * 0.12, HIP_Y, 0))
+                piv_hip = Entity(parent=p, position=Vec3(sx * 0.115, HIP_Y, 0))
                 setattr(self, f'_pivot_hip_{side}', piv_hip)
 
-                th = _part_box(Vec3(0, -0.21, 0), (0.18, 0.42, 0.22), pants, parent=piv_hip)
+                th = _part_box(Vec3(0, -0.17, 0), (0.175, 0.34, 0.21), pants, parent=piv_hip)
                 setattr(self, f'thigh_{side}', th)
 
-                piv_kn = Entity(parent=piv_hip, position=Vec3(0, -0.42, 0))
+                piv_kn = Entity(parent=piv_hip, position=Vec3(0, -0.34, 0))
                 setattr(self, f'_pivot_knee_{side}', piv_kn)
 
-                sh_e = _part_box(Vec3(0, -0.20, 0), (0.17, 0.40, 0.20), pants, parent=piv_kn)
+                sh_e = _part_box(Vec3(0, -0.15, 0), (0.165, 0.30, 0.19), pants, parent=piv_kn)
                 setattr(self, f'shin_{side}', sh_e)
 
-                foot = _part_box(Vec3(0, -0.45, 0.06), (0.20, 0.10, 0.32), shoe, parent=piv_kn)
+                foot = _part_box(Vec3(0, -0.35, 0.05), (0.195, 0.10, 0.30), shoe, parent=piv_kn)
                 setattr(self, f'shoe_{side}', foot)
                 setattr(self, f'_leg_{side}', th)
 
@@ -992,13 +1050,6 @@ class Player3D(Entity):
             if not hasattr(self, '_walk_t'):
                 self._walk_t = 0.0
 
-            # Floating halo ring and cube rotation & bobbing
-            if hasattr(self, '_halo_ring') and self._halo_ring:
-                self._halo_ring.rotation_y += dt * 50
-                self._halo_cube.rotation_x += dt * 70
-                self._halo_cube.rotation_y += dt * 90
-                self._halo_ring.y = 0.45 + math.sin(self._walk_t * 2.0) * 0.02
-                self._halo_cube.y = 0.70 + math.cos(self._walk_t * 2.0) * 0.03
 
             if getattr(self, '_slide_active_ms', 0) > 0:
                 # Slide pose for Voxel chibi
@@ -1018,10 +1069,10 @@ class Player3D(Entity):
                 
                 # Bobbing body
                 bob = math.sin(t) * 0.05
-                self.body.y = (_GH + 1.42) + bob
-                self._pivot_neck.y = _GH + 1.89 + bob
-                self._pivot_shoulder_l.y = _GH + 1.55 + bob
-                self._pivot_shoulder_r.y = _GH + 1.55 + bob
+                self.body.y = self._Y_BADAN + bob
+                self._pivot_neck.y = self._Y_KEPALA + bob
+                self._pivot_shoulder_l.y = self._Y_BAHU + bob
+                self._pivot_shoulder_r.y = self._Y_BAHU + bob
                 
                 # sitting-flying pose
                 if hasattr(self, '_pivot_hip_l') and self._pivot_hip_l:
@@ -1038,6 +1089,42 @@ class Player3D(Entity):
                 
                 self.body.rotation_x = _menuju(self.body.rotation_x, 15, 8, dt)
                 self.body.rotation_z = math.sin(t) * 3  # gentle sway
+            elif getattr(s, 'menunggang', ''):
+                # Pose menunggang. Yang membuat sebuah pose terbaca sebagai
+                # MENUNGGANG dan bukan sekadar berdiri di atas kuda adalah dua
+                # hal, dan dua-duanya harus ada:
+                #   1. kaki MENGANGKANG — paha dibuka ke samping (rotation_z),
+                #      bukan cuma ditekuk ke depan. Tanpa ini kedua kaki
+                #      berimpit di tengah punggung kuda dan pemain terlihat
+                #      duduk menyamping di atas peti.
+                #   2. tangan ke depan memegang tali kendali, sikunya tertekuk.
+                # Badan ikut naik-turun mengikuti langkah kuda saat bergerak,
+                # dan hampir diam saat kuda berhenti — deraknya yang membuat
+                # kecepatan 1,9x terasa, bukan angkanya.
+                self._walk_t += dt * (3.0 + (9.0 if moving_now else 0.0))
+                t = self._walk_t
+                derak = math.sin(t) * (0.055 if moving_now else 0.012)
+
+                if hasattr(self, '_pivot_hip_l') and self._pivot_hip_l:
+                    self._pivot_hip_l.rotation_x = _menuju(self._pivot_hip_l.rotation_x, 62, 9, dt)
+                    self._pivot_hip_r.rotation_x = _menuju(self._pivot_hip_r.rotation_x, 62, 9, dt)
+                    self._pivot_hip_l.rotation_z = _menuju(self._pivot_hip_l.rotation_z, 24, 9, dt)
+                    self._pivot_hip_r.rotation_z = _menuju(self._pivot_hip_r.rotation_z, -24, 9, dt)
+                    if hasattr(self, '_pivot_knee_l') and self._pivot_knee_l:
+                        self._pivot_knee_l.rotation_x = _menuju(self._pivot_knee_l.rotation_x, 55, 9, dt)
+                        self._pivot_knee_r.rotation_x = _menuju(self._pivot_knee_r.rotation_x, 55, 9, dt)
+                    self._pivot_shoulder_l.rotation_x = _menuju(self._pivot_shoulder_l.rotation_x, -58, 9, dt)
+                    self._pivot_shoulder_r.rotation_x = _menuju(self._pivot_shoulder_r.rotation_x, -58, 9, dt)
+                    if hasattr(self, '_pivot_elbow_l') and self._pivot_elbow_l:
+                        self._pivot_elbow_l.rotation_x = _menuju(self._pivot_elbow_l.rotation_x, -35, 9, dt)
+                        self._pivot_elbow_r.rotation_x = _menuju(self._pivot_elbow_r.rotation_x, -35, 9, dt)
+
+                self.body.rotation_x = _menuju(self.body.rotation_x, 10, 9, dt)
+                self.body.rotation_z = 0
+                self.body.y = self._Y_BADAN + derak
+                self._pivot_neck.y = self._Y_KEPALA + derak
+                self._pivot_shoulder_l.y = self._Y_BAHU + derak
+                self._pivot_shoulder_r.y = self._Y_BAHU + derak
             elif moving_now:
                 # Scale walk animation frequency based on actual velocity
                 speed_ratio = v_mag / max(0.1, self.speed)
@@ -1051,6 +1138,9 @@ class Player3D(Entity):
                     self._pivot_shoulder_r.rotation_x = swing
                     self._pivot_hip_l.rotation_x = swing
                     self._pivot_hip_r.rotation_x = -swing
+                    # Tutup kembali kaki mengangkang warisan pose menunggang.
+                    self._pivot_hip_l.rotation_z = _menuju(self._pivot_hip_l.rotation_z, 0, 12, dt)
+                    self._pivot_hip_r.rotation_z = _menuju(self._pivot_hip_r.rotation_z, 0, 12, dt)
 
                     # Elbows (Bend slightly when swinging forward)
                     if hasattr(self, '_pivot_elbow_l') and self._pivot_elbow_l:
@@ -1066,10 +1156,10 @@ class Player3D(Entity):
                     lean = 5.0 + speed_ratio * 15.0  # Dynamic lean based on speed (lean forward more when running)
                     self.body.rotation_x = lean
                     bob = abs(math.sin(t)) * (0.08 + speed_ratio * 0.08)  # Dynamic bobbing based on speed
-                    self.body.y = (_GH + 1.42) + bob
-                    self._pivot_neck.y = _GH + 1.89 + bob
-                    self._pivot_shoulder_l.y = _GH + 1.55 + bob
-                    self._pivot_shoulder_r.y = _GH + 1.55 + bob
+                    self.body.y = self._Y_BADAN + bob
+                    self._pivot_neck.y = self._Y_KEPALA + bob
+                    self._pivot_shoulder_l.y = self._Y_BAHU + bob
+                    self._pivot_shoulder_r.y = self._Y_BAHU + bob
             else:
                 # Idle bobbing
                 self._walk_t += dt * 1.8
@@ -1077,6 +1167,13 @@ class Player3D(Entity):
                 if hasattr(self, '_pivot_hip_l') and self._pivot_hip_l:
                     self._pivot_hip_l.rotation_x = _menuju(self._pivot_hip_l.rotation_x, 0, 10, dt)
                     self._pivot_hip_r.rotation_x = _menuju(self._pivot_hip_r.rotation_x, 0, 10, dt)
+                    # Paha dibuka ke samping HANYA oleh pose menunggang, jadi
+                    # di sinilah ia ditutup lagi. Tanpa dua baris ini pemain
+                    # tetap mengangkang selamanya setelah turun dari kuda:
+                    # tidak ada satu pun cabang animasi lain yang menyentuh
+                    # rotation_z pinggul.
+                    self._pivot_hip_l.rotation_z = _menuju(self._pivot_hip_l.rotation_z, 0, 10, dt)
+                    self._pivot_hip_r.rotation_z = _menuju(self._pivot_hip_r.rotation_z, 0, 10, dt)
                     self._pivot_shoulder_l.rotation_x = _menuju(self._pivot_shoulder_l.rotation_x, 0, 10, dt)
                     self._pivot_shoulder_r.rotation_x = _menuju(self._pivot_shoulder_r.rotation_x, 0, 10, dt)
 
@@ -1089,10 +1186,10 @@ class Player3D(Entity):
 
                     self.body.rotation_x = _menuju(self.body.rotation_x, 0, 10, dt)
                     breathe = math.sin(t) * 0.015
-                    self.body.y = (_GH + 1.42) + breathe
-                    self._pivot_neck.y = _GH + 1.89 + breathe
-                    self._pivot_shoulder_l.y = _GH + 1.55 + breathe
-                    self._pivot_shoulder_r.y = _GH + 1.55 + breathe
+                    self.body.y = self._Y_BADAN + breathe
+                    self._pivot_neck.y = self._Y_KEPALA + breathe
+                    self._pivot_shoulder_l.y = self._Y_BAHU + breathe
+                    self._pivot_shoulder_r.y = self._Y_BAHU + breathe
 
         char = getattr(self, '_char', None)
         if char is not None:
@@ -1223,7 +1320,15 @@ class Player3D(Entity):
         tx_i, ty_i = int(round(self.x / TS)), int(round(self.z / TS))
         target_y = self.world.get_surface_height(tx_i, ty_i)
         
-        if getattr(self, '_is_flying', False):
+        if getattr(s, 'menunggang', ''):
+            # Duduk di punggung kuda. Dipisah dari cabang melompat DAN dari
+            # cabang terbang: menunggang tidak boleh jatuh (gravitasi mati),
+            # tapi juga tidak melayang bebas — ia tetap mengikuti kontur tanah,
+            # cuma 0,60 m lebih tinggi.
+            self.y = lerp(self.y, target_y + TINGGI_SADEL, min(1.0, dt * 10.0))
+            self.velocity_y = 0.0
+            self.is_jumping = False
+        elif getattr(self, '_is_flying', False):
             # Float at 1.25 units smoothly above surface with sin bobbing
             if not hasattr(self, '_fly_time'):
                 self._fly_time = 0.0

@@ -53,6 +53,7 @@ TABLE status, ringkas FROM "10-Tahapan" SORT file.name ASC
 
 ## Jurnal sesi terbaru
 
+- [[2026-10-06 — CI menolak penjaga yang saya nyatakan lolos]] — mesin kedua menangkap klaim saya sendiri
 - [[2026-10-06 — Penjaga arah jadi penjaga sungguhan]] — utang yang sesi lalu ciptakan sendiri, ditutup; diagnosis lama dikoreksi
 - [[2026-10-04 — Arah WASD akhirnya terukur dan diperbaiki]] — utang 🔴 tertua, tutup; penjaganya gagal tiga kali dulu
 - [[2026-10-03 — Tahap 2 ditutup, entity_mesh terbukti]] — yatim terakhir dibuktikan, 16 pemeriksaan

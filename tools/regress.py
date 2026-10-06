@@ -220,15 +220,25 @@ def cek_arah_maju(g):
             _cx0, _, _cz0 = camera.world_position
             _ux0, _uz0 = g.camera_focus[0] - _cx0, g.camera_focus[2] - _cz0
             held_keys['w'] = 1
+            # Jendela ditutup oleh JARAK, bukan jumlah frame. `player.tick`
+            # memakai dt jam-dinding, jadi 10 frame di mesin lambat memberi
+            # perpindahan jauh lebih besar daripada di mesin cepat -- dan
+            # penyimpangan akibat menggeser rintangan menumpuk bersama JARAK,
+            # bukan bersama frame. Patokan frame membuat pemeriksaan ini lulus
+            # di satu mesin dan gagal di mesin lain tanpa ada yang berubah di
+            # kode game.
             x_awal, z_awal = x0, z0
-            for _i in range(12):
+            sampai = False
+            for _i in range(60):
                 _b.taskMgr.step()
-                if _i == 9:
-                    x_awal, _, z_awal = g.player.world_position
+                x_awal, _, z_awal = g.player.world_position
+                if _m.hypot(x_awal - x0, z_awal - z0) >= 0.40:
+                    sampai = True
+                    break
             held_keys['w'] = 0
             g.player.velocity_x = g.player.velocity_z = 0.0
 
-            # DIUKUR DI JENDELA AWAL (10 frame), bukan di akhir 40 frame.
+            # DIUKUR DI JENDELA AWAL (0,40 satuan pertama), bukan sepanjang jalan.
             # Alasannya terukur: makin jauh pemain berjalan, makin besar
             # kemungkinan ia menggeser rintangan, dan penyimpangan itu
             # MENUMPUK. Dibandingkan langsung di scene yang sama:
@@ -239,7 +249,7 @@ def cek_arah_maju(g):
             #   mountain   11,4 deg        34,4 deg
             #   town        2,8 deg        30,3 deg
             #
-            # Angka 40-frame itu yang dulu menuduh enam scene sehat. Yang
+            # Angka jarak-jauh itu yang dulu menuduh enam scene sehat. Yang
             # tumbuh bukan kesalahan arah, melainkan jarak geser -- pemain
             # menyusuri dinding. Sisa 11 derajat di jendela awal adalah
             # tikungan saat pemain berakselerasi dari diam, dan ambang 45
@@ -247,14 +257,24 @@ def cek_arah_maju(g):
             # sementara bug yang sesungguhnya mengukur 179 derajat.
             dx, dz = x_awal - x0, z_awal - z0
             jarak = _m.hypot(dx, dz)
-            # Jalan bebas 10 frame memberi 0,7-1,0 satuan. Jarak jauh di bawah itu
+            # Jendela ditutup di 0,40 satuan. Jarak jauh di bawah itu
             # berarti pemain TERHALANG, dan arah sisa geraknya adalah hasil
             # menggeser dinding -- bukan jawaban soal basis arah. `house` ruang
             # kecil: terukur 102 derajat menyimpang hanya karena pemainnya
             # menabrak. Pemeriksaan yang menghukum itu melaporkan bug yang
             # tidak ada.
-            if jarak < 0.25:
-                diuji.append(f'{yaw:.0f}:terhalang({jarak:.1f}u)')
+            # HANYA JENDELA YANG PENUH YANG BOLEH MEMVONIS.
+            #
+            # Kalau pemain tidak pernah mencapai 0,40 satuan dalam 60 frame, ia
+            # tertahan sesuatu -- dan sisa geraknya adalah hasil dorongan
+            # tabrakan, bukan jawaban soal arah. Dulu gerbangnya cuma `jarak <
+            # 0,20`, jadi pemain yang tertahan lalu terdorong MUNDUR 0,2-0,4
+            # satuan lolos gerbang dan divonis "menyimpang 180 derajat".
+            # Itu yang menjatuhkan `town` dan `beach` -- diuji terpisah dengan
+            # _bench/probes/probe_acuan.py, ketiga acuan di kedua scene itu
+            # sepakat 0,0 derajat, jadi gamenya memang benar.
+            if not sampai:
+                diuji.append(f'{yaw:.0f}:terhalang({jarak:.2f}u)')
                 continue
 
             ux, uz = _ux0, _uz0

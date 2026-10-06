@@ -109,7 +109,8 @@ berguna. Tiap kegagalan terukur, bukan dinalar:
 | 3 | menghukum pemain yang **terhalang dinding** | `house` (ruang kecil) dilaporkan menyimpang 102° padahal cuma menabrak |
 
 | 4 | **menuduh enam scene sehat** | 14 scene → 6 GAGAL (dua "180°"); `town` sendirian **LULUS** |
-| 5 | **lolos** | 14/14 lulus dengan perbaikan; 6/6 GAGAL (177–179°) dengan bug dipasang kembali |
+| 5 | **ditolak CI** | hijau di mesin lokal, exit 1 di runner GitHub — jendela berpatok frame padahal gerak berpatok jam dinding |
+| 6 | **lolos** | dua larian bersih berturut-turut 14/14; 7/7 GAGAL (179°) dengan bug dipasang; jendela ditutup oleh jarak, dan hanya jendela penuh yang memvonis |
 
 Versi 4 sudah menyapu tiga yaw dan memulihkan keadaan pemain, tapi menuduh
 enam scene sehat. Dugaan waktu itu — kontaminasi antar-scene — **ternyata
@@ -144,8 +145,22 @@ dengan perbaikan      14/14 lulus, 0 gagal                       exit 0
 dengan bug dipasang    0/6  lulus, 6 gagal (177-179 deg)         exit 1
 ```
 
-**Penjaga yang belum pernah dilihat gagal bukan penjaga** — dan penjaga yang
-salah menuduh juga bukan penjaga.
+Versi 5 masih jatuh dua kali lagi, dan CI yang menemukannya:
+
+- **Jendela berpatok frame.** `player.tick(dt)` memakai jam dinding, jadi 10 frame di mesin lambat ≠ 10 frame di mesin cepat. Sekarang jendela ditutup oleh **jarak 0,40 satuan**, batas aman 60 frame.
+- **Jendela setengah jalan tetap memvonis.** Pemain yang tertahan lalu terdorong mundur 0,2–0,4 satuan lolos gerbang lama dan divonis 180°. `probe_acuan.py` membuktikan game dan acuannya benar di kasus itu — ketiga acuan sepakat 0,0°. Sekarang hanya jendela yang **mencapai** 0,40 satuan yang boleh memvonis.
+
+**Penjaga yang belum pernah dilihat gagal bukan penjaga** — penjaga yang salah
+menuduh juga bukan penjaga — dan penjaga yang hanya terbukti di satu mesin
+belum terbukti. Rinciannya di
+[[2026-10-06 — CI menolak penjaga yang saya nyatakan lolos]].
+
+## Laporan CI sekarang bisa dibaca
+
+Log dan artifact GitHub disajikan dari host penyimpanan yang tidak bisa
+dihubungi klien API sesi ini, jadi larian merah dulu hanya terlihat sebagai
+"exit code 1". Workflow sekarang menempelkan `_bench/regress/report.md` ke
+ringkasan job (`if: always()`), jadi tabel LULUS/GAGAL terbaca langsung.
 
 ## Cacat alat ukur yang ditemukan pada dirinya sendiri
 

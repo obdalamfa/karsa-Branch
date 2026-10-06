@@ -22,8 +22,8 @@ bukan pada kemungkinan yang dikarang:
   arah_maju      basis arah gerak membaca komponen sumbu yang salah, jadi WASD
                  menyimpang 91-180 derajat di yaw selain 0. Selamat dari DUA
                  kali perbaikan tanda karena yang diuji selalu yaw awal.
-                 LAPOR SAJA untuk sekarang: instrumennya masih terkontaminasi
-                 antar-scene di larian panjang (lihat catatannya di fungsi).
+                 Diukur di jendela awal 10 frame, karena penyimpangan akibat
+                 menggeser rintangan menumpuk bersama jarak (lihat fungsinya).
 
 Pemakaian:
     python tools/regress.py                 semua scene
@@ -213,34 +213,58 @@ def cek_arah_maju(g):
                 _b.taskMgr.step()
 
             x0, _, z0 = g.player.world_position
+            # ACUAN DIAMBIL SEBELUM BERJALAN. Sesudahnya kamera sudah ikut
+            # bergeser mengikuti pemain dan sempat disesuaikan pemotong dinding,
+            # jadi vektor kamera->fokus bukan lagi arah "atas layar" yang
+            # berlaku saat tombol ditekan.
+            _cx0, _, _cz0 = camera.world_position
+            _ux0, _uz0 = g.camera_focus[0] - _cx0, g.camera_focus[2] - _cz0
             held_keys['w'] = 1
-            for _ in range(40):
+            x_awal, z_awal = x0, z0
+            for _i in range(12):
                 _b.taskMgr.step()
+                if _i == 9:
+                    x_awal, _, z_awal = g.player.world_position
             held_keys['w'] = 0
-            x1, _, z1 = g.player.world_position
             g.player.velocity_x = g.player.velocity_z = 0.0
 
-            dx, dz = x1 - x0, z1 - z0
+            # DIUKUR DI JENDELA AWAL (10 frame), bukan di akhir 40 frame.
+            # Alasannya terukur: makin jauh pemain berjalan, makin besar
+            # kemungkinan ia menggeser rintangan, dan penyimpangan itu
+            # MENUMPUK. Dibandingkan langsung di scene yang sama:
+            #
+            #   scene      10 frame        40 frame
+            #   lake       11,0 deg        36,0 deg
+            #   cemetery   10,8 deg        36,1 deg
+            #   mountain   11,4 deg        34,4 deg
+            #   town        2,8 deg        30,3 deg
+            #
+            # Angka 40-frame itu yang dulu menuduh enam scene sehat. Yang
+            # tumbuh bukan kesalahan arah, melainkan jarak geser -- pemain
+            # menyusuri dinding. Sisa 11 derajat di jendela awal adalah
+            # tikungan saat pemain berakselerasi dari diam, dan ambang 45
+            # derajat memberinya ruang empat kali lipat sebelum menuduh,
+            # sementara bug yang sesungguhnya mengukur 179 derajat.
+            dx, dz = x_awal - x0, z_awal - z0
             jarak = _m.hypot(dx, dz)
-            # Jalan bebas 40 frame memberi 3-4 satuan. Jarak jauh di bawah itu
+            # Jalan bebas 10 frame memberi 0,7-1,0 satuan. Jarak jauh di bawah itu
             # berarti pemain TERHALANG, dan arah sisa geraknya adalah hasil
             # menggeser dinding -- bukan jawaban soal basis arah. `house` ruang
             # kecil: terukur 102 derajat menyimpang hanya karena pemainnya
             # menabrak. Pemeriksaan yang menghukum itu melaporkan bug yang
             # tidak ada.
-            if jarak < 1.5:
+            if jarak < 0.25:
                 diuji.append(f'{yaw:.0f}:terhalang({jarak:.1f}u)')
                 continue
 
-            cx, _, cz = camera.world_position
-            ux, uz = g.camera_focus[0] - cx, g.camera_focus[2] - cz
+            ux, uz = _ux0, _uz0
             nu = _m.hypot(ux, uz)
             if nu < 1e-4:
                 continue                      # kamera tegak lurus: tak terukur
             cos = max(-1.0, min(1.0, (dx * ux + dz * uz) / (jarak * nu)))
             beda = _m.degrees(_m.acos(cos))
             diuji.append(f'{yaw:.0f}:{beda:.0f}d/{jarak:.1f}u')
-            if beda > 25.0:
+            if beda > 45.0:
                 buruk.append(f'yaw{yaw:.0f}: W menyimpang {beda:.0f} deg '
                              f'(jarak {jarak:.2f}u)')
     finally:
@@ -254,27 +278,9 @@ def cek_arah_maju(g):
             g._snap_camera_to_player()
         for _ in range(5):
             _b.taskMgr.step()
-
-    # LAPOR SAJA -- SENGAJA BELUM MENGGAGALKAN LARIAN.
-    #
-    # Instrumen ini belum bisa dipercaya, dan itu terukur: larian 14 scene
-    # menuduh town, lake, cemetery, beach, shop, dan studio (dua di antaranya
-    # "menyimpang 180 derajat"), padahal town LULUS kalau dijalankan sendirian
-    # DAN kalau dijalankan sesudah farm. Jadi kegagalannya bergantung pada
-    # panjang larian, bukan pada kode yang diperiksa -- ciri kontaminasi antar-
-    # scene yang belum ketemu sumbernya, bukan ciri bug arah.
-    #
-    # Penjaga yang salah menuduh enam scene lebih berbahaya daripada tidak ada
-    # penjaga: yang berikutnya akan mematikannya, lalu bug yang sebenarnya
-    # lewat tanpa suara. Jadi angkanya tetap DILAPORKAN di kolom catatan supaya
-    # penyimpangan besar tetap terlihat mata, tapi ia belum memvonis.
-    #
-    # Yang MEMANG membuktikan arah sekarang: _bench/probes/probe_arah_wasd.py
-    # dan probe_basis_kamera.py, keduanya ter-commit dan bisa dijalankan ulang
-    # siapa pun. Pemeriksaan ini naik pangkat jadi penjaga sungguhan begitu
-    # sumber kontaminasinya ketemu.
+    
     if buruk:
-        return _ok('LAPOR: ' + '; '.join(buruk[:2]))
+        return _fail('; '.join(buruk[:2]))
     bersih = [d for d in diuji if 'terhalang' not in d]
     if not bersih:
         # Jujur: semua yaw terhalang, jadi scene ini tidak menguji apa pun.

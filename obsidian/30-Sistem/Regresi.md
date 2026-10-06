@@ -30,7 +30,7 @@ Keluar dengan kode `1` kalau ada yang gagal, supaya bisa dipakai di skrip.
 | `bisa_keluar` | [[Pemain beku saat panel terbuka]] — ESC dari mode dialog/panel/pie |
 | `motif_waras` | mesin [[Motif]] baru; nilai harus tetap di −100..+100 |
 | `save_bolak` | format save berubah; save lama tidak boleh merusak loader |
-| `arah_maju` ⚠️ | [[Arah WASD basis sumbu salah]] — basis membaca komponen sumbu yang salah. **Lapor-saja**, belum memvonis: instrumennya masih terkontaminasi antar-scene |
+| `arah_maju` | [[Arah WASD basis sumbu salah]] — basis membaca komponen sumbu yang salah; diukur di jendela 10 frame, tiga yaw |
 | `ms_frame` | 4–29 FPS, belum pernah diprofil → [[Tahap 3 — Performa]] |
 
 `ms_frame` dan jumlah entity dicatat sebagai **angka**, bukan lulus/gagal —
@@ -108,28 +108,44 @@ berguna. Tiap kegagalan terukur, bukan dinalar:
 | 2 | meninggalkan bekas (pemain tergeser, kamera masih bergerak) | `beach` **LULUS** kalau pertama, **GAGAL** kalau keenam |
 | 3 | menghukum pemain yang **terhalang dinding** | `house` (ruang kecil) dilaporkan menyimpang 102° padahal cuma menabrak |
 
-| 4 | **masih terkontaminasi di larian panjang** | 14 scene → 6 GAGAL (dua "180°"); `town` sendirian **LULUS**, sesudah `farm` **LULUS** |
+| 4 | **menuduh enam scene sehat** | 14 scene → 6 GAGAL (dua "180°"); `town` sendirian **LULUS** |
+| 5 | **lolos** | 14/14 lulus dengan perbaikan; 6/6 GAGAL (177–179°) dengan bug dipasang kembali |
 
-Versi 4 menyapu tiga yaw, menyalin-dan-memulihkan posisi + kecepatan pemain,
-menyentak kamera alih-alih menunggu lerp, dan melaporkan `terhalang` alih-alih
-GAGAL kalau jarak jalan di bawah 1,5 satuan. Ia **menangkap bug sungguhan**:
+Versi 4 sudah menyapu tiga yaw dan memulihkan keadaan pemain, tapi menuduh
+enam scene sehat. Dugaan waktu itu — kontaminasi antar-scene — **ternyata
+salah**: `probe_kontaminasi.py` mengukur selisih posisi lokal lawan dunia
+**0,000 di keempat belas scene**, dan instrumentasi di dalam pemeriksaannya
+menunjukkan posisi masuk = posisi keluar.
+
+Sebab sebenarnya dua lapis, keduanya di alat ukur:
+
+1. **Acuan diambil sesudah berjalan.** Vektor "atas layar" dihitung dari
+   kamera→fokus setelah 40 frame, saat kamera sudah ikut bergeser dan
+   disesuaikan pemotong dinding. Itu sumber tuduhan **180°** yang hanya muncul
+   di scene berbangunan. Sekarang acuan diambil **sebelum** tombol ditekan.
+2. **Jendela terlalu panjang.** Penyimpangan karena menggeser rintangan
+   menumpuk bersama jarak — diukur berdampingan di scene yang sama:
+
+   | scene | 10 frame | 40 frame |
+   |---|---:|---:|
+   | lake | 11,0° | 36,0° |
+   | cemetery | 10,8° | 36,1° |
+   | mountain | 11,4° | 34,4° |
+   | town | 2,8° | 30,3° |
+
+Vonis sekarang memakai jendela **10 frame** dengan ambang **45°** — empat kali
+lipat ruang di atas sisa 11° (tikungan saat berakselerasi dari diam), sementara
+bug sungguhan mengukur 179°.
+
+Diuji dua arah, dan itu syarat kelayakannya:
 
 ```
-dengan bug lama dipasang   farm GAGAL yaw135: W menyimpang 179 deg   exit 1
-dengan perbaikan, 3 scene  farm house beach LULUS                     exit 0
+dengan perbaikan      14/14 lulus, 0 gagal                       exit 0
+dengan bug dipasang    0/6  lulus, 6 gagal (177-179 deg)         exit 1
 ```
-
-…tapi di larian 14 scene ia menuduh enam scene yang sehat. Karena kegagalannya
-bergantung panjang larian, bukan pada kode yang diperiksa, ia **diturunkan jadi
-lapor-saja**: angka penyimpangan tetap tercetak di kolom catatan, tapi tidak
-memvonis.
 
 **Penjaga yang belum pernah dilihat gagal bukan penjaga** — dan penjaga yang
-salah menuduh juga bukan penjaga: yang berikutnya akan mematikannya, lalu bug
-sungguhan lewat tanpa suara. Status terbukanya ada di [[Utang Teknis]].
-
-Yang membuktikan arah sekarang: `_bench/probes/probe_arah_wasd.py` dan
-`probe_basis_kamera.py`, keduanya ter-commit.
+salah menuduh juga bukan penjaga.
 
 ## Cacat alat ukur yang ditemukan pada dirinya sendiri
 

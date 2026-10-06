@@ -5,7 +5,7 @@ status: selesai
 berat: tinggi
 ditemukan: 2026-08-27
 diperbaiki: 2026-10-04
-dijaga_oleh: probe_arah_wasd.py + probe_basis_kamera.py (cek arah_maju masih lapor-saja)
+dijaga_oleh: arah_maju (tiga yaw, jendela 10 frame) + dua probe ter-commit
 tags: [bug, kontrol, status/selesai]
 ---
 
@@ -85,13 +85,12 @@ yaw 315   W 90,0 deg ATAS   S 270,0 BAWAH   A 180,4 KIRI   D 359,5 KANAN
 W<->S berlawanan 180,0 deg      A<->D berlawanan 179,0 deg
 ```
 
-## Penjaganya: dua probe, BUKAN regresi — belum
+## Penjaganya: `arah_maju`, dan dua probe ter-commit
 
-> [!warning] Pemeriksaan `arah_maju` belum memvonis
-> Ia ada di `tools/regress.py` dan angkanya tercetak di kolom catatan, tapi
-> **sengaja tidak menggagalkan larian**. Instrumennya belum bisa dipercaya —
-> lihat di bawah. Yang benar-benar membuktikan arah sekarang adalah dua probe
-> ter-commit, yang bisa dijalankan ulang siapa pun.
+> [!success] Pemeriksaan `arah_maju` memvonis sejak 2026-10-06
+> Diuji dua arah: 14/14 lulus dengan perbaikan, 6/6 GAGAL (177–179°) saat bug
+> dipasang kembali — termasuk `house` dan `smith`, dua ruang kecil yang dulu
+> memberi hasil palsu. Riwayat lima versinya ada di [[Regresi]].
 
 ## Penjaga yang gagal empat kali
 
@@ -111,7 +110,7 @@ farm   GAGAL   arah_maju: yaw135: W menyimpang 179 deg
 Itu sebabnya aturannya layak ditulis: **penjaga yang belum pernah dilihat gagal
 bukan penjaga.**
 
-### Versi keempat juga belum lolos
+### Versi keempat belum lolos, dan sebabnya bukan yang saya kira
 
 Dengan keadaan pemain disalin-dan-dipulihkan dan scene terhalang tidak dihukum,
 tiga scene yang diuji berurutan lulus. Tapi larian **14 scene penuh**:
@@ -125,16 +124,19 @@ tiga scene yang diuji berurutan lulus. Tapi larian **14 scene penuh**:
 
 Lalu `town` diuji sendirian: **LULUS**. Diuji sesudah `farm`: **LULUS**.
 
-Kegagalannya bergantung pada **panjang larian**, bukan pada kode yang
-diperiksa — itu ciri kontaminasi antar-scene, bukan ciri bug arah. Sumbernya
-belum ketemu.
+Dugaan saat itu: kontaminasi antar-scene. **Salah.** `probe_kontaminasi.py`
+mengukur selisih posisi lokal lawan dunia **0,000 di keempat belas scene**, dan
+instrumentasi di dalam pemeriksaannya menunjukkan posisi masuk = posisi keluar.
 
-Karena itu pemeriksaannya diturunkan jadi **lapor-saja**: angkanya tetap
-tercetak supaya penyimpangan besar terlihat mata, tapi ia tidak memvonis.
-Alasannya bukan kompromi: penjaga yang salah menuduh enam scene akan dimatikan
-oleh orang berikutnya, dan sesudah itu bug yang sebenarnya lewat tanpa suara.
+Sebab sebenarnya ada dua, keduanya di alat ukur: **acuan diambil sesudah
+pemain berjalan** (kamera sudah ikut bergeser dan dipotong dinding — itu
+sumber tuduhan 180° yang hanya muncul di scene berbangunan), dan **jendela ukur
+terlalu panjang** (penyimpangan karena menggeser rintangan menumpuk: 11° pada
+10 frame menjadi 36° pada 40 frame).
 
-Ini tercatat sebagai utang terbuka di [[Utang Teknis]], bukan sebagai selesai.
+Versi kelima mengukur di jendela 10 frame dengan acuan pra-jalan, ambang 45°.
+Rinciannya di [[Regresi]] dan
+[[2026-10-06 — Penjaga arah jadi penjaga sungguhan]].
 
 ## Tautan
 

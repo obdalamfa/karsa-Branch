@@ -2,7 +2,7 @@
 judul: CI menolak penjaga yang saya nyatakan lolos
 tipe: sesi
 tanggal: 2026-10-06
-commit:
+commit: 13e20bc
 tags: [sesi, uji, ci, koreksi]
 ---
 

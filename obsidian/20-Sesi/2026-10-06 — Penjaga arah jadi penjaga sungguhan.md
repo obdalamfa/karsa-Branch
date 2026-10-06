@@ -2,7 +2,7 @@
 judul: Penjaga arah jadi penjaga sungguhan — dan diagnosis lama saya salah
 tipe: sesi
 tanggal: 2026-10-06
-commit:
+commit: 13ff78f
 tags: [sesi, uji, koreksi]
 ---
 

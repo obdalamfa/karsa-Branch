@@ -374,13 +374,84 @@ def build_mountain_landscape(world, scene):
         j=(i+1)%len(outline)
         verts.extend([(29,1.8,3.94),(29+outline[i][0],outline[i][1],3.94),
                       (29+outline[j][0],outline[j][1],3.94)])
-    _part(world,Mesh(vertices=verts),(0,0,0),(1,1,1),(20,29,30),smooth=False,double_sided=True)
+    from ursina.shaders import unlit_shader
+    _gelap=_part(world,Mesh(vertices=verts),(0,0,0),(1,1,1),(6,8,9),smooth=False,
+                 double_sided=True,shader=unlit_shader)
+    try:
+        _gelap.setFogOff(); _gelap.setLightOff()
+    except Exception:
+        pass
     for x in (13,16):
         _part(world,_rock_mesh(x),(x*TS,.2,2*TS),(2.3,4.35,2.5),(111,128,116))
     # Base-origin rocks overlap above the opening, eliminating sky pinholes.
     _part(world,_rock_mesh(31),(29,3.3,3.5),(8.4,2.65,3.7),(114,130,116))
     _part(world,_rock_mesh(43),(28.2,4.4,2.3),(9.5,2.0,3.6),(119,134,122))
+    _mulut_gua(world)
     _lore_lama(world, scene)
+
+
+def _mulut_gua(world):
+    """Mulut gua sungguhan di ujung jalur: SATU tebing utuh berlubang lengkung.
+
+    Sebelumnya ujung jalan hanya diapit dua batu dan langit biru tembus di
+    antaranya. Percobaan pertama memakai model Blender `mulut_gua` (cincin
+    bongkah) ditambah gumpalan penutup -- hasilnya berlapis-lapis, bukan satu
+    bukit. Sekarang mukanya satu permukaan menerus: kontur luar berbentuk
+    punggung bukit, kontur dalam lengkung pintu, dan keduanya disambung
+    sebagai satu cangkang tebal. Lubangnya diisi kegelapan, obor di kedua sisi.
+    """
+    from ursina import Mesh
+    cx, cz = 14.5 * TS, 2.9 * TS          # tengah ambang ubin DR
+    gy = GROUND_H
+    n = 18
+    ow, oh = 7.0, 8.5                     # kontur luar (punggung bukit)
+    iw, ih = 2.3, 3.9                     # kontur dalam (lubang pintu)
+    tebal = 3.0
+
+    def kasar(i, amp):
+        # Derau tetap per titik: tepi bukit tidak licin seperti busur jangka.
+        return 1.0 + amp * math.sin(i * 2.399 + 0.7) * math.cos(i * 1.31)
+
+    luar, dalam = [], []
+    for i in range(n + 1):
+        t = math.pi * i / n
+        r = kasar(i, 0.06) if 0 < i < n else 1.0
+        luar.append((math.cos(t) * ow * r, max(0.0, math.sin(t) ** 0.7 * oh * r)))
+        dalam.append((math.cos(t) * iw, math.sin(t) ** 0.55 * ih))
+
+    v = []
+    def tri(a, b, c):
+        v.extend((a, b, c))
+    def quad(a, b, c, d):
+        tri(a, b, c); tri(a, c, d)
+    def P(xy, z):
+        return (cx + xy[0], gy + xy[1], cz + z)
+
+    zf, zb = 0.0, -tebal                   # muka depan menghadap jalur (+z)
+    for i in range(n):
+        lo, lo2, di, di2 = luar[i], luar[i + 1], dalam[i], dalam[i + 1]
+        quad(P(lo, zf), P(lo2, zf), P(di2, zf), P(di, zf))        # muka depan
+        quad(P(lo2, zb), P(lo, zb), P(di, zb), P(di2, zb))        # muka belakang
+        quad(P(lo, zb), P(lo2, zb), P(lo2, zf), P(lo, zf))        # punggung bukit
+        quad(P(di2, zb), P(di, zb), P(di, zf), P(di2, zf))        # langit-langit lorong
+    _part(world, Mesh(vertices=v, triangles=list(range(len(v)))), (0, 0, 0), (1, 1, 1),
+          (108, 124, 112), double_sided=True)
+
+    # Kegelapan di dalam lorong dan dinding belakang yang menutup langit.
+    # Tanpa cahaya dan kabut: kalau ikut diterangi, kabut jarak mewarnainya
+    # biru langit dan lubangnya terbaca tembus, bukan gelap.
+    from ursina.shaders import unlit_shader
+    for pos, skala, rgb in (((cx, gy + ih / 2, cz - tebal - 0.2), (iw * 2.2, ih + 0.4, 0.3), (6, 8, 9)),
+                            ((cx, gy + 0.02, cz - tebal / 2), (iw * 2, 0.04, tebal), (20, 22, 22))):
+        e = _part(world, 'cube', pos, skala, rgb, shader=unlit_shader)
+        try:
+            e.setFogOff(); e.setLightOff()
+        except Exception:
+            pass
+    for sx in (-1, 1):
+        x = cx + sx * (iw + 0.9)
+        _part(world, 'cube', (x, gy + 0.75, cz + 0.6), (0.09, 1.5, 0.09), (72, 52, 36))
+        _part(world, 'cube', (x, gy + 1.6, cz + 0.6), (0.22, 0.3, 0.22), (255, 168, 70))
 
 
 def _shrine(world, wx, wz):

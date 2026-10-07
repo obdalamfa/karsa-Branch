@@ -177,7 +177,17 @@ CROP_CATALOG: dict[str, dict] = {
         'real': 'kedelai 75-90 hari; palawija sesudah padi',
     },
     'ubi_kayu': {
-        'name': 'Singkong', 'kind': 'palawija', 'days': 14, 'sell': 150, 'cost': 10,
+        # 150G memberi 10,77 G/EN -- 1,9x langit-langit pita 3,0-5,7 yang
+        # ditulis economy.py sendiri, dan pita itu dipatuhi kedelapan tanaman
+        # asli data.py. Yang membuatnya sungguh timpang bukan hasilnya melainkan
+        # ENERGINYA: 14 hari singkong = 13 EN untuk 140G bersih, sementara tujuh
+        # siklus lobak di petak yang sama = 49 EN untuk 147G. Hasil per
+        # petak-hari praktis sama, tapi singkong menuntut seperempat energinya
+        # -- dan doktrin economy.py justru "energi, bukan waktu, adalah sumber
+        # daya langka". Jadi singkong adalah strategi dominan.
+        # 84G menempatkannya tepat di langit-langit pita (5,69 G/EN) sambil
+        # tetap jadi tanaman termahal per buah. Keputusan pemilik, 2026-10-07.
+        'name': 'Singkong', 'kind': 'palawija', 'days': 14, 'sell': 84, 'cost': 10,
         'seasons': ['Semi', 'Panas', 'Gugur'], 'air': 'rendah', 'hasil': 4,
         # Singkong TIDAK tumbuh lagi: umbinya dibongkar, batangnya dicabut.
         # Batang itu dipakai jadi stek untuk tanam berikutnya — makanya panen
@@ -333,12 +343,19 @@ def register_consumables(target: dict) -> dict:
 
 
 def seed_shop_rows() -> list[dict]:
-    """Baris toko untuk semua benih baru — DIEKSPOR, tidak dipasang sendiri.
+    """Baris toko untuk semua benih baru.
 
-    Panel toko sekarang memilih barang dengan tombol angka 1-9, jadi menambah
-    18 baris ke SHOP_ITEMS akan membuat sebagian besar tidak bisa dibeli.
-    Agen ekonomi yang memegang panel itu; daftar ini disiapkan supaya mereka
-    tinggal memasangnya setelah panel toko bisa berhalaman.
+    Dulu daftar ini hanya DIEKSPOR dan tidak pernah dipasang, dengan alasan
+    yang benar pada masanya: panel toko memilih barang dengan tombol 1-9, jadi
+    menambah 16 baris membuat sebagiannya tidak bisa dipilih. Akibatnya 16
+    tanaman tumbuh, berharga, dan punya model -- tapi pemain tidak punya satu
+    pun jalan untuk memulainya.
+
+    Alasan itu sudah kedaluwarsa: `panels.py` kini punya halaman
+    (`ROWS_PER_PAGE = 9`, tombol Q/R, dan `_page_slice` yang memotong daftar
+    sepanjang apa pun). Jadi barisnya dipasang di `_install()`, dan `crop`
+    ikut dibawa supaya `economy.margin_hint` bisa menampilkan rantai
+    benih->panen di daftar beli.
     """
     rows = []
     for cid, spec in CROP_CATALOG.items():
@@ -346,10 +363,11 @@ def seed_shop_rows() -> list[dict]:
                    'tomat', 'labu', 'bayam', 'jamur'):
             continue    # sudah ada di SHOP_ITEMS
         rows.append({'id': f'{cid}_seed', 'name': f"Benih {spec['name']}",
-                     'price': spec['cost'], 'season': '/'.join(spec['seasons'])})
+                     'price': spec['cost'], 'season': '/'.join(spec['seasons']),
+                     'crop': cid})
     for tid, spec in TREE_CATALOG.items():
         rows.append({'id': f'{tid}_seed', 'name': f"Bibit {spec['name']}",
-                     'price': spec['cost'], 'season': 'all'})
+                     'price': spec['cost'], 'season': 'all', 'crop': tid})
     return rows
 
 
@@ -361,6 +379,13 @@ def _install():
     from . import data
     register_into(data.CROPS)
     register_consumables(data.CONSUMABLES)
+    # Benih tanaman baru ikut masuk toko. Dijaga idempoten lewat `id` supaya
+    # impor ulang modul (uji, reload) tidak menggandakan barisnya.
+    sudah = {it['id'] for it in data.SHOP_ITEMS}
+    for row in SEED_SHOP_ROWS:
+        if row['id'] not in sudah:
+            data.SHOP_ITEMS.append(row)
+            sudah.add(row['id'])
 
 
 _install()

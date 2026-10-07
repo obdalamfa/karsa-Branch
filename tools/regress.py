@@ -30,6 +30,11 @@ bukan pada kemungkinan yang dikarang:
                  membalik tanda sampai terasa benar. Diukur sekali di akhir
                  lewat tools/probe_arah.py, alat ukur yang sama dengan probe
                  manual, supaya tidak ada dua kebenaran.
+  rawat_ternak   husbandry.py kini sumber kebenaran ternak dan peluruhan
+                 hariannya hidup lagi. Kombinasi itu pernah merusak: peluruhan
+                 tanpa perawatan yang terjangkau membuat kedelapan ternak sakit
+                 permanen di hari 4. Diperiksa dari DUA sisi -- yang dirawat
+                 selamat dan benar-benar panen, yang ditelantarkan menanggung.
   bentuk_gua     cutaway dinding ala Sims 1 benar untuk rumah, tapi di gua
                  dinding BUKAN pembatas ruangan — dinding ADALAH ruangannya.
                  Aturan lama memangkas 53-72% seluruh dinding gua sekaligus,
@@ -439,6 +444,26 @@ def main():
         wish_baris.append((False, f'probe keinginan gagal jalan: {e}'))
         gagal_total += 1
 
+    # ── loop perawatan ternak (husbandry jadi sumber kebenaran) ──
+    # Peluruhan harian husbandry pernah berjalan TANPA aksi perawatan yang
+    # terjangkau, dan itu membuat kedelapan ternak sakit permanen di hari 4.
+    # Sekarang keduanya tersambung; yang dijaga di sini pasangan itu tetap utuh
+    # dari KEDUA sisi -- yang dirawat selamat, yang ditelantarkan menanggung.
+    ternak_baris = []
+    try:
+        import probe_ternak
+        probe_ternak.uji_ternak(g)
+        buruk_t = [(n, k) for n, ok, k in probe_ternak.hasil if not ok]
+        n_t = len(probe_ternak.hasil)
+        ternak_baris.append((not buruk_t,
+                             f'{n_t - len(buruk_t)}/{n_t} pemeriksaan ternak lulus'
+                             + ('; ' + '; '.join(f'{n}: {k}' for n, k in buruk_t[:2])
+                                if buruk_t else '')))
+        gagal_total += len(buruk_t)
+    except Exception as e:
+        ternak_baris.append((False, f'probe ternak gagal jalan: {e}'))
+        gagal_total += 1
+
     # ── bentuk gua vs keterlihatan pemain ──
     # Dua angka yang harus benar BERSAMAAN: gua tetap berbentuk, dan pemain
     # tidak tertutup batu. Memperbaiki satu saja menukar cacat dengan cacat.
@@ -510,6 +535,9 @@ def main():
     ok_gua, catatan_gua = gua_baris[0] if gua_baris else (True, '-')
     print(f'{"bentuk gua":14s} {"LULUS" if ok_gua else "GAGAL":>7s} '
           f'{"":>9s} {"":>7s}  {catatan_gua[:44]}')
+    ok_ternak, catatan_ternak = ternak_baris[0] if ternak_baris else (True, '-')
+    print(f'{"rawat ternak":14s} {"LULUS" if ok_ternak else "GAGAL":>7s} '
+          f'{"":>9s} {"":>7s}  {catatan_ternak[:44]}')
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)
     print(f'{n_lulus}/{len(baris)} scene lulus, {gagal_total} pemeriksaan gagal, '
@@ -538,6 +566,8 @@ def main():
                 f'{"LULUS" if ok_wish else "**GAGAL**"} — {catatan_wish}\n')
         f.write(f'\n## Bentuk gua\n\n'
                 f'{"LULUS" if ok_gua else "**GAGAL**"} — {catatan_gua}\n')
+        f.write(f'\n## Perawatan ternak\n\n'
+                f'{"LULUS" if ok_ternak else "**GAGAL**"} — {catatan_ternak}\n')
         f.write('\n## Arah WASD\n\n| tombol | hasil | catatan |\n|---|---|---|\n')
         for k, ok, c in arah_baris:
             f.write(f'| {k.upper()} | {"LULUS" if ok else "**GAGAL**"} | {c} |\n')

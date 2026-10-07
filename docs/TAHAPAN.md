@@ -458,6 +458,105 @@ justru yang membuat lapisan horor bekerja.
 
 ---
 
+---
+
+## Keputusan pemilik — 2026-10-07
+
+Empat hal yang sengaja ditandai "bukan wewenang alat" akhirnya diputuskan.
+Dicatat di sini lengkap dengan **alasan** masing-masing, karena keputusan tanpa
+alasan akan dibongkar lagi oleh orang berikutnya yang melihat angkanya aneh.
+
+### 1. Pita G/EN — hanya `ubi_kayu` yang diturunkan
+
+`150G → 84G` (10,77 → **5,69 G/EN**, tepat di langit-langit pita 3,0–5,7).
+`cabai` (7,50) dan `ubi_jalar` (6,67) **dibiarkan** sebagai tanaman premium.
+
+Yang membuat singkong timpang bukan hasilnya melainkan **energinya**: 14 hari
+singkong = 13 EN untuk 140G bersih, sementara tujuh siklus lobak di petak yang
+sama = 49 EN untuk 147G. Per petak-hari praktis sama; per **energi** singkong
+menuntut seperempatnya — dan doktrin `economy.py` sendiri berbunyi *"energi,
+bukan waktu, adalah sumber daya langka"*. Jadi ia strategi dominan.
+
+### 2. Ternak — `husbandry.py` menang, `economy.animals` pensiun
+
+Dua modul mengurus lima hewan yang sama dengan jawaban berbeda (bebek
+telur/1h lawan telur_bebek/2h, domba wol/2h lawan wol/5h, kambing wol/2h lawan
+susu_kambing/2h). Dua sistem atas benda yang sama tidak pernah bisa sepakat,
+jadi salah satu harus menang. Yang menang husbandry karena ia punya tiga
+takaran, jadwal produksi, jalur sakit, **dan** teks keadaan — dan aturan yang
+tidak bisa dilihat pemain bukan aturan.
+
+Konsekuensinya dikerjakan sampai habis, bukan separuh:
+
+- **Empat pekerjaan kandang masuk pie menu**: Beri Makan, Beri Minum,
+  Bersihkan, Ambil Hasil (`beri_minum` dan `bersihkan` aksi yang benar-benar
+  baru). Label tiap aksi menyebut **angka keadaannya** — `air 10%`,
+  `kenyang 10% → 70%` — supaya pemain tahu apa yang kurang tanpa menebak.
+- **`husbandry.daily_tick` dihidupkan kembali.** Ia pernah dimatikan dengan
+  syarat tertulis: keempat aksinya harus terjangkau lebih dulu. Syarat itu kini
+  terpenuhi, jadi peluruhannya punya lawan.
+- **`economy.tick_animals_daily` tidak lagi dipanggil.** Fungsinya dibiarkan
+  ada supaya save lama tetap terbaca.
+- **Pakan hantu diperbaiki.** `rumput` dan `dedak` tidak pernah ada sebagai
+  barang, dan `rumput` bahkan pilihan pertama untuk lima spesies — jadi
+  `feed_item()` melewatinya tiap kali. Selama modulnya dorman cacatnya laten;
+  begitu disambungkan ia jadi nyata. `rumput → jerami`, `dedak → pakan`.
+
+### 3. Alur cerita — diperbaiki, ambang hati **7 dari 10**
+
+Tiga cacat sekaligus, dan ketiganya harus beres bersamaan karena memperbaiki
+satu saja mengubah diam jadi crash:
+
+| cacat | akibatnya |
+|---|---|
+| pengirim mencari `quest_manager` / `_check_quest_progress` | dua nama yang tidak ada pada Player, dijaga `hasattr` → alur **diam** |
+| `QUEST_STAGES` bertipe `list` tapi dibaca `.get()` | crash di langkah pertama alur |
+| `s.npc_relations` tidak ada, ambangnya 15 | `npc_hearts` berskala 0–10, jadi mustahil |
+
+Sekarang: pengirim memakai `quest_controller`, judul tahap dicari lewat
+`q['s']`, dan syarat tahap 2→3 jadi `npc_hearts['arya'] >= 7`. Terbukti maju
+0 → 1 → 2 → 3 → 4, dan hati 6 memang **ditolak** sementara 7 lolos.
+
+### 4. Benih baru — dipasang, karena penghalangnya sudah tidak ada
+
+16 benih kini ada di toko (26 baris, 3 halaman). Alasan `crops.py` tidak pernah
+memasangnya — *"panel toko memilih dengan tombol 1-9"* — sudah **kedaluwarsa**:
+`panels.py` punya `ROWS_PER_PAGE = 9`, tombol Q/R, dan `_page_slice` yang
+memotong daftar sepanjang apa pun. Jadi ini bukan keputusan desain, melainkan
+catatan yang lupa diperbarui.
+
+### Jaring pengamannya ikut tumbuh
+
+`tools/probe_ternak.py` menguji loop perawatan dari **dua sisi**, karena satu
+sisi saja tidak membuktikan apa-apa: yang dirawat 14 hari harus selamat *dan*
+benar-benar memanen (0 sakit, 40 hasil), yang ditelantarkan 14 hari harus
+menanggung (8 dari 8 sakit). Tanpa sisi kedua, sistem tanpa konsekuensi apa pun
+akan lulus. Aksinya dijalankan lewat `execute_pie_action` — jalur tombol yang
+sama dengan pemain.
+
+### Tiga lulus palsu di alatnya sendiri, semuanya dari sebab yang sama
+
+`tokenize` menyambung token dengan spasi dan mengganti string. Akibatnya:
+
+1. `from ..husbandry import x` menjadi `from . . husbandry import x`, jadi pola
+   yang menuntut titik menempel tidak pernah cocok → `daily_tick` terbaca
+   "tanpa pemanggil" padahal dipanggil.
+2. Alias modul (`import husbandry as hb` → `hb.feed(...)`) tidak dikenali sama
+   sekali → perawatan ternak terbaca tidak terjangkau padahal sudah tersambung.
+3. `getattr(player, 'quest_controller')` menyembunyikan namanya di dalam
+   string → pemeriksaan quest lulus secara **hampa**: tidak menemukan pengirim
+   apa pun lalu menyatakan "semua nama ada".
+
+Ketiganya diperbaiki. Pola yang sama sudah muncul di Tahap 2 dan Tahap 4, dan
+pelajarannya tidak berubah: **alat yang memberi vonis salah lebih berbahaya
+daripada tidak ada alat.**
+
+**Status:** `verifikasi.py` **0 RUSAK, 0 RAPUH, 1 KEPUTUSAN** (cabai dan
+ubi_jalar yang sengaja dibiarkan) · `regress.py` 14/14 scene, 0 gagal, termasuk
+`rawat_ternak` 13/13 · `uji_wishes.py` 41/41.
+
+---
+
 ## Yang TIDAK akan dikejar
 
 **Open world Sims 3.** Lima belas scene terpisah dengan frame rate segini

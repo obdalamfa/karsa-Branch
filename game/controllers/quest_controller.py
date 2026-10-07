@@ -19,7 +19,12 @@ class QuestController:
                 self._notify_quest_up(panels)
 
         if s.quest_stage == 2:
-            if s.npc_relations.get('arya', 0) >= 15:
+            # Dulu `s.npc_relations.get('arya', 0) >= 15` -- dan `npc_relations`
+            # TIDAK ADA di GameState, jadi baris ini melempar AttributeError.
+            # Ambangnya pun mustahil: `npc_hearts` berskala 0-10, jadi 15 tidak
+            # pernah tercapai walau field-nya ada. Tujuh dari sepuluh: keputusan
+            # pemilik, 2026-10-07.
+            if s.npc_hearts.get('arya', 0) >= 7:
                 s.quest_stage = 3
                 self._notify_quest_up(panels)
 
@@ -31,7 +36,13 @@ class QuestController:
     def _notify_quest_up(self, panels):
         s = self.state
         sound_play('magic', 0.8)
-        msg = f"Quest Update: Tahap {s.quest_stage} - {QUEST_STAGES.get(s.quest_stage, 'Rahasia baru terungkap')}"
+        # QUEST_STAGES bertipe LIST berisi dict {'s','t','d'}, bukan dict.
+        # `.get()` di sini melempar AttributeError: 'list' object has no
+        # attribute 'get' -- dan karena ia dipanggil tepat saat tahap pertama
+        # selesai, alur cerita akan crash di langkah pertamanya sendiri.
+        judul = next((q['t'] for q in QUEST_STAGES if q.get('s') == s.quest_stage),
+                     'Rahasia baru terungkap')
+        msg = f"Quest Update: Tahap {s.quest_stage} - {judul}"
         if panels:
             panels.flash_msg(msg, 3.5)
         else:

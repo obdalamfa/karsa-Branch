@@ -624,7 +624,11 @@ class UIManager:
         self._set_dialog_visible(False)
         self.mode = 'hud'
         if hasattr(self, 'player') and self.player:
-            self.player._check_quest_progress(self)
+            # `_check_quest_progress` tidak pernah ada pada Player; baris ini
+            # akan melempar AttributeError begitu dialog ditutup.
+            qc = getattr(self.player, 'quest_controller', None)
+            if qc:
+                qc.check_quest_progress(self)
 
     def _refresh_dialog_choices_ui(self):
         for i, ent in enumerate(self._dlg_choice_ents):

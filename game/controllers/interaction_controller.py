@@ -417,10 +417,13 @@ class InteractionController:
         return True
 
     def check_quests(self, panels=None):
-        if hasattr(self.player, 'quest_manager') and self.player.quest_manager:
-            self.player.quest_manager.check_quest_progress(panels)
-        elif hasattr(self.player, '_check_quest_progress'):
-            self.player._check_quest_progress(panels)
+        # `player.quest_controller` -- itu nama yang dibuat player.py.
+        # Dulu di sini dicari `quest_manager` dan `_check_quest_progress`, dua
+        # nama yang tidak pernah ada; keduanya dijaga `hasattr`, jadi alur
+        # cerita DIAM tidak pernah maju tanpa satu pun error atau log.
+        qc = getattr(self.player, 'quest_controller', None)
+        if qc:
+            qc.check_quest_progress(panels)
     def give_gift(self, entities_mgr, panels, npc_id=None):
         s = self.player.state
         tx, ty = self.player.get_tile_pos()
@@ -621,32 +624,59 @@ class InteractionController:
                 opts.append(('naga_riddle', 'Ujian Kebijakan', True, '+Ujian Naga'))
             return opts
         else:
-            # Ternak. Dulu 'Ambil Hasil' digerbangi hati >= 2 dan menjalankan
-            # peta hasil yang kuncinya salah, jadi tidak pernah memberi apa
-            # pun. Sekarang gerbangnya adalah keadaan hewan yang sebenarnya —
-            # dan labelnya MENGATAKAN keadaan itu, supaya pemain tahu apa yang
-            # kurang tanpa menebak.
-            from ..economy import (animal_status, pick_feed, item_name,
-                                   produce_for, EN_FEED, EN_COLLECT,
-                                   FEED_DAY_VALUE, sell_price)
-            species = npc.get('type', '')
-            siap, alasan = animal_status(s, npc_id, species)
-            feed = pick_feed(s.inventory)
-            if feed:
-                boros = '' if feed in ('pakan', 'jerami') else ' (boros!)'
-                feed_lbl = f'Beri Makan ({item_name(feed)}){boros}'
-                feed_fx  = f'-{EN_FEED} EN, hewan produktif 1 hari'
+            # Ternak. SUMBER KEBENARAN sekarang `husbandry.py` (keputusan
+            # pemilik, 2026-10-07). Sebelumnya dua modul mengurus lima hewan
+            # yang sama dengan jawaban berbeda -- economy bilang bebek bertelur
+            # tiap hari, husbandry bilang telur bebek tiap dua hari; economy
+            # bilang domba berwol tiap dua hari, husbandry tiap lima. Dua
+            # sistem yang mengurus benda yang sama tidak pernah bisa sepakat,
+            # jadi salah satunya harus menang. Yang menang husbandry karena ia
+            # yang punya tiga takaran, jadwal produksi, jalur sakit, DAN teks
+            # keadaan -- dan aturan yang tidak bisa dilihat pemain bukan aturan.
+            #
+            # Jalur `economy.animals` (kenyang/siap) dipensiunkan. Fungsinya
+            # masih ada untuk save lama, tapi tidak ada lagi yang memanggilnya.
+            from .. import husbandry as hb
+            from ..economy import EN_FEED, EN_COLLECT, item_name, sell_price
+            if not hb.is_livestock(npc_id):
+                # Rubah itu liar: tidak diurus, tidak diberi makan.
+                return [('belai', 'Belai', True, '+8 Senang')]
+
+            r     = hb.care_rules(npc_id)
+            rec   = hb.care_of(s, npc_id)
+            pakan = hb.feed_item(s, npc_id)
+            opts  = [('belai', 'Belai', True, '+8 Senang')]
+
+            if r.get('produk'):
+                if rec['sakit']:
+                    siap, alasan = False, 'sedang sakit'
+                elif rec['produk_siap']:
+                    siap, alasan = True, r.get('siap_teks', 'siap')
+                else:
+                    sisa = max(1, r.get('tiap', 1)) - rec['produk_t']
+                    siap, alasan = False, f"~{sisa} hari lagi"
+                harga = sell_price(r['produk'])
+                opts.append((
+                    'ambil_hasil', f"{r.get('aksi', 'Ambil Hasil')} - {alasan}", siap,
+                    f"-{EN_COLLECT} EN, +{harga}G {item_name(r['produk'])}"
+                    if harga else f"-{EN_COLLECT} EN"))
+
+            if pakan:
+                opts.append(('beri_makan', f'Beri Makan ({item_name(pakan)})', True,
+                             f"-{EN_FEED} EN, kenyang {rec['kenyang']}% -> "
+                             f"{min(100, rec['kenyang'] + hb.ISI_PAKAN)}%"))
             else:
-                feed_lbl = 'Beri Makan (tak ada pakan)'
-                feed_fx  = f'Beli Jerami {FEED_DAY_VALUE}G di Warung'
-            prod = produce_for(species)
-            ambil_fx = (f'-{EN_COLLECT} EN, +{sell_price(prod["item"])}G nilai'
-                        if prod else 'Hewan ini tidak menghasilkan')
-            return [
-                ('belai',       'Belai',                    True,          '+8 Senang'),
-                ('ambil_hasil', f'Ambil Hasil - {alasan}',  siap,          ambil_fx),
-                ('beri_makan',  feed_lbl,                   bool(feed),    feed_fx),
-            ]
+                diterima = ', '.join(r.get('pakan', [])) or '-'
+                opts.append(('beri_makan', 'Beri Makan (tak ada pakan)', False,
+                             f"{r.get('label', 'Hewan')} makan: {diterima}"))
+
+            opts.append(('beri_minum', f"Beri Minum - air {rec['air']}%",
+                         rec['air'] < 95,
+                         f'-{hb.EN_MINUM} EN, tempat minum penuh'))
+            opts.append(('bersihkan', f"Bersihkan - kandang {rec['bersih']}%",
+                         rec['bersih'] < 95,
+                         f'-{hb.EN_BERSIH} EN, kandang bersih 100%'))
+            return opts
 
     def execute_pie_action(self, npc_id: str, action: str, entities_mgr, panels):
         from ..data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS
@@ -702,60 +732,48 @@ class InteractionController:
             s.senang = min(NEED_MAX, s.senang + 8)
             sound_play('menu_select', 0.6)
             panels.flash_msg(f"Kamu membelai {npc.get('name', npc_id)}.", 1.0)
-        elif action == 'ambil_hasil':
-            from ..economy import (produce_for, animal_record, animal_status,
-                                   item_name, sell_price, best_process_hint,
-                                   EN_COLLECT)
-            species = npc.get('type', '')
-            prod    = produce_for(species)
-            siap, alasan = animal_status(s, npc_id, species)
-            if not prod:
-                panels.flash_msg(f"{npc.get('name', npc_id)} tidak menghasilkan apa-apa.", 1.2)
-            elif not siap:
-                sound_play('blocked', 0.5)
-                panels.flash_msg(alasan, 1.4)
-            elif s.energy < EN_COLLECT:
-                sound_play('blocked', 0.5)
-                panels.flash_msg("Terlalu lelah untuk mengurus kandang.", 1.2)
-            else:
-                item = prod['item']
-                s.inventory[item] = s.inventory.get(item, 0) + 1
-                animal_record(s, npc_id)['siap'] = 0
-                self.player._spend_energy(EN_COLLECT)
-                s.stats['produce_collected'] = s.stats.get('produce_collected', 0) + 1
-                sound_play('harvest', 0.8)
-                hint = best_process_hint(item)
-                ekor = f" | {hint}" if hint else ""
-                panels.flash_msg(
-                    f"+1 {item_name(item)} (nilai {sell_price(item)}G){ekor}", 1.6)
-        elif action == 'beri_makan':
-            # Memberi makan mengisi 'kenyang'. Hewan yang kenyang maju satu
-            # langkah menuju hasil tiap pagi; yang lapar berhenti. Itu seluruh
-            # aturannya — cukup untuk mengajarkan sebab-akibat, tidak cukup
-            # untuk jadi simulasi peternakan.
-            from ..economy import (pick_feed, animal_record, item_name,
-                                   produce_for, EN_FEED, FEED_DAYS)
-            feed = pick_feed(s.inventory)
-            if not feed:
-                sound_play('blocked', 0.5)
-                panels.flash_msg("Tidak punya pakan. Beli Jerami di Warung (18G).", 1.6)
-            elif s.energy < EN_FEED:
+        elif action in ('ambil_hasil', 'beri_makan', 'beri_minum', 'bersihkan'):
+            # Keempat pekerjaan kandang dijalankan husbandry.py, yang sekarang
+            # sumber kebenaran ternak. Pola di sini sama untuk keempatnya:
+            # periksa energi dulu, panggil modulnya, lalu TAMPILKAN pesan yang
+            # ia kembalikan -- pesan itu sudah berisi angka keadaannya, jadi
+            # pemain selalu tahu apa yang berubah.
+            from .. import husbandry as hb
+            from ..economy import EN_FEED, EN_COLLECT, item_name, sell_price
+            biaya = {'ambil_hasil': EN_COLLECT, 'beri_makan': EN_FEED,
+                     'beri_minum': hb.EN_MINUM, 'bersihkan': hb.EN_BERSIH}[action]
+            if not hb.is_livestock(npc_id):
+                panels.flash_msg(f"{npc.get('name', npc_id)} tidak diurus.", 1.2)
+            elif s.energy < biaya:
                 sound_play('blocked', 0.5)
                 panels.flash_msg("Terlalu lelah untuk mengurus kandang.", 1.2)
             else:
-                s.inventory[feed] -= 1
-                if s.inventory[feed] <= 0:
-                    del s.inventory[feed]
-                self.player._spend_energy(EN_FEED)
-                rec = animal_record(s, npc_id)
-                rec['kenyang'] = max(rec.get('kenyang', 0), 0) + FEED_DAYS
-                s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1)
-                sound_play('gift', 0.7)
-                prod = produce_for(npc.get('type', ''))
-                janji = (f" {item_name(prod['item'])} besok pagi."
-                         if prod and rec.get('siap', 0) + 1 >= prod['cycle'] else '')
-                panels.flash_msg(
-                    f"{npc.get('name', npc_id)} diberi {item_name(feed)}.{janji}", 1.6)
+                if action == 'ambil_hasil':
+                    ok, pesan, produk, jml = hb.collect(s, npc_id)
+                else:
+                    fn = {'beri_makan': hb.feed, 'beri_minum': hb.water,
+                          'bersihkan': hb.clean}[action]
+                    ok, pesan = fn(s, npc_id)
+                    produk = None
+                if not ok:
+                    sound_play('blocked', 0.5)
+                    panels.flash_msg(pesan, 1.6)
+                else:
+                    self.player._spend_energy(biaya)
+                    if action == 'ambil_hasil':
+                        # Penghitung ini dibaca mesin Keinginan (game/wishes.py)
+                        # untuk keinginan "Pungut N hasil ternak".
+                        s.stats['produce_collected'] = s.stats.get('produce_collected', 0) + 1
+                        sound_play('harvest', 0.8)
+                        if produk:
+                            from ..economy import best_process_hint
+                            hint = best_process_hint(produk)
+                            ekor = f" | {hint}" if hint else ""
+                            pesan = (f"{pesan} (nilai {sell_price(produk)}G)"
+                                     f"{ekor}")
+                    else:
+                        sound_play('gift', 0.7)
+                    panels.flash_msg(pesan, 1.8)
 
     def queue_toggle(self, panels):
         tx, ty = self.player._facing_tile()

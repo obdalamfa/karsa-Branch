@@ -226,17 +226,36 @@ def uji_dua_sistem_ternak():
         if ec['item'] != hu['produk'] or ec['cycle'] != hu.get('tiap'):
             beda.append(f"{sp}: economy={ec['item']}/{ec['cycle']}h "
                         f"husbandry={hu['produk']}/{hu.get('tiap')}h")
-    if beda:
+    # Ketidaksepakatan itu hanya KONFLIK kalau kedua penghitung benar-benar
+    # berjalan. Begitu salah satu dipensiunkan, sisanya cuma data mati di modul
+    # yang kalah -- dan memvonisnya sama dengan konflik hidup membuat laporan
+    # ini tidak bisa dipercaya.
+    import re as _re
+    _tc = _tanpa_komentar(
+        (ROOT / 'game' / 'controllers' / 'time_controller.py').read_text(
+            encoding='utf-8', errors='replace'))
+    economy_hidup = bool(_re.search(r'tick_animals_daily\s*\(', _tc))
+    husbandry_hidup = bool(_pemanggil_husbandry()['daily_tick'])
+
+    if beda and economy_hidup and husbandry_hidup:
         lapor('KEPUTUSAN', 'economy.py dan husbandry.py tidak sepakat soal ternak',
               '; '.join(beda) + '. Keduanya berjalan tiap pagi. Mana yang jadi '
               'sumber kebenaran adalah keputusan pemilik — menghapus salah satu '
               'membuang pekerjaan yang sudah jadi.')
+    elif beda and not economy_hidup and husbandry_hidup:
+        # Keadaan yang dipilih pemilik (2026-10-07): husbandry menang.
+        pass
     n = len([1 for v in h.SPECIES_CARE.values() if v.get('produk')])
-    return (f'{n} spesies penghasil: {len(tak_laku)} hasil tanpa harga, '
-            f'{len(hantu)} spesies berpakan hantu, {len(beda)} ketidaksepakatan')
+    sumber = ('husbandry' if husbandry_hidup and not economy_hidup else
+              'economy' if economy_hidup and not husbandry_hidup else
+              'DUA-DUANYA' if economy_hidup and husbandry_hidup else 'tidak ada')
+    return (f'{n} spesies penghasil, sumber kebenaran: {sumber}; '
+            f'{len(tak_laku)} hasil tanpa harga, {len(hantu)} berpakan hantu, '
+            f'{len(beda)} beda angka'
+            + (' (tidak aktif)' if not economy_hidup else ''))
 
 
-def _tanpa_komentar(sumber: str) -> str:
+def _tanpa_komentar(sumber: str, buang_string: bool = True) -> str:
     """Buang komentar dan isi string, sisakan kodenya.
 
     Ini bukan kerapian: tanpa ini pemeriksaan di bawah memberi laporan PALSU,
@@ -258,7 +277,12 @@ def _tanpa_komentar(sumber: str) -> str:
             if tok.type == tokenize.COMMENT:
                 continue
             if tok.type == tokenize.STRING:
-                keluar.append('""')
+                # Pengiriman lewat `getattr(obj, 'nama')` menaruh nama fungsinya
+                # DI DALAM string. Membuangnya membuat pemeriksaan quest lulus
+                # secara hampa: tidak menemukan pengirim apa pun lalu menyatakan
+                # "semua nama ada". Jadi pemanggil yang perlu melihat nama di
+                # dalam string meminta buang_string=False.
+                keluar.append('""' if buang_string else tok.string)
                 continue
             keluar.append(tok.string)
         return ' '.join(keluar)
@@ -285,9 +309,23 @@ def _pemanggil_husbandry() -> dict[str, list[str]]:
         teks = _tanpa_komentar(p.read_text(encoding='utf-8', errors='replace'))
         if 'husbandry' not in teks:
             continue
+        # Alias MODUL: `from .. import husbandry as hb` lalu `hb.feed(...)`.
+        # Tanpa ini pemeriksaan memberi laporan PALSU ke arah sebaliknya --
+        # menyatakan perawatan ternak tidak terjangkau padahal keempat aksinya
+        # sudah tersambung ke pie menu kandang lewat alias `hb`.
+        # `[.\s]*` bukan `\.+`: tokenizer menyambung token dengan spasi, jadi
+        # `from ..husbandry import x` menjadi `from . . husbandry import x` dan
+        # pola yang menuntut titik menempel TIDAK PERNAH cocok. Itu membuat
+        # daily_tick terbaca "tanpa pemanggil" padahal time_controller
+        # memanggilnya -- laporan palsu, lagi, dari penyebab yang sama.
+        alias_modul = set(re.findall(
+            r'import\s+husbandry\s+as\s+(\w+)', teks))
+        if re.search(r'from\s+[.\s]*import\s+husbandry\b(?!\s+as)', teks):
+            alias_modul.add('husbandry')
+
         alias = {}
-        for blok in re.findall(r'from\s+\.+husbandry\s+import\s+([^\n(]+|\([^)]*\))',
-                               teks):
+        for blok in re.findall(
+                r'from\s+[.\s]*husbandry\s+import\s+([^\n(]+|\([^)]*\))', teks):
             for bagian in blok.strip('()').split(','):
                 bagian = bagian.strip()
                 if not bagian:
@@ -298,7 +336,16 @@ def _pemanggil_husbandry() -> dict[str, list[str]]:
                 else:
                     alias[bagian] = bagian
         for fn in pemanggil:
-            dipakai = bool(re.search(rf'husbandry\s*\.\s*{fn}\s*\(', teks))
+            dipakai = False
+            for mod in alias_modul | {'husbandry'}:
+                # Bentuk 1: hb.feed(...) / husbandry.feed(...)
+                if re.search(rf'\b{re.escape(mod)}\s*\.\s*{fn}\s*\(', teks):
+                    dipakai = True
+                # Bentuk 2: dirujuk tanpa dipanggil langsung, mis. di dalam
+                # tabel pengiriman `{'beri_makan': hb.feed}[action]`. Itu TETAP
+                # pemanggilan -- cuma lewat satu lapisan.
+                if re.search(rf'\b{re.escape(mod)}\s*\.\s*{fn}\b', teks):
+                    dipakai = True
             lokal = alias.get(fn)
             if lokal and re.search(rf'\b{re.escape(lokal)}\s*\(', teks):
                 dipakai = True
@@ -386,7 +433,8 @@ def uji_quest_terjangkau():
     """
     import re
     teks_player = _tanpa_komentar(
-        (ROOT / 'game' / 'player.py').read_text(encoding='utf-8', errors='replace'))
+        (ROOT / 'game' / 'player.py').read_text(encoding='utf-8', errors='replace'),
+        buang_string=False)
     punya = {n for n in ('quest_controller', 'quest_manager',
                          '_check_quest_progress')
              if re.search(rf'self\s*\.\s*{n}\s*=', teks_player)
@@ -394,9 +442,16 @@ def uji_quest_terjangkau():
 
     dicari = set()
     for p in (ROOT / 'game').rglob('*.py'):
-        t = _tanpa_komentar(p.read_text(encoding='utf-8', errors='replace'))
+        t = _tanpa_komentar(p.read_text(encoding='utf-8', errors='replace'),
+                            buang_string=False)
         for n in ('quest_manager', '_check_quest_progress', 'quest_controller'):
-            if re.search(rf'(player|self)\s*\.\s*{n}\b', t) and p.name != 'player.py':
+            if p.name == 'player.py':
+                continue
+            # Dua bentuk pengiriman: `player.nama(...)` dan
+            # `getattr(player, 'nama', None)`. Yang kedua menyembunyikan
+            # namanya di dalam string, itulah sebabnya string dipertahankan.
+            if (re.search(rf'(player|self)\s*\.\s*{n}\b', t)
+                    or re.search(rf'getattr\s*\([^)]*[\'"]{n}[\'"]', t)):
                 dicari.add(n)
 
     nyasar = dicari - punya

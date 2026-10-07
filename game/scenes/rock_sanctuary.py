@@ -154,35 +154,34 @@ def _tebing_menerus(world, scene):
             h = min(h, 8.0)          # atap lorong, di bawah puncak mulut gua (8,5 m)
         return h
 
-    def titik(cx, cy, y):
-        return ((cx - 0.5) * TS, GROUND_H + y, (cy - 0.5) * TS)
-
-    v = []
-    def quad(a, b, c, d):
-        v.extend((a, b, c, a, c, d))
-
     for y in range(0, _BARIS_TEBING + 1):
         for x in range(w_):
             if not batu(x, y):
                 continue
-            # Sudut: (x,y) kiri-utara, (x+1,y) kanan-utara, (x+1,y+1), (x,y+1).
-            a = titik(x, y, tinggi(x, y)); b = titik(x + 1, y, tinggi(x + 1, y))
-            c = titik(x + 1, y + 1, tinggi(x + 1, y + 1)); d = titik(x, y + 1, tinggi(x, y + 1))
-            # Diagonal bergantian supaya faset tidak membentuk pola garis.
-            if (x + y) % 2:
-                v.extend((a, b, c, a, c, d))
-            else:
-                v.extend((a, b, d, b, c, d))
-            if 13 <= x <= 16:
-                continue             # lorong gua: atap saja, dinding akan menyumbatnya
-            dasar = lambda p: (p[0], GROUND_H, p[2])
-            if not batu(x, y + 1):   quad(dasar(d), dasar(c), c, d)   # muka selatan
-            if not batu(x, y - 1):   quad(dasar(b), dasar(a), a, b)   # muka utara
-            if not batu(x - 1, y):   quad(dasar(a), dasar(d), d, a)   # muka barat
-            if not batu(x + 1, y):   quad(dasar(c), dasar(b), b, c)   # muka timur
-    if v:
-        _part(world, Mesh(vertices=v, triangles=list(range(len(v)))), (0, 0, 0), (1, 1, 1),
-              (108, 124, 112), double_sided=True)
+            # Tiap ubin entity sendiri supaya cutaway kamera bisa memendekkannya
+            # (world._wall_ents menskala sumbu-y ke tinggi penuh `H`). Sudutnya
+            # tetap dihitung dari tinggi BERSAMA, jadi sambungan antar-ubin rata.
+            hs = {(i, j): tinggi(x + i, y + j) for i in (0, 1) for j in (0, 1)}
+            H = max(hs.values())
+
+            def P(i, j, atas=True):
+                ly = (hs[(i, j)] / H - 0.5) if atas else -0.5
+                return ((i - 0.5) * TS, ly, (j - 0.5) * TS)
+
+            a_, b_, c_, d_ = P(0, 0), P(1, 0), P(1, 1), P(0, 1)
+            v = list((a_, b_, c_, a_, c_, d_) if (x + y) % 2 else (a_, b_, d_, b_, c_, d_))
+
+            def quad(p, q, r, t):
+                v.extend((p, q, r, p, r, t))
+            if not (13 <= x <= 16):          # lorong gua: atap saja
+                if not batu(x, y + 1): quad(P(0, 1, False), P(1, 1, False), c_, d_)
+                if not batu(x, y - 1): quad(P(1, 0, False), P(0, 0, False), a_, b_)
+                if not batu(x - 1, y): quad(P(0, 0, False), P(0, 1, False), d_, a_)
+                if not batu(x + 1, y): quad(P(1, 1, False), P(1, 0, False), b_, c_)
+            e = _part(world, Mesh(vertices=v, triangles=list(range(len(v)))),
+                      (x * TS, GROUND_H + H / 2, y * TS), (1, H, 1),
+                      (108, 124, 112), double_sided=True)
+            world._wall_ents.append([e, H, GROUND_H + H / 2, x, y])
 
 
 def _disc(world, x, z, radius, rgb, y=0.215, inner=0):

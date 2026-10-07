@@ -97,6 +97,8 @@ def _rocks(world, scene, outdoor=False):
         for x,tid in enumerate(row):
             if tid != CV_W or (x,y) in covered:
                 continue
+            if outdoor and y <= _BARIS_TEBING:
+                continue  # bahu lembah dibangun utuh oleh _tebing_menerus()
             if outdoor and x in (14,15) and y <= 2:
                 continue  # dark recess behind the mouth, still collision-blocked
             width=1
@@ -113,13 +115,74 @@ def _rocks(world, scene, outdoor=False):
             xx=(x+(width-1)/2)*TS
             e=_part(world,mesh,(xx,GROUND_H+height/2,y*TS),(TS*width*1.02,height,TS*1.02),rgb)
             world._wall_ents.append([e,height,GROUND_H+height/2,x+(width-1)/2,y])
-            if outdoor and seed%3!=1:
+            if False:  # puncak kedua dulu menumpuk jadi tebing berlapis
                 # Puncak kedua yang lebih sempit memecah siluet tebing rata.
                 h2=height*(.35+.2*abs(math.sin(seed*1.7)))
                 e2=_part(world,_rock_mesh(seed+5,centered=True),
                          (xx+.3*math.sin(seed),GROUND_H+height+h2/2-.15,y*TS+.25*math.cos(seed)),
                          (TS*width*.62,h2,TS*.7),tuple(c-8 for c in rgb))
                 world._wall_ents.append([e2,h2,GROUND_H+height+h2/2-.15,x+(width-1)/2,y])
+
+
+# Baris CV_W paling selatan yang ikut tebing menerus. Di bawahnya hanya ada
+# dinding batas tipis yang perlu bisa dipotong kamera (cutaway).
+_BARIS_TEBING = 10
+
+
+def _tebing_menerus(world, scene):
+    """Bahu lembah dan dinding belakang gua sebagai SATU permukaan.
+
+    Dulu tiap 1-3 ubin CV_W dapat bongkah sendiri ditambah puncak kedua di
+    atasnya: puluhan gumpalan yang terbaca bertumpuk dan berlapis. Di sini
+    tinggi tebing ditentukan di SUDUT ubin dan dipakai bersama oleh ubin
+    tetangga, jadi permukaannya menyambung tanpa jahitan. Dinding tegak hanya
+    dibuat di tepi yang berbatasan dengan tanah bisa-jalan.
+    """
+    from ursina import Mesh
+    t = scene.tiles
+    h_, w_ = len(t), len(t[0])
+
+    def batu(x, y):
+        return 0 <= x < w_ and 0 <= y <= _BARIS_TEBING and t[y][x] == CV_W
+
+    def tinggi(cx, cy):
+        # cx, cy = indeks sudut (sudut kiri-atas ubin x,y adalah (x,y)).
+        naik = (_BARIS_TEBING + 1 - cy) * 0.75          # makin ke utara makin tinggi
+        gel = 1.4 * math.sin(cx * 0.55 + 1.3) + 0.9 * math.sin(cx * 1.37 + cy * 0.8)
+        h = max(3.0, 5.0 + naik + gel)
+        if 13 <= cx <= 17 and cy <= 3:
+            h = min(h, 8.0)          # atap lorong, di bawah puncak mulut gua (8,5 m)
+        return h
+
+    def titik(cx, cy, y):
+        return ((cx - 0.5) * TS, GROUND_H + y, (cy - 0.5) * TS)
+
+    v = []
+    def quad(a, b, c, d):
+        v.extend((a, b, c, a, c, d))
+
+    for y in range(0, _BARIS_TEBING + 1):
+        for x in range(w_):
+            if not batu(x, y):
+                continue
+            # Sudut: (x,y) kiri-utara, (x+1,y) kanan-utara, (x+1,y+1), (x,y+1).
+            a = titik(x, y, tinggi(x, y)); b = titik(x + 1, y, tinggi(x + 1, y))
+            c = titik(x + 1, y + 1, tinggi(x + 1, y + 1)); d = titik(x, y + 1, tinggi(x, y + 1))
+            # Diagonal bergantian supaya faset tidak membentuk pola garis.
+            if (x + y) % 2:
+                v.extend((a, b, c, a, c, d))
+            else:
+                v.extend((a, b, d, b, c, d))
+            if 13 <= x <= 16:
+                continue             # lorong gua: atap saja, dinding akan menyumbatnya
+            dasar = lambda p: (p[0], GROUND_H, p[2])
+            if not batu(x, y + 1):   quad(dasar(d), dasar(c), c, d)   # muka selatan
+            if not batu(x, y - 1):   quad(dasar(b), dasar(a), a, b)   # muka utara
+            if not batu(x - 1, y):   quad(dasar(a), dasar(d), d, a)   # muka barat
+            if not batu(x + 1, y):   quad(dasar(c), dasar(b), b, c)   # muka timur
+    if v:
+        _part(world, Mesh(vertices=v, triangles=list(range(len(v)))), (0, 0, 0), (1, 1, 1),
+              (108, 124, 112), double_sided=True)
 
 
 def _disc(world, x, z, radius, rgb, y=0.215, inner=0):
@@ -356,6 +419,7 @@ def build_mountain_landscape(world, scene):
                            (15,31,5,5,(94,123,82)),(42,34,6,5,(87,116,76))):
         _ground_patch(world,x,z,rx,rz,rgb,x+z,.223)
     _rocks(world,scene,True)
+    _tebing_menerus(world,scene)
     # Penyaring di atas ikut mematikan tutup rumput bertekstur (yang diayun
     # angin) dan sebaran helai rumput -- lereng jadi satu hijau polos.
     for e in world._grass_ents:
@@ -381,11 +445,6 @@ def build_mountain_landscape(world, scene):
         _gelap.setFogOff(); _gelap.setLightOff()
     except Exception:
         pass
-    for x in (13,16):
-        _part(world,_rock_mesh(x),(x*TS,.2,2*TS),(2.3,4.35,2.5),(111,128,116))
-    # Base-origin rocks overlap above the opening, eliminating sky pinholes.
-    _part(world,_rock_mesh(31),(29,3.3,3.5),(8.4,2.65,3.7),(114,130,116))
-    _part(world,_rock_mesh(43),(28.2,4.4,2.3),(9.5,2.0,3.6),(119,134,122))
     _mulut_gua(world)
     _lore_lama(world, scene)
 

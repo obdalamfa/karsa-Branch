@@ -2,7 +2,7 @@
 judul: Beranda
 tipe: moc
 proyek: Lembah Karsa 3D
-diperbarui: 2026-09-22
+diperbarui: 2026-10-07
 tags: [moc, beranda]
 ---
 
@@ -25,6 +25,7 @@ catatan ini tidak menggantikannya, ia menjelaskan *kenapa* kodenya begitu.
 | tahu keadaan proyek hari ini | [[Status Sekarang]] |
 | tahu urutan kerja berikutnya | [[Peta Progres]] |
 | cari modul kode tertentu | [[Peta Kode]] |
+| tahu dari mana isi dunia datang | [[Peta Sistem Konten]] |
 | tahu apa yang masih berutang | [[Utang Teknis]] |
 | menambah catatan baru | [[Aturan Pencatatan]] |
 
@@ -53,6 +54,14 @@ TABLE status, ringkas FROM "10-Tahapan" SORT file.name ASC
 
 ## Jurnal sesi terbaru
 
+- [[2026-10-06 — CI menolak penjaga yang saya nyatakan lolos]] — mesin kedua menangkap klaim saya sendiri
+- [[2026-10-06 — Penjaga arah jadi penjaga sungguhan]] — utang yang sesi lalu ciptakan sendiri, ditutup; diagnosis lama dikoreksi
+- [[2026-10-05 — Topi pas di kepala, rambut sesuai suku, tidak semua warga bertopi]] — kerja branch base
+- [[2026-10-05 — Wajah chibi dari wajah.py di rig GLB, mata dipaskan, topi bajak laut]] — kerja branch base
+- [[2026-10-05 — Warga beragam suku dan topi yang pas di kepala (runtime)]] — kerja branch base
+- [[2026-10-05 — Buat Karakter yang berfungsi- kulit, rambut, baju, celana, aksesori, k…|2026-10-05 — Buat Karakter yang berfungsi]] — kerja branch base
+- [[2026-10-05 — Kotak dialog ala Harvest Moon dengan potret, pembuka sesuai jam-tempat]] — kerja branch base
+- [[2026-10-05 — Warga berjalan antar-scene lewat portal, jadwal di scene yang sama dij…|2026-10-05 — Warga berjalan antar-scene lewat portal]] — kerja branch base
 - [[2026-10-04 — Arah WASD akhirnya terukur dan diperbaiki]] — utang 🔴 tertua, tutup; penjaganya gagal tiga kali dulu
 - [[2026-10-03 — Tahap 2 ditutup, entity_mesh terbukti]] — yatim terakhir dibuktikan, 16 pemeriksaan
 - [[2026-10-03 — Probe pertama yang bisa diperiksa]] — 15 dari 16 probe yang dikutip kode tidak ada
@@ -75,7 +84,8 @@ Semua sesi: folder `20-Sesi/`.
 [[Mesh NodePath dipakai bersama]] · [[WASD terbalik]] · [[Terjepit permanen]] ·
 [[Pendaratan scene di luar peta]] · [[Pemain beku saat panel terbuka]] ·
 [[Font HUD tidak ketemu di mesin bersih]] · [[Pemeriksaan motif mengotori keadaan]] ·
-[[Arah WASD basis sumbu salah]]
+[[Arah WASD basis sumbu salah]] ·
+[[Pemeriksaan HUD membandingkan tangkapan lama]]
 
 ---
 
@@ -84,3 +94,6 @@ Semua sesi: folder `20-Sesi/`.
 [[Motif]] · [[Antrian Aksi]] · [[Objek dan Interaksi]] · [[Ternak]] ·
 [[Ekonomi]] · [[Palawija]] · [[Avatar Vitaboy]] · [[Tata Letak Scene]] ·
 [[Regresi]] · [[Dungeon dan Combat]]
+
+Lapisan datanya sendiri — kosakata ubin, tabel isi, peta, aset, dan loop
+pengarangnya — dipetakan di [[Peta Sistem Konten]].

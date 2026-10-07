@@ -44,6 +44,23 @@ jobs:
       - name: Jalankan regresi semua scene
         run: xvfb-run -a -s "-screen 0 1024x768x24" python tools/regress.py
 
+      # Tanpa langkah ini, larian yang GAGAL di sini tidak bisa dibaca dari
+      # luar: unduhan log dan artifact lewat host penyimpanan yang tidak bisa
+      # dihubungi klien API. Laporannya ditempel ke ringkasan job supaya
+      # tabel LULUS/GAGAL terbaca langsung di halaman Actions.
+      - name: Tempel laporan regresi ke ringkasan job
+        if: always()
+        run: |
+          {
+            echo '## Laporan regresi'
+            echo
+            if [ -f _bench/regress/report.md ]; then
+              cat _bench/regress/report.md
+            else
+              echo '_Laporan tidak terbentuk — regresi mati sebelum menulisnya._'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Simpan bukti (tangkapan layar + laporan)
         if: always()
         uses: actions/upload-artifact@v4

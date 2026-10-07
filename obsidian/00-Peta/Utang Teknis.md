@@ -1,7 +1,7 @@
 ---
 judul: Utang Teknis
 tipe: peta
-diperbarui: 2026-09-22
+diperbarui: 2026-10-07
 tags: [moc, utang, status/terbuka]
 ---
 
@@ -73,29 +73,17 @@ dengan artifact bukti 3,28 MB terunggah. Nama paket apt yang ditebak untuk
 | `motif_waras` mengotori keadaannya | scene ke-14 apa pun gagal palsu | [[Pemeriksaan motif mengotori keadaan]] |
 | regresi hanya jalan kalau diingat | jaring digantung tapi tidak dipasang | jalan otomatis di CI |
 
-## 🟠 Pemeriksaan `arah_maju` masih terkontaminasi antar-scene
+## ✅ Pemeriksaan `arah_maju` — lunas 2026-10-06
 
-Dibuat 2026-10-04 untuk menjaga [[Arah WASD basis sumbu salah]]. Ia **menangkap
-bug sungguhan** (bug lama dipasang kembali → GAGAL 179°), tapi di larian 14
-scene ia menuduh enam scene yang sehat:
+Dibuat 2026-10-04 dan sempat menuduh enam scene sehat, jadi diturunkan jadi
+lapor-saja. Sekarang memvonis lagi, dan terbukti dua arah: 14/14 lulus dengan
+perbaikan, 6/6 GAGAL (177–179°) dengan bug dipasang kembali.
 
-```
-8/14 scene lulus, 6 pemeriksaan gagal
-town, beach  "yaw0: W menyimpang 180 deg"
-lake, cemetery, shop, studio   32-34 deg
-```
-
-`town` sendirian: LULUS. `town` sesudah `farm`: LULUS. Jadi kegagalannya
-bergantung **panjang larian**, bukan kode yang diperiksa — kontaminasi
-antar-scene yang belum ketemu sumbernya, meski posisi dan kecepatan pemain
-sudah disalin-dan-dipulihkan dan kamera disentak alih-alih dilerp.
-
-Statusnya sekarang **lapor-saja**: angkanya tercetak, tapi tidak memvonis.
-Naik pangkat jadi penjaga sungguhan begitu sumber kontaminasinya ketemu.
-
-Tersangka yang belum diperiksa: `camera_focus` yang hanya diperbarui di dalam
-`update()`, dan posisi pemain yang dipulihkan sebagai koordinat **lokal**
-sementara yang diukur koordinat **dunia**.
+Catatan yang layak disimpan: dugaan pertama tentang sebabnya — kontaminasi
+antar-scene — **salah**, dan itu terukur (selisih posisi lokal lawan dunia
+0,000 di keempat belas scene). Sebab sebenarnya: acuan diambil sesudah pemain
+berjalan, dan jendela ukur terlalu panjang sehingga gesekan dinding menumpuk.
+→ [[2026-10-06 — Penjaga arah jadi penjaga sungguhan]]
 
 ## 🟠 15 dari 16 probe yang dikutip kode tidak ada di repo
 
@@ -114,6 +102,39 @@ ulang siapa pun. Masih dipercaya, tapi tidak bisa diaudit.
 Pola aturannya sudah diperbaiki base branch: sekarang hanya **keluaran** yang
 diabaikan, alat ukurnya bisa di-commit. Yang tersisa: tiap probe baru harus
 ikut masuk → [[2026-10-03 — Probe pertama yang bisa diperiksa]].
+
+## 🟠 Konten yang lengkap tapi tidak tersambung (2026-10-07)
+
+Lima temuan dari pemetaan sistem konten → [[Peta Sistem Konten]]. Semuanya
+konten yang **sudah selesai ditulis** lalu berhenti sebelum ada yang
+memakainya — pola yang sama dengan modul yatim di [[Tahap 2 — Verifikasi modul yatim]],
+kali ini di lapisan data.
+
+| Utang | Buktinya | Kenapa layak diperbaiki |
+|---|---|---|
+| 16 dari 24 benih tidak bisa dibeli | `grep -rn SEED_SHOP_ROWS` → nol pemanggil; `len(SHOP_ITEMS)` 10 lawan `len(CROPS)` 24 | Alasan yang ditulis `crops.py:335` (panel toko belum berhalaman) **sudah tidak berlaku** — `panels.py:861 _page_slice()` sudah berhalaman dan dipakai di `:879` dan `:950`. Syaratnya terpenuhi, pemasangannya belum |
+| `SEASONAL_EVENTS` nol pemanggil | `grep -rn SEASONAL_EVENTS --include=*.py` → hanya `data.py:523` | Empat festival lengkap dengan hari dan scene-nya; tidak ada yang membacanya |
+| 25 dari 33 model tanpa pemuat | `load_model_file()` hanya dipanggil dengan 5 nama dari `get_npc_model_name()` | 24 `au-*.glb` + `sari_idle.glb` menumpang di repo tanpa jalur pemakaian |
+| `ORE_SPAWN_TABLE` baris 14–15 mati, dan `13` ditulis ulang sebagai angka | `DUNGEON_MAX_LEVEL = 13`; `interaction_controller.py:190` dan `:336` menulis `== 13` | Dua sumber kebenaran untuk lantai maksimum; mengubah satu akan meninggalkan yang lain |
+| `random_stairs_chance()` nol pemanggil | `grep -rn random_stairs_chance` → hanya `dungeon.py:179` | |
+
+## 🟡 Detektor penyimpangan scene tidak dijalankan siapa pun (2026-10-07)
+
+`tools/scene_export.py --check` membandingkan kode scene dengan berkas
+`game/scenes/*.json` dan keluar 1 kalau berbeda. Hari ini keduanya cocok
+(**15/15**, dibuktikan dengan larian sungguhan), dan `scene_roundtrip.py` juga
+hijau 15/15.
+
+Yang berutang bukan keadaannya, tapi penjaganya: CI hanya menjalankan
+`tools/regress.py`, dan `regress.py` tidak menyebut `scene_export`. Penjaga
+yang digantung tapi tidak dipasang adalah persis utang yang dilunasi
+2026-09-22 untuk regresi → [[Regresi]].
+
+## 🟡 `docs/EKONOMI.md` dikutip tapi tidak ada (2026-10-07)
+
+`data.py:11` dan `economy.py:20` menunjuk ke dokumen itu untuk perhitungan
+harga per energi. Berkasnya tidak ada di `docs/`. Perhitungannya sendiri masih
+terbaca di komentar `data.py`, jadi yang hilang adalah alamatnya, bukan isinya.
 
 ## 🔴 Dua utang besar yang sudah punya rumah sendiri
 

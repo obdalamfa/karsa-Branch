@@ -84,12 +84,52 @@ def get_grass_shader():
     return _grass_shader
 
 
+# Uniform `grs_time`/`grs_wind` didorong SEKALI ke `ursina.scene`, bukan ke tiap
+# entity rumput. Panda3D mewariskan shader input ke seluruh anak NodePath, jadi
+# satu panggilan menjangkau semua tutup rumput sekaligus.
+#
+# Kenapa diubah: tools/profil.py menunjuk update_time sebagai 3,12 ms dari
+# 7,78 ms LOGIKA di scene mountain -- 40% seluruh waktu Python game, habis di
+# 461 entity x 2 uniform = 922 panggilan set_shader_input tiap frame.
+# tools/probe_rumput.py mengukur keduanya berdampingan di scene farm:
+#
+#   per-entity  0,590 ms/frame, 65.870 piksel berubah (maks kanal 147)
+#   scene       0,004 ms/frame, 66.008 piksel berubah (maks kanal 147)
+#
+# Jadi animasinya BUKAN dibuang -- jumlah piksel yang bergerak praktis sama,
+# dan itu yang membuktikan uniform-nya memang sampai ke shader. Yang hilang
+# cuma 147x biayanya.
+#
+# SATU SYARAT yang harus dijaga: input per-entity MENINDIH input induk. Begitu
+# ada kode lain yang memanggil `e.set_shader_input('grs_time', ...)` pada entity
+# rumput, entity itu berhenti membaca nilai dari `scene` dan rumputnya membeku
+# di nilai terakhirnya. Jangan lakukan itu; regress menjaganya lewat uji_rumput.
+_wind_terakhir = None
+
+
+def _dorong(time: float, wind: float):
+    """Dorong kedua uniform ke scene. True kalau berhasil."""
+    global _wind_terakhir
+    try:
+        from ursina import scene as _scene
+        _scene.set_shader_input('grs_time', time)
+        if wind != _wind_terakhir:
+            _scene.set_shader_input('grs_wind', wind)
+            _wind_terakhir = wind
+        return True
+    except Exception:
+        return False
+
+
 def apply_to_entities(entities: list, time: float = 0.0, wind: float = 0.06):
     """Terapkan grass shader ke list entity rumput.
 
     entities : list Entity yang sudah dibuat di world.py
     time     : nilai waktu animasi (detik real)
     wind     : kekuatan angin (0 = tidak ada, 0.1 = sepoi, 0.3 = kencang)
+
+    Shader-nya tetap dipasang per entity -- itu memang milik tiap NodePath.
+    Yang pindah ke `scene` cuma nilai uniform-nya.
     """
     sh = get_grass_shader()
     if sh is None:
@@ -97,19 +137,19 @@ def apply_to_entities(entities: list, time: float = 0.0, wind: float = 0.06):
     for e in entities:
         try:
             e.shader = sh
-            e.set_shader_input('grs_time', time)
-            e.set_shader_input('grs_wind', wind)
         except Exception:
             pass
+    global _wind_terakhir
+    _wind_terakhir = None   # scene baru: paksa wind terdorong sekali
+    _dorong(time, wind)
 
 
 def update_time(entities: list, time: float, wind: float = 0.06):
-    """Update uniform `grs_time` dan `grs_wind` tiap frame."""
-    if _grass_failed:
+    """Update uniform `grs_time` dan `grs_wind` tiap frame.
+
+    `entities` cuma dipakai untuk tahu scene ini punya rumput atau tidak;
+    nilainya didorong ke `scene`, bukan ke tiap anggota list.
+    """
+    if _grass_failed or not entities:
         return
-    for e in entities:
-        try:
-            e.set_shader_input('grs_time', time)
-            e.set_shader_input('grs_wind', wind)
-        except Exception:
-            pass
+    _dorong(time, wind)

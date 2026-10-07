@@ -63,6 +63,15 @@ _PRODUCE_VALUES = {
     'telur': 32,   # siklus 1 hari; ayam + bebek
     'susu':  42,   # siklus 1 hari; sapi
     'wol':   58,   # siklus 2 hari; kambing + domba
+    # Dua di bawah ini dihasilkan `husbandry.py` (bebek -> telur_bebek,
+    # kambing -> susu_kambing) tapi tidak pernah punya harga di sini, jadi
+    # `collect()` menaruh barang 0G di tas: tidak laku di warung dan ditolak
+    # Peti Kirim. Angkanya BUKAN karangan baru -- husbandry.SPECIES_CARE sudah
+    # mencatat `harga` per spesies (bebek 38, kambing 45), dan angka itu
+    # memang melacak harga produknya (sapi 40/susu 42, ayam 30/telur 32,
+    # domba 55/wol 58). Jadi dipakai apa adanya, bukan ditebak ulang.
+    'telur_bebek':  38,
+    'susu_kambing': 45,
 }
 
 _PROCESSED_VALUES = {
@@ -117,6 +126,7 @@ ITEM_VALUES: dict[str, int] = _build_values()
 # kunci dict; dia menabung Benih Lobak.
 _EXTRA_NAMES = {
     'telur': 'Telur',              'susu': 'Susu',
+    'telur_bebek': 'Telur Bebek',  'susu_kambing': 'Susu Kambing',
     'wol':   'Wol',                'kayu': 'Kayu',
     'jerami':'Jerami',             'pakan': 'Pakan Ternak',
     'ikan':  'Ikan',
@@ -146,12 +156,54 @@ ITEM_NAMES: dict[str, str] = _build_names()
 
 
 def item_name(item_id: str) -> str:
-    return ITEM_NAMES.get(item_id, item_id.replace('_', ' ').title())
+    """Nama tampilan. Alasan pencarian ulang sama seperti `sell_price`."""
+    n = ITEM_NAMES.get(item_id)
+    if n is not None:
+        return n
+    from .data import CROPS
+    c = CROPS.get(item_id)
+    if c and c.get('name'):
+        ITEM_NAMES[item_id] = c['name']
+        return c['name']
+    if item_id.endswith('_seed'):
+        induk = CROPS.get(item_id[:-5])
+        if induk and induk.get('name'):
+            ITEM_NAMES[item_id] = f"Benih {induk['name']}"
+            return ITEM_NAMES[item_id]
+    return item_id.replace('_', ' ').title()
 
 
 def sell_price(item_id: str) -> int:
-    """Harga yang dibayar Warung Bu Sari. 0 = tidak laku dijual."""
-    return ITEM_VALUES.get(item_id, 0)
+    """Harga yang dibayar Warung Bu Sari. 0 = tidak laku dijual.
+
+    ITEM_VALUES dibangun SEKALI saat modul ini diimpor. Tapi `crops.py`
+    MENAMBAHKAN 16 palawija + 7 pohon ke `data.CROPS` saat IA diimpor, jadi
+    siapa yang diimpor lebih dulu menentukan apakah 23 barang itu punya harga
+    atau bernilai 0G -- tanpa error, tanpa log, cuma panen yang tidak laku.
+
+    Diukur `tools/verifikasi.py`: padi 45G kalau crops lebih dulu, 0G kalau
+    economy lebih dulu. Permainan SEKARANG aman karena `world.py` mengimpor
+    crops di tingkat modul sebelum economy pertama kali dipakai -- tapi itu
+    kebetulan, bukan jaminan, dan satu impor yang dipindah membatalkannya.
+
+    Jadi kunci yang tidak ada di snapshot dicari ulang ke CROPS yang hidup,
+    lalu disimpan. Snapshot tetap jadi jalur cepat; ia cuma tidak lagi jadi
+    satu-satunya kebenaran.
+    """
+    v = ITEM_VALUES.get(item_id)
+    if v is not None:
+        return v
+    from .data import CROPS
+    c = CROPS.get(item_id)
+    if c and c.get('sell') is not None:
+        ITEM_VALUES[item_id] = int(c['sell'])
+        return ITEM_VALUES[item_id]
+    if item_id.endswith('_seed'):
+        induk = CROPS.get(item_id[:-5])
+        if induk and induk.get('cost') is not None:
+            ITEM_VALUES[item_id] = max(1, int(induk['cost']) // 2)
+            return ITEM_VALUES[item_id]
+    return 0
 
 
 def shipping_price(item_id: str) -> int:

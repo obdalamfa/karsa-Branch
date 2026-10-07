@@ -1,6 +1,6 @@
 """Scene-local rock formations and ritual landmarks; all solids follow tile blockers."""
 import math
-from game.config import TILE_SIZE as TS, GROUND_H, CV_W, CRYS, LN
+from game.config import TILE_SIZE as TS, GROUND_H, WALL_H, CV_W, CRYS, LN
 
 
 def _part(world, model, pos, scale, rgb, **kw):
@@ -85,7 +85,15 @@ def _rocks(world, scene, outdoor=False):
                 width+=1
             covered.update((x+i,y) for i in range(width))
             seed=x*13+y*7
-            height=(2.4+.7*math.sin(seed)) if outdoor else (1.5+.5*math.sin(seed))
+            # Tinggi batu dalam ruang diikatkan ke WALL_H (2,8) -- tinggi yang
+            # dipakai tile CV_W yang SAMA di gua bertingkat. Sebelumnya
+            # 1,5+-0,5, yaitu 1,0..2,0: lebih pendek daripada pemain sendiri
+            # (~1,8). Tile yang sama karena itu terbaca sebagai dua benda
+            # berbeda di dua scene -- tembok gua di satu tempat, gundukan batu
+            # setinggi lutut di tempat lain -- dan ruang suci ini kehilangan
+            # dinding yang membuatnya terasa sebagai ruang, bukan pelataran.
+            # Simpangan +-0,6 dipertahankan supaya tepinya tetap bergerigi.
+            height=(2.4+.7*math.sin(seed)) if outdoor else (WALL_H*0.85+.6*math.sin(seed))
             if y < 3: height += 2.3 if outdoor else 1.1
             rgb=(106+seed%12,123+seed%10,111+seed%14) if outdoor else (84+seed%13,105+seed%11,115+seed%15)
             mesh=_rock_mesh(seed, centered=True)

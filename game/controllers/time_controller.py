@@ -52,16 +52,27 @@ class TimeController:
         s.day           += 1
         s.day_in_season += 1
 
-        # Satu malam berlalu untuk ternak: kenyang turun, yang terlalu lama
-        # dilalaikan jatuh sakit, yang terawat siap dipanen hasilnya.
-        # game/husbandry.py sudah lengkap tapi tidak ada pemanggilnya sama
-        # sekali — tanpa baris ini, merawat hewan tidak berakibat apa pun.
+        # ── Satu malam berlalu untuk ternak ────────────────────────────────
+        #
+        # Baris ini pernah DIMATIKAN, dan alasannya penting: `daily_tick`
+        # menurunkan kenyang/air/bersih 45-55 tiap malam, sementara
+        # `husbandry.feed`, `water` dan `clean` tidak punya pemanggil di
+        # seluruh game/. Separuh sistem yang terpasang -- peluruhannya tanpa
+        # perawatannya -- membuat kedelapan ternak sakit permanen di hari 4 dan
+        # hati semua hewan menyentuh 0 di hari 6, tanpa satu pun pintu untuk
+        # mencegahnya.
+        #
+        # Syarat untuk menghidupkannya kembali ditulis waktu itu juga: keempat
+        # aksinya harus terjangkau pemain lebih dulu. Sekarang keempatnya ada
+        # di pie menu kandang (Beri Makan / Beri Minum / Bersihkan / Ambil
+        # Hasil), jadi syaratnya terpenuhi dan peluruhannya punya lawan.
+        # `tools/verifikasi.py` menjaga pasangan itu tetap utuh.
         try:
             from ..husbandry import daily_tick as _ternak_tick
             self._ternak_pagi = _ternak_tick(s)
         except Exception as e:
             import logging
-            logging.warning(f"[TERNAK] daily_tick gagal: {e}")
+            logging.warning("[TERNAK] daily_tick gagal: %s", e)
             self._ternak_pagi = None
         s.time_minutes   = 360.0
         s.energy         = s.max_energy
@@ -86,12 +97,11 @@ class TimeController:
                 soil['age'] = soil.get('age', 0) + growth
                 soil['watered'] = False
 
-        # Ternak maju semalam persis seperti tanaman: yang kenyang mendekat
-        # satu hari ke hasilnya, yang lapar diam di tempat. Diletakkan tepat
-        # di bawah pertumbuhan tanaman supaya kedua siklus hidup di satu tempat
-        # dan tidak bisa lagi menyimpang satu sama lain.
-        from ..economy import tick_animals_daily
-        tick_animals_daily(s)
+        # economy.tick_animals_daily TIDAK lagi dipanggil di sini. Ternak sudah
+        # dimajukan satu malam oleh husbandry.daily_tick di atas, yang kini jadi
+        # sumber kebenaran; menjalankan DUA penghitung produksi atas lima hewan
+        # yang sama persis itulah yang dulu membuat keduanya menyimpang.
+        # Fungsinya sendiri dibiarkan ada supaya save lama tetap bisa dibaca.
 
         if s.day_in_season > DAYS_PER_SEASON:
             s.day_in_season = 1
@@ -115,10 +125,13 @@ class TimeController:
             pass
             
         # Optional: check quest progress
-        if hasattr(player, 'quest_manager') and player.quest_manager:
-            player.quest_manager.check_quest_progress()
-        elif hasattr(player, '_check_quest_progress'):
-            player._check_quest_progress()
+        # `player.quest_controller` -- itu nama yang dibuat player.py.
+        # Dulu di sini dicari `quest_manager` dan `_check_quest_progress`, dua
+        # nama yang tidak pernah ada; keduanya dijaga `hasattr`, jadi alur
+        # cerita DIAM tidak pernah maju tanpa satu pun error atau log.
+        qc = getattr(player, 'quest_controller', None)
+        if qc:
+            qc.check_quest_progress()
 
     def try_sleep(self, panels, player):
         from ursina import invoke

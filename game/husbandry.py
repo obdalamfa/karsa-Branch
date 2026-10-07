@@ -40,6 +40,14 @@ MIN_KENYANG_PRODUKSI = 40
 MIN_AIR_PRODUKSI     = 30
 MIN_BERSIH_PRODUKSI  = 25
 
+# Energi per pekerjaan kandang. Sengaja tidak nol: kalau merawat ternak
+# gratis, ternak jadi uang gratis dan bertani kehilangan maknanya. Memberi
+# makan dan memungut hasil memakai angka yang sama dengan jalur lama
+# (economy.EN_FEED / EN_COLLECT) supaya biaya sehari-hari tidak berubah saat
+# sumber kebenaran berpindah ke modul ini.
+EN_MINUM  = 1    # mengangkat ember dari sumur
+EN_BERSIH = 2    # menyekop kandang
+
 LALAI_JADI_SAKIT = 3
 SEMBUH_BUTUH_HARI = 2
 AMBANG_SEHAT = 60
@@ -53,37 +61,37 @@ SPECIES_CARE: dict[str, dict] = {
     'sapi': {
         'label': 'Sapi', 'produk': 'susu', 'produk_label': 'Susu',
         'tiap': 1, 'jumlah': 1, 'aksi': 'Perah', 'siap_teks': 'Siap diperah',
-        'pakan': ['rumput', 'jerami', 'jagung'], 'harga': 40,
+        'pakan': ['jerami', 'pakan', 'jagung'], 'harga': 40,
         'catatan': 'Sapi perah butuh air paling banyak — susu 87% air.',
     },
     'ayam': {
         'label': 'Ayam', 'produk': 'telur', 'produk_label': 'Telur',
         'tiap': 1, 'jumlah': 1, 'aksi': 'Ambil Telur', 'siap_teks': 'Ada telur di sarang',
-        'pakan': ['jagung', 'dedak', 'kacang_hijau'], 'harga': 30,
+        'pakan': ['jagung', 'pakan', 'kacang_hijau'], 'harga': 30,
         'catatan': 'Ayam berhenti bertelur kalau kandang kotor atau kekurangan pakan.',
     },
     'bebek': {
         'label': 'Bebek', 'produk': 'telur_bebek', 'produk_label': 'Telur Bebek',
         'tiap': 2, 'jumlah': 1, 'aksi': 'Ambil Telur', 'siap_teks': 'Ada telur bebek',
-        'pakan': ['dedak', 'jagung', 'bayam'], 'harga': 38,
+        'pakan': ['pakan', 'jagung', 'bayam'], 'harga': 38,
         'catatan': 'Bebek perlu air lebih sering daripada unggas lain.',
     },
     'kambing': {
         'label': 'Kambing', 'produk': 'susu_kambing', 'produk_label': 'Susu Kambing',
         'tiap': 2, 'jumlah': 1, 'aksi': 'Perah', 'siap_teks': 'Siap diperah',
-        'pakan': ['rumput', 'jerami', 'ubi_jalar'], 'harga': 45,
+        'pakan': ['jerami', 'pakan', 'ubi_jalar'], 'harga': 45,
         'catatan': 'Kambing paling tahan pakan seadanya, tapi kandang basah bikin sakit.',
     },
     'domba': {
         'label': 'Domba', 'produk': 'wol', 'produk_label': 'Wol',
         'tiap': 5, 'jumlah': 1, 'aksi': 'Cukur', 'siap_teks': 'Bulu siap dicukur',
-        'pakan': ['rumput', 'jerami'], 'harga': 55,
+        'pakan': ['jerami', 'pakan'], 'harga': 55,
         'catatan': 'Wol tumbuh pelan: sekali cukur per lima hari.',
     },
     'kuda': {
         'label': 'Kuda', 'produk': None, 'produk_label': None,
         'tiap': 0, 'jumlah': 0, 'aksi': None, 'siap_teks': None,
-        'pakan': ['rumput', 'jerami', 'wortel'], 'harga': 0,
+        'pakan': ['jerami', 'pakan', 'wortel'], 'harga': 0,
         'catatan': 'Kuda tidak menghasilkan apa-apa, tapi tetap harus diberi makan.',
     },
     'kucing': {
@@ -95,7 +103,7 @@ SPECIES_CARE: dict[str, dict] = {
     'kelinci': {
         'label': 'Kelinci', 'produk': None, 'produk_label': None,
         'tiap': 0, 'jumlah': 0, 'aksi': None, 'siap_teks': None,
-        'pakan': ['wortel', 'bayam', 'rumput'], 'harga': 0,
+        'pakan': ['wortel', 'bayam', 'jerami'], 'harga': 0,
         'catatan': 'Kelinci paling cepat sakit kalau kandangnya kotor.',
     },
     'rubah': {
@@ -105,6 +113,14 @@ SPECIES_CARE: dict[str, dict] = {
         'catatan': 'Rubah hewan LIAR — tidak diurus, dan mengincar ayammu.',
     },
 }
+
+# CATATAN PAKAN. Daftar di atas pernah menyebut 'rumput' dan 'dedak' -- dua
+# nama yang TIDAK ADA sebagai barang di game ini. 'rumput' bahkan pilihan
+# PERTAMA untuk lima spesies, jadi `feed_item()` melewatinya tiap kali dan
+# pemain tidak pernah tahu kenapa. Selama modul ini dorman cacatnya laten;
+# begitu perawatannya disambungkan ke pie menu (2026-10-07) ia jadi nyata,
+# jadi diganti barang yang benar-benar ada: rumput -> jerami, dedak -> pakan.
+# `tools/verifikasi.py` memeriksa tiap nama pakan memang barang yang ada.
 
 # Kelinci dan kucing lebih cepat kotor/lapar (badannya kecil, makannya sering).
 PENGALI_SUSUT = {'kelinci': 1.3, 'kucing': 1.2, 'ayam': 1.1, 'sapi': 1.0}

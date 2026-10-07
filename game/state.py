@@ -94,6 +94,20 @@ class GameState:
     char_pants: int = 0
     char_hat:   int = 0
 
+    # ─── Keinginan (Tahap 4, game/wishes.py) ───
+    # `janji` = daftar keinginan yang sedang dikejar, tiap entri membawa garis
+    # dasarnya sendiri ('awal') supaya kemajuan dihitung dari saat DIJANJIKAN,
+    # bukan dari total seumur hidup. `kebahagiaan` dibelanjakan, `_total` hanya
+    # dipajang. `hadiah` = {id: berapa kali dibeli}.
+    #
+    # Semuanya dict/list/int murni supaya save tetap JSON, sama seperti `soil`
+    # dan `motives` — dan supaya tidak mengulang bug `animal_care`, yang dulu
+    # ditulis sebagai atribut dinamis sehingga `load()` membuangnya tiap kali.
+    janji:             list = field(default_factory=list)
+    kebahagiaan:       int  = 0
+    kebahagiaan_total: int  = 0
+    hadiah:            dict = field(default_factory=dict)
+
     quest_stage:        int  = 0
     mail_read:          bool = False
     shop_unlocked:      bool = False
@@ -301,11 +315,13 @@ class GameState:
             self.season_index = 0
         for name in ('inventory', 'soil', 'npc_hearts', 'npc_dialog_index',
                      'npc_positions', 'buffs', 'upgrades', 'motives',
-                     'side_quests', 'stats', 'animals', 'animal_care'):
+                     'side_quests', 'stats', 'animals', 'animal_care',
+                     'hadiah'):
             if not isinstance(getattr(self, name, None), dict):
                 logging.warning("%s bukan dict di save, direset ke kosong", name)
                 setattr(self, name, {})
-        for name in ('wild_entities', 'mobs', 'dungeon_tiles', 'lore_collected'):
+        for name in ('wild_entities', 'mobs', 'dungeon_tiles', 'lore_collected',
+                     'janji'):
             if not isinstance(getattr(self, name, None), list):
                 logging.warning("%s bukan list di save, direset ke kosong", name)
                 setattr(self, name, [])

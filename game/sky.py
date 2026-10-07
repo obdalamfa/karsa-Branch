@@ -85,12 +85,46 @@ def _get_sky_shader():
 
 # ─── Palet warna langit per kondisi (port FreeSO OutsideTime interpolation) ───
 # Format: (zenith_rgb, horizon_rgb, sun_glow_rgb, sun_dir_xyz)
-_SKY_NIGHT   = ((0.15, 0.05, 0.15), (0.10, 0.80, 1.00), (1.00, 0.20, 0.80), ( 0.0,  1.0,  0.0))
-_SKY_DAWN    = ((1.00, 0.80, 0.90), (1.00, 0.20, 0.80), (0.00, 1.00, 1.00), ( 0.7,  0.2, -0.1))
-_SKY_MORNING = ((1.00, 0.90, 1.00), (0.20, 1.00, 0.80), (1.00, 0.20, 0.80), ( 0.5,  0.5, -0.4))
-_SKY_DAY     = ((0.90, 0.80, 1.00), (1.00, 0.50, 0.80), (0.20, 0.80, 1.00), ( 0.0,  1.0, -0.4))
-_SKY_DUSK    = ((1.00, 0.50, 0.80), (0.20, 0.80, 1.00), (1.00, 0.80, 1.00), (-0.7,  0.2, -0.1))
-_SKY_EVENING = ((0.50, 0.10, 0.50), (0.10, 0.80, 1.00), (1.00, 0.20, 0.80), (-0.9, -0.1,  0.0))
+#
+# Tabel ini pernah berisi warna placeholder norak — merah jambu dan sian pekat
+# untuk SETIAP waktu — dan itu terbaca di layar sebagai pita magenta di tepi
+# atas frame (paling jelas jam 11–17, di mana `_SKY_DAY` dipakai rata tanpa
+# interpolasi). Sempat disalahartikan sebagai "tekstur langit gagal dimuat",
+# padahal `_SKY_FRAG` di atas tidak punya sampler2D sama sekali: kubah langit
+# TIDAK pernah menyentuh tekstur, jadi tidak ada yang bisa gagal di-resolve.
+# Warnanya murni dari enam baris ini.
+#
+# Patokan yang menahannya sekarang, dan alasannya bukan selera:
+#
+#   HIJAU SELALU DI ANTARA MERAH DAN BIRU.
+#
+# Langit apa pun adalah landaian mulus sepanjang spektrum, dan hijau ada di
+# tengah spektrum — jadi nilainya selalu terjepit di antara merah dan biru.
+# Hijau yang jatuh di bawah keduanya memberi magenta; yang naik di atas
+# keduanya memberi sian neon. Keduanya cuma bisa datang dari data karangan.
+# Dijaga tiap setengah jam oleh tools/uji_langit.py.
+#
+# Nilainya diselaraskan dengan `target_sky` di app.py, yang sudah lama benar
+# dan menggerakkan window.color + lampu: siang (128,205,248), senja
+# (248,138,88), malam (18,12,42). Sengaja ditahan agak kalem — docs/
+# ENTITY_VISUAL_LANGUAGE.md §2 mensyaratkan desanya tetap muted supaya entity
+# jadi satu-satunya hal jenuh di layar, dan langit adalah permukaan terbesar
+# yang ada.
+#
+# ANGGARAN BLOOM — jangan naikkan kanal mana pun di atas ~0.68 tanpa mengukur
+# ulang. camera.shader = vhs_bloom_shader (game/shaders/vhs_bloom.py) memakai
+# `bloom += c * (c * 1.2)` lalu `base + bloom * 0.45`, jadi tiap kanal keluar
+# kira-kira sebagai c + 0.54*c^2 dan MENTOK di 1.0 begitu c lewat ~0.72.
+# Itu sebabnya palet lama tidak keluar sebagai merah jambu lembut tapi sebagai
+# magenta jenuh: merah dan birunya di 0.80-1.00, dua-duanya terpotong di 255,
+# dan yang tersisa cuma selisih hijaunya. Langit adalah bidang datar terbesar
+# di layar, jadi ia yang paling telak kena bloom.
+_SKY_NIGHT   = ((0.03, 0.04, 0.11), (0.08, 0.10, 0.18), (0.22, 0.25, 0.34), ( 0.0,  0.9,  0.1))
+_SKY_DAWN    = ((0.20, 0.28, 0.48), (0.62, 0.45, 0.36), (0.60, 0.44, 0.28), ( 0.7,  0.2, -0.1))
+_SKY_MORNING = ((0.24, 0.42, 0.64), (0.50, 0.58, 0.66), (0.60, 0.55, 0.42), ( 0.5,  0.5, -0.4))
+_SKY_DAY     = ((0.20, 0.38, 0.60), (0.40, 0.54, 0.68), (0.55, 0.50, 0.40), ( 0.0,  1.0, -0.4))
+_SKY_DUSK    = ((0.22, 0.24, 0.42), (0.66, 0.40, 0.28), (0.66, 0.42, 0.24), (-0.7,  0.2, -0.1))
+_SKY_EVENING = ((0.08, 0.09, 0.20), (0.24, 0.20, 0.28), (0.34, 0.26, 0.28), (-0.9, -0.1,  0.0))
 
 # Modifikasi cuaca — mengurangi saturasi (FreeSO Weather pattern)
 _WEATHER_MUL = {
@@ -107,20 +141,31 @@ def _lerp3(a, b, t):
 def _sky_palette(hour: float, weather: str):
     """Interpolasi palet langit berdasarkan jam (0–24) dan cuaca."""
     # Peta jam → palet
-    if hour < 5.0:
-        pal = _lerp_pal(_SKY_NIGHT, _SKY_DAWN, hour / 5.0)
+    #
+    # Fajar mulai jam 04:00, bukan tengah malam. Versi lama memakai
+    # `hour / 5.0` untuk seluruh rentang 00:00–05:00, jadi jam 3 pagi sudah 60%
+    # menuju _SKY_DAWN — terukur di scene town: langit terbaca (120, 91, 83),
+    # cokelat hangat, di atas desa yang lampunya masih penuh malam. app.py
+    # menahan pencahayaan malam sampai jam 6, jadi langitnya juga tidak boleh
+    # terang duluan. Malam sekarang rata dari 21:00 sampai 04:00.
+    if hour < 4.0:
+        pal = _SKY_NIGHT
+    elif hour < 5.0:
+        pal = _lerp_pal(_SKY_NIGHT, _SKY_DAWN, hour - 4.0)
     elif hour < 7.0:
         pal = _lerp_pal(_SKY_DAWN, _SKY_MORNING, (hour - 5.0) / 2.0)
     elif hour < 11.0:
         pal = _lerp_pal(_SKY_MORNING, _SKY_DAY, (hour - 7.0) / 4.0)
     elif hour < 17.0:
         pal = _SKY_DAY
-    elif hour < 19.0:
-        pal = _lerp_pal(_SKY_DAY, _SKY_DUSK, (hour - 17.0) / 2.0)
+    elif hour < 18.0:
+        pal = _lerp_pal(_SKY_DAY, _SKY_DUSK, (hour - 16.0) / 2.0)
+    elif hour < 19.3:
+        pal = _lerp_pal(_SKY_DUSK, _SKY_EVENING, (hour - 18.0) / 1.3)
     elif hour < 21.0:
-        pal = _lerp_pal(_SKY_DUSK, _SKY_EVENING, (hour - 19.0) / 2.0)
+        pal = _lerp_pal(_SKY_EVENING, _SKY_NIGHT, (hour - 19.3) / 1.7)
     else:
-        pal = _lerp_pal(_SKY_EVENING, _SKY_NIGHT, (hour - 21.0) / 3.0)
+        pal = _SKY_NIGHT
 
     mul = _WEATHER_MUL.get(weather, 1.0)
     zenith  = tuple(c * mul for c in pal[0])
@@ -180,6 +225,16 @@ class SkyDome:
             self._apply(hour, weather)
 
     def _apply(self, hour: float, weather: str):
+        # Catatan yang belum diselesaikan: palet ini dan `window.color` tidak
+        # sepakat soal warna langit. Jam 10 palet memberi zenith (0,93 0,83
+        # 1,00) dan horizon (0,80 0,62 0,80) — lavender/merah muda pucat yang
+        # nyaris putih — sementara window.color, yang dipakai sebagai kabut DAN
+        # sebagai langit di jalur tanpa shader, bernilai (0,50 0,80 0,97), biru
+        # langit biasa.
+        #
+        # Akibatnya warna langit bergantung pada apakah jalur GLSL tersedia di
+        # mesin pemain: ada shader -> nyaris putih, tidak ada -> biru. Itu bukan
+        # selera, itu dua kebenaran untuk satu hal yang sama.
         zenith, horizon, sun_glow, sun_dir = _sky_palette(hour, weather)
         if self._sphere is None:
             # Fallback: set window background ke horizon color

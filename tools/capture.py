@@ -81,6 +81,31 @@ def main():
                          'punya geometri.')
     ap.add_argument('--width', type=int, default=1280)
     ap.add_argument('--height', type=int, default=720)
+    # --- mode STRIP: gerak tidak bisa dinilai dari gambar diam ---------------
+    # Kritikus yang cuma melihat satu frame tidak bisa membedakan animasi panen
+    # yang hidup dari pose panen yang beku. Strip mengambil N frame berjarak
+    # tetap lalu menyusunnya jadi SATU gambar, jadi kritikus melihat waktu.
+    ap.add_argument('--strip', type=int, default=0,
+                    help='ambil N frame berurutan dan susun jadi satu strip')
+    ap.add_argument('--strip-every', type=int, default=6,
+                    help='berapa langkah simulasi antar frame strip')
+    ap.add_argument('--strip-cols', type=int, default=0,
+                    help='kolom pada strip (0 = satu baris)')
+    ap.add_argument('--hold', default='',
+                    help='tombol yang DITAHAN selama strip, mis. w atau w,shift. '
+                         'Gerak jalan/berkuda butuh tombol ditahan, bukan diketuk.')
+    # --- aksi pie-menu -------------------------------------------------------
+    # `gosok` dan `bicara` bukan tombol; keduanya pilihan di pie menu, jadi dari
+    # baris perintah keduanya TIDAK BISA DIFOTO — dan BRIEF-nya sendiri bilang
+    # fitur yang tidak bisa difoto kritikus itu tidak ada. Ini memanggil jalur
+    # yang SAMA dengan yang dipanggil pie menu (`execute_pie_action`), bukan
+    # pintu belakang yang melewati logikanya.
+    ap.add_argument('--aksi', default=None,
+                    help='jalankan satu aksi pie-menu, mis. gosok / bicara')
+    ap.add_argument('--target', default=None,
+                    help='id sasaran aksi (npc atau hewan), mis. kuda_pegasus')
+    ap.add_argument('--gif', default=None,
+                    help='tulis juga GIF dari frame strip (untuk halaman progres)')
     args = ap.parse_args()
 
     # Ursina derives asset_folder from sys.argv[0]; force it to the repo root
@@ -100,6 +125,22 @@ def main():
 
     from game.app import Game3D
     g = Game3D()
+    # Sinema dimatikan untuk alat ukur, dan ini bukan menyembunyikan masalah.
+    # Adegan pembuka memicu diri sendiri pada quest_stage 0 lalu menyetel
+    # panels.mode='sinema', yang membekukan waktu, pemain, entity, DAN
+    # pergantian scene — semuanya memang ada di dalam gerbang mode 'hud'.
+    # Terukur saat pertama disambungkan: keempat belas scene melaporkan jumlah
+    # entity yang sama persis (1205) karena tidak satu pun benar-benar dimuat,
+    # dan pemeriksaan arah WASD gagal keempat arahnya karena pemain terkunci.
+    #
+    # Dipakai mekanisme yang sudah ada — menandai semua adegan sudah ditonton —
+    # bukan bendera pintas baru, supaya jalur yang diuji tetap jalur yang
+    # dimainkan pemain.
+    try:
+        from game.cutscene import NASKAH as _NASKAH
+        g.state.sinema_selesai = list(_NASKAH)
+    except Exception:
+        pass
 
     from direct.showbase.ShowBaseGlobal import base
     from ursina import application
@@ -137,13 +178,17 @@ def main():
     if any(v is not None for v in (args.pitch, args.yaw, args.dist)):
         g._snap_camera_to_player()
     if args.hour is not None:
-        try:
-            g.state.hour = args.hour
-        except Exception:
-            pass
+        # GameState menyimpan waktu sebagai `time_minutes`; tidak ada atribut
+        # `hour`. Versi lama menulis `g.state.hour = args.hour` di dalam
+        # try/except telanjang, jadi ia membuat atribut baru yang tidak dibaca
+        # siapa pun dan tidak pernah melempar apa pun — `--hour` diam-diam
+        # tidak berpengaruh, dan potongan SENJA terambil pagi hari selama ini.
+        # Tanpa try/except: kalau ini rusak lagi, ia harus berisik.
+        g.state.time_minutes = float(args.hour) * 60.0
 
     if args.toolrack:
         _build_toolrack(g, base)
+
 
     for _ in range(args.frames):
         base.taskMgr.step()
@@ -179,11 +224,127 @@ def main():
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     from panda3d.core import Filename
+
+    # Aksi dipicu DI SINI, tepat sebelum strip mulai merekam — bukan sebelum
+    # frame pemanasan.
+    #
+    # Sebelumnya ia dipanggil di awal, lalu `--frames 50` berjalan, lalu strip
+    # baru diambil. Animasi `gosok` hidup 900 ms dan `swing` 350 ms; keduanya
+    # sudah SELESAI sebelum ubin pertama direkam. Hasilnya strip berisi enam
+    # ubin identik — dan strip beku terbaca sebagai "animasinya belum ada",
+    # padahal yang salah urutan pemicunya. Diukur: gerak antar-ubin 0,0%
+    # untuk GOSOK dan PANEN, melawan 46,1% dan 40,5% pada strip patokan.
+    if args.aksi:
+        if not args.target:
+            print('CAPTURE_FAIL: --aksi butuh --target', file=sys.stderr)
+            sys.exit(2)
+        try:
+            g.player.execute_pie_action(args.target, args.aksi, g.entities, g.panels)
+        except Exception:
+            # Berisik dengan sengaja: aksi yang diam-diam gagal menghasilkan
+            # strip beku, dan strip beku terbaca sebagai "animasinya belum ada".
+            traceback.print_exc()
+            print(f'CAPTURE_FAIL: aksi {args.aksi} pada {args.target} melempar',
+                  file=sys.stderr)
+            sys.exit(2)
+        # Aksi yang DITOLAK tidak melempar apa pun: `execute_pie_action`
+        # menampilkan pesan lalu return biasa. Selama ini harness memotret
+        # penolakan itu dan menghasilkan strip enam-ubin-identik, yang lalu
+        # terbaca sebagai "animasinya belum dibuat". Diukur: GOSOK 0,0% gerak
+        # sementara aksinya dilaporkan sukses.
+        #
+        # Karena itu keberhasilan diperiksa dari EFEKNYA, bukan dari
+        # kembalinya fungsi: kalau tidak ada animasi yang mulai berjalan,
+        # aksinya tidak terjadi.
+        # Dua bentuk "aksinya terjadi", dan keduanya harus dihitung:
+        # aksi bertimer (memicu `_attack_anim`) dan aksi yang memasuki
+        # KEADAAN (menunggang tidak punya timer — ia berlangsung sampai
+        # pemain turun). Memeriksa timer saja menolak yang kedua sebagai
+        # kegagalan, padahal ia berhasil.
+        beraksi = (float(getattr(g.player, '_attack_anim', 0) or 0) > 0
+                   or getattr(g.player, '_tunggangan', None) is not None)
+        if not beraksi:
+            print(f'CAPTURE_FAIL: aksi {args.aksi} pada {args.target} tidak '
+                  f'menjalankan animasi apa pun — kemungkinan besar ia DITOLAK '
+                  f'(syarat tidak terpenuhi), bukan belum dibuat.',
+                  file=sys.stderr)
+            sys.exit(2)
+        print(f'CAPTURE_AKSI {args.aksi} -> {args.target}')
+
+    if args.strip > 0:
+        # Tombol ditahan lewat held_keys Ursina — jalur yang SAMA dengan yang
+        # dibaca player.py (baris 512-518), bukan jalur uji terpisah. Kalau
+        # gerakan hanya jalan di harness dan tidak di tangan pemain, harness
+        # ini berbohong.
+        from ursina import held_keys
+        tahan = [k.strip() for k in args.hold.split(',') if k.strip()]
+        for k in tahan:
+            held_keys[k] = 1
+
+        frames_dir = out.parent / (out.stem + '_frames')
+        frames_dir.mkdir(parents=True, exist_ok=True)
+        paths = []
+        for i in range(args.strip):
+            for _ in range(max(1, args.strip_every)):
+                base.taskMgr.step()
+            im = base.win.getScreenshot()
+            if im is None:
+                print('CAPTURE_FAIL: no screenshot in strip', file=sys.stderr)
+                sys.exit(2)
+            fp = frames_dir / f'f{i:02d}.png'
+            im.write(Filename.fromOsSpecific(str(fp.resolve())))
+            paths.append(fp)
+
+        for k in tahan:
+            held_keys[k] = 0
+
+        from PIL import Image
+        ims = [Image.open(fp).convert('RGB') for fp in paths]
+        cols = args.strip_cols if args.strip_cols > 0 else len(ims)
+        rows = (len(ims) + cols - 1) // cols
+        tw, th = ims[0].size
+        sheet = Image.new('RGB', (cols * tw, rows * th), (0, 0, 0))
+        for i, im in enumerate(ims):
+            sheet.paste(im, ((i % cols) * tw, (i // cols) * th))
+        sheet.save(out)
+
+        if args.gif:
+            gp = Path(args.gif)
+            gp.parent.mkdir(parents=True, exist_ok=True)
+            small = [im.resize((tw // 2, th // 2), Image.LANCZOS) for im in ims]
+            small[0].save(gp, save_all=True, append_images=small[1:],
+                          duration=90, loop=0, optimize=True)
+
+        print(f'CAPTURE_OK {out.resolve()} strip={len(ims)} tile={tw}x{th}')
+        sys.stdout.flush()
+        os._exit(0)
+
     img = base.win.getScreenshot()
     if img is None:
         print('CAPTURE_FAIL: no screenshot', file=sys.stderr)
         sys.exit(2)
     img.write(Filename.fromOsSpecific(str(out.resolve())))
+
+    # Frame HITAM PEKAT lolos sebagai sukses sampai sekarang, dan itu bukan
+    # kemungkinan teoretis: dua dari empat tangkapan 1920x1080 berturut-turut
+    # keluar dengan mean (0,0,0) sementara `CAPTURE_OK` tetap tercetak. Lembar
+    # perbandingannya lalu berisi separuh bidang hitam, dan DUA kritikus buta
+    # menghabiskan gilirannya untuk melaporkan bahwa tidak ada yang bisa
+    # dinilai. Penilaian yang terbuang itu jauh lebih mahal daripada
+    # pemeriksaan ini.
+    try:
+        from PIL import Image as _Im, ImageStat as _St
+        _m = _St.Stat(_Im.open(out).convert('RGB')).mean
+        if sum(_m) < 6.0:
+            print(f'CAPTURE_FAIL: frame kosong (mean={[round(v,1) for v in _m]}). '
+                  f'Jendela kemungkinan tertutup atau konteks GL hilang.',
+                  file=sys.stderr)
+            sys.exit(2)
+    except SystemExit:
+        raise
+    except Exception:
+        pass
+
     print(f'CAPTURE_OK {out.resolve()}')
     sys.stdout.flush()
     os._exit(0)

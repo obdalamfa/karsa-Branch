@@ -29,6 +29,7 @@ from .pathfinder import PathGrid, PathMover
 from .controllers.time_controller import TimeController
 from .controllers.quest_controller import QuestController
 from .controllers.interaction_controller import InteractionController
+from . import care_anim
 
 TS = TILE_SIZE
 _GH = GROUND_H
@@ -48,6 +49,18 @@ _SHIN_LEN       = _KNEE_Y     - _ANKLE_Y      # 0.58
 _UPPER_ARM_LEN  = 0.46
 _FOREARM_LEN    = 0.38
 _TORSO_Y        = (_HIP_Y + _SHOULDER_Y) * 0.5
+
+# ── MENUNGGANG ──────────────────────────────────────────────────────────────
+# Tinggi sadel diturunkan dari rig kuda yang sebenarnya, bukan dikira-kira:
+# _kuda() di animal_models.py menaruh kotak badan di y 1,22 dengan tinggi 0,68,
+# jadi punggungnya di 1,22 + 0,34 = 1,56 m di atas kaki kuda. Panggul pemain
+# duduk 1,02 m di atas titik asalnya (PEL_Y = _GH + 0,82), jadi titik asal
+# pemain harus naik 1,56 - 1,02 = 0,54 supaya ia duduk DI punggung dan bukan
+# menembusnya. Ditambah 0,06 untuk tebal sadel.
+TINGGI_SADEL = 0.60
+# Kuda pengganti berjalan kaki, bukan pengganti sapu terbang: 1,9x itu sedikit
+# di bawah sapu (2,2x) dan jelas di atas lari (PLAYER_RUN_MULTIPLIER).
+LAJU_KUDA    = 1.9
 
 # Palet hangat ala FreeSO — earth tones
 SKIN_COLOR   = color.rgb(230, 190, 148)
@@ -116,8 +129,60 @@ def _part(model, pos, scale, tex_name, tint=color.white, parent=None):
     return e
 
 
+
+# Mode aksi -> klip animasi TSO. Hanya mode yang PUNYA klip yang masuk;
+# sisanya tetap mengandalkan pivot prosedural dan tidak dipaksa memakai klip
+# yang artinya lain.
+_KLIP_TSO = {
+    'gosok': 'a2o-fso-outsideshower-scrub',
+    'swing': 'a2o-lever-pull-start',
+    'mine':  'a2o-lever-pull-start',
+    'down':  'a2o-lever-pull-start',
+    'bend':  'a2o-lever-pull-start',
+}
+
+
+# Letak alat relatif tulang R_HAND rig karakter (dikalibrasi dengan render).
+_PEGANG_POS = (0.0, 0.0, 0.0)
+_PEGANG_ROT = (180.0, 0.0, 0.0)
+_PEGANG_SKALA = 1.0
+
+_KLIP_RIG = {
+    'hoe':   'hoe',
+    'water': 'water',
+    'swing': 'swing',
+    'mine':  'swing',
+    'down':  'hoe',
+}
+
+
+def _menuju(sekarang, tujuan, k, dt):
+    """Bergerak menuju `tujuan` dengan laju k per detik, aman di frame rate mana pun.
+
+    `lerp(a, b, dt * k)` — pola yang sebelumnya dipakai di seluruh file ini —
+    diam-diam rusak begitu `dt * k` melewati 1,0. Pada k=15 itu terjadi di
+    bawah 15 FPS: nilainya MELEWATI tujuan, lalu berayun, lalu (di atas 2,0)
+    berbalik arah. Game ini berjalan 4-29 FPS, jadi itu wilayah kerja
+    sehari-hari, bukan kasus tepi. Bug WASD-terbalik yang dikejar berulang
+    kali ternyata versi bentuk ini pada gesekan kecepatan.
+
+    Peluruhan eksponensial menyelesaikannya secara matematis, bukan dengan
+    penjepitan: 1 - exp(-k*dt) tidak pernah melebihi 1, dan pecahan yang
+    ditempuh per satuan waktu sama di 60 FPS maupun 8 FPS.
+    """
+    return sekarang + (tujuan - sekarang) * (1.0 - math.exp(-k * dt))
+
+
 class Player3D(Entity):
     """Player sebagai Ursina Entity. Root di y=0, semua bagian sebagai child."""
+
+    # Tinggi sendi untuk animasi napas/jalan. Rakitan voxel menimpanya dengan
+    # proporsinya sendiri; jalur avatar Vitaboy tidak membangun tubuh voxel
+    # tapi tetap menjalankan animasi yang sama pada `self.body` kosong, jadi
+    # tanpa nilai bawaan ini tick() melempar AttributeError tiap frame.
+    _Y_BADAN  = _GH + 1.18
+    _Y_KEPALA = _GH + 1.70
+    _Y_BAHU   = _GH + 1.28
 
     def __init__(self, state, world):
         super().__init__()
@@ -144,7 +209,19 @@ class Player3D(Entity):
         self._anim_t           = 0.0
         self._attack_anim      = 0.0
         self._anim_mode        = 'swing' # swing|down|water|bend
+        # Alat di tangan: dibangun sekali, tapi baru TERLIHAT saat dipakai.
+        self._held_tool        = None
+        self._held_tool_idx    = None
+        self._alat_tampil      = False
+        self._alat_ekor        = 0.0
+        # Aksi perawatan berdurasi (care_anim.AksiRawat) atau None. Bukan bagian
+        # dari _attack_anim: yang ini punya fase, kurva, dan banyak sendi, dan
+        # ia menulis pose SESUDAH blok animasi lama supaya tidak ditimpa
+        # lerp-ke-nol milik pose diam.
+        self._care_anim        = None
+        self._care_prop        = None
         self.target_rotation_y = 0.0
+        self._tunggangan       = None
         self.velocity_x        = 0.0
         self.velocity_y        = 0.0
         self.velocity_z        = 0.0
@@ -164,6 +241,18 @@ class Player3D(Entity):
 
         self.path_grid = None
         self.mover = None
+
+        # entities.py menyimpan satu slot modul berisi pemain yang aktif, dan
+        # docstring-nya berbunyi "Dipanggil Player3D.__init__" — tapi tidak ada
+        # satu pun pemanggilnya di seluruh repo, jadi slot itu selalu None.
+        # Akibatnya dua hal diam-diam mati: warga tidak pernah menoleh ke
+        # pemain (head-seek keluar di baris pertama karena _lihat_pemain None),
+        # dan hewan tunggangan tidak punya sumber posisi untuk diikuti.
+        try:
+            from .entities import daftarkan_pemain
+            daftarkan_pemain(self)
+        except Exception:
+            pass
 
         self._is_flying = False
         self._broom_ent = None
@@ -225,10 +314,16 @@ class Player3D(Entity):
         p = self
 
         # ── Drop shadow di tanah (flat quad gelap) ─────────────────────────────
+        # y lokal 0,02 menaruhnya di y DUNIA 0,92 — melayang 68 cm di atas
+        # permukaan rumput (GROUND_H + 0,04 = 0,24). Bayangan yang mengambang
+        # setinggi lutut adalah salah satu hal yang paling cepat terbaca
+        # salah, dan ia sudah begitu sejak lama. Ketinggiannya sekarang
+        # dikunci ke permukaan tiap frame di tick(), karena pemain berpindah
+        # scene dan tidak selalu berdiri di ketinggian yang sama.
         self._shadow = Entity(parent=p, model='quad',
                               position=Vec3(0, 0.02, 0),
                               rotation=(90, 0, 0),
-                              scale=(0.95, 0.95, 1),
+                              scale=(0.98, 0.98, 1),
                               color=color.rgba(0, 0, 0, 120),
                               shader=None)
 
@@ -246,21 +341,41 @@ class Player3D(Entity):
         self.body = Entity(parent=p)
         self._pivot_neck = Entity(parent=p)
 
-        try:
-            # Lewat pabrik tunggal di vitaboy_npc.py: ia memilih Character
-            # Panda3D (skinning C++, 0,288 ms/avatar) kalau ada, dan jatuh ke
-            # skinning Python (6,387 ms/avatar) kalau tidak. Pemain memakai
-            # jalur yang sama dengan NPC supaya tidak ada dua kebenaran.
-            from .vitaboy_npc import build_vitaboy_avatar
-            apr_list = ['mabd000_leathers.apr', 'mahd000_proxy.apr']
-            self._va = build_vitaboy_avatar(self, apr_list, scale=0.32)
-            if self._va is None:
-                raise RuntimeError('kedua backend avatar gagal')
-        except Exception as e:
-            import logging
-            logging.error(f"Failed to load Vitaboy for Player: {e}")
-            self._va = None
+        self._use_mesh_swap = False
+        from .char_actor import build_char_actor
+        from .entities import load_model_file, _baked_texture, _setup_pose_swap
+        self._char = build_char_actor(self, 'player')
+        p_mdl = None
+        if self._char is None:
+            p_mdl = load_model_file('player_idle') or load_model_file('player')
+        if self._char is not None:
             self._is_vitaboy = False
+        elif p_mdl is not None:
+            self.model = p_mdl
+            tex = _baked_texture('player_baked')
+            if tex is not None:
+                self.texture = tex
+                self.color = color.white
+            _setup_pose_swap(self, 'player')
+            self._use_mesh_swap = True
+            self._is_vitaboy = False
+        else:
+            try:
+                from .vitaboy_npc import build_vitaboy_avatar, PEMAIN_DEFAULT
+                from .wajah import varian_pemain
+                apr_list = list(PEMAIN_DEFAULT)
+                st = getattr(self, 'state', None)
+                varian = varian_pemain(getattr(st, 'char_skin', 0) or 0,
+                                       getattr(st, 'char_hair', 0) or 0)
+                self._va = build_vitaboy_avatar(self, apr_list, scale=0.32,
+                                                varian=varian)
+                if self._va is None:
+                    raise RuntimeError('kedua backend avatar gagal')
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to load Vitaboy for Player: {e}")
+                self._va = None
+                self._is_vitaboy = False
 
             # Build full gorgeous voxel character fallback
             pants = PANTS_COLOR
@@ -268,32 +383,77 @@ class Player3D(Entity):
             skin  = SKIN_COLOR
             cloth = self._shirt_col
 
-            PEL_Y, WST_Y, CHEST_Y = _GH + 0.96, _GH + 1.16, _GH + 1.42
-            NECK_Y, HEAD_Y        = _GH + 1.62, _GH + 1.89
-            SHOULDER_Y, HIP_Y     = _GH + 1.55, _GH + 0.88
+            # ── PROPORSI CHIBI ──────────────────────────────────
+            # Sebelumnya kepala 0,45 tinggi pada badan setinggi 2,115 — nisbah
+            # kepala-badan 1 : 4,7, yaitu proporsi orang dewasa realistis.
+            # Patokan kita bukan itu: Story of Seasons dan sekelasnya memakai
+            # chibi sekitar 1 : 3, dan nisbah itulah yang membuat orang terbaca
+            # sebagai orang dari jarak main — wajahnya cukup besar untuk punya
+            # arah hadap, badannya cukup kecil untuk tidak menutupi wajahnya.
+            #
+            # Tinggi TOTAL sengaja dipertahankan ~2,1: kamera, collider, tinggi
+            # pintu, dan seluruh animasi alat dikalibrasi ke angka itu.
+            # Kepalanya membesar dengan MEMENDEKKAN kaki dan torso, bukan
+            # dengan meninggikan orangnya.
+            #
+            #   kaki  : sepatu 0,10 + betis 0,30 + paha 0,34  = 0,74
+            #   torso : pinggul 0,74 -> leher 1,40            = 0,66
+            #   kepala: 1,40 .. 2,00                          = 0,60
+            #   total 2,00   ->  0,60 / 2,00 = 1 : 3,33
+            PEL_Y, WST_Y, CHEST_Y = _GH + 0.82, _GH + 0.98, _GH + 1.18
+            NECK_Y, HEAD_Y        = _GH + 1.40, _GH + 1.70
+            SHOULDER_Y, HIP_Y     = _GH + 1.28, _GH + 0.74
+
+            # Tinggi torso/kepala/bahu disimpan karena blok ANIMASI di bawah
+            # menulis ulang ketiganya tiap frame. Dulu angkanya ditulis mati di
+            # sana (_GH+1,42 badan, _GH+1,89 kepala, _GH+1,55 bahu) — angka
+            # rangka LAMA. Jadi begitu proporsi chibi dipasang, animasi menarik
+            # torso naik 0,24 m dan kepala naik 0,19 m dari pinggul yang tetap
+            # di 0,74: badannya putus di pinggang, dan tidak ada satu pun frame
+            # permainan yang memakai proporsi yang tertulis di atas. Sekarang
+            # animasi membaca dari sini, jadi mengubah proporsi cukup di satu
+            # tempat dan tidak bisa lagi diam-diam dibatalkan.
+            self._Y_BADAN    = CHEST_Y
+            self._Y_KEPALA   = HEAD_Y
+            self._Y_BAHU     = SHOULDER_Y
 
             # Destroy the default dummy body, and recreate body properly
             if hasattr(self, 'body') and self.body:
                 destroy(self.body)
 
-            # Build body boxes
-            self.belt = _part_box(Vec3(0, PEL_Y, 0), (0.42, 0.18, 0.28), pants, parent=p)
-            self.waist = _part_box(Vec3(0, WST_Y, 0), (0.40, 0.22, 0.26), cloth, parent=p)
-            self.body = _part_box(Vec3(0, CHEST_Y, 0), (0.52, 0.30, 0.30), cloth, parent=p)
+            # Build body boxes. Torso memakai `chibi_torso` — mesh
+            # superellipsoid bertepi dibevel yang sudah ada di meshes.py sejak
+            # lama, lengkap dengan dispatch-nya di _part(), dan TIDAK PERNAH
+            # dipanggil satu kali pun: seluruh badan dibangun dari kubus polos.
+            self.belt = _part_box(Vec3(0, PEL_Y, 0), (0.40, 0.16, 0.26), pants, parent=p)
+            self.waist = _part_box(Vec3(0, WST_Y, 0), (0.38, 0.20, 0.25), cloth, parent=p)
+            self.body = _part('chibi_torso', Vec3(0, CHEST_Y, 0),
+                              (0.50, 0.34, 0.30), None, cloth, parent=p)
 
-            # Neck & Head
-            _part_box(Vec3(0, NECK_Y, 0), (0.14, 0.10, 0.14), skin, parent=p)
+            # Leher dan kerah. Leher lama 0,14 lebar berdiri di antara dada
+            # 0,52 dan kepala 0,35, jadi kepalanya terbaca melayang di atas
+            # sebuah tangkai. Sekarang lehernya lebih lebar dan sengaja
+            # TUMPANG TINDIH dengan keduanya (1,555-1,675 melewati puncak dada
+            # 1,57 dan dasar kepala 1,665), lalu kerah baju menutup sambungannya
+            # — cara yang sama dipakai karakter chibi game pertanian Jepang:
+            # tidak ada leher yang terlihat sama sekali.
+            _part_box(Vec3(0, NECK_Y - 0.005, 0), (0.21, 0.12, 0.19), skin, parent=p)
+            self.kerah = _part_box(Vec3(0, CHEST_Y + 0.155, 0),
+                                   (0.40, 0.07, 0.34), cloth, parent=p)
             if hasattr(self, '_pivot_neck') and self._pivot_neck:
                 destroy(self._pivot_neck)
             self._pivot_neck = Entity(parent=p, position=Vec3(0, HEAD_Y, 0))
-            self.head = _part_box(Vec3(0, 0, 0), (0.35, 0.45, 0.35), skin, parent=self._pivot_neck)
+            # chibi_head_mesh() sudah ada di meshes.py — rounded box dengan
+            # sudut dibevel halus — tapi tidak pernah dipanggil satu kali pun;
+            # kepalanya memakai kubus tajam. Siluet bulat itu yang membedakan
+            # kepala karakter dari sebuah kotak.
+            self.head = _part('chibi_head', Vec3(0, 0, 0), (0.35, 0.45, 0.35),
+                              None, skin, parent=self._pivot_neck)
 
-            # Surreal floating geometric halo
-            self._halo_ring = Entity(model='cylinder', position=Vec3(0, 0.45, 0), scale=(0.5, 0.05, 0.5), color=color.rgb(255, 0, 255), parent=self._pivot_neck)
-            self._halo_cube = Entity(model='cube', position=Vec3(0, 0.7, 0), scale=(0.15, 0.15, 0.15), color=color.rgb(0, 255, 255), parent=self._pivot_neck, rotation=(45, 45, 45))
-            from .smooth_shader import apply_smooth
-            apply_smooth(self._halo_ring, has_texture=False)
-            apply_smooth(self._halo_cube, has_texture=False)
+            # Cincin magenta dan kubus cyan yang dulu melayang di atas kepala
+            # ("surreal floating geometric halo") DIBUANG. Itu perancah uji
+            # yang tertinggal, dan ia terpasang pada setiap pemain.
+            self._bangun_wajah(skin)
 
             # Destroy and recreate pivot shoulders & hips to have proper positions
             if hasattr(self, '_pivot_shoulder_l') and self._pivot_shoulder_l: destroy(self._pivot_shoulder_l)
@@ -305,37 +465,37 @@ class Player3D(Entity):
 
             # Arms
             for side, sx in (('l', -1), ('r', 1)):
-                piv_sh = Entity(parent=p, position=Vec3(sx * 0.30, SHOULDER_Y, 0))
+                piv_sh = Entity(parent=p, position=Vec3(sx * 0.26, SHOULDER_Y, 0))
                 setattr(self, f'_pivot_shoulder_{side}', piv_sh)
 
-                ua = _part_box(Vec3(0, -0.16, 0), (0.14, 0.32, 0.16), cloth, parent=piv_sh)
+                ua = _part_box(Vec3(0, -0.13, 0), (0.13, 0.26, 0.15), cloth, parent=piv_sh)
                 setattr(self, f'upper_arm_{side}', ua)
 
-                piv_el = Entity(parent=piv_sh, position=Vec3(0, -0.32, 0))
+                piv_el = Entity(parent=piv_sh, position=Vec3(0, -0.26, 0))
                 setattr(self, f'_pivot_elbow_{side}', piv_el)
 
-                fa = _part_box(Vec3(0, -0.15, 0), (0.13, 0.30, 0.14), skin, parent=piv_el)
+                fa = _part_box(Vec3(0, -0.11, 0), (0.12, 0.22, 0.13), skin, parent=piv_el)
                 setattr(self, f'forearm_{side}', fa)
 
-                hd = _part_box(Vec3(0, -0.36, 0), (0.14, 0.12, 0.14), skin, parent=piv_el)
+                hd = _part_box(Vec3(0, -0.27, 0), (0.14, 0.13, 0.14), skin, parent=piv_el)
                 setattr(self, f'hand_{side}', hd)
                 setattr(self, f'_arm_{side}', ua)
 
             # Legs
             for side, sx in (('l', -1), ('r', 1)):
-                piv_hip = Entity(parent=p, position=Vec3(sx * 0.12, HIP_Y, 0))
+                piv_hip = Entity(parent=p, position=Vec3(sx * 0.115, HIP_Y, 0))
                 setattr(self, f'_pivot_hip_{side}', piv_hip)
 
-                th = _part_box(Vec3(0, -0.21, 0), (0.18, 0.42, 0.22), pants, parent=piv_hip)
+                th = _part_box(Vec3(0, -0.17, 0), (0.175, 0.34, 0.21), pants, parent=piv_hip)
                 setattr(self, f'thigh_{side}', th)
 
-                piv_kn = Entity(parent=piv_hip, position=Vec3(0, -0.42, 0))
+                piv_kn = Entity(parent=piv_hip, position=Vec3(0, -0.34, 0))
                 setattr(self, f'_pivot_knee_{side}', piv_kn)
 
-                sh_e = _part_box(Vec3(0, -0.20, 0), (0.17, 0.40, 0.20), pants, parent=piv_kn)
+                sh_e = _part_box(Vec3(0, -0.15, 0), (0.165, 0.30, 0.19), pants, parent=piv_kn)
                 setattr(self, f'shin_{side}', sh_e)
 
-                foot = _part_box(Vec3(0, -0.45, 0.06), (0.20, 0.10, 0.32), shoe, parent=piv_kn)
+                foot = _part_box(Vec3(0, -0.35, 0.05), (0.195, 0.10, 0.30), shoe, parent=piv_kn)
                 setattr(self, f'shoe_{side}', foot)
                 setattr(self, f'_leg_{side}', th)
 
@@ -344,6 +504,17 @@ class Player3D(Entity):
     # ─── APPEARANCE (chargen) ────────────────────────────
     def apply_appearance(self, state):
         """Terapkan pilihan karakter dari chargen ke model yang sudah dibangun."""
+        # Rig GLB (jalur utama sekarang): pewarnaan tekstur + aksesori kepala
+        # di game/rupa_pemain.py. Cabang voxel/Vitaboy di bawah tidak pernah
+        # menyentuh model ini, jadi tanpa baris ini chargen tidak berefek.
+        if getattr(self, '_char', None) is not None:
+            from . import rupa_pemain
+            try:
+                rupa_pemain.terapkan(self._char, state)
+            except Exception:
+                import logging
+                logging.warning('rupa pemain gagal diterapkan', exc_info=True)
+            return
         sk = getattr(state, 'char_skin',  0)
         hr = getattr(state, 'char_hair',  0)
         sh = getattr(state, 'char_shirt', 0)
@@ -353,8 +524,13 @@ class Player3D(Entity):
         self._shirt_col = color.rgb(*SHIRT_PRESETS[sh][1]) if sh < len(SHIRT_PRESETS) else color.white
 
         if getattr(self, '_is_vitaboy', False) and hasattr(self, '_va') and self._va:
-            body_apr = 'mabd000_leathers.apr' if sh == 0 else 'fabd000_sl__defaultpjs.apr'
-            head_apr = 'mahd000_proxy.apr' if sh == 0 else 'fahd001_alt.apr'
+            # `mahd000_proxy.apr` dibuang: itu placeholder Maxis — petak biru
+            # bertaburan tanda tanya, bukan kepala. Selama ia terpasang, tidak
+            # ada pengaturan kamera atau pencahayaan mana pun yang bisa membuat
+            # wajah pemain terbaca sebagai wajah. Lihat vitaboy_npc.py.
+            from .vitaboy_npc import PEMAIN_DEFAULT, PEMAIN_ALT
+            baju = PEMAIN_DEFAULT if sh == 0 else PEMAIN_ALT
+            body_apr, head_apr = baju[0], baju[1]
             hair_apr = 'fahl003_longhair02.apr' if hr > 0 else None
             try:
                 from .vitaboy_npc import build_vitaboy_avatar
@@ -371,8 +547,10 @@ class Player3D(Entity):
                     destroy(lama_va.root_entity)
                 apr_list = [x for x in [body_apr, head_apr, hair_apr] if x]
                 anim = "a2o-walking-loop" if getattr(self, '_was_moving', False) else "a2a-talk-idle-loop"
+                from .wajah import varian_pemain
                 baru_va = build_vitaboy_avatar(self, apr_list, scale=0.32,
-                                               idle_anim=anim)
+                                               idle_anim=anim,
+                                               varian=varian_pemain(sk, hr))
                 if baru_va is not None:
                     self._va = baru_va
             except Exception:
@@ -400,6 +578,30 @@ class Player3D(Entity):
                     getattr(self, f'shin_{side}').color = pants
             if hasattr(self, 'head') and self.head:
                 self.head.color = skin
+            if hasattr(self, 'kerah') and self.kerah:
+                self.kerah.color = cloth
+            for e in getattr(self, '_rambut', ()) or ():
+                try:
+                    e.color = self._warna_rambut()
+                except Exception:
+                    pass
+
+    # ─── WAJAH ───────────────────────────────────────────
+    # Resepnya ada di game/wajah.py — satu bahasa rupa untuk pemain DAN NPC,
+    # ukurannya pecahan dari setengah-lebar kepala jadi satu resep pas di
+    # kepala pemain (0,175) maupun di kepala manekin NPC (0,36).
+    def _warna_rambut(self):
+        from .wajah import warna_rambut
+        return warna_rambut(self.state)
+
+    def _bangun_wajah(self, skin):
+        """Rambut dan wajah pada kepala voxel pemain."""
+        from .wajah import bangun_rambut, bangun_wajah
+        n = self._pivot_neck
+        HW, HT = 0.175, 0.225          # kepala 0,35 x 0,45
+        self._rambut = bangun_rambut(n, HW, HT, self._warna_rambut())
+        self._wajah = bangun_wajah(n, HW, HT, HW * 1.005)
+        self._wajah.fase_awal('pemain')
 
     # ─── POSITION HELPERS ────────────────────────────────
     def set_tile_pos(self, tx: float, ty: float):
@@ -415,13 +617,30 @@ class Player3D(Entity):
         return self.x / TS, self.z / TS
 
     # ─── TICK (dipanggil manual dari app.py saat mode='hud') ──
-    def refresh_held_tool(self, force: bool = False) -> None:
-        """Pasang model alat yang sedang dipilih ke tangan kanan.
 
-        game/tool_models.py sudah berisi model lengkap untuk cangkul, penyiram,
-        kapak, beliung, pedang, pancing, benih, bakul dan kado — tapi tidak ada
-        satu pun pemanggilnya, jadi alatnya tidak pernah muncul dan HUD cuma
-        menulis kata "Cangkul". Ini yang menyambungkannya.
+    # Ekor waktu (detik) alat tetap terlihat sesudah animasinya habis. Tanpa
+    # ini alat lenyap tepat di frame yang sama dengan pose terakhir ayunan,
+    # dan yang terlihat bukan "alat disimpan" melainkan "alat berkedip".
+    _ALAT_EKOR = 0.22
+
+    def refresh_held_tool(self, force: bool = False) -> None:
+        """Alat hanya ADA DI TANGAN selama aksinya berjalan.
+
+        Permintaan pemilik, persis: "alat dari pada terlihat dibawa bawa
+        seperti cangkul di gambar. lebih baik ditampilkan saja icon di salah
+        satu gui nya ... dan alat akan keluar hanya ketika digunakan."
+
+        Jadi modelnya tetap dibangun dan tetap tergenggam di pivot bahu kanan
+        — yang berubah cuma KAPAN ia terlihat. `_attack_anim` sudah menjadi
+        satu-satunya penanda "aksi sedang berjalan" di seluruh berkas ini
+        (`_play_tool_anim` mengisinya, `tick` menghabiskannya), jadi tidak ada
+        keadaan baru yang perlu dijaga sinkron: kalau aksinya jalan, alatnya
+        keluar; kalau tidak, tangan kosong. Identitas alat yang dipilih
+        sekarang dibawa oleh roda ikon di HUD (game/panels.py).
+
+        Perhatikan urutan di `tick()`: `_attack_anim` DIKURANGI sebelum
+        fungsi ini dipanggil, jadi frame terakhir animasi sudah bernilai 0 —
+        itulah gunanya `_ALAT_EKOR`.
 
         build_tool() sengaja membuat Entity + Mesh baru tiap kali, tanpa cache.
         Itu bukan pemborosan: Mesh Ursina adalah NodePath Panda3D yang hanya
@@ -429,31 +648,96 @@ class Player3D(Entity):
         entity kecuali yang terakhir kehilangan geometri. Bug itu sudah dua kali
         terjadi di proyek ini.
         """
+        # 1. Bangun ulang HANYA kalau alat yang dipilih berganti.
         idx = getattr(self.state, 'tool_index', 0)
-        if not force and idx == getattr(self, '_held_tool_idx', None):
-            return
-        self._held_tool_idx = idx
+        if force or idx != getattr(self, '_held_tool_idx', None):
+            self._held_tool_idx = idx
 
-        lama = getattr(self, '_held_tool', None)
-        if lama is not None:
-            from ursina import destroy as _destroy
-            _destroy(lama)
-            self._held_tool = None
+            lama = getattr(self, '_held_tool', None)
+            if lama is not None:
+                from ursina import destroy as _destroy
+                _destroy(lama)
+                self._held_tool = None
 
-        try:
-            from .tool_models import build_tool, kind_for_tool_index
-            kind = kind_for_tool_index(idx)
-            induk = getattr(self, '_pivot_shoulder_r', None) or self
-            alat = build_tool(kind, parent=induk)
+            try:
+                from .tool_models import build_tool, kind_for_tool_index
+                kind = kind_for_tool_index(idx)
+                # Avatar TSO: gantungkan di joint tangan yang sudah di-expose,
+                # bukan di pivot humanoid prosedural. Pivot itu ada, tapi pada
+                # avatar TSO ia tidak menggerakkan satu vertex pun — alatnya
+                # akan tergantung di ruang kosong dan tidak pernah terlihat,
+                # walau logika "tampil saat dipakai" sudah benar sepenuhnya.
+                induk = None
+                va = getattr(self, '_va', None)
+                char = getattr(self, '_char', None)
+                if char is not None:
+                    induk = char.pegangan()
+                elif va is not None and hasattr(va, 'node_tangan'):
+                    try:
+                        induk = va.node_tangan()
+                    except Exception:
+                        induk = None
+                di_tangan = induk is not None
+                if induk is None:
+                    induk = getattr(self, '_pivot_shoulder_r', None) or self
+                alat = build_tool(kind, parent=induk)
+                if alat is not None:
+                    if char is not None:
+                        alat.position = Vec3(*_PEGANG_POS)
+                        alat.rotation = Vec3(*_PEGANG_ROT)
+                        alat.scale = _PEGANG_SKALA
+                    elif di_tangan:
+                        # Digantung di joint TANGAN: titiknya sudah tepat di
+                        # telapak, jadi offset bahu yang lama (-0,34 pada Y)
+                        # justru menjatuhkan alat ke pinggang. Yang tersisa
+                        # cuma menggeser sedikit ke depan telapak dan memiringkan
+                        # gagangnya supaya tidak menembus lengan.
+                        # TIGA tebakan offset dicoba di joint tangan TSO dan
+                        # hanya SATU yang menghasilkan alat yang benar-benar
+                        # terlihat: nilai warisan bahu di bawah. Titik joint
+                        # apa adanya (0,0,0) dan rotasi -72 dua-duanya membuat
+                        # alat hilang dari pandangan — sumbu lokal joint TSO
+                        # bukan sumbu pivot prosedural, dan menebaknya tiga
+                        # kali sudah cukup.
+                        #
+                        # Yang dipakai karena TERUKUR terlihat, bukan karena
+                        # benar secara anatomi: alat masih menggantung terlalu
+                        # rendah, di pinggang alih-alih di telapak. Itu celah
+                        # yang MASIH TERBUKA, dan menutupnya butuh membaca
+                        # orientasi joint dari adult.skel, bukan tebakan
+                        # keempat.
+                        alat.position = Vec3(0.06, -0.34, 0.14)
+                        alat.rotation = Vec3(-12, 0, 6)
+                    else:
+                        # Digenggam sedikit di bawah dan di depan bahu kanan.
+                        alat.position = Vec3(0.06, -0.34, 0.14)
+                        alat.rotation = Vec3(-12, 0, 6)
+                    alat.enabled = bool(getattr(self, '_alat_tampil', False))
+                self._held_tool = alat
+            except Exception as e:
+                import logging
+                logging.warning(f"[ALAT] gagal memasang model alat: {e}")
+                self._held_tool = None
+
+        # 2. Nyalakan/padamkan sesuai aksi yang sedang berjalan.
+        pakai = self._attack_anim > 0.0
+        if pakai:
+            self._alat_ekor = self._ALAT_EKOR
+        elif getattr(self, '_alat_ekor', 0.0) > 0.0:
+            self._alat_ekor = max(0.0, self._alat_ekor - time.dt)
+        tampil = bool(pakai or getattr(self, '_alat_ekor', 0.0) > 0.0)
+
+        # Ditulis hanya saat BERUBAH: `Entity.enabled` menyalakan/mematikan
+        # NodePath lewat show()/hide() tiap kali di-set, dan memanggilnya 60
+        # kali sedetik untuk nilai yang sama adalah kerja Panda3D gratisan.
+        if tampil != getattr(self, '_alat_tampil', None):
+            self._alat_tampil = tampil
+            alat = getattr(self, '_held_tool', None)
             if alat is not None:
-                # Digenggam sedikit di bawah dan di depan bahu kanan.
-                alat.position = Vec3(0.06, -0.34, 0.14)
-                alat.rotation = Vec3(-12, 0, 6)
-            self._held_tool = alat
-        except Exception as e:
-            import logging
-            logging.warning(f"[ALAT] gagal memasang model alat: {e}")
-            self._held_tool = None
+                try:
+                    alat.enabled = tampil
+                except Exception:
+                    pass
 
     def _escape_to_walkable(self, tx: int, tz: int, max_r: int = 8) -> bool:
         """Pindahkan pemain ke tile terdekat yang bisa dijalani.
@@ -481,6 +765,10 @@ class Player3D(Entity):
     def tick(self, dt: float = None, panels=None):
         if dt is None:
             dt = time.dt
+        # Bayangan dikunci ke permukaan tanah, bukan ke badan pemain. Dengan
+        # y lokal tetap 0,02 ia mendarat di y dunia 0,92 — 68 cm di atas
+        # rumput — dan terbaca sebagai cakram gelap melayang setinggi lutut.
+        # Dikunci per frame karena pemain berpindah scene.
         s = self.state
         if self._invuln > 0:
             self._invuln = max(0, self._invuln - dt * 1000)
@@ -502,6 +790,11 @@ class Player3D(Entity):
         # Alat di tangan mengikuti pilihan pemain (murah: keluar cepat kalau sama)
         self.refresh_held_tool()
 
+        # Umpan yang sedang menggantung. Keluar di baris pertama kalau tidak ada
+        # yang dipancing, jadi ongkosnya nol untuk pemain yang tidak memancing.
+        if panels is not None:
+            self.interaction_controller.tick_fishing(dt, panels)
+
         # ── WASD MOVEMENT (kamera-relative isometric) ──────────────────────
         dx_in, dz_in = 0.0, 0.0
         if held_keys['w'] or held_keys['up arrow']:    dz_in += 1
@@ -509,12 +802,23 @@ class Player3D(Entity):
         if held_keys['a'] or held_keys['left arrow']:  dx_in -= 1
         if held_keys['d'] or held_keys['right arrow']: dx_in += 1
 
+        # Aksi perawatan menyerah begitu pemain memilih jalan. Aksi yang
+        # mengunci pemain sampai selesai adalah cara tercepat membuat orang
+        # merasa game-nya rusak — pelajaran yang sudah dibayar dua kali di
+        # proyek ini ("jalan saja tidak bisa").
+        if (dx_in or dz_in) and self._care_anim is not None:
+            self._care_anim.batal()
+
         is_moving_wasd = False
         run = held_keys['shift'] and s.energy > 0
         
         # Sapoe Terbang flying speed boost!
         fly_boost = 2.2 if getattr(self, '_is_flying', False) else 1.0
-        spd_factor = (PLAYER_RUN_MULTIPLIER if run else 1.0) * fly_boost
+        # Menunggang HARUS terasa lebih cepat, kalau tidak ia cuma pose duduk.
+        # 1,75x dipilih supaya berlari (1,6x) masih lebih lambat daripada
+        # menunggang santai — kalau tidak, kuda jadi hiasan.
+        kuda_boost = 1.75 if getattr(self, '_tunggangan', None) is not None else 1.0
+        spd_factor = (PLAYER_RUN_MULTIPLIER if run else 1.0) * fly_boost * kuda_boost
         max_speed = self.speed * spd_factor
         if getattr(self, '_slide_active_ms', 0) > 0:
             max_speed = max(max_speed, 38.0)
@@ -554,54 +858,37 @@ class Player3D(Entity):
             # apa pun parent-nya. Tidak ada tanda yang perlu ditebak.
             try:
                 from direct.showbase.ShowBaseGlobal import base as _p3d
-                _q = _p3d.cam.getQuat(_p3d.render)
-                _f, _r = _q.getForward(), _q.getRight()
-                # Maju DINEGASIKAN: kamera Ursina menghadap ke arah berlawanan
-                # dengan sumbu +Z Ursina yang dipakai posisi entity, jadi
-                # getForward() menunjuk menjauhi layar-atas. Sumbu kanan tidak
-                # kena efek ini. Keduanya diverifikasi pada yaw 0/90/215 lewat
-                # proyeksi lensa di _bench/probes/probe_screen.py.
-                # DIPERBAIKI 2026-10-04. Dua baris ini dulu membaca komponen
-                # (.x, .y) dan menegasikan yang maju:
-                #     fwd_x, fwd_z = -_f.x, -_f.y
-                #     right_x, right_z = _r.x, _r.y
-                # Alasan yang ditulis dulu -- "Panda3D Z-up: y mendatar" --
-                # tidak berlaku di sini. `getQuat(render)` relatif terhadap
-                # AKAR URSINA, dan di Ursina sumbu mendatar adalah x dan z
-                # sementara y adalah sumbu ATAS. Jadi yang dibaca dulu justru
-                # komponen vertikal, dan basisnya ikut miring.
+                from panda3d.core import Point2 as _P2, Point3 as _P3
+
+                # Basisnya diambil dari LENSA, bukan dari sumbu quaternion.
                 #
-                # Diukur di _bench/probes/probe_basis_kamera.py pada delapan
-                # yaw, dibandingkan dengan basis layar yang diturunkan dari
-                # posisi kamera (bukan dari tanda yang ditebak):
+                # Sebelumnya basis diturunkan dari getForward()/getRight() lalu
+                # tandanya disetel sampai "terasa benar". Itu gagal dua kali,
+                # dan terakhir gagal karena `_f.y` — komponen TEGAK di sistem
+                # `y-up-left` yang dipasang Ursina (window.py:24) — dipakai
+                # sebagai sumbu mendatar. Akibatnya pada pitch 34° nilainya
+                # selalu negatif berapa pun yaw: W menarik pemain ke arah
+                # kamera dan yaw kamera nyaris tidak berpengaruh.
                 #
-                #   yaw    (.x,.y) dinegasikan       (.x,.z) apa adanya
-                #     0    tepat                     tepat
-                #    45    91,4 deg menyimpang       tepat
-                #    90   146,0 deg, "kanan" NOL     tepat
-                #   135   178,6 deg menyimpang       tepat
-                #   180   180,0 deg TERBALIK         tepat
-                #   225   178,6 deg menyimpang       tepat
-                #   270   146,0 deg menyimpang       tepat
-                #   315    91,4 deg menyimpang       tepat
-                #
-                # dot(maju, kanan) dulu sampai +-0,829: basis yang seharusnya
-                # tegak lurus miring sampai 56 derajat. Dengan (.x,.z) dot =
-                # 0,000 di kedelapan yaw. Pada yaw 90 dan 270 vektor "kanan"
-                # yang lama RUNTUH jadi (0,0) lalu jatuh ke cadangan (1,0) --
-                # itu sebabnya A/D selalu bergerak di sumbu X apa pun arah
-                # kamera.
-                #
-                # Kenapa yaw 0 dulu terasa benar: di sana, dan HANYA di sana,
-                # kedua rumus memberi angka yang sama. Itu sebabnya bug ini
-                # selamat dari dua kali perbaikan tanda -- yang diuji selalu
-                # yaw awal.
-                #
-                # Dijaga oleh pemeriksaan `arah_maju` di tools/regress.py, yang
-                # menguji PERILAKU (tekan W, ukur perpindahan) dan bukan rumus,
-                # supaya ia tidak bisa ikut salah bersama kode ini.
-                fwd_x, fwd_z = _f.x, _f.z
-                right_x, right_z = _r.x, _r.z
+                # lens.extrude() menjawab pertanyaan yang sebenarnya ingin
+                # dijawab — "arah dunia mana yang MASUK ke layar, dan mana yang
+                # ke KANAN layar" — dalam istilah layar itu sendiri. Tidak ada
+                # konvensi sumbu, tangan kiri/kanan, atau tanda yang perlu
+                # ditebak, sehingga tidak ada yang bisa terbalik lagi ketika
+                # ada yang menyentuh kamera. Diverifikasi pada yaw 0/90/215 di
+                # tools/probe_arah.py.
+                _lens, _cam, _rend = _p3d.camLens, _p3d.cam, _p3d.render
+                _n, _tengah = _P3(), _P3()
+                _lens.extrude(_P2(0, 0), _n, _tengah)      # sinar tengah layar
+                _n2, _kanan = _P3(), _P3()
+                _lens.extrude(_P2(1, 0), _n2, _kanan)      # sinar tepi kanan
+                _w0 = _rend.getRelativePoint(_cam, _n)
+                _wt = _rend.getRelativePoint(_cam, _tengah)
+                _wr = _rend.getRelativePoint(_cam, _kanan)
+                # Komponen tegak dibuang: pemain berjalan di bidang tanah,
+                # tidak mengikuti kemiringan kamera.
+                fwd_x, fwd_z = _wt.x - _w0.x, _wt.z - _w0.z
+                right_x, right_z = _wr.x - _wt.x, _wr.z - _wt.z
             except Exception:
                 # Cadangan kalau base belum ada (mis. di unit test murni).
                 # BELUM TERVERIFIKASI: probe arah menempuh jalur Panda3D di
@@ -636,9 +923,26 @@ class Player3D(Entity):
             if run:
                 s.energy = max(0, s.energy - SPRINT_ENERGY_DRAIN * dt)
 
-        # Apply friction
-        self.velocity_x = lerp(self.velocity_x, 0, FRICTION * dt)
-        self.velocity_z = lerp(self.velocity_z, 0, FRICTION * dt)
+        # Gesekan sebagai PELURUHAN EKSPONENSIAL, bukan lerp.
+        #
+        # Versi lerp-nya adalah sebab sebenarnya dari "WASD terbalik" yang
+        # dikejar berkali-kali dengan membalik tanda di basis kamera —
+        # padahal basisnya tidak pernah salah. lerp(v, 0, FRICTION*dt)
+        # menjadi v*(1 - FRICTION*dt); dengan FRICTION=14 faktor itu melewati
+        # 1,0 begitu dt > 0,071 detik, yaitu di bawah 14 FPS. Di bawah ambang
+        # itu hasilnya BERTANDA TERBALIK dari kecepatan yang baru saja
+        # ditambahkan input — pada dt≈0,14 s (7 FPS) tepat -1,0, jadi tiap
+        # frame kecepatan dibalik utuh dan pemain melawan tombolnya sendiri.
+        # Game ini berjalan 4-29 FPS, jadi separuh waktu ia ada di wilayah itu.
+        # Terukur di tools/probe_arah.py: fwd/right sudah benar (+0,+1)/(+1,+0)
+        # sementara kecepatan hasilnya justru negatif.
+        #
+        # exp(-k*dt) tidak pernah berpindah tanda, tidak pernah melewati nol,
+        # dan memberi peluruhan yang SAMA per satuan waktu di frame rate mana
+        # pun — 60 FPS dan 8 FPS terasa sama, bukan cuma tidak rusak.
+        _gesek = math.exp(-FRICTION * dt)
+        self.velocity_x *= _gesek
+        self.velocity_z *= _gesek
 
         # Clamp max speed
         v_mag = math.sqrt(self.velocity_x**2 + self.velocity_z**2)
@@ -739,7 +1043,18 @@ class Player3D(Entity):
 
         # Animation Handling
         if getattr(self, '_is_vitaboy', False) and hasattr(self, '_va') and self._va:
-            if getattr(self, '_slide_active_ms', 0) > 0:
+            if getattr(self, '_tunggangan', None) is not None:
+                # Menunggang HARUS diperiksa lebih dulu daripada bergerak.
+                # Cabang `moving_now` di bawah menyetel `a2o-walking-loop`, dan
+                # ia berjalan tiap frame — jadi pose duduk yang dipasang saat
+                # naik langsung ditimpa pose BERJALAN pada frame berikutnya.
+                # Itulah kenapa penunggang kita berkaki lurus menggantung
+                # sementara penunggang di patokan berlutut menekuk: yang
+                # terlihat selama ini bukan pose berkuda sama sekali.
+                self._va.set_animation('a2o-kart-ride')
+                self._was_moving = False
+                self._va.speed = 1.0
+            elif getattr(self, '_slide_active_ms', 0) > 0:
                 self._va.set_animation('a2o-slide-normal')
                 self._was_moving = False
                 self._va.speed = 1.0
@@ -765,25 +1080,18 @@ class Player3D(Entity):
             if not hasattr(self, '_walk_t'):
                 self._walk_t = 0.0
 
-            # Floating halo ring and cube rotation & bobbing
-            if hasattr(self, '_halo_ring') and self._halo_ring:
-                self._halo_ring.rotation_y += dt * 50
-                self._halo_cube.rotation_x += dt * 70
-                self._halo_cube.rotation_y += dt * 90
-                self._halo_ring.y = 0.45 + math.sin(self._walk_t * 2.0) * 0.02
-                self._halo_cube.y = 0.70 + math.cos(self._walk_t * 2.0) * 0.03
 
             if getattr(self, '_slide_active_ms', 0) > 0:
                 # Slide pose for Voxel chibi
-                self.body.rotation_x = lerp(self.body.rotation_x, -35, dt * 15)
-                self.body.y = lerp(self.body.y, _GH + 0.8, dt * 15)
+                self.body.rotation_x = _menuju(self.body.rotation_x, -35, 15, dt)
+                self.body.y = _menuju(self.body.y, _GH + 0.8, 15, dt)
                 if hasattr(self, '_pivot_hip_l') and self._pivot_hip_l:
-                    self._pivot_hip_l.rotation_x = lerp(self._pivot_hip_l.rotation_x, 90, dt * 15)
-                    self._pivot_hip_r.rotation_x = lerp(self._pivot_hip_r.rotation_x, 90, dt * 15)
-                    self._pivot_knee_l.rotation_x = lerp(self._pivot_knee_l.rotation_x, 90, dt * 15)
-                    self._pivot_knee_r.rotation_x = lerp(self._pivot_knee_r.rotation_x, 90, dt * 15)
-                    self._pivot_shoulder_l.rotation_x = lerp(self._pivot_shoulder_l.rotation_x, -25, dt * 15)
-                    self._pivot_shoulder_r.rotation_x = lerp(self._pivot_shoulder_r.rotation_x, -25, dt * 15)
+                    self._pivot_hip_l.rotation_x = _menuju(self._pivot_hip_l.rotation_x, 90, 15, dt)
+                    self._pivot_hip_r.rotation_x = _menuju(self._pivot_hip_r.rotation_x, 90, 15, dt)
+                    self._pivot_knee_l.rotation_x = _menuju(self._pivot_knee_l.rotation_x, 90, 15, dt)
+                    self._pivot_knee_r.rotation_x = _menuju(self._pivot_knee_r.rotation_x, 90, 15, dt)
+                    self._pivot_shoulder_l.rotation_x = _menuju(self._pivot_shoulder_l.rotation_x, -25, 15, dt)
+                    self._pivot_shoulder_r.rotation_x = _menuju(self._pivot_shoulder_r.rotation_x, -25, 15, dt)
             elif getattr(self, '_is_flying', False):
                 # Flying pose for Voxel chibi
                 self._walk_t += dt * 3.0
@@ -791,26 +1099,62 @@ class Player3D(Entity):
                 
                 # Bobbing body
                 bob = math.sin(t) * 0.05
-                self.body.y = (_GH + 1.42) + bob
-                self._pivot_neck.y = _GH + 1.89 + bob
-                self._pivot_shoulder_l.y = _GH + 1.55 + bob
-                self._pivot_shoulder_r.y = _GH + 1.55 + bob
+                self.body.y = self._Y_BADAN + bob
+                self._pivot_neck.y = self._Y_KEPALA + bob
+                self._pivot_shoulder_l.y = self._Y_BAHU + bob
+                self._pivot_shoulder_r.y = self._Y_BAHU + bob
                 
                 # sitting-flying pose
                 if hasattr(self, '_pivot_hip_l') and self._pivot_hip_l:
-                    self._pivot_hip_l.rotation_x = lerp(self._pivot_hip_l.rotation_x, 65, dt * 8)
-                    self._pivot_hip_r.rotation_x = lerp(self._pivot_hip_r.rotation_x, 65, dt * 8)
-                    self._pivot_knee_l.rotation_x = lerp(self._pivot_knee_l.rotation_x, 40, dt * 8)
-                    self._pivot_knee_r.rotation_x = lerp(self._pivot_knee_r.rotation_x, 40, dt * 8)
-                    self._pivot_shoulder_l.rotation_x = lerp(self._pivot_shoulder_l.rotation_x, -40, dt * 8)
-                    self._pivot_shoulder_r.rotation_x = lerp(self._pivot_shoulder_r.rotation_x, -40, dt * 8)
+                    self._pivot_hip_l.rotation_x = _menuju(self._pivot_hip_l.rotation_x, 65, 8, dt)
+                    self._pivot_hip_r.rotation_x = _menuju(self._pivot_hip_r.rotation_x, 65, 8, dt)
+                    self._pivot_knee_l.rotation_x = _menuju(self._pivot_knee_l.rotation_x, 40, 8, dt)
+                    self._pivot_knee_r.rotation_x = _menuju(self._pivot_knee_r.rotation_x, 40, 8, dt)
+                    self._pivot_shoulder_l.rotation_x = _menuju(self._pivot_shoulder_l.rotation_x, -40, 8, dt)
+                    self._pivot_shoulder_r.rotation_x = _menuju(self._pivot_shoulder_r.rotation_x, -40, 8, dt)
                     
                     if hasattr(self, '_pivot_elbow_l') and self._pivot_elbow_l:
-                        self._pivot_elbow_l.rotation_x = lerp(self._pivot_elbow_l.rotation_x, -25, dt * 8)
-                        self._pivot_elbow_r.rotation_x = lerp(self._pivot_elbow_r.rotation_x, -25, dt * 8)
+                        self._pivot_elbow_l.rotation_x = _menuju(self._pivot_elbow_l.rotation_x, -25, 8, dt)
+                        self._pivot_elbow_r.rotation_x = _menuju(self._pivot_elbow_r.rotation_x, -25, 8, dt)
                 
-                self.body.rotation_x = lerp(self.body.rotation_x, 15, dt * 8)
+                self.body.rotation_x = _menuju(self.body.rotation_x, 15, 8, dt)
                 self.body.rotation_z = math.sin(t) * 3  # gentle sway
+            elif getattr(s, 'menunggang', ''):
+                # Pose menunggang. Yang membuat sebuah pose terbaca sebagai
+                # MENUNGGANG dan bukan sekadar berdiri di atas kuda adalah dua
+                # hal, dan dua-duanya harus ada:
+                #   1. kaki MENGANGKANG — paha dibuka ke samping (rotation_z),
+                #      bukan cuma ditekuk ke depan. Tanpa ini kedua kaki
+                #      berimpit di tengah punggung kuda dan pemain terlihat
+                #      duduk menyamping di atas peti.
+                #   2. tangan ke depan memegang tali kendali, sikunya tertekuk.
+                # Badan ikut naik-turun mengikuti langkah kuda saat bergerak,
+                # dan hampir diam saat kuda berhenti — deraknya yang membuat
+                # kecepatan 1,9x terasa, bukan angkanya.
+                self._walk_t += dt * (3.0 + (9.0 if moving_now else 0.0))
+                t = self._walk_t
+                derak = math.sin(t) * (0.055 if moving_now else 0.012)
+
+                if hasattr(self, '_pivot_hip_l') and self._pivot_hip_l:
+                    self._pivot_hip_l.rotation_x = _menuju(self._pivot_hip_l.rotation_x, 62, 9, dt)
+                    self._pivot_hip_r.rotation_x = _menuju(self._pivot_hip_r.rotation_x, 62, 9, dt)
+                    self._pivot_hip_l.rotation_z = _menuju(self._pivot_hip_l.rotation_z, 24, 9, dt)
+                    self._pivot_hip_r.rotation_z = _menuju(self._pivot_hip_r.rotation_z, -24, 9, dt)
+                    if hasattr(self, '_pivot_knee_l') and self._pivot_knee_l:
+                        self._pivot_knee_l.rotation_x = _menuju(self._pivot_knee_l.rotation_x, 55, 9, dt)
+                        self._pivot_knee_r.rotation_x = _menuju(self._pivot_knee_r.rotation_x, 55, 9, dt)
+                    self._pivot_shoulder_l.rotation_x = _menuju(self._pivot_shoulder_l.rotation_x, -58, 9, dt)
+                    self._pivot_shoulder_r.rotation_x = _menuju(self._pivot_shoulder_r.rotation_x, -58, 9, dt)
+                    if hasattr(self, '_pivot_elbow_l') and self._pivot_elbow_l:
+                        self._pivot_elbow_l.rotation_x = _menuju(self._pivot_elbow_l.rotation_x, -35, 9, dt)
+                        self._pivot_elbow_r.rotation_x = _menuju(self._pivot_elbow_r.rotation_x, -35, 9, dt)
+
+                self.body.rotation_x = _menuju(self.body.rotation_x, 10, 9, dt)
+                self.body.rotation_z = 0
+                self.body.y = self._Y_BADAN + derak
+                self._pivot_neck.y = self._Y_KEPALA + derak
+                self._pivot_shoulder_l.y = self._Y_BAHU + derak
+                self._pivot_shoulder_r.y = self._Y_BAHU + derak
             elif moving_now:
                 # Scale walk animation frequency based on actual velocity
                 speed_ratio = v_mag / max(0.1, self.speed)
@@ -824,6 +1168,9 @@ class Player3D(Entity):
                     self._pivot_shoulder_r.rotation_x = swing
                     self._pivot_hip_l.rotation_x = swing
                     self._pivot_hip_r.rotation_x = -swing
+                    # Tutup kembali kaki mengangkang warisan pose menunggang.
+                    self._pivot_hip_l.rotation_z = _menuju(self._pivot_hip_l.rotation_z, 0, 12, dt)
+                    self._pivot_hip_r.rotation_z = _menuju(self._pivot_hip_r.rotation_z, 0, 12, dt)
 
                     # Elbows (Bend slightly when swinging forward)
                     if hasattr(self, '_pivot_elbow_l') and self._pivot_elbow_l:
@@ -839,37 +1186,67 @@ class Player3D(Entity):
                     lean = 5.0 + speed_ratio * 15.0  # Dynamic lean based on speed (lean forward more when running)
                     self.body.rotation_x = lean
                     bob = abs(math.sin(t)) * (0.08 + speed_ratio * 0.08)  # Dynamic bobbing based on speed
-                    self.body.y = (_GH + 1.42) + bob
-                    self._pivot_neck.y = _GH + 1.89 + bob
-                    self._pivot_shoulder_l.y = _GH + 1.55 + bob
-                    self._pivot_shoulder_r.y = _GH + 1.55 + bob
+                    self.body.y = self._Y_BADAN + bob
+                    self._pivot_neck.y = self._Y_KEPALA + bob
+                    self._pivot_shoulder_l.y = self._Y_BAHU + bob
+                    self._pivot_shoulder_r.y = self._Y_BAHU + bob
             else:
                 # Idle bobbing
                 self._walk_t += dt * 1.8
                 t = self._walk_t
                 if hasattr(self, '_pivot_hip_l') and self._pivot_hip_l:
-                    self._pivot_hip_l.rotation_x = lerp(self._pivot_hip_l.rotation_x, 0, dt * 10)
-                    self._pivot_hip_r.rotation_x = lerp(self._pivot_hip_r.rotation_x, 0, dt * 10)
-                    self._pivot_shoulder_l.rotation_x = lerp(self._pivot_shoulder_l.rotation_x, 0, dt * 10)
-                    self._pivot_shoulder_r.rotation_x = lerp(self._pivot_shoulder_r.rotation_x, 0, dt * 10)
+                    self._pivot_hip_l.rotation_x = _menuju(self._pivot_hip_l.rotation_x, 0, 10, dt)
+                    self._pivot_hip_r.rotation_x = _menuju(self._pivot_hip_r.rotation_x, 0, 10, dt)
+                    # Paha dibuka ke samping HANYA oleh pose menunggang, jadi
+                    # di sinilah ia ditutup lagi. Tanpa dua baris ini pemain
+                    # tetap mengangkang selamanya setelah turun dari kuda:
+                    # tidak ada satu pun cabang animasi lain yang menyentuh
+                    # rotation_z pinggul.
+                    self._pivot_hip_l.rotation_z = _menuju(self._pivot_hip_l.rotation_z, 0, 10, dt)
+                    self._pivot_hip_r.rotation_z = _menuju(self._pivot_hip_r.rotation_z, 0, 10, dt)
+                    self._pivot_shoulder_l.rotation_x = _menuju(self._pivot_shoulder_l.rotation_x, 0, 10, dt)
+                    self._pivot_shoulder_r.rotation_x = _menuju(self._pivot_shoulder_r.rotation_x, 0, 10, dt)
 
                     if hasattr(self, '_pivot_elbow_l') and self._pivot_elbow_l:
-                        self._pivot_elbow_l.rotation_x = lerp(self._pivot_elbow_l.rotation_x, 0, dt * 10)
-                        self._pivot_elbow_r.rotation_x = lerp(self._pivot_elbow_r.rotation_x, 0, dt * 10)
+                        self._pivot_elbow_l.rotation_x = _menuju(self._pivot_elbow_l.rotation_x, 0, 10, dt)
+                        self._pivot_elbow_r.rotation_x = _menuju(self._pivot_elbow_r.rotation_x, 0, 10, dt)
                     if hasattr(self, '_pivot_knee_l') and self._pivot_knee_l:
-                        self._pivot_knee_l.rotation_x = lerp(self._pivot_knee_l.rotation_x, 0, dt * 10)
-                        self._pivot_knee_r.rotation_x = lerp(self._pivot_knee_r.rotation_x, 0, dt * 10)
+                        self._pivot_knee_l.rotation_x = _menuju(self._pivot_knee_l.rotation_x, 0, 10, dt)
+                        self._pivot_knee_r.rotation_x = _menuju(self._pivot_knee_r.rotation_x, 0, 10, dt)
 
-                    self.body.rotation_x = lerp(self.body.rotation_x, 0, dt * 10)
+                    self.body.rotation_x = _menuju(self.body.rotation_x, 0, 10, dt)
                     breathe = math.sin(t) * 0.015
-                    self.body.y = (_GH + 1.42) + breathe
-                    self._pivot_neck.y = _GH + 1.89 + breathe
-                    self._pivot_shoulder_l.y = _GH + 1.55 + breathe
-                    self._pivot_shoulder_r.y = _GH + 1.55 + breathe
+                    self.body.y = self._Y_BADAN + breathe
+                    self._pivot_neck.y = self._Y_KEPALA + breathe
+                    self._pivot_shoulder_l.y = self._Y_BAHU + breathe
+                    self._pivot_shoulder_r.y = self._Y_BAHU + breathe
+
+        char = getattr(self, '_char', None)
+        if char is not None:
+            char.update(dt, v_mag if moving_now else 0.0)
+
+        # ── Mesh-swap animation (jika model player memakai mesh swap) ──
+        if getattr(self, '_use_mesh_swap', False):
+            names = getattr(self, '_pose_names', None)
+            if names:
+                if moving_now:
+                    n_walk = max(1, len(names) - 1)
+                    frame = 1 + (int(getattr(self, '_walk_t', 0.0) * 0.5) % n_walk)
+                else:
+                    frame = 0
+                if frame != getattr(self, '_pose_cur', -1):
+                    try:
+                        from .entities import load_model_file
+                        mdl = load_model_file(names[frame])
+                        if mdl is not None:
+                            self.model = mdl
+                            self._pose_cur = frame
+                    except Exception:
+                        pass
 
         # Animasi alat/serangan — per mode
         if self._attack_anim > 0:
-            t  = self._attack_anim / 350.0
+            t  = self._attack_anim / float(getattr(self, '_anim_dur', 350.0) or 350.0)
             # Gaya voxel: ayunan kaku linier (segitiga 0 -> 1 -> 0), bukan gelombang sinus halus
             st = 1.0 - abs(t * 2.0 - 1.0)
             m  = self._anim_mode
@@ -908,14 +1285,33 @@ class Player3D(Entity):
                 self._pivot_shoulder_r.rotation_x = -85 * st
                 self._pivot_shoulder_l.rotation_x = -85 * st
                 if va_root: va_root.rotation_x = -45 * st
+            elif m == 'gosok':
+                # Menggosok bukan mengayun. Yang membedakan keduanya BOLAK-BALIK
+                # berulang, jadi lengannya diayun tiga kali dalam satu aksi
+                # (sin 6*pi = 3 siklus penuh) alih-alih sekali naik-turun.
+                # Badan condong sedikit dan TETAP condong sepanjang aksi —
+                # menyikat itu bertumpu, bukan memukul.
+                sapu = math.sin(t * math.pi * 6.0)
+                self._pivot_shoulder_r.rotation_x = -55 + 28 * sapu
+                self._pivot_shoulder_l.rotation_x = -20
+                self.body.rotation_x = 12
+                if va_root: va_root.rotation_x = -25
+            elif m == 'bicara':
+                # Bicara: satu tangan terangkat sebentar lalu turun, badan
+                # tegak. Tidak ada ayunan sama sekali — gerakan yang terlalu
+                # besar membuat menyapa tetangga terlihat seperti melempar.
+                self._pivot_shoulder_r.rotation_x = -32 * st
+                self._pivot_shoulder_r.rotation_z = -14 * st
+                self._pivot_shoulder_l.rotation_x = 0
+                if va_root: va_root.rotation_x = 0
         else:
             self._pivot_shoulder_r.rotation_z = 0
             if moving_now and not getattr(self, '_is_vitaboy', True):
                 pass # let walk cycle govern rotation_x
             else:
-                self._pivot_shoulder_r.rotation_x = lerp(self._pivot_shoulder_r.rotation_x, 0, dt * 10)
-                self._pivot_shoulder_l.rotation_x = lerp(self._pivot_shoulder_l.rotation_x, 0, dt * 10)
-            self.body.rotation_x = lerp(self.body.rotation_x, 0, dt * 10)
+                self._pivot_shoulder_r.rotation_x = _menuju(self._pivot_shoulder_r.rotation_x, 0, 10, dt)
+                self._pivot_shoulder_l.rotation_x = _menuju(self._pivot_shoulder_l.rotation_x, 0, 10, dt)
+            self.body.rotation_x = _menuju(self.body.rotation_x, 0, 10, dt)
             if getattr(self, '_is_vitaboy', False) and hasattr(self, '_va') and self._va:
                 self._va.root_entity.rotation_x = 0
 
@@ -933,11 +1329,17 @@ class Player3D(Entity):
                 del s.buffs[buff_name]
 
         # Invuln: kedip merah
+        # Alpha 0,4 di cabang TANPA invuln adalah salin-tempel dari cabang
+        # kedipnya: hasilnya dada pemain 60% tembus pandang sepanjang permainan,
+        # bukan cuma selama kebal. Yang kedip tetap kedip; yang tidak, pejal.
         if self._invuln > 0:
             blink = int(self._invuln / 80) % 2 == 0
-            self.body.color = color.rgb(255, 80, 80, 102) if blink else Vec4(self._shirt_col[0], self._shirt_col[1], self._shirt_col[2], 0.4)
+            self.body.color = (color.rgb(255, 80, 80, 102) if blink else
+                               Vec4(self._shirt_col[0], self._shirt_col[1],
+                                    self._shirt_col[2], 0.4))
         else:
-            self.body.color = Vec4(self._shirt_col[0], self._shirt_col[1], self._shirt_col[2], 0.4)
+            self.body.color = Vec4(self._shirt_col[0], self._shirt_col[1],
+                                   self._shirt_col[2], 1.0)
 
         # Sync state
         s.player_x = self.x / TS
@@ -948,7 +1350,15 @@ class Player3D(Entity):
         tx_i, ty_i = int(round(self.x / TS)), int(round(self.z / TS))
         target_y = self.world.get_surface_height(tx_i, ty_i)
         
-        if getattr(self, '_is_flying', False):
+        if getattr(s, 'menunggang', ''):
+            # Duduk di punggung kuda. Dipisah dari cabang melompat DAN dari
+            # cabang terbang: menunggang tidak boleh jatuh (gravitasi mati),
+            # tapi juga tidak melayang bebas — ia tetap mengikuti kontur tanah,
+            # cuma 0,60 m lebih tinggi.
+            self.y = lerp(self.y, target_y + TINGGI_SADEL, min(1.0, dt * 10.0))
+            self.velocity_y = 0.0
+            self.is_jumping = False
+        elif getattr(self, '_is_flying', False):
             # Float at 1.25 units smoothly above surface with sin bobbing
             if not hasattr(self, '_fly_time'):
                 self._fly_time = 0.0
@@ -979,8 +1389,126 @@ class Player3D(Entity):
             spark_col = _rng_mod.choice([color.rgb(0, 255, 255), color.rgb(255, 0, 255), color.rgb(255, 255, 0)])
             self._fx_burst(tail_x, tail_y, tail_z, spark_col, n=1, spread=0.1)
 
+        # Menunggang disamakan SESUDAH gerak dihitung dan SEBELUM portal
+        # diperiksa: hewannya harus mendarat di petak yang sama dengan pemain
+        # pada frame yang sama, kalau tidak ia tertinggal satu frame dan
+        # terlihat menyeret di belakang penunggangnya.
+        self._tick_tunggangan(dt)
+
         # Check portals every tick unconditionally so cooldowns don't block standing players
-        self._check_portals(tx_i, ty_i)
+        if self._check_portals(tx_i, ty_i):
+            # Ganti scene MEMBATALKAN aksi perawatan yang sedang berjalan.
+            # Tanpa ini `_saat_frame` terus memanggil `_maju()`, yang menulis
+            # player.x/z tanpa syarat — jadi pemain dipaku di koordinat kandang
+            # yang lama selama sisa aksi, berdiri di peta baru sambil memegang
+            # ember, alat HUD-nya hilang, dan memerah sapi yang ada di peta lain.
+            # (care_anim sudah diimpor di tingkat modul — mengimpornya lagi di
+            # sini membuat namanya LOKAL untuk seluruh tick(), dan pemakaian di
+            # bawah jadi UnboundLocalError tiap kali aksi selesai normal.)
+            care_anim.bereskan(self)
+
+        # ── Aksi perawatan: DIJALANKAN TERAKHIR, dan itu disengaja ──────────
+        # Blok animasi di atas melerp tiap sendi kembali ke nol setiap frame
+        # saat pemain diam. Kalau aksi perawatan menulis posenya lebih dulu,
+        # lerp itu akan menghapusnya di frame yang sama dan tidak ada yang
+        # pernah terlihat bergerak. Menulis terakhir = menang.
+        # Kedipan. Mata yang tidak pernah menutup adalah tanda uncanny yang
+        # paling murah dihilangkan, dan `lelah` memakai energi yang sudah ada:
+        # di bawah 30 matanya mulai menyipit, dan itu memberi tahu pemain
+        # keadaannya tanpa satu pun angka di HUD.
+        w = getattr(self, '_wajah', None)
+        if w is not None:
+            w.set_lelah(max(0.0, (30.0 - float(getattr(s, 'energy', 100)))) / 30.0)
+            w.tick(dt)
+
+        if self._care_anim is not None:
+            self._care_anim.update(dt)
+            if self._care_anim.selesai:
+                care_anim.bereskan(self)
+            else:
+                self._care_anim.terapkan(self)
+
+        # Bayangan dikunci ke permukaan tanah DI AKHIR tick, bukan di awal:
+        # kode gerak di atas memindahkan pemain sesudahnya dan menyeret
+        # bayangannya ikut — terukur mendarat di y 0,2269, yaitu 1,3 cm DI
+        # BAWAH tutup rumput (0,24) dan karena itu terkubur lagi.
+        from .bayangan import pin_ke_tanah
+        pin_ke_tanah(getattr(self, '_shadow', None))
+
+    # ── Menunggang ────────────────────────────────────────────────────────
+    # Tinggi duduk di pelana, dalam satuan dunia. Diambil dari tinggi badan
+    # kuda di animal_models (_kuda: badan pada y 1,22, punggung ~1,55).
+    # Diturunkan dari 0,86 setelah membandingkan dengan frame patokan pada
+    # perbesaran yang sama: di sana badan kuda MENUTUPI pinggul dan betis
+    # penunggang, dan yang terlihat cuma badan atas, paha atas, dan sepatu.
+    # Pada 0,86 penunggang kita bertengger di atas punggung dengan seluruh
+    # badan terekspos, dan itu yang membuatnya terbaca sebagai dua model yang
+    # ditumpuk, bukan satu orang yang menunggang.
+    Y_PELANA = 0.76
+
+    def mulai_menunggang(self, hewan):
+        """Naikkan pemain ke punggung `hewan`.
+
+        Hewannya TIDAK di-parent ke pemain dan pemain tidak di-parent ke
+        hewan. Keduanya tetap entity terpisah yang posisinya disamakan tiap
+        frame — karena AI hewan, collider pemain, dan kamera semuanya sudah
+        membaca posisi masing-masing, dan mem-parent salah satunya membuat
+        ketiganya harus diubah.
+        """
+        self._tunggangan = hewan
+        try:
+            hewan.ai_state = getattr(hewan, 'ai_state', None)
+            hewan._ditunggangi = True
+        except Exception:
+            pass
+        va = getattr(self, '_va', None)
+        if va is not None and getattr(self, '_is_vitaboy', False):
+            try:
+                va.set_animation('a2o-kart-ride')
+            except Exception:
+                pass
+
+    def berhenti_menunggang(self):
+        hewan = getattr(self, '_tunggangan', None)
+        if hewan is not None:
+            try:
+                hewan._ditunggangi = False
+                # Diturunkan satu petak ke samping supaya pemain tidak berdiri
+                # di dalam hewannya sendiri.
+                hewan.x = self.x + TS * 0.9
+            except Exception:
+                pass
+        self._tunggangan = None
+        va = getattr(self, '_va', None)
+        if va is not None and getattr(self, '_is_vitaboy', False):
+            try:
+                va.set_animation('a2a-talk-idle-loop')
+            except Exception:
+                pass
+
+    def _tick_tunggangan(self, dt: float):
+        """Samakan posisi hewan dengan pemain, dan ayunkan kakinya."""
+        hewan = getattr(self, '_tunggangan', None)
+        if hewan is None:
+            return
+        # `logical_*` yang harus disamakan, BUKAN cuma x/z. `sync_visuals()`
+        # meng-lerp x/z menuju logical tiap frame, jadi menulis x/z langsung
+        # akan ditarik balik ke posisi logis lama pada frame berikutnya — dan
+        # yang terlihat adalah kuda yang tertinggal di belakang penunggangnya
+        # atau, kalau jaraknya jauh, penunggang tanpa kuda sama sekali.
+        hewan.logical_x = self.x / TS
+        hewan.logical_y = self.z / TS
+        hewan.x = self.x
+        hewan.z = self.z
+        hewan.rotation_y = self.rotation_y
+        # Pemain duduk di pelana. `y` dipakai langsung, bukan lewat
+        # set_tile_pos, karena set_tile_pos memaksa y = 0.
+        self.y = GROUND_H + self.Y_PELANA
+        laju = math.hypot(getattr(self, 'velocity_x', 0.0), getattr(self, 'velocity_z', 0.0))
+        if hasattr(hewan, '_walk_t'):
+            hewan._walk_t += dt * (4.0 + laju * 1.6)
+        if hasattr(hewan, 'ayun_kaki'):
+            hewan.ayun_kaki(dt, laju=min(1.6, 0.5 + laju * 0.25))
 
     def _reset_anim(self):
         for piv in (self._pivot_hip_l, self._pivot_hip_r,
@@ -1146,9 +1674,35 @@ class Player3D(Entity):
         # ── Lore pickup at specific dungeon levels ──
         self.quest_controller.check_dungeon_lore(s.dungeon_level, self)
 
-    def _play_tool_anim(self, mode='swing'):
-        self._attack_anim = 350
+    def _play_tool_anim(self, mode='swing', ms=350):
+        """Mainkan satu pose alat/aksi selama `ms` milidetik.
+
+        Durasinya jadi parameter karena tidak semua aksi selesai dalam 350 ms.
+        Menggosok butuh cukup lama untuk terbaca sebagai BOLAK-BALIK — satu
+        sapuan 350 ms tidak bisa dibedakan dari mengayun.
+        """
+        self._attack_anim = float(ms)
+        self._anim_dur    = float(ms)
         self._anim_mode   = mode
+
+        char = getattr(self, '_char', None)
+        if char is not None:
+            klip = _KLIP_RIG.get(mode)
+            if klip:
+                char.mainkan_sekali(klip)
+            return
+
+        # Avatar TSO tidak digerakkan oleh pivot di bawah — pivot itu milik
+        # humanoid prosedural. Untuk avatar TSO satu-satunya cara membuat aksi
+        # TERLIHAT adalah memutar klip animasinya sendiri.
+        va = getattr(self, '_va', None)
+        if va is not None and getattr(self, '_is_vitaboy', False):
+            klip = _KLIP_TSO.get(mode)
+            if klip:
+                try:
+                    va.set_animation(klip)
+                except Exception:
+                    pass
 
     def _fx_burst(self, wx, wy, wz, col, n=5, spread=0.45, dur=0.38):
         """Partikel ledakan singkat di posisi world — efek visual alat/serangan."""
@@ -1215,7 +1769,9 @@ class Player3D(Entity):
         return tx + dx, ty + dz
 
     def _spend_energy(self, n: int):
-        actual = max(1, round(n * self.state.mood_energy_multiplier()))
+        from .keahlian import punya
+        hemat = 0.75 if punya(self.state, 'kerbau') else 1.0     # Tenaga Kerbau
+        actual = max(1, round(n * hemat * self.state.mood_energy_multiplier()))
         self.state.energy = max(0, self.state.energy - actual)
 
     def _try_sleep(self, panels):

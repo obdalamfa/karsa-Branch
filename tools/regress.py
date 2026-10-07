@@ -19,6 +19,89 @@ bukan pada kemungkinan yang dikarang:
   save_bolak     format save berubah; save lama tidak boleh merusak loader.
   ms_frame       4-29 FPS dan belum pernah diprofil. Dicatat sebagai angka
                  supaya regresi performa terlihat, bukan cuma terasa.
+  hud_muat       HUD terpotong di tepi kanan: jam, tanggal, nama scene, dan
+                 baris kontrol tumbuh melewati tepi layar karena dijangkar di
+                 KIRI pada koordinat mati 0.70/0.60, sementara camera.ui
+                 sebenarnya membentang -aspect/2..+aspect/2. Bertahan lama
+                 justru karena cuma bisa dilihat: tiap screenshot dinilai
+                 dengan mata, dan mata memaafkan. Sekarang jadi angka.
+  hud_terbaca    panel motif terbaca mati sejak awal. Termometernya selalu
+                 ada; yang salah urutan gambarnya — latar panel menang di bin
+                 transparan Panda dan menutupi barnya. Diukur dari PIKSEL
+                 tangkapan layar, bukan dari properti color, supaya "ada di
+                 memori" tidak lagi dianggap sama dengan "terlihat".
+  rumput_catur   rumput luar ruang terbaca sebagai papan catur. Tint ubin
+                 dipilih (tx+ty) % 2 — periode DUA, pola paling teratur yang
+                 bisa dibuat, dan mata mengunci grid-nya sebelum sempat
+                 membacanya sebagai tanah. Diukur sebagai korelasi antara
+                 terang ubin dan paritasnya, jadi "sudah tidak catur" jadi
+                 angka, bukan pendapat.
+  avatar_warna   di mesin tanpa instalasi TSO avatar Vitaboy gagal dimuat dan
+                 warga desa jatuh ke humanoid.obj — mesh yang benar, tapi tanpa
+                 warna sama sekali, jadi semua orang sampai ke layar sebagai
+                 gumpalan PUTIH POLOS. Diperiksa dua-duanya: warnanya benar ADA
+                 di vertex data, DAN shader yang membacanya benar terpasang.
+                 Yang kedua bukan tambahan: shader hasil setShaderAuto() Panda
+                 mengabaikan kolom warna vertex, jadi mesh yang sudah diwarnai
+                 tetap keluar putih tanpa smooth_shader.
+  rumput_lambai  uniform rumput dipindah dari per-entity ke induknya (976
+                 panggilan set_shader_input per frame jadi 2). Kalau nilainya
+                 berhenti sampai ke shader, rumputnya BEKU — dan beku itu
+                 tidak melempar error, tidak menulis log, dan tidak terlihat
+                 di frame diam. Diukur sebagai piksel yang berubah antara dua
+                 nilai grs_time yang jauh.
+  cahaya_global  siang-malam tidak pernah sampai ke permukaan mana pun.
+                 smooth_shader tidak membaca lampu Panda, ia membaca
+                 sm_sun_color/sm_ambient; jembatannya ada dan dipanggil tiap
+                 frame, tapi `default_input` Ursina memasang salinan sm_* di
+                 TIAP entity, dan input entity menimpa input scene. Diukur
+                 sebelum perbaikan: mengubah sm_ambient di scene menggeser
+                 0,00% piksel. Yang berubah malam hari cuma langit dan kabut.
+  otonomi_hidup  `choose_action()` dan `autonomy_candidates()` dibangun lengkap
+                 lalu tidak pernah dipanggil siapa pun — seluruh katalog iklan
+                 di objects.py (kasur, kompor, meja, TV, rak buku, cermin,
+                 dermaga) tidak pernah dibaca satu kali pun. Warga desa memilih
+                 dari daftar mati tiga baris dan tidak pernah melihat
+                 sekelilingnya. Sekarang tersambung, dan cek ini yang menjaga
+                 sambungannya: putus lagi tidak melempar error apa pun.
+  hud_kontras    teks HUD hilang di atas latar terang. Jam putih di scene farm
+                 jam 10 terukur: 95% piksel di kotaknya nyaris putih, karena
+                 bangunan di belakangnya sama putihnya. Teksnya ADA, warnanya
+                 benar, dan tidak satu huruf pun bisa dibaca. Tidak bisa
+                 diperbaiki dengan mengganti warna teks — latar dunia berubah
+                 sepanjang hari dan antar-scene, jadi warna apa pun kalah di
+                 suatu tempat.
+  kanal_jenuh    rumput siang terbaca neon: albedo (148,205,105) sampai ke
+                 layar sebagai (230,255,90) dengan kanal hijau MENTOK, jadi
+                 gradasinya hilang. Dicatat sebagai angka, bukan lulus/gagal.
+  hud_layar      HUD terpotong tepi layar -- jam, tanggal, cuaca, nama scene,
+                 dan baris bantuan lari keluar tepi kanan kalau dipatok ke
+                 angka tetap padahal tepi UI mengikuti rasio layar. panels.py
+                 sudah dibenahi memakai tepi dinamis (_X_L/_X_R dari
+                 window.aspect_ratio, lihat UIManager._pasang_tepi); cek ini
+                 dipertahankan sebagai jaring supaya regresi sejenis tertangkap.
+  arah_wasd      arah WASD terbalik. Kegagalan yang PALING sering kembali di
+                 proyek ini — tiga kali, dan tiap kali "diperbaiki" dengan
+                 membalik tanda sampai terasa benar. Diukur sekali di akhir
+                 lewat tools/probe_arah.py, alat ukur yang sama dengan probe
+                 manual, supaya tidak ada dua kebenaran.
+  bentuk_gua     cutaway dinding ala Sims 1 benar untuk rumah, tapi di gua
+                 dinding BUKAN pembatas ruangan — dinding ADALAH ruangannya.
+                 Aturan lama memangkas 53-72% seluruh dinding gua sekaligus,
+                 menyisakan lapangan datar bertabur tunggul. Diperiksa dua
+                 angka sekaligus: gua tetap berbentuk DAN pemain tidak
+                 tertutup batu; memperbaiki satu saja menukar cacat.
+  panel_wishes   mesin Keinginan (Tahap 4) benar tapi tak terjangkau adalah
+                 kegagalan yang TIDAK terlihat sebagai error — persis yang
+                 terjadi pada husbandry.py. Diperiksa lewat jalur tombol
+                 sungguhan: [p] membuka, [1] berjanji, [6] melupakan,
+                 [a] membeli hadiah, ESC menutup.
+  rumput_hidup   uniform `grs_time` sekarang didorong SEKALI ke `scene`, bukan
+                 ke tiap entity rumput (147x lebih murah). Yang membuatnya aman
+                 cuma satu syarat: tidak boleh ada input per-entity yang
+                 menindihnya. Kalau ada, rumputnya membeku TANPA error — jadi
+                 diukur, lewat tools/probe_rumput.py, dengan menghitung piksel
+                 yang bergerak.
   arah_maju      basis arah gerak membaca komponen sumbu yang salah, jadi WASD
                  menyimpang 91-180 derajat di yaw selain 0. Selamat dari DUA
                  kali perbaikan tanda karena yang diuji selalu yaw awal.
@@ -33,8 +116,10 @@ Keluar dengan kode 1 kalau ada yang GAGAL, supaya bisa dipakai di skrip.
 """
 from __future__ import annotations
 
+import atexit
 import json
 import os
+import shutil
 import sys
 import time
 import traceback
@@ -114,6 +199,30 @@ def cek_frame_kosong(png: Path):
         return _fail(f'frame nyaris polos (warna unik {unik}, dominan {dominan:.0%})')
     return _ok(f'{unik} warna')
 
+
+def cek_kanal_jenuh(png: Path):
+    """Berapa banyak layar yang kanal warnanya mentok 255 (detailnya hilang).
+
+    Diukur karena rumput siang terbaca neon: albedo-nya (148,205,105) tapi yang
+    sampai ke layar (230,255,90) — kanal hijau MENTOK, jadi bayangan dan
+    gradasi di rumput hilang sama sekali dan papan catur di bawahnya berubah
+    jadi dua pita datar. app.py sendiri menulis invarian "ambient + sun x dot
+    <= 100% agar warna tidak overflow putih"; nilai yang dipakai sekarang
+    (amb 95, sun 255) jauh di atas plafon yang dicatat komentarnya (70/185).
+
+    Dicatat sebagai ANGKA, bukan lulus/gagal, seperti ms/frame: yang penting
+    regresinya terlihat. Gagal hanya kalau sudah terang-terangan terbakar.
+    """
+    try:
+        from PIL import Image
+        im = Image.open(png).convert('RGB').resize((160, 90))
+    except Exception as e:
+        return _fail(f'gagal baca png: {e}'), 0.0
+    px = list(im.getdata())
+    jenuh = sum(1 for p in px if max(p) >= 255) / len(px)
+    if jenuh > 0.25:
+        return _fail(f'{jenuh:.0%} layar terbakar (kanal mentok)'), jenuh
+    return _ok(f'{jenuh:.0%}'), jenuh
 
 def cek_bisa_keluar(g):
     """ESC harus mengembalikan mode panel apa pun ke 'hud'.
@@ -318,39 +427,681 @@ def cek_motif_waras(g):
     mood = mv.mood
     if mood != mood or abs(mood) > 1e6:
         return _fail(f'mood tidak terhingga: {mood}')
-    # Peluruhan diuji pada mesin NYATA, tapi tanpa meninggalkan bekas: nilai
-    # kedelapan motif (plus akumulator pecahannya) disalin dulu dan dipulihkan
-    # di `finally`.
+    # Dua sesi menemukan bug yang SAMA di pemeriksa ini secara terpisah: ia
+    # men-tick state hidup dan jalan sekali per scene, jadi di scene ke-14
+    # motifnya sudah diluruhkan 14x4 jam tanpa pernah makan dan pemeriksanya
+    # melaporkan GAGAL karena memakan umpannya sendiri. Cabang livestock
+    # memperbaikinya dengan MEMULIHKAN nilai sesudah tick; versi di bawah
+    # mengujinya pada SALINAN. Yang ini yang dipakai: ia tidak menyentuh state
+    # hidup sama sekali, jadi tidak ada yang perlu dipulihkan dan tidak ada
+    # ketergantungan pada atribut privat `_acc`/`_tick_carry`.
+    # Peluruhan diuji pada SALINAN, bukan pada state yang dipakai game.
     #
-    # Kenapa: pemeriksaan ini memakai mesin motif MILIK STATE YANG SAMA untuk
-    # tiap scene, dan tiap panggilan memajukan 240 menit tanpa memulihkannya.
-    # Laju peluruhan Lapar adalah HUNGER_RATIO * (100 + lapar) -- non-linear,
-    # dan MENUJU NOL saat lapar mendekati dasar -100. Setelah belasan scene
-    # penurunannya tidak lagi mencapai satu poin utuh yang bisa dibukukan
-    # `tick()`, jadi nilainya mendatar: diukur, tick ke-15 memberi
-    # -98,0000 -> -98,0000. Akibatnya `mv.get('lapar') >= sebelum` benar dan
-    # scene TERAKHIR apa pun gagal tanpa sebab nyata -- larian 14 scene menuduh
-    # `swarga`, padahal `swarga` sendirian LULUS. Hasilnya ditentukan urutan
-    # scene, bukan kesehatan motif.
-    #
-    # Dua agen menemukan cacat ini terpisah dan menambalnya berbeda: satu
-    # menyetel ulang `lapar` ke titik netral tiap scene, satu menyalin-dan-
-    # memulihkan. Yang kedua dipakai di sini karena ia tidak mengubah keadaan
-    # yang dipakai pemeriksaan SESUDAHNYA (`save_bolak` membaca state yang
-    # sama); penjelasan rumus di atas datang dari yang pertama.
-    salinan = {m: mv.get(m) for m in MOTIVES}
-    carry, acc = mv._tick_carry, dict(mv._acc)
+    # Kedua cabang memperbaiki bug yang sama — pemeriksaan ini memakai SATU
+    # mesin motif untuk semua scene, tiap panggilan memajukan 240 menit, dan
+    # setelah belasan scene `lapar` menempel di lantai -100 tempat laju
+    # peluruhannya menjadi nol; scene terakhir lalu GAGAL semata-mata karena
+    # berdiri paling belakang di antrean. Cabang dasar menyelesaikannya dengan
+    # mengembalikan `lapar` ke titik netral sebelum diuji. Yang dipakai di sini
+    # menguji salinannya, sehingga mencapai keterurutan yang sama TANPA
+    # menyentuh state hidup yang dipakai pemeriksaan lain di scene yang sama.
+    import copy
     try:
-        mv.add('lapar', 100.0)      # jauhkan dari dasar supaya peluruhan terukur
-        sebelum = mv.get('lapar')
-        mv.tick(240.0)
-        if mv.get('lapar') >= sebelum:
-            return _fail('lapar tidak turun setelah 4 jam-sim')
-    finally:
-        for m, v in salinan.items():
-            setattr(mv, m, v)
-        mv._tick_carry, mv._acc = carry, acc
+        uji = copy.deepcopy(mv)
+    except Exception:
+        uji = mv        # kalau tidak bisa disalin, lebih baik tetap diuji
+    sebelum = uji.get('lapar')
+    uji.tick(240.0)
+    sesudah = uji.get('lapar')
+    if sesudah >= sebelum and sesudah > MOTIVE_MIN + 5.0:
+        return _fail(f'lapar tidak turun setelah 4 jam-sim ({sebelum:.1f} -> {sesudah:.1f})')
+    if sesudah < MOTIVE_MIN - 0.01:
+        return _fail(f'lapar tembus lantai ({sesudah:.1f} < {MOTIVE_MIN})')
     return _ok(f'mood {mood:+.1f}')
+
+
+_HUD_TUNGGAL = (
+    '_time_txt', '_date_txt', '_weather_txt', '_scene_txt', '_gold_txt',
+    '_tool_name', '_seed_txt', '_hp_bar', '_hp_val', '_en_bar', '_en_val',
+    '_buff_txt', '_queue_txt', '_control_hint',
+    '_motive_panel_bg', '_mood_lbl', '_mood_bg', '_mood_fill',
+)
+_HUD_DERET = ('_need_lbl_ents', '_need_bg_ents', '_need_fill_ents',
+              '_hud_lain')
+
+# Palang HUD: kotak kejar yang boleh menimpa LATAR, tapi tidak boleh menimpa
+# satu pun teks. Dipisah dari daftar di atas supaya pemeriksaan tindih tahu
+# mana yang palang dan mana yang tulisan tanpa menebak dari namanya.
+_HUD_PALANG = ('_hp_bar', '_en_bar', '_mood_bg', '_mood_fill')
+_HUD_PALANG_DERET = ('_need_bg_ents', '_need_fill_ents')
+
+
+def cek_hud_muat(g):
+    """Tiap elemen HUD harus muat di layar, dan isi panel harus di dalam panel.
+
+    Dua kegagalan nyata sekaligus. (1) camera.ui membentang
+    -aspect/2..+aspect/2 mendatar, bukan -0.5..0.5; teks kanan dijangkar di
+    KIRI pada x=0.70 lalu tumbuh melewati tepi 0.889, jadi jam, tanggal, nama
+    scene, dan ekor baris kontrol terpotong. (2) tinggi panel SUASANA HATI
+    dihitung dengan rumus tebakan sehingga tepi atasnya jatuh DI BAWAH judul
+    dan judulnya menyembul keluar.
+
+    Diukur lewat getTightBounds di ruang camera.ui — bukan lewat rumus yang
+    sama dengan yang dipakai membangunnya, supaya alat ukurnya tidak ikut
+    salah bersama barang yang diukurnya.
+    """
+    from ursina import camera, window
+    ui = camera.ui
+    ex = window.aspect_ratio / 2
+    EPS = 0.004
+
+    pan = getattr(g, 'panels', None)
+    if pan is None:
+        return _fail('tidak ada UIManager untuk diperiksa')
+    if getattr(pan, 'mode', 'hud') != 'hud':
+        return _ok('mode bukan hud, dilewati')
+
+    def kotak(e):
+        if e is None:
+            return None
+        try:
+            if e.is_hidden():
+                return None
+            tb = e.getTightBounds(ui)
+        except Exception:
+            return None
+        if tb is None:
+            return None
+        lo, hi = tb
+        return (lo.x, hi.x, lo.y, hi.y)
+
+    def elemen():
+        for nama in _HUD_TUNGGAL:
+            yield nama, getattr(pan, nama, None)
+        for nama in _HUD_DERET:
+            for i, e in enumerate(getattr(pan, nama, []) or []):
+                yield f'{nama}[{i}]', e
+
+    luber = []
+    for nama, e in elemen():
+        k = kotak(e)
+        if k is None:
+            continue
+        x0, x1, y0, y1 = k
+        lewat = max(-ex - x0, x1 - ex, -0.5 - y0, y1 - 0.5)
+        if lewat > EPS:
+            luber.append(f'{nama} lewat tepi {lewat:+.3f}')
+
+    # Isi panel motif harus benar-benar di dalam kotak panelnya.
+    pk = kotak(getattr(pan, '_motive_panel_bg', None))
+    if pk:
+        px0, px1, py0, py1 = pk
+        for nama, e in elemen():
+            if nama == '_motive_panel_bg' or not nama.startswith(
+                    ('_mood', '_need')):
+                continue
+            k = kotak(e)
+            if k is None:
+                continue
+            x0, x1, y0, y1 = k
+            lewat = max(px0 - x0, x1 - px1, py0 - y0, y1 - py1)
+            if lewat > EPS:
+                luber.append(f'{nama} keluar panel {lewat:+.3f}')
+
+    # Tidak satu pun TULISAN boleh tertimpa PALANG.
+    #
+    # Ini kegagalan yang benar-benar terkirim, dan dua pemeriksaan HUD yang
+    # sudah ada tidak bisa melihatnya: hud_muat cuma menanyakan apakah elemen
+    # masih di dalam layar dan panelnya, hud_kontras cuma menanyakan apakah
+    # ada sesuatu yang gelap di belakang teks. Angka "100/100" dijangkar di
+    # tepi ATAS teks (origin bawaan Ursina -0.5, 0.5) pada 0,015 di atas sumbu
+    # palang setinggi 0,015 — jadi teksnya tumbuh KE BAWAH masuk ke palangnya
+    # sendiri, dua pertiga tingginya tertutup, di tiap frame sejak HUD dibuat.
+    # Judul SUASANA HATI kena hal yang sama dari palang Mood.
+    def _palang():
+        for nama in _HUD_PALANG:
+            yield nama, getattr(pan, nama, None)
+        for nama in _HUD_PALANG_DERET:
+            for i, e in enumerate(getattr(pan, nama, []) or []):
+                yield f'{nama}[{i}]', e
+
+    from ursina import Text
+    kotak_palang = [(n, kotak(e)) for n, e in _palang()]
+    kotak_palang = [(n, k) for n, k in kotak_palang if k]
+    tindih = []
+    for nama, e in elemen():
+        if not isinstance(e, Text):
+            continue
+        k = kotak(e)
+        if k is None:
+            continue
+        tx0, tx1, ty0, ty1 = k
+        for pnama, (bx0, bx1, by0, by1) in kotak_palang:
+            lebar  = min(tx1, bx1) - max(tx0, bx0)
+            tinggi = min(ty1, by1) - max(ty0, by0)
+            if lebar > EPS and tinggi > EPS:
+                tindih.append(f'{nama} tertimpa {pnama} '
+                              f'({lebar:.3f}x{tinggi:.3f})')
+                break
+    luber.extend(tindih)
+
+    if luber:
+        return _fail(f'{len(luber)} elemen terpotong ({"; ".join(luber[:3])})')
+    return _ok(f'tepi ±{ex:.3f}, {len(kotak_palang)} palang bebas teks')
+
+
+def cek_hud_terbaca(g, png):
+    """Bar termometer harus TERLIHAT, bukan cuma ada di memori.
+
+    Warna fill dibaca dari piksel tangkapan layar lalu dibandingkan dengan
+    warna yang diminta entity-nya. Sebelum ini fill hijau rgb(120,200,130)
+    sampai ke layar sebagai rgb(19,33,31) — semua elemen camera.ui duduk di
+    z=0, Panda menyortir bin transparannya sesukanya, dan latar panel 93% opak
+    yang menang. Memeriksa `entity.color` tidak akan pernah menangkap itu:
+    properti warnanya benar sepanjang waktu.
+    """
+    from ursina import camera, window
+    pan = getattr(g, 'panels', None)
+    if pan is None or getattr(pan, 'mode', 'hud') != 'hud':
+        return _ok('mode bukan hud, dilewati')
+    fills = list(getattr(pan, '_need_fill_ents', None) or [])
+    mf = getattr(pan, '_mood_fill', None)
+    if mf is not None:
+        fills.append(mf)
+    if not fills:
+        return _ok('tidak ada termometer')
+    try:
+        from PIL import Image
+        im = Image.open(png).convert('RGB')
+    except Exception as e:
+        return _fail(f'gagal baca png: {e}')
+
+    w_px, h_px = im.size
+    ex = window.aspect_ratio / 2
+    ui = camera.ui
+    buruk = []
+    diperiksa = 0
+    for i, e in enumerate(fills):
+        try:
+            if e.is_hidden():
+                continue
+            tb = e.getTightBounds(ui)
+        except Exception:
+            continue
+        if tb is None:
+            continue
+        lo, hi = tb
+        if (hi.x - lo.x) < 0.05:        # bar nyaris kosong: tidak ada yang bisa dibaca
+            continue
+        cx = lo.x + (hi.x - lo.x) * 0.35
+        cy = (lo.y + hi.y) / 2
+        px = min(w_px - 1, max(0, int(round((cx + ex) / (2 * ex) * w_px))))
+        py = min(h_px - 1, max(0, int(round((0.5 - cy) * h_px))))
+        dapat = im.getpixel((px, py))
+        minta = tuple(int(round(c * 255)) for c in tuple(e.color)[:3])
+        beda = sum(abs(a - b) for a, b in zip(dapat, minta))
+        diperiksa += 1
+        if beda > 90:
+            buruk.append(f'bar{i} layar{dapat} bukan {minta}')
+    if buruk:
+        return _fail(f'{len(buruk)} bar tertimbun ({buruk[0]})')
+    if not diperiksa:
+        return _ok('semua bar kosong')
+    return _ok(f'{diperiksa} bar terbaca')
+
+
+def cek_rumput_tak_catur(g):
+    """Terang ubin rumput tidak boleh terkunci ke paritas (tx+ty) % 2.
+
+    Papan catur bukan soal selera warna, tapi soal PERIODE. Dua warna
+    berselang tiap satu ubin adalah pola paling teratur yang bisa dibuat, dan
+    mata menemukan grid-nya seketika. Variasi halus ala Sims 1 tetap boleh —
+    yang dilarang variasi yang bisa diramalkan dari paritas ubin.
+
+    Diukur sebagai jarak rata-rata dua kelompok paritas dibagi sebaran
+    seluruh ubin. Papan catur murni memberi 2.00 (dua nilai, masing-masing
+    satu paritas). Medan bising memberi mendekati 0.
+    """
+    import statistics
+    w = getattr(g, 'world', None)
+    ents = list(getattr(w, '_grass_ents', None) or [])
+    tiles = list(getattr(w, '_grass_tiles', None) or [])
+    if len(ents) != len(tiles):
+        return _fail(f'{len(ents)} entity rumput vs {len(tiles)} koordinat')
+    if len(ents) < 24:
+        return _ok(f'{len(ents)} ubin rumput, tidak diukur')
+
+    genap, ganjil = [], []
+    for e, (tx, ty) in zip(ents, tiles):
+        c = e.color
+        lum = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+        (ganjil if (tx + ty) % 2 else genap).append(lum)
+    if not genap or not ganjil:
+        return _ok('satu paritas saja')
+
+    sebar = statistics.pstdev(genap + ganjil)
+    if sebar < 1e-6:
+        return _ok('semua ubin sewarna')
+    rasio = abs(statistics.fmean(genap) - statistics.fmean(ganjil)) / sebar
+    if rasio > 0.5:
+        return _fail(f'tint terkunci ke paritas ubin (rasio {rasio:.2f}, catur murni = 2.00)')
+    return _ok(f'paritas {rasio:.2f}')
+
+
+def cek_avatar_berwarna(g):
+    """Warga desa yang jatuh ke humanoid.obj tidak boleh jadi gumpalan putih.
+
+    Dua syarat, dan kegagalan salah satunya sudah pernah terjadi:
+
+      1. vertex data punya kolom warna dengan lebih dari satu warna. Tanpa ini
+         satu mesh cuma punya satu entity.color, dan warna itu memang tidak
+         pernah diisi.
+      2. ada shader terpasang di aktornya. Lampu scene memicu setShaderAuto()
+         Panda3D, dan shader hasil generator itu MENGABAIKAN kolom warna
+         vertex — diuji langsung: mesh yang sudah diwarnai tetap keluar putih
+         pucat sampai smooth_shader dipasang. Memeriksa syarat 1 saja akan
+         LULUS pada bug yang sebenarnya masih terlihat di layar.
+    """
+    from panda3d.core import GeomVertexReader
+    ents = getattr(g, 'entities', None)
+    aktor = getattr(ents, 'actors', None) or {}
+    polos, tanpa_shader, diperiksa = [], [], 0
+
+    for aid, a in aktor.items():
+        m = getattr(a, 'model', None)
+        if m is None or not hasattr(m, 'findAllMatches'):
+            continue
+        gns = list(m.findAllMatches('**/+GeomNode'))
+        if not any(gn.getName().endswith('part_0') for gn in gns):
+            continue        # bukan humanoid.obj — Vitaboy atau rig hewan
+        diperiksa += 1
+        unik = set()
+        for gn in gns:
+            node = gn.node()
+            for i in range(node.getNumGeoms()):
+                vd = node.getGeom(i).getVertexData()
+                if not vd.hasColumn('color'):
+                    continue
+                r = GeomVertexReader(vd, 'color')
+                while not r.isAtEnd():
+                    c = r.getData4()
+                    unik.add((round(c[0] * 255), round(c[1] * 255), round(c[2] * 255)))
+        if len(unik) < 3:
+            polos.append(f'{aid}({len(unik)} warna)')
+            continue
+        # Bukan cuma "ada shader": shader yang terpasang harus benar-benar
+        # MEMBACA warna vertex. Versi pertama pemeriksaan ini cuma menuntut
+        # shader tidak None, dan ia tetap LULUS ketika p3d_Color dicabut dari
+        # smooth_shader — bug yang masih terlihat jelas di layar. Sumber
+        # fragmennya dibaca langsung supaya tidak ada celah itu lagi.
+        sh = getattr(a, 'shader', None)
+        baca_warna = False
+        if sh is not None:
+            try:
+                src = sh.fragment if isinstance(getattr(sh, 'fragment', None), str) else ''
+                # Dicari `v_color`, BUKAN `p3d_Color`: `p3d_Color` adalah
+                # substring dari `p3d_ColorScale`, yang ada di setiap versi
+                # shader ini. Versi pertama pemeriksaan ini memakainya dan
+                # karena itu lulus pada uji negatifnya sendiri.
+                baca_warna = 'v_color' in src
+            except Exception:
+                baca_warna = False
+        if not baca_warna:
+            tanpa_shader.append(aid)
+
+    if polos:
+        return _fail(f'{len(polos)} avatar tanpa warna ({", ".join(polos[:3])})')
+    if tanpa_shader:
+        return _fail(f'{len(tanpa_shader)} avatar berwarna tapi tanpa shader '
+                     f'pembaca warna vertex ({", ".join(tanpa_shader[:3])})')
+    if not diperiksa:
+        return _ok('tidak ada avatar cadangan')
+    return _ok(f'{diperiksa} avatar berwarna')
+
+
+class _TanpaUpdate:
+    """Bekukan task update game selama pengukuran, lalu pasang lagi.
+
+    Wajib untuk tiap pemeriksaan yang MEMAKSA sebuah nilai lalu melihat
+    layarnya. Tanpa ini game menimpa nilai paksaan itu di frame berikutnya —
+    dan yang lebih buruk, pemeriksaannya tetap bisa LULUS karena dunia memang
+    berubah sendiri antara dua tangkapan layar. Lulus karena alasan yang salah
+    lebih berbahaya daripada gagal.
+    """
+
+    def __init__(self, base):
+        self.base = base
+        self.tugas = []
+
+    def __enter__(self):
+        self.tugas = list(self.base.taskMgr.getTasksNamed('update'))
+        for t in self.tugas:
+            t.remove()
+        for _ in range(2):
+            self.base.taskMgr.step()
+        return self
+
+    def __exit__(self, *a):
+        for t in self.tugas:
+            self.base.taskMgr.add(t)
+        for _ in range(2):
+            self.base.taskMgr.step()
+        return False
+
+
+def cek_rumput_melambai(g, base, tmp: Path):
+    """Angin rumput harus benar-benar sampai ke shader.
+
+    Uniform `grs_time`/`grs_wind` dipasang SEKALI di induk, bukan per entity —
+    976 panggilan per frame di mountain jadi 2. Yang dibayar untuk itu: kalau
+    suatu saat ada yang memasang uniform di entity lagi, input entity MENIMPA
+    input induknya dan rumput itu membeku sendirian; kalau assignment di
+    induknya hilang, semuanya membeku. Dua-duanya diam: tidak melempar error,
+    tidak menulis log, dan tidak terlihat sama sekali di frame diam.
+
+    Jadi diuji dari luar: render dua kali dengan grs_time yang jauh berbeda,
+    lalu hitung piksel yang berubah. Rumput yang melambai menggeser vertex;
+    rumput yang beku menghasilkan dua frame yang identik.
+    """
+    ge = list(getattr(getattr(g, 'world', None), '_grass_ents', None) or [])
+    if len(ge) < 16:
+        return _ok(f'{len(ge)} rumput, tidak diukur')
+    try:
+        import game.grass_shader as gs
+    except Exception as e:
+        return _fail(f'grass_shader tidak bisa diimpor: {e}')
+    if getattr(gs, '_grass_failed', False) or gs.get_grass_shader() is None:
+        return _ok('grass shader tidak tersedia di pipeline ini')
+
+    try:
+        from PIL import Image
+    except Exception as e:
+        return _fail(f'butuh Pillow: {e}')
+
+    def tembak(t, nama):
+        gs.update_time(ge, t, 0.30)     # angin kencang supaya geserannya terukur
+        for _ in range(2):
+            base.taskMgr.step()
+        p = tmp / nama
+        img = base.win.getScreenshot()
+        if img is None:
+            return None
+        img.write(Filename.fromOsSpecific(str(p)))
+        return Image.open(p).convert('RGB')
+
+    semula = getattr(g, '_grass_time', 0.0)
+    try:
+        # Update dibekukan: kalau tidak, game memanggil update_time sendiri di
+        # antara dua tangkapan layar dan pemeriksaan ini lulus karena waktu
+        # berjalan, bukan karena nilai yang kita paksa benar-benar sampai.
+        with _TanpaUpdate(base):
+            a = tembak(0.0, '_lambai_a.png')
+            b = tembak(3.7, '_lambai_b.png')
+    finally:
+        # Kembalikan waktu rumput seperti semula supaya pemeriksaan berikutnya
+        # tidak menilai dunia yang sudah kita geser sendiri.
+        try:
+            gs.update_time(ge, semula, 0.06)
+        except Exception:
+            pass
+    if a is None or b is None:
+        return _fail('tidak ada tangkapan layar')
+    if a.size != b.size:
+        return _fail('ukuran frame berubah di tengah pengukuran')
+
+    beda = sum(1 for pa, pb in zip(a.getdata(), b.getdata()) if pa != pb)
+    total = a.size[0] * a.size[1]
+    frac = beda / total
+    if frac < 0.005:
+        return _fail(f'rumput beku — cuma {frac:.2%} piksel berubah antara '
+                     f'grs_time 0.0 dan 3.7')
+
+    # Separuh struktural, dan ini bukan pengulangan yang di atas.
+    #
+    # Uji piksel menangkap rumput yang beku SELURUHNYA. Ia tidak menangkap
+    # sebagian: diukur langsung, memaku separuh rumput di entity cuma
+    # menurunkan angkanya 9,5% -> 3,5%, masih jauh di atas ambang mana pun
+    # yang aman dari salah-vonis di scene yang rumputnya sedikit. Yang
+    # menangkapnya justru pemeriksaan yang jauh lebih murah: tidak boleh ada
+    # entity rumput yang menyimpan grs_time-nya sendiri, karena input entity
+    # menimpa input induknya (juga diukur, bukan diasumsikan).
+    try:
+        from panda3d.core import ShaderAttrib, ShaderInput
+        kosong = ShaderInput.get_blank()
+        sendiri = []
+        for e in ge:
+            sa = e.getState().getAttrib(ShaderAttrib)
+            if sa is None:
+                continue
+            if sa.get_shader_input('grs_time') != kosong:
+                sendiri.append(getattr(e, 'name', '?'))
+        if sendiri:
+            return _fail(f'{len(sendiri)} rumput memasang grs_time sendiri — '
+                         f'input entity menimpa induknya, jadi rumput itu beku')
+    except Exception:
+        pass        # versi Panda tanpa API ini: uji piksel di atas tetap jalan
+
+    return _ok(f'{frac:.1%} piksel bergeser')
+
+
+def cek_cahaya_global(g, base, tmp: Path):
+    """Uniform cahaya di `scene` harus benar-benar turun ke seluruh dunia.
+
+    Ini menjaga satu kegagalan yang sudah terjadi dan berumur panjang: uniform
+    siang-malam dipasang di `scene` tiap frame, tapi `default_input` shader
+    memasang salinannya di TIAP entity lewat Ursina, dan input entity menimpa
+    input induknya. Hasilnya jembatan siang-malam berjalan sempurna tanpa
+    mengubah satu piksel pun — tanah, rumput, rumah dan orang tetap seterang
+    tengah hari pukul dua pagi.
+
+    Tidak bisa dijaga dengan memeriksa nilai uniform-nya: nilainya BENAR di
+    kedua tempat. Yang membedakan cuma siapa yang menang, dan itu hanya
+    terlihat di piksel. Jadi diuji begitu: paksa ambient ke nilai ekstrem di
+    `scene`, render, dan tuntut layarnya berubah.
+    """
+    try:
+        from ursina import Vec3
+        from game.smooth_shader import get_smooth_shader
+    except Exception as e:
+        return _fail(f'smooth_shader tidak bisa diimpor: {e}')
+    if get_smooth_shader() is None:
+        return _ok('smooth shader tidak tersedia di pipeline ini')
+    try:
+        from PIL import Image
+    except Exception as e:
+        return _fail(f'butuh Pillow: {e}')
+
+    from ursina import scene as uscene
+
+    def tembak(nama):
+        for _ in range(2):
+            base.taskMgr.step()
+        p = tmp / nama
+        img = base.win.getScreenshot()
+        if img is None:
+            return None
+        img.write(Filename.fromOsSpecific(str(p)))
+        return Image.open(p).convert('RGB')
+
+    def rerata(im):
+        px = list(im.getdata())
+        n = max(1, len(px))
+        return tuple(sum(p[i] for p in px) / n for i in range(3))
+
+    try:
+        # Sama seperti rumput: game memanggil _sync_smooth_lighting() tiap
+        # frame, jadi tanpa membekukan update, nilai gelap yang kita paksa
+        # sudah ditimpa sebelum sempat dirender.
+        with _TanpaUpdate(base):
+            a = tembak('_cahaya_a.png')
+            uscene.set_shader_input('sm_ambient', Vec3(0.02, 0.02, 0.03))
+            uscene.set_shader_input('sm_sun_color', Vec3(0.05, 0.05, 0.10))
+            b = tembak('_cahaya_b.png')
+    finally:
+        # Kembalikan seperti semula lewat jalur yang dipakai game sendiri,
+        # supaya pemeriksaan berikutnya tidak menilai dunia yang kita gelapkan.
+        try:
+            g._sync_smooth_lighting()
+        except Exception:
+            from game.smooth_shader import pasang_uniform_global
+            pasang_uniform_global()
+        for _ in range(2):
+            base.taskMgr.step()
+
+    if a is None or b is None:
+        return _fail('tidak ada tangkapan layar')
+    ra, rb = rerata(a), rerata(b)
+    turun = sum(ra) - sum(rb)
+    if turun < 30.0:
+        return _fail(f'cahaya scene tidak sampai ke dunia — layar cuma turun '
+                     f'{turun:.1f} saat ambient dipaksa gelap '
+                     f'({tuple(round(v) for v in ra)} -> {tuple(round(v) for v in rb)})')
+
+    # Separuh struktural, untuk permukaan yang terlalu kecil di layar untuk
+    # menggeser rata-rata. Rumput pernah memakai fragmen satu baris —
+    # `fragColor = texture(...)` — yang membuang tint, cahaya, dan siang-malam
+    # sekaligus. Diukur: mengembalikan fragmen itu TIDAK menggagalkan uji
+    # rata-rata di atas, karena 112 tutup rumput tidak cukup menggeser seluruh
+    # layar. Yang menangkapnya cuma membaca sumber fragmennya.
+    try:
+        from game.grass_shader import get_grass_shader
+        gsh = get_grass_shader()
+        if gsh is not None:
+            src = getattr(gsh, 'fragment', '') or ''
+            if 'sm_ambient' not in src:
+                return _fail('fragmen grass_shader tidak membaca sm_ambient — '
+                             'rumput dirender tanpa cahaya dan tanpa tint')
+    except Exception:
+        pass
+
+    return _ok(f'gelap {turun:.0f}')
+
+
+def cek_otonomi_hidup(g):
+    """Warga desa harus memilih perabot NYATA di sekitarnya, bukan daftar mati.
+
+    Dijaga karena putusnya sambungan ini TIDAK melempar error: NPC tetap
+    berjalan, tetap beranimasi, dan tetap terlihat sibuk — mereka cuma berhenti
+    peduli pada apa yang ada di sekelilingnya. Persis jenis kerusakan yang di
+    repo ini berulang kali lolos karena "kelihatannya jalan".
+
+    Hanya diuji di scene yang memang berpenghuni DAN punya perabot dalam
+    jangkauan. Menuntut otonomi di gudang kosong akan menghasilkan GAGAL yang
+    tidak berarti apa-apa, dan cek yang menyalak tanpa sebab akan dimatikan
+    orang — itu cara paling cepat kehilangan sebuah jaring pengaman.
+    """
+    br = getattr(getattr(g, 'entities', None), 'brains', None)
+    if br is None:
+        return _fail('NPCBrains tidak ada — otonomi tidak mungkin jalan')
+    if getattr(br, 'peta', None) is None:
+        return _fail('peta otonomi belum diarahkan ke scene aktif')
+
+    hadir = [n for n in br._brains if br._di_scene_aktif(n)]
+    if not hadir:
+        return _ok('tidak ada warga di scene ini')
+
+    from game.objects import autonomy_candidates
+    ada_perabot = False
+    for npc_id in hadir:
+        ubin = br._posisi_ubin(npc_id)
+        if ubin and autonomy_candidates(br.peta, ubin[0], ubin[1]):
+            ada_perabot = True
+            break
+    if not ada_perabot:
+        return _ok(f'{len(hadir)} warga, tidak ada perabot dalam jangkauan')
+
+    sblm_dunia = br.jml_pilihan_dunia
+    sblm_tuntas = br.jml_selesai
+    for _ in range(120):
+        br.tick(1.0)
+    dunia = br.jml_pilihan_dunia - sblm_dunia
+    tuntas = br.jml_selesai - sblm_tuntas
+
+    # Yang dituntut per scene cuma: mesinnya HIDUP — warga memilih sesuatu dan
+    # menyelesaikannya. Menuntut pilihan-dunia di SETIAP scene salah: di `town`
+    # cuma ada dua warga dan perabot terdekat mereka kalah skor melawan
+    # kebutuhan yang lebih mendesak, jadi mereka sah-sah saja jatuh ke
+    # cadangan. Cek yang menyalak tanpa sebab akan dimatikan orang, dan itu
+    # cara paling cepat kehilangan sebuah jaring pengaman.
+    #
+    # Tuntutan "perabot benar-benar dipakai" dipindah ke tingkat suite, di
+    # bawah — di sana nol pilihan-dunia SELALU berarti sambungannya putus.
+    if dunia <= 0 and tuntas <= 0 and not br._sisa:
+        return _fail(f'{len(hadir)} warga hadir, tapi nol pilihan dan nol '
+                     f'interaksi berjalan dalam 120 tick — mesin otonomi mati')
+
+    nyata = [v for v in br.ringkas_pilihan().values() if '(cadangan)' not in v]
+    contoh = f', mis. {nyata[0]}' if nyata else ', semuanya cadangan'
+    return _ok(f'{len(hadir)} warga, {dunia} dunia, {tuntas} tuntas{contoh}')
+
+
+_HUD_TEKS = ('_time_txt', '_date_txt', '_weather_txt', '_scene_txt',
+             '_gold_txt', '_tool_name', '_control_hint')
+
+
+def cek_hud_kontras(g, png: Path):
+    """Tiap teks HUD harus BEDA dari latarnya sendiri.
+
+    Diukur sebagai: berapa besar bagian kotak teks yang warnanya nyaris sama
+    dengan warna teks itu. Kalau hampir seluruh kotak sewarna teksnya, yang
+    terlihat bukan tulisan melainkan bidang polos — entah putih di atas putih
+    atau gelap di atas gelap. Terukur sebelum scrim dipasang: kotak jam 95%
+    nyaris putih; sesudah: 25%.
+
+    Memeriksa `entity.color` tidak akan pernah menangkap ini, sama seperti
+    pada bug urutan gambar di panel motif: warnanya benar sepanjang waktu.
+    Yang salah apa yang ada DI BELAKANGNYA.
+    """
+    from ursina import camera, window
+    pan = getattr(g, 'panels', None)
+    if pan is None or getattr(pan, 'mode', 'hud') != 'hud':
+        return _ok('mode bukan hud, dilewati')
+    try:
+        from PIL import Image
+        im = Image.open(png).convert('RGB')
+    except Exception as e:
+        return _fail(f'gagal baca png: {e}')
+
+    w_px, h_px = im.size
+    ex = window.aspect_ratio / 2
+    ui = camera.ui
+    buruk, diperiksa = [], 0
+
+    for nama in _HUD_TEKS:
+        e = getattr(pan, nama, None)
+        if e is None or not str(getattr(e, 'text', '')).strip():
+            continue
+        try:
+            if e.is_hidden():
+                continue
+            tb = e.getTightBounds(ui)
+        except Exception:
+            continue
+        if tb is None:
+            continue
+        lo, hi = tb
+        x0 = max(0, min(w_px - 1, int((lo.x + ex) / (2 * ex) * w_px)))
+        x1 = max(0, min(w_px, int((hi.x + ex) / (2 * ex) * w_px)))
+        y0 = max(0, min(h_px - 1, int((0.5 - hi.y) * h_px)))
+        y1 = max(0, min(h_px, int((0.5 - lo.y) * h_px)))
+        if x1 - x0 < 4 or y1 - y0 < 4:
+            continue
+        kotak = list(im.crop((x0, y0, x1, y1)).getdata())
+        if not kotak:
+            continue
+        warna = tuple(int(round(c * 255)) for c in tuple(e.color)[:3])
+        dekat = sum(1 for c in kotak
+                    if sum(abs(a - b) for a, b in zip(c, warna)) < 90)
+        frac = dekat / len(kotak)
+        diperiksa += 1
+        if frac > 0.85:
+            buruk.append(f'{nama} {frac:.0%} sewarna teksnya')
+
+    if buruk:
+        return _fail(f'{len(buruk)} teks HUD tanpa kontras ({buruk[0]})')
+    if not diperiksa:
+        return _ok('tidak ada teks HUD terukur')
+    return _ok(f'{diperiksa} teks berkontras')
 
 
 def cek_save_bolak(g):
@@ -377,6 +1128,73 @@ def cek_save_bolak(g):
 
 # ─── PENGGERAK ───────────────────────────────────────────
 
+def cek_sims_tersambung():
+    """Tiap modul `sims_*` harus DIPANGGIL dari luar dirinya sendiri.
+
+    Dijaga karena kegagalannya sudah terjadi, bukan dibayangkan. Saat
+    feature/3d-mobs digabung, kedelapan modul Sims masuk ke pohon dengan bersih
+    — berkas baru, nol konflik. Tujuh tersambung. `sims_build.py` tidak: mode
+    Bangun/Beli ada lengkap dengan katalog dan panelnya, dan tidak ada satu
+    tombol pun yang membukanya.
+
+    Penyebabnya bentuk yang sama dengan empat kegagalan boot di merge itu —
+    titik panggil jatuh di dalam blok yang dimenangkan sisi lain — tapi jauh
+    lebih sunyi. Yang itu MELEDAK saat boot dan ketahuan dalam hitungan detik.
+    Yang ini tidak melempar apa pun, dan regresi tetap hijau 14/14 sepanjang
+    waktu, karena regresi tidak menguji satu pun sistem Sims.
+
+    Cek ini murah dan statis: ia tidak menjalankan sistemnya, cuma menuntut
+    ada yang memanggilnya. Itu tidak membuktikan sistemnya benar — tapi ia
+    membuktikan sistemnya BISA DIJANGKAU, dan itulah yang hilang tanpa suara.
+    """
+    akar = Path(__file__).resolve().parent.parent / 'game'
+    modul = sorted(p.stem for p in akar.glob('sims_*.py'))
+    if not modul:
+        return _ok('tidak ada modul sims_*')
+    sumber = {p: p.read_text(encoding='utf-8', errors='replace')
+              for p in akar.rglob('*.py')}
+    # Dicocokkan sebagai SUBSTRING, bukan regex, dan itu bukan kemalasan.
+    # Versi pertama cek ini memakai batas kata regex, escape-nya runtuh saat
+    # ditulis (yang sampai ke berkas adalah karakter BACKSPACE, bukan ), dan
+    # regex-nya tidak pernah cocok — KEDELAPAN modul dilaporkan yatim, termasuk
+    # yang jelas punya pemanggil. Cek yang selalu merah lebih berbahaya
+    # daripada tidak ada cek: ia mengajari orang mengabaikan warna merah.
+    #
+    # Nama modul `sims_*` cukup khas untuk dicocokkan sebagai substring biasa,
+    # dan substring tidak punya escape yang bisa runtuh.
+    yatim = []
+    for m in modul:
+        pemanggil = [p.name for p, t in sumber.items()
+                     if p.stem != m and m in t]
+        if not pemanggil:
+            yatim.append(m)
+    if yatim:
+        return _fail(f'masuk ke pohon tapi TIDAK dipanggil siapa pun: '
+                     f'{", ".join(yatim)} — sistemnya ada dan tidak bisa '
+                     f'dijangkau pemain')
+    return _ok(f'{len(modul)} modul sims_* semuanya punya pemanggil')
+
+
+_SAVE_FIXTURE: Path | None = None
+
+
+def _pasang_save_fixture(save: Path):
+    # Save pemain tidak di-track git; tanpa karakter, layar buat-karakter
+    # menutupi dunia dan setiap cek berbasis piksel gagal palsu.
+    global _SAVE_FIXTURE
+    if save.exists():
+        return
+    shutil.copyfile(ROOT / 'tools' / 'fixtures' / 'regress_save.json', save)
+    _SAVE_FIXTURE = save
+    atexit.register(_buang_save_fixture)
+
+
+def _buang_save_fixture():
+    # Dipanggil eksplisit sebelum os._exit, yang melewati atexit.
+    if _SAVE_FIXTURE is not None:
+        _SAVE_FIXTURE.unlink(missing_ok=True)
+
+
 def main():
     from ursina import application
     application.asset_folder = ROOT
@@ -387,14 +1205,34 @@ def main():
     import game.config as cfg
     cfg.SCREEN_W, cfg.SCREEN_H = W, H
 
+    # game.app HARUS diimpor sebelum game.scenes: ia menimpa color.rgb ke skala
+    # 0-255, dan props.py membangun warna atap saat diimpor. Urutan terbalik
+    # membuat setiap atap di tangkapan regress putih polos.
+    from game.app import Game3D
     from game.scenes import SCENES
     minta = [a for a in sys.argv[1:] if not a.startswith('-')]
     scenes = minta or [s for s in SCENES if s != 'dungeon']
 
-    from game.app import Game3D
+    _pasang_save_fixture(ROOT / cfg.SAVE_FILE)
     t0 = time.time()
     try:
         g = Game3D()
+        # Sinema dimatikan untuk alat ukur, dan ini bukan menyembunyikan masalah.
+        # Adegan pembuka memicu diri sendiri pada quest_stage 0 lalu menyetel
+        # panels.mode='sinema', yang membekukan waktu, pemain, entity, DAN
+        # pergantian scene — semuanya memang ada di dalam gerbang mode 'hud'.
+        # Terukur saat pertama disambungkan: keempat belas scene melaporkan jumlah
+        # entity yang sama persis (1205) karena tidak satu pun benar-benar dimuat,
+        # dan pemeriksaan arah WASD gagal keempat arahnya karena pemain terkunci.
+        #
+        # Dipakai mekanisme yang sudah ada — menandai semua adegan sudah ditonton —
+        # bukan bendera pintas baru, supaya jalur yang diuji tetap jalur yang
+        # dimainkan pemain.
+        try:
+            from game.cutscene import NASKAH as _NASKAH
+            g.state.sinema_selesai = list(_NASKAH)
+        except Exception:
+            pass
     except Exception:
         print('GAGAL TOTAL: game tidak bisa dibangun\n')
         traceback.print_exc()
@@ -435,6 +1273,7 @@ def main():
             print('Coba lagi dengan:  python tools/regress.py --offscreen')
             print('=' * 78)
             sys.stdout.flush()
+            _buang_save_fixture()
             os._exit(2)
 
     from ursina import scene as uscene
@@ -481,20 +1320,142 @@ def main():
 
             hasil['geom_nol'] = cek_geom_nol(nama)
             hasil['frame_kosong'] = hasil_frame
+            if png.exists():
+                hasil['kanal_jenuh'], jenuh = cek_kanal_jenuh(png)
+            else:
+                jenuh = float('nan')
             hasil['pemain_valid'] = cek_pemain_valid(g)
             hasil['bisa_keluar'] = cek_bisa_keluar(g)
             hasil['arah_maju'] = cek_arah_maju(g)
             hasil['motif_waras'] = cek_motif_waras(g)
+            hasil['rumput_catur'] = cek_rumput_tak_catur(g)
+            hasil['avatar_warna'] = cek_avatar_berwarna(g)
+            hasil['hud_muat'] = cek_hud_muat(g)
+            hasil['hud_kontras'] = cek_hud_kontras(g, png) if png.exists() \
+                else _fail('tidak ada tangkapan layar')
+            hasil['hud_terbaca'] = cek_hud_terbaca(g, png) if png.exists() \
+                else _fail('tidak ada tangkapan layar')
             hasil['save_bolak'] = cek_save_bolak(g)
+            hasil['rumput_lambai'] = cek_rumput_melambai(g, base, OUT)
+            hasil['cahaya_global'] = cek_cahaya_global(g, base, OUT)
+            hasil['otonomi_hidup'] = cek_otonomi_hidup(g)
             n_ent = len(uscene.children)
         except Exception as e:
             hasil['boot'] = _fail(f'{type(e).__name__}: {e}')
-            ms, n_ent = float('nan'), 0
+            ms, n_ent, jenuh = float('nan'), 0, float('nan')
             traceback.print_exc()
 
         buruk = [k for k, (ok, _) in hasil.items() if not ok]
         gagal_total += len(buruk)
-        baris.append((nama, hasil, ms, n_ent, buruk))
+        baris.append((nama, hasil, ms, n_ent, buruk, jenuh))
+
+    # ── otonomi tingkat suite ──────────────────────────────────────
+    # Nol pilihan-dunia di SELURUH empat belas scene tidak mungkin benar: itu
+    # berarti `autonomy_candidates`/`choose_action` tidak tersambung lagi, dan
+    # putusnya sambungan itu tidak melempar error apa pun.
+    otonomi_baris = []
+    try:
+        br_akhir = getattr(getattr(g, 'entities', None), 'brains', None)
+        total_dunia = getattr(br_akhir, 'jml_pilihan_dunia', 0) if br_akhir else 0
+        total_tuntas = getattr(br_akhir, 'jml_selesai', 0) if br_akhir else 0
+        if total_dunia <= 0:
+            otonomi_baris.append(('otonomi', False,
+                                  'nol interaksi dunia di seluruh scene — '
+                                  'katalog perabot tidak pernah terpakai'))
+            gagal_total += 1
+        else:
+            otonomi_baris.append(('otonomi', True,
+                                  f'{total_dunia} pilihan dunia, '
+                                  f'{total_tuntas} tuntas'))
+    except Exception as e:
+        otonomi_baris.append(('otonomi', False, f'tidak bisa diperiksa: {e}'))
+        gagal_total += 1
+
+    # ── arah WASD (sekali saja; mahal, dan tidak bergantung scene) ──
+    arah_baris = []
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from probe_arah import uji_arah
+        for key, ok, catatan, _ in uji_arah(g, base):
+            arah_baris.append((key, ok, catatan))
+            if not ok:
+                gagal_total += 1
+    except Exception as e:
+        arah_baris.append(('?', False, f'probe arah gagal jalan: {e}'))
+        gagal_total += 1
+
+    # ── sistem Sims tersambung (sekali saja; statis, tidak bergantung scene) ──
+    sims_baris = []
+    try:
+        ok, cat = cek_sims_tersambung()
+        sims_baris.append(('sims', ok, cat))
+        if not ok:
+            gagal_total += 1
+    except Exception as e:
+        sims_baris.append(('sims', False, f'cek sims gagal jalan: {e}'))
+        gagal_total += 1
+
+    # ── HUD terpotong tepi layar (sekali saja, tidak bergantung scene) ──
+    hud_baris = []
+    try:
+        from probe_hud import uji_hud
+        for nama, ok, catatan in uji_hud(g):
+            if not ok:
+                hud_baris.append((nama, catatan))
+                gagal_total += 1
+    except Exception as e:
+        hud_baris.append(('?', f'probe HUD gagal jalan: {e}'))
+        gagal_total += 1
+
+    # ── animasi rumput masih hidup (sekali saja, butuh render penuh) ──
+    rumput_baris = []
+    try:
+        from probe_rumput import uji_rumput
+        ok, catatan = uji_rumput(g, 'farm')
+        rumput_baris.append((ok, catatan))
+        if not ok:
+            gagal_total += 1
+    except Exception as e:
+        rumput_baris.append((False, f'probe rumput gagal jalan: {e}'))
+        gagal_total += 1
+
+    # ── panel Keinginan terjangkau pemain (Tahap 4) ──
+    # Mesinnya diuji terpisah di tools/uji_wishes.py; yang diperiksa di sini
+    # keterjangkauannya lewat jalur tombol sungguhan. Sistem yang benar tapi
+    # tak terjangkau sudah pernah terjadi di proyek ini (husbandry.py), dan
+    # kegagalannya tidak kelihatan sebagai error apa pun.
+    wish_baris = []
+    try:
+        import probe_wishes
+        probe_wishes.uji_panel_hidup(g)
+        buruk_w = [(n, k) for n, ok, k in probe_wishes.hasil if not ok]
+        n_w = len(probe_wishes.hasil)
+        wish_baris.append((not buruk_w,
+                           f'{n_w - len(buruk_w)}/{n_w} pemeriksaan panel lulus'
+                           + ('; ' + '; '.join(f'{n}: {k}' for n, k in buruk_w[:2])
+                              if buruk_w else '')))
+        gagal_total += len(buruk_w)
+    except Exception as e:
+        wish_baris.append((False, f'probe keinginan gagal jalan: {e}'))
+        gagal_total += 1
+
+    # ── bentuk gua vs keterlihatan pemain ──
+    # Dua angka yang harus benar BERSAMAAN: gua tetap berbentuk, dan pemain
+    # tidak tertutup batu. Memperbaiki satu saja menukar cacat dengan cacat.
+    gua_baris = []
+    try:
+        import probe_gua
+        probe_gua.uji_gua(g)
+        buruk_g = [(n, k) for n, ok, k in probe_gua.hasil if not ok]
+        n_g = len(probe_gua.hasil)
+        gua_baris.append((not buruk_g,
+                          f'{n_g - len(buruk_g)}/{n_g} pemeriksaan gua lulus'
+                          + ('; ' + '; '.join(f'{n}: {k}' for n, k in buruk_g[:2])
+                             if buruk_g else '')))
+        gagal_total += len(buruk_g)
+    except Exception as e:
+        gua_baris.append((False, f'probe gua gagal jalan: {e}'))
+        gagal_total += 1
 
     # ── laporan ──
     # Empat belas scene kosong SEKALIGUS bukan cacat scene: game ini terbukti
@@ -505,8 +1466,15 @@ def main():
     # Alat yang melaporkan 0/14 karena lingkungan lebih berbahaya daripada tidak
     # ada alat sama sekali: 0/14 palsu tidak bisa dibedakan dari kerusakan
     # sungguhan, dan itu melatih pemakainya untuk mengabaikan alarmnya.
+    # `baris` berisi tuple ENAM elemen (nama, hasil, ms, entity, buruk, jenuh);
+    # baris ini dulu membongkarnya jadi lima dan meledak dengan
+    # "too many values to unpack". Tidak pernah terlihat karena hanya dijalankan
+    # saat `gagal_total > 0` -- jadi alat ini akan CRASH persis pada saat ia
+    # paling dibutuhkan, yaitu ketika ada yang benar-benar gagal, dan menelan
+    # laporan kegagalan yang sudah susah payah dikumpulkan. Dibongkar lewat
+    # indeks supaya penambahan kolom berikutnya tidak mengulanginya.
     lingkungan = bool(baris) and gagal_total > 0 and all(
-        set(buruk) == {'frame_kosong'} for _n, _h, _ms, _e, buruk in baris)
+        set(b[4]) == {'frame_kosong'} for b in baris)
     if lingkungan:
         print()
         print('=' * 78)
@@ -519,15 +1487,39 @@ def main():
         print('Coba lagi dengan:  python tools/regress.py --offscreen')
         print('=' * 78)
     print()
-    print(f'{"scene":14s} {"hasil":>7s} {"ms/frame":>9s} {"entity":>7s}  catatan')
-    print('-' * 78)
-    for nama, hasil, ms, n_ent, buruk in baris:
+    print(f'{"scene":14s} {"hasil":>7s} {"ms/frame":>9s} {"entity":>7s} {"jenuh":>6s}  catatan')
+    print('-' * 86)
+    for nama, hasil, ms, n_ent, buruk, jenuh in baris:
         tanda = 'LULUS' if not buruk else 'GAGAL'
         catatan = '; '.join(f'{k}: {hasil[k][1]}' for k in buruk) if buruk else \
                   hasil.get('pemain_valid', (True, ''))[1]
-        print(f'{nama:14s} {tanda:>7s} {ms:9.1f} {n_ent:7d}  {catatan[:44]}')
+        print(f'{nama:14s} {tanda:>7s} {ms:9.1f} {n_ent:7d} {jenuh:5.0%}  {catatan[:44]}')
+    print('-' * 86)
+    for k, ok, c in otonomi_baris:
+        print(f'{"otonomi":14s} {"LULUS" if ok else "GAGAL":>7s} {"":>9s} {"":>7s}  {c[:44]}')
     print('-' * 78)
-    n_lulus = sum(1 for _, _, _, _, b in baris if not b)
+    for k, ok, c in sims_baris:
+        print(f'{"sistem sims":14s} {"LULUS" if ok else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {c[:44]}')
+    print('-' * 78)
+    tanda_hud = 'LULUS' if not hud_baris else 'GAGAL'
+    ring_hud = '; '.join(f'{k} {c}' for k, c in hud_baris) or 'semua di dalam layar'
+    print(f'{"HUD di layar":14s} {tanda_hud:>7s} {"":>9s} {"":>7s}  {ring_hud[:44]}')
+    print('-' * 78)
+    tanda_arah = 'LULUS' if all(ok for _, ok, _ in arah_baris) else 'GAGAL'
+    rangkum = ', '.join(f'{k.upper()}={c.split(" ")[0]}' for k, ok, c in arah_baris)
+    print(f'{"arah WASD":14s} {tanda_arah:>7s} {"":>9s} {"":>7s}  {rangkum[:44]}')
+    ok_rumput, catatan_rumput = rumput_baris[0] if rumput_baris else (True, '-')
+    tanda_rumput = 'LULUS' if ok_rumput else 'GAGAL'
+    print(f'{"rumput hidup":14s} {tanda_rumput:>7s} {"":>9s} {"":>7s}  {catatan_rumput[:44]}')
+    ok_wish, catatan_wish = wish_baris[0] if wish_baris else (True, '-')
+    print(f'{"panel wishes":14s} {"LULUS" if ok_wish else "GAGAL":>7s} '
+          f'{"":>9s} {"":>7s}  {catatan_wish[:44]}')
+    ok_gua, catatan_gua = gua_baris[0] if gua_baris else (True, '-')
+    print(f'{"bentuk gua":14s} {"LULUS" if ok_gua else "GAGAL":>7s} '
+          f'{"":>9s} {"":>7s}  {catatan_gua[:44]}')
+    print('-' * 78)
+    n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)
     print(f'{n_lulus}/{len(baris)} scene lulus, {gagal_total} pemeriksaan gagal, '
           f'boot {boot_s:.1f}s')
     if lingkungan:
@@ -542,11 +1534,21 @@ def main():
             f.write('> **Hasil ini tidak sah.** Kegagalannya seragam `frame_kosong` '
                     'dan sebabnya\n> lingkungan (jendela tidak bisa difokuskan), '
                     'bukan scene. Jalankan ulang dengan `--offscreen`.\n\n')
-        f.write('| scene | hasil | ms/frame | entity | catatan |\n|---|---|--:|--:|---|\n')
-        for nama, hasil, ms, n_ent, buruk in baris:
+        f.write('| scene | hasil | ms/frame | entity | jenuh | catatan |\n|---|---|--:|--:|--:|---|\n')
+        for nama, hasil, ms, n_ent, buruk, jenuh in baris:
             tanda = 'LULUS' if not buruk else '**GAGAL**'
             catatan = '; '.join(f'`{k}` {hasil[k][1]}' for k in buruk) or '-'
-            f.write(f'| {nama} | {tanda} | {ms:.1f} | {n_ent} | {catatan} |\n')
+            f.write(f'| {nama} | {tanda} | {ms:.1f} | {n_ent} | {jenuh:.0%} | {catatan} |\n')
+        f.write(f'\n## HUD\n\n{ring_hud}\n')
+        f.write(f'\n## Animasi rumput\n\n'
+                f'{"LULUS" if ok_rumput else "**GAGAL**"} — {catatan_rumput}\n')
+        f.write(f'\n## Panel Keinginan\n\n'
+                f'{"LULUS" if ok_wish else "**GAGAL**"} — {catatan_wish}\n')
+        f.write(f'\n## Bentuk gua\n\n'
+                f'{"LULUS" if ok_gua else "**GAGAL**"} — {catatan_gua}\n')
+        f.write('\n## Arah WASD\n\n| tombol | hasil | catatan |\n|---|---|---|\n')
+        for k, ok, c in arah_baris:
+            f.write(f'| {k.upper()} | {"LULUS" if ok else "**GAGAL**"} | {c} |\n')
     print(f'laporan: {laporan}')
 
     try:
@@ -562,6 +1564,7 @@ def main():
     sys.stdout.flush()
     # Kode 2 dibedakan dari 1: 1 berarti ada scene yang benar-benar rusak,
     # 2 berarti hasilnya tidak sah karena lingkungan. CI bisa membedakannya.
+    _buang_save_fixture()
     os._exit(2 if lingkungan else (1 if gagal_total else 0))
 
 

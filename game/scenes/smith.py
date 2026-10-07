@@ -1,11 +1,19 @@
-from game.config import *
-from game.scenes.scene_base import Scene, _build_indoor_room
-import random
-import math
+from game.scenes.scene_base import ruang_denah
+
+# Bengkel Budi. Tungku tempa di utara dengan landasan (ubin meja) dua ubin di
+# depannya -- Budi menempa di antara keduanya, di luar jalur pintu. Meja kerja
+# di timur, tong di dinding barat, rak senjata, dipan di pojok.
+DENAH = """
+#########
+#R.F..RB#
+#.......#
+#C.T..NN#
+#C......#
+#.......#
+#J....LP#
+####D####
+"""
+
 
 def build_smith():
-    return _build_indoor_room('smith', 'Bengkel Budi', [
-        (6,1,TB),(1,2,SH),(12,1,FP),(8,1,SH),(9,1,SH),
-    ], ('town', 7, 22))
-
-
+    return ruang_denah('smith', 'Bengkel Budi', DENAH, ('town', 12, 16))

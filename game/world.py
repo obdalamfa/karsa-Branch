@@ -14,7 +14,7 @@ Struktur Y (vertikal):
 import math, os
 from pathlib import Path
 from PIL import Image
-from ursina import Entity, Vec3, color, destroy, Texture
+from ursina import Entity, Vec3, color, destroy, Texture, scene
 from ursina.models.procedural.cylinder import Cylinder
 
 from .config import (TILE_SIZE, GROUND_H, WALL_H, TREE_H, HOUSE_H, OBJ_H, SMALL_OBJ_H,
@@ -22,7 +22,8 @@ from .config import (TILE_SIZE, GROUND_H, WALL_H, TREE_H, HOUSE_H, OBJ_H, SMALL_
                      G, D, P, W, FL, WL, TR, H, MB, DR, FN, GT, BD, ST, TB, BS,
                      MR, FP, CL, PP, CH, CT, SH, GR, LN, DT, CV_W, CV_F, PEN, STR_T,
                      DCK, BOT, LLY, CRYS, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH,
-                     STAIRS_DOWN, STAIRS_UP, MINED, SD, LGH_B, LGH_F, CLOUD, GOLD_W, PALM, TV, CHR, CAL)
+                     STAIRS_DOWN, STAIRS_UP, MINED, SD, LGH_B, LGH_F, CLOUD, GOLD_W, PALM, TV, CHR, CAL,
+                     WC)
 from .scenes import SCENES
 from .data import CROPS
 # Impor ini BUKAN sekadar dekorasi: game/crops.py mendaftarkan katalog palawija,
@@ -32,6 +33,21 @@ from .data import CROPS
 from . import crops as _crops_registry  # noqa: F401
 
 TS = TILE_SIZE
+
+# Tekstur permukaan luar ruang. Dipusatkan di sini karena namanya disebut di
+# enam tempat, dan sebelumnya salah satu di antaranya ('grass') menunjuk file
+# yang hampir hitam.
+#
+# `rumput_desa` dan `tanah_garap` dibuat oleh tools/gen_terrain_tex.py. Alasan
+# menggantinya, dengan angkanya, ada di kepala tool itu; ringkasnya kanal biru
+# `grass_tso` cuma 32% dari kanal hijau, dan perkalian tint tidak bisa
+# menaikkannya — tidak ada satu pun warna entity yang bisa membuat rumput itu
+# berhenti neon. File lamanya TETAP ADA di disk dan masih dipakai untuk salju
+# dan pasir.
+TEX_RUMPUT = 'rumput_desa'
+TEX_TANAH  = 'tanah_garap'
+TEX_JERAMI = 'jerami_lantai'
+TEX_SALJU  = 'snow_ground'
 
 # ─── TEXTURE HELPERS ─────────────────────────────────────
 _ASSET_DIR = Path(__file__).resolve().parent.parent / 'assets' / 'textures'
@@ -49,10 +65,22 @@ def _tex(name: str):
             img = Image.open(p)
             t = Texture(img)
             # Enable high-quality bilinear filtering for high-resolution ground textures
-            if name in ('grass_tso', 'rock_ground', 'sand_ground', 'snow_ground'):
+            if name in ('grass_tso', 'rumput_desa', 'tanah_garap',
+                        'jerami_lantai', 'rock_ground', 'sand_ground',
+                        'snow_ground'):
                 t.filtering = True
             else:
                 t.filtering = False
+            # Mengecil SELALU lewat mipmap, apa pun pembesarannya. Tanpa ini
+            # tekstur tanah resolusi tinggi dicuplik satu titik per piksel
+            # layar, dan titik itu berganti begitu kamera bergeser beberapa
+            # milimeter -- seluruh tanah berkerlip saat pemain berjalan
+            # (laporan pemilik: "layar seperti kedip-kedip"). Pembesaran
+            # tidak disentuh, jadi tekstur piksel tetap tajam dari dekat.
+            # Anisotropik menjaga ubin yang dilihat miring tidak jadi buram.
+            from panda3d.core import SamplerState
+            t._texture.setMinfilter(SamplerState.FT_linear_mipmap_linear)
+            t._texture.setAnisotropicDegree(4)
             _TEX_CACHE[name] = t
             return t
         except Exception:
@@ -74,6 +102,30 @@ def _e(model, pos, scale, tex_name, tint=color.white, smooth=True, soft=True,
             model = soft_capsule_mesh()
     elif model == 'cylinder':
         model = Cylinder()
+
+    # Mesh prosedural Ursina bisa datang TANPA normal sama sekali, dan mesh
+    # tanpa normal tidak bisa dicahayai.
+    #
+    # `ursina.models.procedural.cone.Cone` adalah contohnya: diukur, ia punya
+    # 24 vertex dan `normals is None`. smooth_shader memulai dengan
+    # `normalize(v_world_normal)`, jadi untuk atap rumah — yang dibangun dari
+    # Cone — seluruh perhitungan cahaya berangkat dari nilai yang tidak
+    # ditentukan. Hasilnya: dot(N,L) jatuh ke pita paling gelap DAN dot(N,V)
+    # membuat `edge` menyala penuh, dua-duanya dikalikan, dan atap bergenteng
+    # emas keluar di layar sebagai (59,38,12) — praktis hitam.
+    #
+    # Ini juga sebabnya "balik normal kalau membelakangi kamera" tidak
+    # menolong sedikit pun: tidak ada normal untuk dibalik.
+    #
+    # Diperbaiki di sini, bukan di tempat atap dibuat, karena tiap mesh
+    # prosedural lain punya jebakan yang sama dan tidak ada yang melempar
+    # apa pun saat menginjaknya.
+    if hasattr(model, 'generate_normals') and not getattr(model, 'normals', None):
+        try:
+            model.generate_normals()
+        except Exception:
+            pass
+
     t = tex_obj if tex_obj is not None else _tex(tex_name)
     if t:
         e = Entity(model=model, position=pos, scale=scale,
@@ -96,9 +148,28 @@ def _c(r, g_, b):
 
 # Roof texture variants moved to props.py
 
-# Checkerboard outdoor — hijau hangat Sims 1 (tidak terlalu neon)
-_CB_LIGHT = color.rgb(148, 205, 105)
-_CB_DARK  = color.rgb(125, 182, 85)
+# Rumput luar ruang. TIGA jangkar, bukan dua.
+#
+# Yang lama dua warna, (148,205,105) dan (125,182,85): selisih nilainya cuma
+# 10%, jadi seluruh ladang terbaca sebagai SATU hijau rata — persis keluhan
+# pemilik. Di `_bench/refs/farm_wide.jpg` rumput pada jarak main yang sama
+# punya rentang nilai kira-kira dua kali lipat: petak yang kena matahari penuh
+# jauh lebih pucat daripada petak teduh di sebelahnya, dan di antaranya ada
+# bercak yang KERING — lebih kuning, bukan sekadar lebih gelap.
+#
+# Jadi jangkarnya tiga dan sumbunya dua:
+#   nilai    _CB_DARK ↔ _CB_LIGHT, dikendalikan tint_mix() (bercak + bintik)
+#   kekering ke arah _CB_KERING, dikendalikan noise terpisah berfrekuensi lain
+# Dua sumbu yang tidak berkorelasi tidak bisa menghasilkan pita, dan tidak ada
+# satu pun yang berperiode dua ubin.
+#
+# Sejak `rumput_desa.png` dipakai, corak hijaunya datang dari TEKSTUR dan tint
+# di sini nyaris netral: tugasnya cuma nilai (terang-gelap) dan pergeseran ke
+# kuning di bercak kering. Tint yang ikut mewarnai — seperti versi sebelumnya —
+# akan mengalikan dua kali dan hijaunya kembali jadi hijau layar.
+_CB_LIGHT  = color.rgb(236, 232, 210)
+_CB_DARK   = color.rgb(146, 152, 134)
+_CB_KERING = color.rgb(244, 226, 168)
 
 # Checkerboard indoor — kayu jati gelap.
 # Nilai (value) sengaja jauh di bawah dinding: mata membaca ruangan lewat beda
@@ -111,14 +182,128 @@ _FL_DARK  = color.rgb(131, 96, 62)
 _CV_LIGHT = color.rgb(132, 118, 152)
 _CV_DARK  = color.rgb(108, 95, 128)
 
+def _tile_hash(tx, ty):
+    """Acak per-ubin yang deterministik, [0..1]. Tetangga tidak berkorelasi."""
+    h = (int(tx) * 374761393 + int(ty) * 668265263) & 0xFFFFFFFF
+    h = ((h ^ (h >> 13)) * 1274126177) & 0xFFFFFFFF
+    return ((h ^ (h >> 16)) & 0xFFFF) / 65535.0
+
+
+def tint_mix(tx, ty):
+    """Seberapa terang ubin (tx, ty) seharusnya, [0..1].
+
+    Ini pengganti papan catur. Yang lama benar-benar papan catur: (tx+ty) % 2
+    memilih antara dua warna, dan periode DUA adalah pola paling teratur yang
+    bisa dibuat. Mata mengunci grid semacam itu sebelum sempat membaca apa pun
+    sebagai tanah — di screenshot ladangnya terbaca sebagai papan catur, bukan
+    rumput. Maksud aslinya (variasi halus ala Sims 1) tidak salah; yang salah
+    periodenya.
+
+    Dua lapis, dan keduanya perlu:
+
+      bercak  tiga sinus berfrekuensi rendah (periode ~7, ~9, dan ~20 ubin)
+              memberi bercak selebar beberapa ubin — terang di satu tempat,
+              lebih tua di tempat lain, seperti tanah yang tidak rata sinarnya.
+      bintik  hash per-ubin memecah bercaknya. Tanpa ini jumlah sinus tetap
+              periodik dan matanya menemukan pita, cuma pita yang lebih besar.
+              Dengan ini tepian bercaknya berbutir, bukan bergaris.
+
+    Deterministik dari koordinat ubin: scene yang sama selalu terlihat sama,
+    jadi tangkapan layar regresi tidak berkedip antar-jalan.
+    """
+    s = (math.sin(tx * 0.31 + ty * 0.47) * 0.45 +
+         math.sin(tx * 0.73 - ty * 0.19 + 2.1) * 0.30 +
+         math.sin(tx * 0.17 + ty * 0.91 + 4.3) * 0.25)
+    bercak = (s + 1.0) * 0.5
+    return max(0.0, min(1.0, bercak * 0.70 + _tile_hash(tx, ty) * 0.30))
+
+
+def _campur(gelap, terang, t):
+    return color.rgb(*[int(round(a + (b - a) * t))
+                       for a, b in (( gelap[0] * 255, terang[0] * 255),
+                                    ( gelap[1] * 255, terang[1] * 255),
+                                    ( gelap[2] * 255, terang[2] * 255))])
+
+
+def kekeringan(tx, ty):
+    """Seberapa KERING ubin (tx, ty), [0..1] — sumbu kedua warna rumput.
+
+    Sengaja berfrekuensi lain dari `tint_mix` dan tanpa bintik per-ubin:
+    bercak kering di padang memang berukuran beberapa langkah dan bertepi
+    halus, sementara variasi terang-gelap berbutir sampai satu ubin. Dua pola
+    dengan ukuran butir berbeda inilah yang membuat bidangnya terbaca sebagai
+    tanah, bukan sebagai gradien.
+    """
+    s = (math.sin(tx * 0.23 - ty * 0.37 + 1.7) * 0.55 +
+         math.sin(tx * 0.11 + ty * 0.29 + 5.2) * 0.45)
+    k = (s + 1.0) * 0.5
+    # Dipangkas: sebagian besar peta TIDAK kering. Tanpa ini seluruh rumput
+    # bergeser ke kuning dan warnanya kembali seragam, cuma seragam kuning.
+    return max(0.0, (k - 0.45) / 0.55)
+
+
 def _cb(tx, ty):
-    return _CB_DARK if (tx + ty) % 2 == 1 else _CB_LIGHT
+    dasar = _campur(_CB_DARK, _CB_LIGHT, tint_mix(tx, ty))
+    ker = kekeringan(tx, ty)
+    if ker <= 0.0:
+        return dasar
+    return _campur(dasar, _CB_KERING, min(1.0, ker * 0.62))
 
 def _cb_floor(tx, ty):
+    # Di dalam ruangan papan catur justru BENAR: lantai papan/ubin memang
+    # dipasang berselang, dan ruangannya kecil sehingga polanya terbaca
+    # sebagai lantai, bukan sebagai grid yang menutupi dunia.
     return _FL_DARK if (tx + ty) % 2 == 1 else _FL_LIGHT
 
 def _cb_cave(tx, ty):
-    return _CV_DARK if (tx + ty) % 2 == 1 else _CV_LIGHT
+    return _campur(_CV_DARK, _CV_LIGHT, tint_mix(tx, ty))
+
+
+# ─── TINT PER KELUARGA PERMUKAAN ────────────────────────────────────────────
+# Cabang `else` di _make_tile() memberi tint papan catur RUMPUT ke SEMUA ubin
+# yang bukan G — termasuk tanah (`D`), jerami kandang (`STR_T`), pasir (`SD`)
+# dan batu (`P` di dalam ruang). Akibatnya terukur di layar:
+#
+#   sand_ground (220,193,150) x hijau (136,193,95) = (117,146,56) → HIJAU OLIVE
+#   straw       (186,149,53)  x hijau (136,193,95) = (99,113,20)  → HIJAU LUMUT
+#
+# Jadi seluruh ladang dan seluruh lantai kandang terbaca sebagai rumput pucat.
+# Itu justru alasan `scenes/zone_paint.py` ada: ia melapisi zona dengan bidang
+# kedua supaya warnanya kembali. Dua permukaan berjarak 6 mm itu lalu saling
+# beradu-Z, dan pita bergaris yang terlihat di `_bench/shots/HUD.png` di lantai
+# kandang adalah adu-Z itu, bukan tekstur jeraminya.
+#
+# Diperbaiki di sumbernya: tiap keluarga permukaan punya pasangan tint sendiri,
+# dipilih dengan noise yang sama seperti rumput sehingga variasinya tetap ada
+# dan tetap tidak berperiode pendek.
+_TINT_KELUARGA = {
+    # tekstur       : (gelap, terang, kering)
+    'tanah_garap'   : ((150, 140, 132),  (226, 216, 204), (238, 220, 182)),
+    'sand_ground'   : ((110, 88, 72),    (152, 126, 102), (168, 144, 106)),
+    'dirt_path'     : ((186, 168, 148),  (238, 226, 208), (244, 228, 190)),
+    'jerami_lantai' : ((156, 150, 142),  (232, 226, 214), (240, 228, 194)),
+    'straw'         : ((174, 176, 190),  (216, 216, 224), (222, 214, 200)),
+    'rock_ground'   : ((182, 180, 176),  (224, 222, 218), (226, 220, 208)),
+    'cave_floor'    : ((108, 95, 128),   (132, 118, 152), (132, 118, 152)),
+}
+_TINT_UMUM = ((212, 208, 202), (246, 244, 240), (246, 240, 228))
+
+
+def _tint_dasar(tex_name, tx, ty):
+    """Tint per-ubin untuk permukaan tanah NON-rumput.
+
+    Rumput tetap lewat `_cb()`. Semua yang lain lewat sini, dan pemetaannya
+    dari nama tekstur — bukan dari id ubin — supaya satu tekstur selalu
+    diperlakukan sama di scene mana pun.
+    """
+    if tex_name in (TEX_RUMPUT, 'grass_tso', TEX_SALJU):
+        return _cb(tx, ty)
+    gelap, terang, kering = _TINT_KELUARGA.get(tex_name, _TINT_UMUM)
+    dasar = _campur(_c(*gelap), _c(*terang), tint_mix(tx, ty))
+    ker = kekeringan(tx + 3, ty - 7)
+    if ker <= 0.0:
+        return dasar
+    return _campur(dasar, _c(*kering), min(1.0, ker * 0.55))
 
 
 # ─── TERRAIN NOISE (dari filosofi Panda3D Terrain + Ursina minecraft_clone) ──
@@ -149,7 +334,7 @@ TILE_TEX = {
     W:          'water',
     FL:         'floor_wood',
     CV_F:       'cave_floor',
-    STR_T:      'straw',
+    STR_T:      TEX_JERAMI,
     DCK:        'dock',
     LLY:        'lily',
     MINED:      'mined',
@@ -214,6 +399,11 @@ OBJ_COLORS = {
     TB:  _c(96, 130, 122),  # warm table
     BS:  _c(72, 96, 140),
     MR:  _c(165, 225, 255),  # brighter mirror
+    # Porselen, ditahan di L~78 dan bukan putih murni: cel shader
+    # menambah cahaya di tier terang, jadi dasar di atas ~210 terjepit
+    # jadi putih rata dan bentuknya hilang (lihat catatan plester
+    # dinding di bawah, dan palet hewan di animal_models.py).
+    WC:  _c(198, 200, 196),
     FP:  _c(255, 148, 55),   # vivid fireplace
     CL:  _c(105, 85, 68),
     PP:  _c(88, 215, 88),    # vivid plant
@@ -260,10 +450,21 @@ class World3D:
         self._crop_ents: dict   = {}   # key → Entity
         self._water_ents: list  = []   # untuk animasi warna
         self._grass_ents: list  = []   # untuk grass shader (FreeSO GrassShader.fx)
+        self._grass_tiles: list = []   # (tx, ty) sejajar _grass_ents, untuk cek regresi
+        # Mesh gabungan benda kecil (rumpun, bunga, kerikil, ranting, semak).
+        # DIPISAH dari _grass_ents karena cek `rumput_catur` di tools/regress.py
+        # menuntut _grass_ents dan _grass_tiles sama panjang dan membaca
+        # e.color tiap ubin — mesh sebaran tidak punya koordinat ubin dan
+        # warnanya ada di vertex, bukan di entity.
+        self._sebaran_ents: list = []
         self._water_t    = 0.0
         # Dinding dilacak terpisah supaya bisa dipotong (wall cutaway ala Sims 1):
         # (entity, tinggi_penuh, y_penuh, tx, ty)
         self._wall_ents: list   = []
+        # Hiasan yang menempel di muka dalam dinding (lis, jendela, kusen
+        # pintu), per ubin dinding: (tx, ty) -> [entity]. Ikut disembunyikan
+        # saat dindingnya dipangkas -- kalau tidak, jendela melayang di udara.
+        self._wall_decor: dict  = {}
         self._cutaway_state     = None   # cache arah kamera terakhir
         self.ground_collider = None
         # Craig-Macomber pattern: cache tinggi surface per tile (tx,ty) → float
@@ -281,11 +482,122 @@ class World3D:
         self._clear()
         self.scene_name = name
         self.scene_obj  = SCENES[name]
+        # Objek yang DIBELI pemain (Sims S7) di-overlay sebelum tile dibangun,
+        # supaya ikut dirender dan bertahan lintas save — SCENES adalah
+        # template global, jadi tanpa langkah ini objek yang dibeli hilang tiap
+        # kali scene dimuat ulang.
+        try:
+            from .sims_build import apply_placed
+            apply_placed(self.state, self.scene_obj)
+        except Exception:
+            pass
         self._build_tiles()
         self._build_all_crops()
         if hasattr(self.scene_obj, 'builder') and self.scene_obj.builder:
             self.scene_obj.builder(self)
         self._build_objects()
+        self._satukan_ubin()
+        self._lepas_dari_loop_ursina()
+
+    def _satukan_ubin(self):
+        """Gabungkan ubin statis jadi satu mesh per keadaan render.
+
+        Diukur di farm: 1.008 GeomNode digambar terpisah, 673 di antaranya
+        ubin tanah yang tidak pernah berubah setelah scene dibangun, dan
+        renderFrame memakan 38 dari ~50 ms per frame -- ~19 FPS di mesin
+        pemilik. Satu draw call per ubin adalah ongkos CPU, bukan GPU, jadi
+        resolusi lebih kecil pun tidak menolong.
+
+        Salinan visualnya dikumpulkan di satu node lalu `flattenStrong()`
+        menggabungkan yang teksturnya sama. Entity aslinya TIDAK dihapus,
+        hanya disembunyikan: collider-nya tetap dipakai klik mouse, dan
+        `_clear()` tetap menghancurkannya seperti biasa. Air, rumput, dinding
+        (cutaway) dan tanah garapan ada di daftar lain, jadi tidak tersentuh.
+        """
+        lama = getattr(self, '_ubin_statis', None)
+        if lama is not None:
+            lama.removeNode()
+        self._ubin_statis = None
+        from panda3d.core import ColorScaleAttrib, TextureAttrib, RenderState
+
+        def _sidik(e):
+            # Ubin hanya boleh dilebur dengan ubin yang shader input-nya sama.
+            return tuple(sorted((k, str(v)) for k, v in
+                                (getattr(e, '_shader_inputs', {}) or {}).items()))
+
+        calon = [e for e in self._tile_ents
+                 if e.enabled and e.model is not None and not e.is_hidden()]
+        if len(calon) < 32:
+            return
+        acuan = _sidik(calon[0])
+        calon = [e for e in calon if _sidik(e) == acuan]
+        akar = scene.attachNewNode('ubin_statis')
+        bersama = None
+        for e in calon:
+            # Yang disalin GeomNode-nya saja dengan transform dunianya. Menyalin
+            # entity utuh membawa simpul perantara Ursina yang tidak mau dilebur
+            # flatten -- terukur 673 simpul masuk, 673 keluar.
+            for gnp in e.findAllMatches('**/+GeomNode'):
+                st = gnp.getNetState()
+                if bersama is None:
+                    # Shader, lampu, kabut: SATU kali di induk. Panda hanya
+                    # melebur geom yang state-nya objek yang sama, dan shader
+                    # input tiap entity Ursina adalah objek tersendiri -- 673
+                    # state "identik" yang tetap jadi 673 draw call.
+                    # Transparansi 'dual' sengaja dibuang: tanah buram, dan dual
+                    # menggambar tiap ubin dua kali plus mengurutkannya.
+                    bersama = st
+                    for jenis in ('ColorScaleAttrib', 'TextureAttrib',
+                                  'TransparencyAttrib', 'ColorAttrib'):
+                        from panda3d import core as _pc
+                        bersama = bersama.removeAttrib(getattr(_pc, jenis))
+                    akar.setState(bersama)
+                c = gnp.copyTo(akar)
+                # Per ubin cuma teksturnya. Warnanya (ColorScaleAttrib ber-flag
+                # "off" yang tidak bisa dipanggang flatten) dipindah jadi
+                # ColorScale biasa supaya flatten menulisnya ke warna vertex;
+                # smooth_shader menghitung ColorScale x warna vertex, jadi hasil
+                # di layar sama.
+                tx = st.getAttrib(TextureAttrib)
+                c.setState(RenderState.make(tx) if tx is not None
+                           else RenderState.makeEmpty())
+                cs = st.getAttrib(ColorScaleAttrib)
+                if cs is not None and cs.hasScale():
+                    c.setColorScale(cs.getScale())
+                c.setMat(gnp.getMat(scene))
+            e.hide()
+        akar.flattenStrong()
+        self._ubin_statis = akar
+
+    def _lepas_dari_loop_ursina(self):
+        """Keluarkan entity statis dari loop update per-entity Ursina.
+
+        Tiap frame Ursina memeriksa SETIAP entity di `scene.entities` --
+        enabled, ignore, has_disabled_ancestor, hasattr(update), scripts,
+        shader -- walau entity itu tidak punya apa pun untuk dijalankan.
+        Diukur di farm: 17 ms per frame di loop itu, lebih dari tiga kali
+        seluruh logika game (5 ms). Ubin, properti, pagar, dan rumah tidak
+        punya update; mereka cuma digambar.
+
+        Hanya Entity POLOS yang dikeluarkan: tanpa method update, tanpa
+        script, tanpa shader berinput kontinu. Entity tetap di scene graph
+        (tetap tampil, collider tetap kena klik), dan destroy() Ursina tetap
+        aman karena pembersihannya memakai uji keanggotaan.
+        """
+        from ursina import scene as _sc
+        kandidat = set()
+        for daftar in (self._tile_ents, self._obj_ents, self._wall_ents):
+            for e in daftar:
+                if type(e) is not Entity:
+                    continue
+                if 'update' in e.__dict__ or getattr(e, 'scripts', None):
+                    continue
+                sh = getattr(e, 'shader', None)
+                if sh is not None and getattr(sh, 'continuous_input', None):
+                    continue
+                kandidat.add(id(e))
+        if kandidat:
+            _sc.entities = [e for e in _sc.entities if id(e) not in kandidat]
 
     def _build_objects(self):
         """Render objek terpasang bebas (`Scene.objects`).
@@ -420,13 +732,45 @@ class World3D:
     # supaya tetap benar saat kamera diputar.
     CUTAWAY_STUB = 0.42          # tinggi sisa dinding yang dipangkas (world units)
 
-    def update_wall_cutaway(self, cam_pos, focus_pos):
-        """Pangkas dinding yang menghalangi pandangan ke titik fokus.
+    # Setengah lebar koridor pandang, dalam world unit. Dinding di luar koridor
+    # ini TIDAK memangkas dirinya walau ia lebih dekat ke kamera daripada
+    # pemain — karena ia tidak menghalangi apa pun.
+    #
+    # Kenapa angkanya ada: aturan lama memangkas SELURUH setengah-ruang di
+    # depan fokus, tanpa memandang jarak menyamping. Di rumah itu tidak
+    # kelihatan salah — dindingnya sedikit dan memang mengelilingi satu
+    # ruangan. Di gua ia menghancurkan bentuk ruangannya, karena di gua
+    # dinding BUKAN pembatas ruangan, dinding ADALAH ruangannya: 46-57% peta
+    # gua bertingkat adalah batu padat.
+    #
+    # Terukur sebelum perbaikan (tools/probe_gua.py): gua bertingkat memangkas
+    # 41-48% seluruh dindingnya sekaligus, gua Sang Hyang 67%. Yang tersisa di
+    # layar bukan gua melainkan lapangan datar bertabur tunggul setinggi lutut.
+    #
+    # 1,15 tile: cukup lebar untuk menelan satu dinding penuh (1 tile) beserta
+    # sedikit kelonggaran supaya dinding yang menghalangi separuh tubuh pemain
+    # ikut terpangkas, cukup sempit supaya dinding di sebelahnya tetap berdiri.
+    CUTAWAY_RADIUS = TS * 1.15
 
-        Sebuah dinding dipangkas kalau ia berada di sisi kamera relatif terhadap
-        fokus, diukur sepanjang sumbu pandang mendatar. Murah: hanya beberapa
-        puluh dinding per scene, dan kita lewati seluruhnya kalau arah pandang
-        belum berubah cukup jauh sejak frame sebelumnya.
+    def update_wall_cutaway(self, cam_pos, focus_pos):
+        """Pangkas dinding yang benar-benar MENGHALANGI pandangan ke fokus.
+
+        Syaratnya tiga, dan ketiganya harus benar:
+
+          1. dinding berada di DEPAN kamera (bukan di belakangnya),
+          2. lebih dekat ke kamera daripada fokus, diukur sepanjang sumbu
+             pandang mendatar,
+          3. dan jaraknya MENYAMPING dari garis kamera-ke-fokus lebih kecil
+             dari `CUTAWAY_RADIUS`.
+
+        Syarat ketiga itu yang dulu tidak ada, dan ketiadaannya yang membuat gua
+        kehilangan bentuk. Tanpa syarat itu aturannya berbunyi "pangkas semua
+        yang lebih dekat ke kamera daripada pemain" — di gua, itu berarti
+        memangkas seluruh baji peta di depan pemain, termasuk batu yang jaraknya
+        belasan tile ke samping dan tidak menghalangi apa-apa.
+
+        Murah: hanya beberapa ratus dinding per scene, dan seluruhnya dilewati
+        kalau arah pandang belum berubah cukup jauh sejak frame sebelumnya.
         """
         if not self._wall_ents:
             return
@@ -437,32 +781,44 @@ class World3D:
             return
         vx /= mag; vz /= mag
 
-        # Proyeksi fokus ke sumbu pandang — dinding dengan proyeksi lebih kecil
-        # berada di depan fokus (lebih dekat ke kamera) dan karenanya menghalangi.
+        # Dua sumbu: `proj` sepanjang arah pandang, `perp` tegak lurus padanya.
+        # Keduanya dihitung dari vektor yang sama, jadi tidak ada sudut yang
+        # perlu ditebak saat kamera diputar.
         f_proj = focus_pos[0] * vx + focus_pos[2] * vz
+        f_perp = -focus_pos[0] * vz + focus_pos[2] * vx
+        cam_proj = cam_pos[0] * vx + cam_pos[2] * vz
 
-        state = (round(vx, 2), round(vz, 2), round(f_proj, 1))
+        state = (round(vx, 2), round(vz, 2), round(f_proj, 1), round(f_perp, 1))
         if state == self._cutaway_state:
             return
         self._cutaway_state = state
 
         stub = self.CUTAWAY_STUB
+        radius = self.CUTAWAY_RADIUS
         for rec in self._wall_ents:
             e, full_h, full_y = rec[0], rec[1], rec[2]
             if not e:
                 continue
             proj = e.x * vx + e.z * vz
+            perp = -e.x * vz + e.z * vx
             # Ambang setengah tile: dinding tepat sejajar fokus dibiarkan berdiri
             # supaya ruangan tetap punya batas yang terbaca.
-            cut = proj < f_proj - TS * 0.5
+            cut = (proj > cam_proj
+                   and proj < f_proj - TS * 0.5
+                   and abs(perp - f_perp) < radius)
             want_h = stub if cut else full_h
             if abs(e.scale_y - want_h) > 1e-3:
                 e.scale_y = want_h
                 e.y = want_h / 2 + GROUND_H if cut else full_y
+                for d in self._wall_decor.get((rec[3], rec[4]), ()):
+                    d.enabled = not cut
 
     def _clear(self):
         for e in self._tile_ents + self._obj_ents:
             destroy(e)
+        if getattr(self, '_ubin_statis', None) is not None:
+            self._ubin_statis.removeNode()
+            self._ubin_statis = None
         for e in self._soil_ents.values():
             destroy(e)
         # Satu petak sekarang berisi BANYAK entity (batang, daun, buah,
@@ -476,7 +832,13 @@ class World3D:
         self._crop_ents.clear()
         self._water_ents.clear()
         self._grass_ents.clear()
+        self._grass_tiles.clear()
+        # Entity-nya sendiri sudah ikut terbuang lewat _obj_ents di atas
+        # (sebaran.bangun_entity mendaftarkannya ke sana); di sini cuma
+        # daftarnya yang dikosongkan supaya tidak menunjuk entity mati.
+        self._sebaran_ents.clear()
         self._wall_ents.clear()
+        self._wall_decor.clear()
         self._cutaway_state = None
         self._tile_heights.clear()
         
@@ -488,7 +850,21 @@ class World3D:
     def _build_tiles(self):
         sc = self.scene_obj
         is_dungeon = (self.scene_name == 'dungeon' and self.state.dungeon_tiles)
-        default_tex = 'cave_floor' if is_dungeon else ('floor_wood' if sc.indoor else 'grass')
+        # Di luar ruang, default_tex dulu 'grass' — dan grass.png di repo ini
+        # tekstur DEBUG: hitam bergaris magenta, rata-rata (44,14,46). Baris
+        # 511 memakainya apa adanya untuk setiap tile penghalang yang bukan
+        # pagar, jadi tiap pohon, tunggul, lentera dan peti berdiri di atas
+        # kotak hitam. Kontras hitam-pekat lawan rumput terang itu pula yang
+        # memicu aberasi kromatik di post-process, sehingga di layar muncul
+        # garis magenta di sekeliling kotaknya.
+        #
+        # Perbaikan satu baris ini persis yang diminta docstring
+        # `zone_paint.patch_tile()`: "Perbaikan sebenarnya satu baris di
+        # game/world.py (pakai 'grass_tso'/'sand_ground' sebagai default_tex
+        # luar ruang)." Tambalan di props.py boleh dicabut sesudah ini.
+        _rumput = 'snow_ground' if self.state.season_index == 3 else 'grass_tso'
+        default_tex = ('cave_floor' if is_dungeon
+                       else ('floor_wood' if sc.indoor else _rumput))
 
         tiles_to_build = self.state.dungeon_tiles if is_dungeon else sc.tiles
         h = len(tiles_to_build)
@@ -510,24 +886,70 @@ class World3D:
             visible=False
         )
 
+        # Benda kecil (rumpun, bunga, kerikil, ranting, semak) — satu mesh
+        # gabungan untuk seluruh peta. Harus SESUDAH loop ubin: ia membaca
+        # tetangga tiap ubin untuk menumbuhi batas antar material.
+        self._bangun_sebaran()
+
         # ── Horizon Lingkungan Luas (Menutupi efek "Piring di tengah bola") ──
         if getattr(sc, 'has_horizon', not sc.indoor and not is_dungeon):
-            # Digital Alice style: bright neon sky reflection / white void
+            # Bidang ini PUTIH POLOS sebelumnya, dan di tangkapan layar ia
+            # muncul sebagai pita putih hangus di garis kaki langit — bukan
+            # "kejauhan", tapi lubang. Di patokan, yang ada di balik peta selalu
+            # LAHAN: hijau yang sudah pudar oleh jarak. Warnanya dipilih tepat
+            # di antara rumput dan langit supaya kabut (fog_color = warna
+            # langit) menyelesaikan sisanya tanpa batas yang terlihat.
             horizon = _e('quad', (w * TS / 2.0, -0.05, h * TS / 2.0),
-                         (1000, 1000, 1), None, color.rgb(255, 255, 255), soft=False, rotation=(90, 0, 0))
+                         (1000, 1000, 1), None, color.rgb(126, 152, 108),
+                         soft=False, rotation=(90, 0, 0))
             self._tile_ents.append(horizon)
         
         # ── Pencahayaan Indoor (PointLight) ──
         if sc.indoor:
             from ursina import PointLight, scene
             pl = PointLight(parent=scene, position=(w * TS / 2.0, 5, h * TS / 2.0))
-            pl.color = color.rgb(255, 40, 200) # Neon magenta indoor
+            # Lampu kuning hangat ruangan berpenghuni. Dulu magenta neon --
+            # sisa eksperimen "Digital Alice" yang membuat rumah terasa klub.
+            pl.color = color.rgb(255, 214, 160)
             pl.shadows = True
             self._obj_ents.append(pl)
 
     def _make_tile(self, tid, wx, wz, default_tex, tx=0, ty=0):
+        # `default_tex` untuk scene luar ruang bernilai 'grass', dan grass.png
+        # di repo ini rata-ratanya (44,13,46) — nyaris hitam, dan UNGU karena
+        # R dan B jauh di atas G. Cabang normal di bawah sudah memetakannya ke
+        # 'grass_tso' (78,158,50) yang benar, tapi cabang penghalang tidak:
+        # ia meneruskan `default_tex` apa adanya. Akibatnya tiap ubin di bawah
+        # benda penghalang jadi kotak hitam-ungu, dan di sinar matahari tepinya
+        # menyala jadi kisi merah-muda.
+        #
+        # Untuk pohon dan lentera itu tertutup massanya sendiri. Untuk RUMAH
+        # tidak: `build_house_block` memberi badan rumah lebar TS * n * 0.94,
+        # jadi 6% sisa di tiap sisi membiarkan ubinnya mengintip — itulah pita
+        # hitam berkisi merah-muda yang melingkari tiap bangunan di `town`.
+        # props.py punya daftar tambalan `_TILE_TAMBALAN` yang mengecat ulang
+        # sebagian ubin ini satu per satu; komentarnya sendiri menyebut diri
+        # "tambalan sementara, bukan perbaikan", dan ia sengaja TIDAK memuat
+        # bangunan dengan alasan "massanya menutupi ubinnya sendiri" — alasan
+        # yang tidak berlaku justru karena angka 0,94 itu.
+        #
+        # Dinormalkan sekali di sini supaya semua cabang dapat tekstur yang
+        # benar, bukan ditambal per jenis benda. `luar` disimpan supaya
+        # perbandingan `== 'grass'` di bawah tetap berarti "ini scene luar
+        # ruang" setelah nilainya diganti.
+        luar = (default_tex == 'grass')
+        sc_indoor = not luar
+        if luar:
+            default_tex = (TEX_SALJU if self.state.season_index == 3
+                           else TEX_RUMPUT)
+
         # Pick tint based on tile type so indoor rooms aren't all white
-        if tid == FL or (tid in BLOCKING and default_tex == 'floor_wood'):
+        # Di dalam ruangan SEMUA ubin berlantai kayu memakai papan catur kayu,
+        # bukan cuma FL dan ubin pemblokir: kursi (CHR) bukan keduanya, jadi
+        # dulu tiap kursi berdiri di atas petak hijau rumput.
+        if default_tex == 'floor_wood' and tid == D:
+            tint = _c(112, 84, 60)          # tanah bedeng rumah kaca
+        elif tid == FL or default_tex == 'floor_wood':
             tint = _cb_floor(tx, ty)
         elif tid == CV_F or (tid in BLOCKING and default_tex == 'cave_floor'):
             tint = _cb_cave(tx, ty)
@@ -535,7 +957,7 @@ class World3D:
             tint = _cb(tx, ty)
 
         if tid in BLOCKING or tid == MB:
-            if tid in _FENCE_LIKE and default_tex == 'grass':
+            if tid in _FENCE_LIKE and luar:
                 # Pagar sekarang berlubang, jadi tanah di bawahnya ikut terlihat.
                 # Dulu tersembunyi di balik kubus pagar; kalau dibiarkan setinggi
                 # GROUND_H saja, jalur pagar terbaca sebagai pita gelap yang
@@ -545,9 +967,14 @@ class World3D:
                 # selebar TS * 1.005, jadi tepinya menjorok ~1 cm ke tile ini.
                 # Kalau tingginya PERSIS sama, dua bidang jadi sebidang dan
                 # z-fighting bikin garis belang di kaki tiang.
+                #
+                # Dulu cabang ini cuma untuk _FENCE_LIKE, dan sisanya ditambal
+                # dari luar oleh `zone_paint.patch_tile()` — satu entity
+                # tambahan per pohon/tunggul/lentera/peti. Tambalan itu sudah
+                # dicabut; docstring-nya sendiri menyebutnya sementara.
                 gh = GROUND_H + 0.042
                 ge = _e('cube', (wx, gh / 2, wz), (TS, gh, TS),
-                        'snow_ground' if self.state.season_index == 3 else 'grass_tso',
+                        TEX_SALJU if self.state.season_index == 3 else TEX_RUMPUT,
                         tint, soft=False)
             else:
                 ge = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS), default_tex, tint, soft=False)
@@ -567,13 +994,12 @@ class World3D:
         elif tid == G:
             # Resolve FreeSO/TSO high-fidelity textures
             is_winter = (self.state.season_index == 3)
-            grass_tex = 'snow_ground' if is_winter else 'grass_tso'
-            dirt_tex = 'sand_ground'
+            grass_tex = TEX_SALJU if is_winter else TEX_RUMPUT
+            dirt_tex = TEX_TANAH
 
             # ── Terrain Halus (Bukan Minecraft) ──
             # Hanya buat satu bidang datar, tanpa efek voxel bertingkat
-            nv = _noise_val(tx, ty) if self._is_outdoor() else 0.0
-            
+
             # Base dirt cube
             base = _e('cube', (wx, GROUND_H / 2, wz), (TS, GROUND_H, TS), dirt_tex, tint, soft=False)
             self._tile_ents.append(base)
@@ -584,13 +1010,14 @@ class World3D:
                        tint, soft=False)
             self._tile_ents.append(cap)
             self._grass_ents.append(cap)   # kumpulkan untuk grass shader
+            self._grass_tiles.append((tx, ty))
 
             # Cache tinggi surface untuk player terrain-following (selalu rata)
             self._tile_heights[(tx, ty)] = 0.0
 
-            # Dekorasi organik: batu kecil / rumput tinggi / bunga liar (30% tile)
-            if nv < 0.30:
-                self._add_outdoor_deco(wx, wz, GROUND_H + 0.04, tx, ty, nv)
+            # Benda kecil di atas rumput TIDAK dibuat di sini lagi. Semuanya
+            # dirakit jadi satu mesh gabungan setelah seluruh ubin selesai —
+            # lihat _bangun_sebaran(). Alasannya di kepala game/sebaran.py.
 
         elif tid == W:
             we = _e('cube', (wx, 0.05, wz), (TS, 0.10, TS), 'water',
@@ -607,39 +1034,48 @@ class World3D:
             self._tile_ents.append(base)
 
         elif tid == P and self._is_outdoor():
-            # Road tile: bitmask dari 4 tetangga P → pilih road00-15.png (FreeSO terrain pattern)
-            bm   = self._road_bitmask(tx, ty)
-            
-            # Add solid dirt base so transparent road doesn't show sky
-            # Jalan diberi warna tanah, bukan `tint` papan-catur rumput — dengan
-            # tint rumput, jalan desa terbaca sebagai petak hijau-limau menyala
-            # dan pemain tidak bisa membedakan jalan dari halaman.
-            base_dirt = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS),
-                           'sand_ground', _c(176, 150, 112), soft=False)
-            self._tile_ents.append(base_dirt)
-            
-            # Lapisan jalan dibuat SLAB TIPIS di atas dasar, bukan kubus setinggi
-            # penuh. Dua kubus dengan volume nyaris sama menghasilkan z-fighting
-            # hebat di sisi-sisinya — itulah kisi hitam/magenta yang berkedip di
-            # sepanjang jalan desa, bukan tekstur yang hilang.
-            # transparent=True WAJIB di sini: tekstur road* punya alpha nyata
-            # (road00 seluruhnya alpha=0) dengan RGB hitam di bawahnya. Tanpa
-            # alpha, yang tergambar adalah hitam pekat plus garis kuning — itulah
-            # kisi gelap yang menutupi seluruh jalan desa.
-            # smooth=False juga wajib: smooth_shader menulis alpha opak sehingga
-            # transparent=True saja tidak cukup untuk membuat area kosong tekstur
-            # jalan benar-benar tembus ke dasar pasir.
-            base = _e('cube', (wx, GROUND_H + 0.012, wz), (TS, 0.024, TS),
-                      f'terrain/road{bm:02d}', _c(196, 178, 148), soft=False,
-                      smooth=False, transparent=True)
+            # Jalan desa: SATU ubin tanah, bukan aspal.
+            #
+            # Sebelumnya di sini ada dua entitas — dasar pasir plus slab tipis
+            # bertekstur `terrain/road{00..15}`, dipilih lewat bitmask 4 tetangga
+            # supaya tepi jalan menyambung. Masalahnya bukan cara memasangnya,
+            # tapi asetnya: road*.png itu tileset JALAN KOTA dari FreeSO/The Sims
+            # Online — badan hitam aspal dengan MARKA KUNING PUTUS-PUTUS di tepi
+            # ubin (diperiksa: road01 punya 246 piksel (255,255,1) di x=125..127).
+            #
+            # Di layar hasilnya jalur gelap berkisi dengan garis putus-putus
+            # membelah petak ladang. Komentar lama di sini mengejar gejalanya
+            # — "hitam pekat plus garis kuning" — dan menambal dengan
+            # transparent=True supaya sebagian tembus ke dasar pasir. Yang
+            # tersisa tetap aspal, cuma lebih tipis.
+            #
+            # `dirt_path.png` sudah ada, dibuat `tools/gen_textures.py`
+            # (`gen_dirt_path`, komentarnya sendiri menyebutnya "alternatif road
+            # tile"), coklat tanah (152,125,89) — dan tidak pernah dipakai satu
+            # kali pun. TILE_TEX bahkan sudah memetakan P ke jalur, tapi cabang
+            # ini membajaknya sebelum sampai ke sana.
+            #
+            # Satu ubin menggantikan dua: marka jalannya hilang, dan z-fighting
+            # antara dasar dan slab yang dulu ditambal dengan slab tipis tidak
+            # bisa terjadi lagi karena tidak ada lagi dua permukaan yang
+            # bertumpuk. Tint dibuat nyaris putih supaya warna tekstur yang
+            # tampil, bukan hasil kali dua coklat.
+            # dirt_path.png simpangan bakunya 4 dari 255 — praktis satu warna.
+            # Dengan tint tetap seperti dulu (240,232,220), seluruh jalan desa
+            # jadi SATU pita cokelat rata sepanjang peta; itu salah satu bidang
+            # datar terbesar di frame `town`. Tint per-ubin dari noise yang sama
+            # dengan rumput memberi jalur yang terinjak tidak rata tanpa satu
+            # pun entity baru: bagian yang kering lebih pucat, bagian yang
+            # lembap (dekat rumput) lebih tua.
+            v = tint_mix(tx * 2 + 11, ty * 2 + 7)
+            k = kekeringan(tx + 5, ty - 3)
+            r_ = 206 + v * 44 + k * 8
+            g_ = 194 + v * 42
+            b_ = 178 + v * 40 - k * 14
+            base = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS),
+                      'dirt_path', _c(int(r_), int(g_), int(b_)), soft=False)
             self._tile_ents.append(base)
-            nv2 = _noise2(tx, ty)
-            if nv2 > 0.55:
-                ox = math.sin(tx * 53.7 + ty * 89.1) * 0.38
-                oz = math.cos(tx * 73.2 + ty * 47.5) * 0.38
-                pebble = _e('cube', (wx + ox, GROUND_H + 0.04, wz + oz),
-                            (0.18, 0.09, 0.16), 'rock_ground', _c(140, 128, 112))
-                self._tile_ents.append(pebble)
+            # Kerikil jalan ikut masuk mesh sebaran (lihat _bangun_sebaran).
 
         elif tid == CV_F:
             base = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS), 'cave_floor', _cb_cave(tx, ty), soft=False)
@@ -656,35 +1092,143 @@ class World3D:
         else:
             tex = TILE_TEX.get(tid, default_tex)
             if tex == 'grass':
-                tex = 'snow_ground' if self.state.season_index == 3 else 'grass_tso'
+                tex = TEX_SALJU if self.state.season_index == 3 else TEX_RUMPUT
             elif tex == 'dirt':
-                tex = 'sand_ground'
+                tex = TEX_TANAH
             elif tex == 'path_stone':
                 tex = 'rock_ground'
+            # Tint dipilih dari KELUARGA teksturnya, bukan dari papan catur
+            # rumput — lihat _tint_dasar(). Di dalam ruang tint lantai kayu /
+            # lantai gua yang sudah dihitung di atas tetap dipakai.
+            if not sc_indoor:
+                tint = _tint_dasar(tex, tx, ty)
             ge = _e('cube', (wx, GROUND_H/2, wz), (TS, GROUND_H, TS), tex, tint, soft=False)
             self._tile_ents.append(ge)
 
-    # ─── INTERNAL: OUTDOOR DECORATION ───────────────────────
-    def _add_outdoor_deco(self, wx, wz, surface_y, tx, ty, nv):
-        """Surreal digital deco: floating cubes, wireframe pyramids"""
-        ox = math.sin(tx * 53.7 + ty * 89.1) * 0.42
-        oz = math.cos(tx * 73.2 + ty * 47.5) * 0.42
-        dtype = int(abs(math.sin(tx * 200.3 + ty * 150.7)) * 3)
+    # ─── INTERNAL: SEBARAN BENDA KECIL ──────────────────────
+    # Kepadatan per keluarga ubin. Angkanya rata-rata benda per ubin, bukan
+    # peluang: 2,2 berarti sebagian ubin dapat satu, sebagian dapat tiga.
+    #
+    # Rumput dapat jatah terbesar karena di situlah bidang kosong terbesar
+    # berada. Tanah garapan sengaja SEDIKIT — ladang harus tetap terbaca
+    # sebagai tanah yang sudah dibersihkan; menaburinya sama rapat dengan
+    # rumput akan menghapus batas zona yang dibangun farm.py.
+    KEPADATAN = {
+        'rumput': 2.2,
+        'tanah':  0.75,
+        'jalan':  0.55,
+        'jerami': 0.35,
+        'pasir':  0.45,
+    }
 
-        if dtype == 0:   # Floating abstract cube
-            c1 = _e('cube', (wx + ox, surface_y + 0.8, wz + oz),
-                      (0.2, 0.2, 0.2), None, _c(0, 255, 255), rotation=(45, 45, 0))
-            self._tile_ents.append(c1)
+    def _keluarga_ubin(self, tid):
+        """Ubin ini keluarga apa untuk keperluan sebaran, atau None kalau kosong."""
+        if tid == G:
+            return 'rumput'
+        if tid == D:
+            return 'tanah'
+        if tid == P:
+            return 'jalan'
+        if tid == STR_T:
+            return 'jerami'
+        if tid == SD:
+            return 'pasir'
+        return None
 
-        elif dtype == 1:  # Wireframe pillar
-            c2 = _e('cylinder', (wx + ox, surface_y + 0.4, wz + oz),
-                      (0.05, 0.8, 0.05), None, _c(255, 0, 255))
-            self._tile_ents.append(c2)
+    def _bangun_sebaran(self):
+        """Rakit SEMUA benda kecil di tanah jadi satu Entity per scene.
 
-        else:             # Glowing orb
-            flower = _e('sphere', (wx + ox, surface_y + 0.6, wz + oz),
-                        (0.2, 0.2, 0.2), 'lamp_glow', _c(255, 255, 255))
-            self._tile_ents.append(flower)
+        Dijalankan sekali setelah seluruh ubin selesai, karena ia perlu tahu
+        TETANGGA tiap ubin: benda paling berharga di sebaran ini bukan yang di
+        tengah petak, melainkan yang tumbuh di BATAS antara dua material.
+        Di `_bench/refs/farm_wide.jpg` tidak ada satu pun tepi rumput yang
+        dipotong lurus — semuanya ditumbuhi, dan itulah yang membedakan tanah
+        yang hidup dari dua bidang warna yang bersinggungan.
+        """
+        if not self._is_outdoor():
+            return
+        from . import sebaran as sb
+
+        sc = self.scene_obj
+        acc = sb.Perakit()
+        y_rumput = GROUND_H + 0.040
+        y_datar  = GROUND_H + 0.004
+
+        for ty in range(sc.h):
+            for tx in range(sc.w):
+                fam = self._keluarga_ubin(self.get_tile(tx, ty))
+                if fam is None:
+                    continue
+                wx, wz = tx * TS, ty * TS
+                y = y_rumput if fam == 'rumput' else y_datar
+                self._sebar_ubin(acc, fam, tx, ty, wx, wz, y, sb)
+
+        if acc.kosong():
+            return
+        e = sb.bangun_entity(acc, self)
+        if e is not None:
+            self._sebaran_ents.append(e)
+
+    def _sebar_ubin(self, acc, fam, tx, ty, wx, wz, y, sb):
+        # Undian deterministik. Dua ubin bertetangga harus TIDAK berkorelasi,
+        # kalau tidak sebaran ikut membentuk pita seperti tint yang lama.
+        def r(k):
+            return _tile_hash(tx * 131 + k * 7919, ty * 197 + k * 104729)
+
+        n = self.KEPADATAN[fam]
+        jml = int(n) + (1 if r(1) < (n - int(n)) else 0)
+
+        for i in range(jml):
+            def ri(k, _i=i):
+                return _tile_hash(tx * 131 + (k + _i * 41) * 7919,
+                                  ty * 197 + (k + _i * 41) * 104729)
+            ox = (ri(2) - 0.5) * TS * 0.88
+            oz = (ri(3) - 0.5) * TS * 0.88
+            x, z = wx + ox, wz + oz
+            pilih = ri(4)
+            if fam == 'rumput':
+                if pilih < 0.50:
+                    sb.rumpun(acc, x, y, z, ri)
+                elif pilih < 0.78:
+                    sb.bunga(acc, x, y, z, ri)
+                elif pilih < 0.91:
+                    sb.kerikil(acc, x, y, z, ri)
+                else:
+                    sb.ranting(acc, x, y, z, ri)
+            elif fam in ('tanah', 'jerami'):
+                # Di tanah garapan yang tumbuh adalah gulma pendek dan kerikil,
+                # bukan rumpun tinggi: ladang yang penuh rumput tinggi terbaca
+                # sebagai ladang yang TIDAK dirawat.
+                if pilih < 0.44:
+                    sb.kerikil(acc, x, y, z, ri)
+                elif pilih < 0.74:
+                    sb.rumpun(acc, x, y, z, ri, skala=0.55)
+                else:
+                    sb.ranting(acc, x, y, z, ri)
+            else:   # jalan, pasir
+                if pilih < 0.66:
+                    sb.kerikil(acc, x, y, z, ri)
+                else:
+                    sb.ranting(acc, x, y, z, ri)
+
+        # ── Tepi: rumput yang menjorok ke material sebelah ──────────────────
+        if fam != 'rumput':
+            return
+        for j, (dx, dz) in enumerate(((0, -1), (1, 0), (0, 1), (-1, 0))):
+            if self._keluarga_ubin(self.get_tile(tx + dx, ty + dz)) == 'rumput':
+                continue
+            if r(50 + j) > 0.62:
+                continue
+            # Ditaruh SEDIKIT melewati garis ubin (0,54 dari 0,5) supaya
+            # rumpunnya benar-benar menggantung di atas material sebelah.
+            lat = (r(60 + j) - 0.5) * TS * 0.82
+            bx = wx + dx * TS * 0.54 + (0 if dx else lat)
+            bz = wz + dz * TS * 0.54 + (0 if dz else lat)
+            if r(70 + j) < 0.42:
+                sb.semak(acc, bx, y, bz, lambda k, _j=j: r(80 + k + _j * 13))
+            else:
+                sb.rumpun(acc, bx, y, bz, lambda k, _j=j: r(90 + k + _j * 13),
+                          skala=1.15)
 
     # ─── INTERNAL: PAGAR & GERBANG ──────────────────────────
     # Sebuah pagar dikenali dari CELAH-nya, bukan dari massanya. Satu kubus utuh
@@ -726,6 +1270,10 @@ class World3D:
         self._obj_ents.append(e)
 
     def _make_blocking_obj(self, tid, wx, wz):
+        if getattr(self.scene_obj, 'builder_name', '') == 'interior':
+            from .scenes.interior import TILES as _INTERIOR_TILES
+            if tid in _INTERIOR_TILES:
+                return    # rupa dari model Blender, lihat scenes/interior.py
         if tid in (TR, PALM, DT, LN, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS, H, FP, GR, TV, CHR, CAL):
             # Handled by Scene builder/props.py
             return
@@ -739,6 +1287,7 @@ class World3D:
                   BD: 0.62, TB: 0.82, BS: OBJ_H * 1.4, MR: OBJ_H * 1.2,
                   CL: OBJ_H * 1.35, PP: 0.70, CH: 0.80, CT: 0.90, SH: OBJ_H * 1.5,
                   GR: OBJ_H * 0.90, BOT: 0.60, MB: 0.85, ST: 0.95,
+                  WC: 0.72,
                   DR: WALL_H}.get(tid, OBJ_H)
             tex = OBJ_TEX.get(tid, None)
             

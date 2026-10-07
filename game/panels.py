@@ -13,10 +13,13 @@ Layout layar (Ursina screen coords: -0.5 ke 0.5):
 Dialog box: muncul di bawah tengah.
 Panel (inventori, quest, dll.): overlay penuh semi-transparan.
 """
+import math
 from pathlib import Path as _Path
 from PIL import Image as _PILImg
+from PIL import ImageDraw as _PILDraw
+from PIL import ImageFont as _PILFont
 from ursina import (Entity, Text, Texture, color, camera, destroy,
-                    Vec2, Vec4, invoke)
+                    Vec2, Vec4, invoke, window)
 
 from .config import SEASON_NAMES, NEED_LOW, NEED_CRITICAL, NEED_MAX
 
@@ -39,9 +42,399 @@ def _init_thermo_tex():
     _THERMO_FILL_TEX = _lt('up_thermo_slice_active')
 from .data import CROPS
 from .data import (HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS,
-                   QUEST_STAGES, SWORD_RECIPES, PICKAXE_RECIPES, SHOP_ITEMS)
+                   QUEST_STAGES, SWORD_RECIPES, PICKAXE_RECIPES, SHOP_ITEMS,
+                   CRAFT_RECIPES)
+from .sound import play as sound_play
+from .batin import VOICES as BVOICES, DIFF_NAME, pct as batin_pct, roll as batin_roll, raise_voice
+import textwrap as _tw
 
 _ALL_NPCS = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# IKON HUD — digambar PROSEDURAL dengan PIL, bukan berkas gambar baru
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Kenapa modul ikon hidup di sini dan bukan di assets/: satu-satunya hal yang
+# dibutuhkan HUD adalah bitmap RGBA kecil, dan menggambarnya saat start jauh
+# lebih murah daripada menambah 20 berkas PNG yang harus ikut dijaga, dinamai,
+# dan diberi lisensi. Ursina menerima PIL.Image langsung sebagai Texture
+# (lihat ursina/texture.py) dan membalik gambarnya sendiri, jadi gambar PIL
+# yang ditulis normal (y ke bawah) muncul tegak di layar.
+#
+# Texture BOLEH dibagi-pakai antar Entity — yang tidak boleh dibagi itu Mesh,
+# karena Mesh adalah NodePath Panda3D dan sebuah NodePath cuma punya satu
+# parent. Ikon di bawah sengaja di-cache; jangan meniru pola ini untuk mesh.
+#
+# Semua koordinat gambar dinormalkan 0..1 dengan (0,0) di KIRI-ATAS, jadi
+# ukuran piksel akhirnya bisa diubah tanpa menyentuh satu pun bentuk.
+
+_SS       = 4           # supersample sebelum diperkecil LANCZOS (anti-alias)
+_IKON_CACHE: dict = {}
+
+# Palet ikon = palet model 3D-nya (game/tool_models.py). Ikon cangkul dan
+# cangkul yang dipegang karakter harus terbaca sebagai BENDA YANG SAMA;
+# kalau warnanya beda, ikon jadi lambang, bukan gambar barangnya.
+_I_GELAP  = ( 20,  28,  34, 255)
+_I_KAYU   = (156, 116,  74, 255)
+_I_KAYUT  = (110,  80,  50, 255)
+_I_BAMBU  = (200, 178, 120, 255)
+_I_BESI   = (168, 176, 186, 255)
+_I_BESIT  = (104, 112, 122, 255)
+_I_SENG   = (152, 162, 160, 255)
+_I_ANYAM  = (198, 164, 106, 255)
+_I_DAUN   = (114, 166,  88, 255)
+_I_DAUNT  = ( 78, 122,  62, 255)
+_I_AIR    = ( 96, 172, 214, 255)
+_I_EMAS   = (232, 196,  96, 255)
+_I_MERAH  = (198,  88,  80, 255)
+_I_KRIM   = (240, 232, 206, 255)
+_I_KAIN   = (150, 114,  92, 255)
+_I_PUTIH  = (250, 250, 246, 255)
+
+
+def _pena(n):
+    img = _PILImg.new('RGBA', (n, n), (0, 0, 0, 0))
+    return img, _PILDraw.Draw(img)
+
+
+def _grs(d, n, p0, p1, w, isi, garis=_I_GELAP):
+    """Batang tebal dari p0 ke p1. Garis gelap digambar lebih lebar DULU,
+    lalu isinya menimpa — itu cara termurah mendapat outline yang rapi tanpa
+    menghitung poligon offset."""
+    a = (p0[0] * n, p0[1] * n)
+    b = (p1[0] * n, p1[1] * n)
+    if garis:
+        d.line([a, b], fill=garis, width=max(1, int((w + 0.055) * n)))
+    d.line([a, b], fill=isi, width=max(1, int(w * n)))
+
+
+def _plg(d, n, pts, isi, garis=_I_GELAP, tebal=0.05):
+    P = [(x * n, y * n) for x, y in pts]
+    if garis and tebal:
+        d.line(P + [P[0]], fill=garis, width=max(1, int(tebal * n)), joint='curve')
+    d.polygon(P, fill=isi)
+    if garis and tebal:
+        d.line(P + [P[0]], fill=garis,
+               width=max(1, int(tebal * n * 0.5)), joint='curve')
+
+
+def _lkr(d, n, cx, cy, r, isi, garis=_I_GELAP, tebal=0.05):
+    box = [(cx - r) * n, (cy - r) * n, (cx + r) * n, (cy + r) * n]
+    if garis:
+        d.ellipse(box, fill=isi, outline=garis, width=max(1, int(tebal * n)))
+    else:
+        d.ellipse(box, fill=isi)
+
+
+def _bintang(cx, cy, r1, r2, sudut=5):
+    pts = []
+    for i in range(sudut * 2):
+        r = r1 if i % 2 == 0 else r2
+        a = -math.pi / 2 + i * math.pi / sudut
+        pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r))
+    return pts
+
+
+def _tetes(cx, cy, r, tinggi):
+    """Tetesan air sebagai SATU poligon, bukan lingkaran + segitiga.
+    Gabungan dua bentuk tidak bisa dikelilingi satu outline — dan tanpa
+    outline ikon hilang di atas latar terang."""
+    pts = []
+    for i in range(33):
+        a = math.radians(-40 + i * (260.0 / 32.0))
+        pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r))
+    pts.append((cx, cy - tinggi))
+    return pts
+
+
+def _hati(cx, cy, s):
+    pts = []
+    for i in range(44):
+        t = i / 44.0 * 2 * math.pi
+        x = 16 * math.sin(t) ** 3
+        y = (13 * math.cos(t) - 5 * math.cos(2 * t)
+             - 2 * math.cos(3 * t) - math.cos(4 * t))
+        pts.append((cx + x / 17.0 * s, cy - y / 17.0 * s))
+    return pts
+
+
+def _orang(d, n, cx, cy, s, isi):
+    """Siluet kepala + bahu. Dipakai dua kali untuk ikon Sosial."""
+    _lkr(d, n, cx, cy - 0.20 * s, 0.15 * s, isi)
+    _plg(d, n, [(cx - 0.26 * s, cy + 0.42 * s), (cx - 0.24 * s, cy + 0.06 * s),
+                (cx - 0.12 * s, cy - 0.04 * s), (cx + 0.12 * s, cy - 0.04 * s),
+                (cx + 0.24 * s, cy + 0.06 * s), (cx + 0.26 * s, cy + 0.42 * s)],
+         isi)
+
+
+# ─── ALAT ────────────────────────────────────────────────────────────────
+def _ika_cangkul(d, n):
+    _grs(d, n, (0.78, 0.16), (0.42, 0.66), 0.10, _I_KAYU)
+    _plg(d, n, [(0.48, 0.56), (0.16, 0.68), (0.12, 0.86), (0.50, 0.72)], _I_BESI)
+
+
+def _ika_penyiram(d, n):
+    _plg(d, n, [(0.34, 0.40), (0.78, 0.40), (0.72, 0.86), (0.40, 0.86)], _I_SENG)
+    _grs(d, n, (0.36, 0.48), (0.12, 0.34), 0.09, _I_SENG)
+    _plg(d, n, [(0.16, 0.22), (0.04, 0.28), (0.08, 0.42), (0.20, 0.36)], _I_SENG)
+    _grs(d, n, (0.46, 0.40), (0.56, 0.24), 0.06, _I_BESIT)
+    _grs(d, n, (0.56, 0.24), (0.70, 0.40), 0.06, _I_BESIT)
+    _lkr(d, n, 0.12, 0.60, 0.055, _I_AIR)
+    _lkr(d, n, 0.24, 0.74, 0.045, _I_AIR)
+
+
+def _ika_benih(d, n):
+    _plg(d, n, [(0.16, 0.90), (0.84, 0.90), (0.74, 0.74), (0.26, 0.74)], _I_KAYUT)
+    _grs(d, n, (0.50, 0.80), (0.50, 0.40), 0.07, _I_DAUNT)
+    _plg(d, n, [(0.50, 0.52), (0.24, 0.44), (0.26, 0.26), (0.48, 0.38)], _I_DAUN)
+    _plg(d, n, [(0.50, 0.46), (0.76, 0.36), (0.78, 0.18), (0.52, 0.32)], _I_DAUN)
+
+
+def _ika_bakul(d, n):
+    _lkr(d, n, 0.36, 0.40, 0.13, _I_MERAH)
+    _lkr(d, n, 0.62, 0.42, 0.11, _I_DAUN)
+    _plg(d, n, [(0.12, 0.48), (0.88, 0.48), (0.74, 0.90), (0.26, 0.90)], _I_ANYAM)
+    w = max(1, int(0.035 * n))
+    for fy in (0.60, 0.72):
+        d.line([(0.16 * n, fy * n), (0.84 * n, fy * n)], fill=_I_KAYUT, width=w)
+
+
+def _ika_kapak(d, n):
+    # Mata kapak WAJIB punya tepi atas dan bawah yang cekung; wedge cembung
+    # penuh terbaca sebagai palu atau sekop pada 25 piksel — sudah diuji.
+    _grs(d, n, (0.28, 0.96), (0.66, 0.24), 0.085, _I_KAYU)
+    _plg(d, n, [(0.78, 0.34), (0.62, 0.20), (0.66, 0.02), (0.86, 0.02),
+                (0.96, 0.16), (0.92, 0.34), (0.86, 0.44)], _I_BESI)
+
+
+def _ika_kado(d, n):
+    _plg(d, n, [(0.14, 0.44), (0.86, 0.44), (0.86, 0.88), (0.14, 0.88)], _I_MERAH)
+    _plg(d, n, [(0.44, 0.44), (0.58, 0.44), (0.58, 0.88), (0.44, 0.88)],
+         _I_EMAS, tebal=0.03)
+    _plg(d, n, [(0.14, 0.56), (0.86, 0.56), (0.86, 0.66), (0.14, 0.66)],
+         _I_EMAS, tebal=0.03)
+    _plg(d, n, [(0.51, 0.42), (0.26, 0.22), (0.20, 0.36), (0.44, 0.44)], _I_EMAS)
+    _plg(d, n, [(0.51, 0.42), (0.76, 0.22), (0.82, 0.36), (0.58, 0.44)], _I_EMAS)
+
+
+def _ika_beliung(d, n):
+    _grs(d, n, (0.50, 0.92), (0.50, 0.28), 0.09, _I_KAYU)
+    _plg(d, n, [(0.06, 0.42), (0.30, 0.20), (0.70, 0.20), (0.94, 0.42),
+                (0.68, 0.32), (0.32, 0.32)], _I_BESI)
+
+
+def _ika_pedang(d, n):
+    _plg(d, n, [(0.50, 0.06), (0.60, 0.20), (0.60, 0.60), (0.40, 0.60),
+                (0.40, 0.20)], _I_BESI)
+    _plg(d, n, [(0.24, 0.60), (0.76, 0.60), (0.76, 0.70), (0.24, 0.70)], _I_EMAS)
+    _grs(d, n, (0.50, 0.70), (0.50, 0.88), 0.11, _I_KAYUT)
+    _lkr(d, n, 0.50, 0.92, 0.08, _I_EMAS)
+
+
+def _ika_pancing(d, n):
+    _grs(d, n, (0.12, 0.90), (0.80, 0.14), 0.07, _I_BAMBU)
+    d.line([(0.80 * n, 0.16 * n), (0.86 * n, 0.56 * n)],
+           fill=_I_KRIM, width=max(1, int(0.030 * n)))
+    _lkr(d, n, 0.86, 0.62, 0.09, _I_MERAH)
+    _lkr(d, n, 0.34, 0.62, 0.055, _I_AIR)
+
+
+def _ika_bawaan(d, n):
+    _lkr(d, n, 0.50, 0.50, 0.34, _I_BESIT)
+
+
+# ─── MOTIF ───────────────────────────────────────────────────────────────
+def _ikm_mood(d, n):
+    _lkr(d, n, 0.50, 0.50, 0.40, _I_EMAS)
+    _lkr(d, n, 0.37, 0.42, 0.065, _I_GELAP, None)
+    _lkr(d, n, 0.63, 0.42, 0.065, _I_GELAP, None)
+    d.arc([0.28 * n, 0.40 * n, 0.72 * n, 0.76 * n], 20, 160,
+          fill=_I_GELAP, width=max(1, int(0.075 * n)))
+
+
+def _ikm_lapar(d, n):
+    _grs(d, n, (0.30, 0.34), (0.30, 0.92), 0.10, _I_KRIM)
+    for fx in (0.19, 0.30, 0.41):
+        _grs(d, n, (fx, 0.10), (fx, 0.34), 0.055, _I_KRIM)
+    _plg(d, n, [(0.62, 0.10), (0.78, 0.20), (0.78, 0.54), (0.62, 0.54)], _I_KRIM)
+    _grs(d, n, (0.70, 0.52), (0.70, 0.92), 0.09, _I_KRIM)
+
+
+def _ikm_nyaman(d, n):
+    _plg(d, n, [(0.20, 0.22), (0.80, 0.22), (0.80, 0.58), (0.20, 0.58)], _I_KAIN)
+    _plg(d, n, [(0.10, 0.54), (0.90, 0.54), (0.90, 0.70), (0.10, 0.70)], _I_KAYU)
+    _plg(d, n, [(0.06, 0.42), (0.20, 0.42), (0.20, 0.70), (0.06, 0.70)], _I_KAYUT)
+    _plg(d, n, [(0.80, 0.42), (0.94, 0.42), (0.94, 0.70), (0.80, 0.70)], _I_KAYUT)
+    _grs(d, n, (0.20, 0.70), (0.20, 0.90), 0.07, _I_KAYUT)
+    _grs(d, n, (0.80, 0.70), (0.80, 0.90), 0.07, _I_KAYUT)
+
+
+def _ikm_higiene(d, n):
+    _plg(d, n, _tetes(0.50, 0.62, 0.30, 0.56), _I_AIR)
+
+
+def _ikm_kandung(d, n):
+    _plg(d, n, [(0.12, 0.16), (0.36, 0.16), (0.36, 0.54), (0.12, 0.54)], _I_KRIM)
+    _plg(d, n, [(0.34, 0.36), (0.88, 0.36), (0.76, 0.64), (0.44, 0.64)], _I_KRIM)
+    _plg(d, n, [(0.46, 0.62), (0.74, 0.62), (0.78, 0.90), (0.42, 0.90)], _I_KRIM)
+
+
+def _ikm_energi(d, n):
+    _plg(d, n, [(0.60, 0.06), (0.22, 0.54), (0.44, 0.54), (0.36, 0.94),
+                (0.78, 0.44), (0.54, 0.44)], _I_EMAS)
+
+
+def _ikm_senang(d, n):
+    _plg(d, n, _bintang(0.50, 0.52, 0.44, 0.19), _I_EMAS)
+
+
+def _ikm_sosial(d, n):
+    _orang(d, n, 0.66, 0.52, 0.86, _I_BAMBU)
+    _orang(d, n, 0.36, 0.58, 1.00, _I_AIR)
+
+
+def _ikm_ruang(d, n):
+    _plg(d, n, [(0.08, 0.18), (0.92, 0.18), (0.92, 0.82), (0.08, 0.82)], _I_KAYU)
+    _plg(d, n, [(0.20, 0.30), (0.80, 0.30), (0.80, 0.70), (0.20, 0.70)],
+         _I_KRIM, tebal=0.035)
+    _lkr(d, n, 0.66, 0.41, 0.075, _I_EMAS, None)
+    _plg(d, n, [(0.22, 0.68), (0.44, 0.40), (0.64, 0.68)], _I_DAUNT, None)
+
+
+def _ik_hp(d, n):
+    _plg(d, n, _hati(0.50, 0.52, 0.44), _I_MERAH)
+
+
+_GAMBAR_IKON = {
+    'cangkul': _ika_cangkul, 'penyiram': _ika_penyiram, 'benih': _ika_benih,
+    'bakul': _ika_bakul, 'kapak': _ika_kapak, 'kado': _ika_kado,
+    'beliung': _ika_beliung, 'pedang': _ika_pedang, 'pancing': _ika_pancing,
+    'bawaan': _ika_bawaan,
+    'mood': _ikm_mood, 'lapar': _ikm_lapar, 'nyaman': _ikm_nyaman,
+    'higiene': _ikm_higiene, 'kandung': _ikm_kandung, 'energi': _ikm_energi,
+    'senang': _ikm_senang, 'sosial': _ikm_sosial, 'ruang': _ikm_ruang,
+    'hp': _ik_hp,
+}
+
+
+def _font_ikon(px: int):
+    p = _Path(__file__).resolve().parent.parent / 'assets' / 'fonts' / _FONT_NAME
+    try:
+        return _PILFont.truetype(str(p), px)
+    except Exception:
+        try:
+            return _PILFont.load_default()
+        except Exception:
+            return None
+
+
+def _chip_angka(d, n, teks: str):
+    """Nomor pintasan di sudut kiri-bawah petak alat.
+
+    Ini satu-satunya HURUF yang tersisa di blok alat, dan ia ada supaya
+    pemain tahu petaknya bisa dipilih dengan angka tanpa ada satu baris
+    manual pun di layar. Digambar di atas kepingan gelap karena angka krem
+    telanjang hilang di atas bilah cangkul yang juga terang."""
+    r = 0.15
+    cx, cy = 0.17, 0.83
+    d.ellipse([(cx - r) * n, (cy - r) * n, (cx + r) * n, (cy + r) * n],
+              fill=(14, 20, 26, 225))
+    f = _font_ikon(max(6, int(0.26 * n)))
+    if f is None:
+        return
+    try:
+        kotak = d.textbbox((0, 0), teks, font=f)
+    except Exception:
+        return
+    w = kotak[2] - kotak[0]
+    h = kotak[3] - kotak[1]
+    d.text((cx * n - w / 2 - kotak[0], cy * n - h / 2 - kotak[1]),
+           teks, font=f, fill=_I_KRIM)
+
+
+def ikon_tex(nama: str, px: int = 64, angka: str = ''):
+    """Texture ikon, dibuat sekali lalu dipakai ulang."""
+    kunci = (nama, px, angka)
+    if kunci in _IKON_CACHE:
+        return _IKON_CACHE[kunci]
+    fn = _GAMBAR_IKON.get(nama)
+    tex = None
+    if fn is not None:
+        try:
+            n = px * _SS
+            img, d = _pena(n)
+            fn(d, n)
+            if angka:
+                _chip_angka(d, n, angka)
+            img = img.resize((px, px), _PILImg.LANCZOS)
+            tex = Texture(img)
+            tex.filtering = 'bilinear'
+        except Exception:
+            tex = None
+    _IKON_CACHE[kunci] = tex
+    return tex
+
+
+def petak_tex(px: int = 64):
+    """Petak bersudut tumpul, PUTIH, supaya bisa diwarnai lewat `color`
+    entity — satu tekstur melayani petak terpilih maupun yang redup."""
+    kunci = ('_petak', px, '')
+    if kunci in _IKON_CACHE:
+        return _IKON_CACHE[kunci]
+    tex = None
+    try:
+        n = px * _SS
+        img, d = _pena(n)
+        r = int(0.18 * n)
+        d.rounded_rectangle([int(0.03 * n), int(0.03 * n),
+                             int(0.97 * n), int(0.97 * n)],
+                            radius=r, fill=(255, 255, 255, 175),
+                            outline=(255, 255, 255, 255),
+                            width=max(2, int(0.045 * n)))
+        img = img.resize((px, px), _PILImg.LANCZOS)
+        tex = Texture(img)
+        tex.filtering = 'bilinear'
+    except Exception:
+        tex = None
+    _IKON_CACHE[kunci] = tex
+    return tex
+
+
+def tuts_tex(label: str, tinggi: int = 30):
+    """Kepingan tombol keyboard (SPACE, E, TAB) sebagai gambar.
+
+    Return (Texture, rasio_lebar_per_tinggi) supaya pemanggil bisa membuat
+    quad dengan proporsi yang benar; label 'SPACE' lima kali lebih lebar
+    daripada 'E' dan memaksanya ke kotak persegi membuat hurufnya gepeng."""
+    kunci = ('_tuts', tinggi, label)
+    if kunci in _IKON_CACHE:
+        return _IKON_CACHE[kunci]
+    hasil = (None, 1.0)
+    try:
+        h = tinggi * _SS
+        f = _font_ikon(int(h * 0.52))
+        tmp = _PILDraw.Draw(_PILImg.new('RGBA', (8, 8)))
+        kotak = tmp.textbbox((0, 0), label, font=f)
+        w_teks = kotak[2] - kotak[0]
+        w = int(max(h, w_teks + h * 0.60))
+        img = _PILImg.new('RGBA', (w, h), (0, 0, 0, 0))
+        d = _PILDraw.Draw(img)
+        d.rounded_rectangle([2, 2, w - 3, h - 3], radius=int(h * 0.26),
+                            fill=(18, 26, 32, 232),
+                            outline=(214, 228, 240, 245),
+                            width=max(2, int(h * 0.055)))
+        d.text(((w - w_teks) / 2 - kotak[0],
+                (h - (kotak[3] - kotak[1])) / 2 - kotak[1]),
+               label, font=f, fill=(238, 246, 252, 255))
+        img = img.resize((max(1, w // _SS), tinggi), _PILImg.LANCZOS)
+        tex = Texture(img)
+        tex.filtering = 'bilinear'
+        hasil = (tex, img.width / float(img.height))
+    except Exception:
+        hasil = (None, 1.0)
+    _IKON_CACHE[kunci] = hasil
+    return hasil
 
 
 def _ui(model='quad', **kw):
@@ -51,7 +444,48 @@ def _ui(model='quad', **kw):
     return Entity(parent=camera.ui, model=model, **kw)
 
 
-_FONT_NAME = 'Montserrat-Bold.ttf'  # Ursina cari via glob(**) di asset_folder
+# Ursina lama menemukan font ini lewat glob(**) di asset_folder; Ursina baru
+# menyerahkannya mentah-mentah ke Panda3D loadFont(), yang hanya melihat model
+# path. Jadi pakai jalur absolut kalau file-nya memang ada di repo — nama telanjang
+# hanya sebagai cadangan supaya instalasi lama tetap jalan.
+_FONT_FILE = (_Path(__file__).resolve().parent.parent
+              / 'assets' / 'fonts' / 'Montserrat-Bold.ttf')
+# NAMA TELANJANG, bukan jalur absolut — dan ini dikembalikan dengan sengaja.
+#
+# Cabang livestock mengubah baris ini jadi `_FONT_FILE.as_posix()`, dan git
+# meng-auto-merge-nya tanpa konflik. Di pohon INI perubahan itu salah dan
+# membuat game GAGAL DIBANGUN TOTAL: `app.py` sudah mendaftarkan root dan
+# `assets/fonts` ke model-path Panda3D sejak baris 29, jadi nama telanjang
+# justru yang bisa ditemukan — sementara jalur absolut diserahkan mentah ke
+# `loader.loadFont()`, gagal di-resolve (jalurnya memuat spasi: "Game
+# Research"), dan `font_file_path` kembali None:
+#
+#     AttributeError: 'NoneType' object has no attribute 'parent'
+#
+# Ini jenis kerusakan yang paling mahal di merge: TIDAK ADA konflik, jadi tidak
+# ada yang meminta keputusan, dan baru ketahuan saat game menolak boot.
+_FONT_NAME = 'Montserrat-Bold.ttf'
+
+# ── Skin panel 'chrome' ala TSO (ROADMAP M3-A) ──
+_CHROME_PATH = _Path(__file__).resolve().parent.parent / 'assets' / 'ui' / 'panel_chrome.png'
+_chrome_tex = None
+def _chrome():
+    global _chrome_tex
+    if _chrome_tex is None:
+        try:
+            _chrome_tex = Texture(_PILImg.open(_CHROME_PATH)) if _CHROME_PATH.exists() else False
+        except Exception:
+            _chrome_tex = False
+    return _chrome_tex or None
+
+def _skin_chrome(ent):
+    """Pasang bingkai chrome TSO sbg tekstur latar panel (tahan-stretch)."""
+    t = _chrome()
+    if t is not None:
+        ent.texture = t
+        ent.color = color.white
+    return ent
+
 
 def _txt(text='', pos=(0, 0), scale=1.0, col=color.white, **kw):
     kw.setdefault('font', _FONT_NAME)
@@ -80,7 +514,11 @@ class UIManager:
         self._build_hud()
         self._build_dialog_box()
         self._build_panel_bg()
+        self._build_inventory_grid()
         self._build_pie_menu()
+        self._build_batin()
+        self._build_pause()
+        self._build_buy()
 
         # Previous motives cache for Arrow indicators
         self._prev_hunger = None
@@ -91,7 +529,13 @@ class UIManager:
     # ─── PUBLIC: UPDATE ──────────────────────────────────
     def update(self, state, dt: float = 0):
         self.state = state
+        self._tick_ketik(dt)
         if self.mode == 'hud':
+            # Petunjuk tombol punya UMUR. Setelah 30 detik ia padam sendiri;
+            # pemain yang sudah tahu SPACE itu 'pakai' tidak perlu diberi
+            # tahu lagi setiap detik sisa permainannya.
+            if self._hint_umur < self._HINT_PADAM:
+                self._hint_umur += max(0.0, dt)
             self._refresh_hud()
             self._update_motive_panel()
             self._update_action_readout()
@@ -104,96 +548,627 @@ class UIManager:
                 if hasattr(self, '_flash_bg'):
                     self._flash_bg.enabled = False
 
-    _TOOL_NAMES = ['Cangkul','Siram','Tanam','Panen','Kapak','Hadiah','Pickaxe','Pedang']
+    # Urutan persis config.TOOLS dan tool_models.KIND_BY_TOOL_INDEX. Sembilan,
+    # bukan delapan: daftar lama berhenti di 'Pedang' sehingga alat ke-9
+    # (Pancing) selalu tampil dengan nama alat ke-8.
+    _KIND_ALAT = ('cangkul', 'penyiram', 'benih', 'bakul', 'kapak',
+                  'kado', 'beliung', 'pedang', 'pancing')
+
+    # Tiga pintasan, bukan tujuh. Sisanya hidup di F1, dan roda alat di
+    # kiri-atas sudah membawa nomornya sendiri di tiap petak.
+    _PINTASAN = (('SPACE', 'Pakai'), ('E', 'Aksi'), ('TAB', 'Motif'))
+    _HINT_PADAM = 30.0          # detik sebelum petunjuk memudar sendiri
 
     # ─── PUBLIC: HUD ─────────────────────────────────────
     def _build_hud(self):
-        """HUD minimalis gaya Harvest Moon AWL."""
+        """HUD tipis yang MENEMPEL di tepi layar (patokan: AWL).
+
+        Bentuk lama memakan seperempat layar dengan empat panel pejal: kotak
+        alat 390x280 di kiri-atas, kotak waktu 660x280 di kanan-atas, panel
+        SUASANA HATI 285x400 yang mengambang jauh dari tepi, dan pita tombol
+        SELEBAR LAYAR di bawah. Diukur dari tangkapan layar 1920x1080: ~27%
+        layar tertutup HUD.
+
+        Patokannya justru kebalikannya — bilah stamina TIPIS menempel di
+        kiri-atas, tanggal/musim/jam kecil di kanan-atas, petunjuk tombol
+        kecil di kanan-bawah, dan latar panel nyaris tidak ada: teks duduk
+        langsung di atas dunia dengan alas gelap setipis mungkin.
+
+        Tiga aturan tata letak, dan tidak ada yang keempat:
+
+        1. Semua dijangkar ke SUDUT lewat satu margin yang sama (`M`), jadi
+           tidak ada blok yang "hampir" di tepi.
+        2. Satu baris menampung sebanyak mungkin. Waktu/tanggal/cuaca dulu
+           empat baris bertumpuk; sekarang satu baris rata kanan yang
+           lebarnya dihitung dari teksnya sendiri (`_tata_kanan_atas`).
+        3. Alas gelap dipas ke isinya tiap kali teksnya berubah, bukan
+           dipatok ke kotak tetap. Pita bawah selebar layar mati karena
+           alasan ini: ia dibuat selebar layar supaya prompt sepanjang apa
+           pun tetap berlatar — padahal yang perlu melar cuma alasnya.
+
+        Informasi tidak dibuang, cuma dikecilkan dan dipindahkan. Delapan
+        motif tetap tampil lengkap di sudut kiri-bawah, dan TAB
+        menyembunyikan/menampilkannya kalau pemain mau layar bersih.
+
+        ── Putaran ALAT: gambar menggantikan kata ────────────────────────
+
+        Tiga keluhan yang diperbaiki di sini, semuanya soal yang sama:
+        layar ini menulis apa yang seharusnya ia GAMBARKAN.
+
+        1. Sembilan baris motif berlabel KATA tanpa satu pun ikon. Sekarang
+           tiap baris dipimpin ikon yang menggambarkan kebutuhannya —
+           garpu-pisau, tetesan air, petir, bintang — dan katanya hilang.
+           Panel menyusut dari 260 px jadi 173 px lebar sekaligus.
+        2. Nama alat ditulis sebagai teks sementara tangan karakter memegang
+           cangkul sepanjang permainan. Sekarang alatnya diwakili RODA
+           sembilan petak berikon di kiri-atas, yang terpilih membesar dan
+           menyala, dan cangkulnya cuma keluar ke tangan saat dipakai
+           (lihat Player3D.refresh_held_tool).
+        3. Angka '100/100' menempel di ujung bilah sehingga terbaca
+           menindihnya. Jaraknya dinaikkan 0.010 -> 0.020 dan ukurannya
+           diturunkan, dan tiap bilah kini dipimpin ikonnya sendiri (hati,
+           petir) supaya bisa dibedakan tanpa membaca angkanya sama sekali.
+
+        Dan yang keempat: baris motif terbawah dulu menempel ke tepi bawah
+        layar sehingga terbaca terpotong. Bantalan bawah panel 0.002 ->
+        0.010, jadi ada 28 px di bawah bilah terakhir.
+        """
         TIME_C   = color.rgb(255, 255, 255)
         GOLD_C   = color.rgb(255, 215,  60)
-        
-        # ── Kanan Atas: Jam & Tanggal ──
-        self._time_txt    = _txt('06:00',         pos=(0.70, 0.45), scale=1.3, col=TIME_C)
-        self._date_txt    = _txt('Hari 1 | Semi', pos=(0.70, 0.40), scale=0.8, col=color.rgb(170, 200, 255))
-        self._weather_txt = _txt('^ Cerah',       pos=(0.70, 0.36), scale=0.8, col=color.rgb(255, 240, 130))
-        self._scene_txt   = _txt('> Kebun',       pos=(0.70, 0.32), scale=0.8, col=color.rgb(140, 255, 160))
-        self._gold_txt    = _txt('§ 0G',          pos=(0.70, 0.28), scale=1.0, col=GOLD_C)
+        # ── Tepi layar yang sebenarnya ──
+        # camera.ui membentang -aspect/2..+aspect/2 mendatar, BUKAN -0.5..0.5.
+        # Angka mati 0.70 lahir dari menebak layar 16:9 lalu menjangkar teks di
+        # KIRI-nya; tiap teks lalu tumbuh ke kanan sampai lewat tepi 0.889.
+        # Itu sebabnya jam, tanggal, dan nama scene terpotong di screenshot.
+        # Yang duduk di kanan dijangkar di KANAN (origin x = +0.5) supaya
+        # tumbuhnya ke dalam layar, berapa pun panjang teksnya.
+        self._edge_x = window.aspect_ratio / 2
+        M = 0.013                       # jarak ke tepi: 14 px di layar 1080
+        self._M   = M
+        self._X_L = X_L = -self._edge_x + M
+        self._X_R = X_R =  self._edge_x - M
+        self._Y_T = Y_T =  0.5 - M
+        self._Y_B = Y_B = -0.5 + M
+        self._GAP = 0.014               # jarak antar potongan dalam satu baris
+        self._RA  = (0.5, 0.0)          # rata kanan, jangkar tengah menegak
 
-        # ── Kiri Atas: Tool & Stamina ──
-        X_L = -0.85
-        self._tool_name = _txt('Cangkul', pos=(X_L, 0.45), scale=1.1, col=color.rgb(255, 240, 100))
-        self._seed_txt  = _txt('',        pos=(X_L, 0.41), scale=0.8, col=color.rgb(155, 255, 155))
-        
-        self._BAR_W       = 0.22
-        self._BAR_X_LEFT  = X_L
-        
-        hy = 0.36
-        self._hp_bar = _ui(scale=(self._BAR_W, 0.015), position=(X_L + self._BAR_W/2, hy), color=color.rgb(55, 210, 80))
-        self._hp_val = _txt('HP', pos=(X_L, hy + 0.015), scale=0.7, col=color.white)
+        # Tinggi satu baris teks di ruang camera.ui = Text.size * skala entity.
+        # Dipakai untuk menumpuk baris tanpa menebak; skala di sini adalah
+        # argumen `_txt`, yang dikalikan 1.2 di dalamnya.
+        def _tinggi(s):
+            return 0.025 * s * 1.2
 
-        ey = 0.32
-        self._en_bar = _ui(scale=(self._BAR_W, 0.015), position=(X_L + self._BAR_W/2, ey), color=color.rgb(55, 205, 75))
-        self._en_val = _txt('EN', pos=(X_L, ey + 0.015), scale=0.7, col=color.white)
+        S_JAM   = 0.92                  # jam: satu-satunya teks yang boleh besar
+        S_KECIL = 0.66
+        h_jam   = _tinggi(S_JAM)
+        h_kecil = _tinggi(S_KECIL)
 
-        self._buff_txt = _txt('', pos=(X_L, 0.28), scale=0.75, col=color.rgb(120, 255, 180))
-        self._queue_txt = _txt('', pos=(X_L, 0.24), scale=0.75, col=color.rgb(255, 210, 80))
+        # ── Kanan Atas: satu baris jam/cuaca/tanggal + satu baris tipis ──
+        # Empat baris jadi dua. Posisi mendatar dihitung ulang dari lebar
+        # teksnya di `_tata_kanan_atas`, jadi teks sepanjang apa pun tetap
+        # rata kanan dan tidak pernah menabrak yang di sebelahnya.
+        r1 = Y_T - h_jam / 2
+        r2 = r1 - h_jam / 2 - 0.004 - h_kecil / 2
+        self._ROW1_Y, self._ROW2_Y = r1, r2
+        self._time_txt    = _txt('06:00',         pos=(X_R, r1), scale=S_JAM,   col=TIME_C, origin=self._RA)
+        self._weather_txt = _txt('^ Cerah',       pos=(X_R, r1), scale=S_KECIL, col=color.rgb(255, 240, 130), origin=self._RA)
+        self._date_txt    = _txt('Hari 1 | Semi', pos=(X_R, r1), scale=S_KECIL, col=color.rgb(180, 205, 255), origin=self._RA)
+        self._gold_txt    = _txt('§ 0G',          pos=(X_R, r2), scale=S_KECIL, col=GOLD_C, origin=self._RA)
+        self._scene_txt   = _txt('> Kebun',       pos=(X_R, r2), scale=S_KECIL, col=color.rgb(150, 250, 170), origin=self._RA)
 
-        # ── Kiri Bawah: Panel Motif (termometer ala The Sims 1) ──
-        # Delapan motif ditumpuk vertikal dengan Mood di puncaknya. Tanpa panel
-        # ini seluruh mesin motif tidak terlihat oleh pemain, dan need yang tak
-        # terlihat sama saja dengan tidak ada.
-        from .motives import MOTIVES, LABELS
+        # ── Kiri Atas: dua bilah stamina BERIKON + roda alat ──
+        # Patokan menaruh satu bilah setebal 16 px menempel di sudut. Dua
+        # bilah kita 15 px, bertumpuk, masing-masing dipimpin ikonnya sendiri
+        # (hati untuk HP, petir untuk energi) supaya bisa dibedakan tanpa
+        # membaca satu huruf pun, dan angkanya duduk 22 px di kanan ujung
+        # bilah — bukan 11 px seperti dulu, di mana '100/100' terbaca
+        # menindih ujung bilahnya.
+        S_ANGKA  = 0.50
+        LA       = (-0.5, 0.0)          # rata kiri, jangkar tengah menegak
+        self._LA = LA
+
+        self._IK_BAR     = IK_BAR = 0.017
+        self._BAR_W      = 0.185
+        self._BAR_H      = 0.014
+        self._BAR_GAP    = 0.006        # jarak ikon -> bilah
+        self._NUM_GAP    = 0.020        # jarak ujung bilah -> angka
+        self._BAR_X_LEFT = X_L + IK_BAR + self._BAR_GAP
+        BW, BH = self._BAR_W, self._BAR_H
+        BX = self._BAR_X_LEFT
+
+        hy = Y_T - 0.004 - BH / 2
+        ey = hy - BH - 0.006
+        self._hy, self._ey = hy, ey
+
+        self._hp_ikon = _ui(scale=(IK_BAR, IK_BAR), z=0.02,
+                            position=(X_L + IK_BAR / 2, hy),
+                            texture=ikon_tex('hp', 40), color=color.white)
+        self._en_ikon = _ui(scale=(IK_BAR, IK_BAR), z=0.02,
+                            position=(X_L + IK_BAR / 2, ey),
+                            texture=ikon_tex('energi', 40), color=color.white)
+
+        # Alas bilah: tanpa ini bilah yang menyusut jadi tidak terbaca sebagai
+        # "sisa dari sekian", cuma sebagai garis pendek yang berubah panjang.
+        trek = color.rgb(18, 26, 30, 200)
+        self._hp_trek = _ui(scale=(BW, BH), z=0.06,
+                            position=(BX + BW / 2, hy), color=trek)
+        self._en_trek = _ui(scale=(BW, BH), z=0.06,
+                            position=(BX + BW / 2, ey), color=trek)
+        self._hp_bar = _ui(scale=(BW, BH), z=0.03,
+                           position=(BX + BW / 2, hy),
+                           color=color.rgb(55, 210, 80))
+        self._en_bar = _ui(scale=(BW, BH), z=0.03,
+                           position=(BX + BW / 2, ey),
+                           color=color.rgb(55, 205, 75))
+        self._hp_val = _txt('', pos=(BX + BW + self._NUM_GAP, hy),
+                            scale=S_ANGKA, col=color.rgb(214, 228, 236), origin=LA)
+        self._en_val = _txt('', pos=(BX + BW + self._NUM_GAP, ey),
+                            scale=S_ANGKA, col=color.rgb(214, 228, 236), origin=LA)
+
+        # ── Roda alat: sembilan petak berikon, ala GTA/AWL ──
+        # Yang terpilih membesar dan menyala penuh; sisanya diredupkan lewat
+        # tint entity, bukan lewat tekstur kedua. Nomor pintasan dipanggang
+        # ke dalam gambar ikonnya, jadi tidak ada satu baris teks
+        # "[1-8] pilih alat" pun yang perlu berdiri di layar.
+        # Petak terpilih dibesarkan PERSIS sebesar dua kali jaraknya ke
+        # tetangga (0.033 + 2*0.005 = 0.043), jadi ia menyentuh tetangganya
+        # tanpa pernah menindihnya, berapa pun petak yang sedang dipilih.
+        self._SLOT   = SLOT   = 0.033
+        self._SLOT_S = SLOT_S = 0.043
+        self._SGAP   = SGAP   = 0.005
+        self._RODA_W = len(self._KIND_ALAT) * SLOT + (len(self._KIND_ALAT) - 1) * SGAP
+        y_roda = ey - BH / 2 - 0.009 - SLOT_S / 2
+        self._y_roda = y_roda
+
+        _petak = petak_tex(64)
+        self._alat_petak, self._alat_ikon = [], []
+        for i, kind in enumerate(self._KIND_ALAT):
+            cx = X_L + SLOT / 2 + i * (SLOT + SGAP)
+            self._alat_petak.append(
+                _ui(scale=(SLOT, SLOT), z=0.09, position=(cx, y_roda),
+                    texture=_petak, color=color.rgb(26, 34, 40, 200)))
+            self._alat_ikon.append(
+                _ui(scale=(SLOT * 0.80, SLOT * 0.80), z=0.04,
+                    position=(cx, y_roda),
+                    texture=ikon_tex(kind, 56, str(i + 1)),
+                    color=color.rgb(182, 192, 200)))
+
+        # Nama alat: satu kata, DI BAWAH petaknya, persis seperti 'Clippers'
+        # di patokan. Ia menamai gambar, bukan menggantikannya.
+        S_NAMA = 0.60
+        h_nama = _tinggi(S_NAMA)
+        self._h_nama = h_nama
+        y_nama = y_roda - SLOT_S / 2 - 0.004 - h_nama / 2
+        self._tool_name = _txt('Cangkul', pos=(X_L, y_nama), scale=S_NAMA,
+                               col=color.rgb(255, 238, 154), origin=(0, 0))
+
+        y_benih = y_nama - h_nama / 2 - 0.004 - h_kecil / 2
+        self._seed_txt  = _txt('', pos=(X_L, y_benih),
+                               scale=S_KECIL, col=color.rgb(155, 255, 155), origin=LA)
+
+        # Buff dan antrian aksi: dua baris yang HAMPIR SELALU kosong, jadi
+        # ongkos layarnya nol kecuali saat memang ada yang perlu dibaca.
+        self._buff_txt  = _txt('', pos=(X_L, y_benih - h_kecil - 0.003),
+                               scale=S_KECIL, col=color.rgb(120, 255, 180), origin=LA)
+        self._queue_txt = _txt('', pos=(X_L, y_benih - h_kecil * 2 - 0.006),
+                               scale=S_KECIL, col=color.rgb(255, 210, 80), origin=LA)
+
+        # ── Kiri Bawah: ringkasan motif, menempel di SUDUT ──
+        # Delapan motif ditumpuk vertikal dengan Suasana di puncaknya. Tanpa
+        # ini seluruh mesin motif tidak terlihat oleh pemain, dan need yang
+        # tak terlihat sama saja dengan tidak ada.
+        #
+        # Kolom NAMA dibuang seluruhnya dan diganti kolom IKON selebar 20 px:
+        # blok yang tadinya 260 px lebar (kolom 'Kamar Kecil' menentukan
+        # lebarnya) jadi 173 px, dan tidak ada satu kata pun tersisa di sana.
+        from .motives import MOTIVES
         self._motive_keys = MOTIVES
-        self._NBAR_W = 0.20
-        self._NBAR_X = -0.86
-        self._NBAR_H = 0.018
-        self._NBAR_GAP = 0.038      # cukup renggang agar label tidak tertimpa bar
-        top_y = -0.06
+        self._IK_N     = IK_N = 0.0185   # ikon motif, satu per baris
+        self._NBAR_W   = 0.115
+        self._NBAR_H   = 0.0125
+        self._NROW     = 0.0215
+        self._NGAP     = 0.006           # jarak ikon -> bilah
+        NBH            = self._NBAR_H
 
-        # Panel latar gelap: tanpa ini termometer hilang di atas lantai terang.
-        panel_h = 0.052 + self._NBAR_GAP * len(self._motive_keys) + 0.03
+        n = len(self._motive_keys)
+        # Bantalan bawah 0.010, bukan 0.002. Dengan 0.002 baris 'Ruangan'
+        # praktis menyentuh tepi alas dan terbaca sebagai baris yang
+        # TERPOTONG, bukan baris terakhir — keluhan yang diukur, bukan selera.
+        PAD     = 0.010
+        y_need0 = Y_B + NBH / 2 + PAD            # motif terakhir, paling bawah
+        y_mood  = y_need0 + (n - 1) * self._NROW + 0.028
+        MOOD_H  = 0.017
+
+        # Kata-katanya HILANG; yang tersisa gambar + bilah. Sembilan nama
+        # motif berjejer tegak adalah blok teks terbesar di layar, dan
+        # patokan (AWL) tidak menuliskan satu pun namanya. Entity label tetap
+        # ada sebagai None supaya pemeriksa regresi yang mencarinya lewat
+        # nama atribut tidak meledak — ia melewati yang None.
+        self._mood_lbl = None
+        self._need_lbl_ents = []
+        self._NLBL_W = IK_N + self._NGAP
+        self._NBAR_X = X_L + self._NLBL_W
+
+        self._mood_ikon = _ui(scale=(IK_N, IK_N), z=0.02,
+                              position=(X_L + IK_N / 2, y_mood),
+                              texture=ikon_tex('mood', 40), color=color.white)
+        self._need_ikon_ents = [
+            _ui(scale=(IK_N, IK_N), z=0.02,
+                position=(X_L + IK_N / 2, y_need0 + (n - 1 - i) * self._NROW),
+                texture=ikon_tex(key, 40), color=color.white)
+            for i, key in enumerate(self._motive_keys)]
+
+        # Alas panel: tipis, bukan kotak 93% opak lagi. Tugasnya cuma menjamin
+        # ikon dan bilah tetap terbaca di atas lantai terang; selebihnya biar
+        # dunia yang kelihatan.
+        panel_top = y_mood + MOOD_H / 2 + PAD
+        panel_bot = y_need0 - NBH / 2 - PAD
+        panel_w   = self._NLBL_W + self._NBAR_W + PAD * 2
+        self._PAD_N, self._PANEL_W_N = PAD, panel_w
+        # z eksplisit, dan ini bukan hiasan.
+        #
+        # Semua elemen camera.ui duduk di z=0, jadi Panda menyortir bin
+        # transparannya tanpa urutan yang bisa diandalkan — dan yang menang
+        # ternyata latar panelnya. Termometernya SELALU ada, cuma dilihat
+        # menembus kotak gelap 93% opak: fill hijau rgb(120,200,130) terukur
+        # jadi rgb(19,33,31) di layar, persis 0.926*latar + 0.074*fill. Itu
+        # sebabnya panel motif terbaca mati sejak awal. Yang di belakang diberi
+        # z lebih besar, yang di depan lebih kecil.
         self._motive_panel_bg = _ui(
-            scale=(self._NBAR_W + 0.045, panel_h),
-            position=(self._NBAR_X + self._NBAR_W / 2 - 0.006,
-                      top_y + 0.046 - panel_h / 2),
-            color=color.rgb(12, 20, 24, 205))
+            scale=(panel_w, panel_top - panel_bot),
+            position=(X_L - PAD + panel_w / 2, (panel_top + panel_bot) / 2),
+            z=0.10,
+            color=color.rgb(12, 20, 24, 128))
 
-        self._mood_lbl = _txt('SUASANA HATI', pos=(self._NBAR_X, top_y + 0.052),
-                              scale=0.62, col=color.rgb(196, 178, 148))
-        self._mood_bg = _ui(scale=(self._NBAR_W, 0.026),
-                            position=(self._NBAR_X + self._NBAR_W / 2, top_y + 0.032),
+        self._mood_bg = _ui(scale=(self._NBAR_W, MOOD_H), z=0.06,
+                            position=(self._NBAR_X + self._NBAR_W / 2, y_mood),
                             color=color.rgb(28, 34, 40, 210))
-        self._mood_fill = _ui(scale=(self._NBAR_W, 0.026),
-                              position=(self._NBAR_X + self._NBAR_W / 2, top_y + 0.032),
+        self._mood_fill = _ui(scale=(self._NBAR_W, MOOD_H), z=0.03,
+                              position=(self._NBAR_X + self._NBAR_W / 2, y_mood),
                               color=color.rgb(120, 210, 140))
 
-        self._need_lbl_ents  = []
         self._need_bg_ents   = []
         self._need_fill_ents = []
         for i, key in enumerate(self._motive_keys):
-            y = top_y - 0.020 - i * self._NBAR_GAP
-            self._need_lbl_ents.append(
-                _txt(LABELS[key], pos=(self._NBAR_X, y + 0.019), scale=0.55,
-                     col=color.rgb(186, 198, 204)))
+            y = y_need0 + (n - 1 - i) * self._NROW
             self._need_bg_ents.append(
-                _ui(scale=(self._NBAR_W, self._NBAR_H),
+                _ui(scale=(self._NBAR_W, NBH), z=0.06,
                     position=(self._NBAR_X + self._NBAR_W / 2, y),
                     color=color.rgb(28, 34, 40, 200)))
             self._need_fill_ents.append(
-                _ui(scale=(self._NBAR_W, self._NBAR_H),
+                _ui(scale=(self._NBAR_W, NBH), z=0.03,
                     position=(self._NBAR_X + self._NBAR_W / 2, y),
                     color=color.rgb(120, 200, 130)))
+        self._motif_tampil = True
 
-        # ── Flash message tengah ───────────────────────────────
-        self._flash_ent = _txt('', pos=(0, 0.108), scale=1.1,
+        # ── Objective tracker (kiri-atas) — tutorial / quest aktif ──
+        self._obj_bg = _ui(scale=(0.385, 0.092), position=(-0.685, 0.398),
+                           color=color.rgb(20, 19, 18, 215), z=0.9)
+        self._obj_rust = _ui(scale=(0.385, 0.006), position=(-0.685, 0.446),
+                             color=color.rgb(150, 96, 60), z=0.85)
+        self._obj_title = _txt('TUTORIAL', pos=(-0.868, 0.434), scale=0.62,
+                               col=color.rgb(214, 168, 110))
+        self._obj_step = _txt('...', pos=(-0.868, 0.408), scale=0.78,
+                              col=color.rgb(228, 222, 198))
+        self._obj_hint = _txt('', pos=(-0.868, 0.380), scale=0.58,
+                              col=color.rgb(150, 158, 168))
+        self._obj_last = None   # cache: deteksi pergantian langkah → emote
+
+        # ── Flash message tengah ──
+        self._flash_ent = _txt('', pos=(0, 0.15), scale=1.1,
                                col=color.rgb(255, 245, 80), origin=(0, 0))
         self._flash_ent.enabled = False
 
-        # ── Bawah Kanan: Action Prompts dinamis ───────
+        # ── Scrim: jaminan kontras untuk teks HUD ──────────────
+        #
+        # Teks HUD putih tanpa apa pun di belakangnya menghilang total di atas
+        # latar terang. Terukur di scene farm jam 10: kotak jam berisi 2.528
+        # piksel dan 95% di antaranya nyaris putih — teksnya ADA, warnanya
+        # benar, dan tidak satu pun huruf bisa dibaca karena bangunan di
+        # belakangnya sama putihnya.
+        #
+        # Bukan diperbaiki dengan mengganti warna teks: latar dunia berubah
+        # sepanjang hari dan antar-scene, jadi warna teks apa pun akan kalah di
+        # suatu tempat. Yang dijamin harus latarnya sendiri.
+        #
+        # Yang berubah sekarang: ukurannya tidak lagi dipatok. Scrim kiri dulu
+        # 0.30 x 0.27 dan scrim bawah SELEBAR LAYAR, keduanya dipilih supaya
+        # muat untuk teks terpanjang yang mungkin. Sekarang ketiganya dipas
+        # ulang ke isinya di `_pas_scrim`, jadi alasnya persis sebesar yang
+        # dibutuhkan dan tidak sepiksel pun lebih.
+        #
+        # z lebih besar = di belakang. Pelajaran yang sudah dibayar sekali di
+        # panel motif: semua elemen camera.ui duduk di z=0 dan Panda menyortir
+        # bin transparannya tanpa urutan yang bisa diandalkan.
+        SCRIM_C = color.rgb(10, 16, 20, 112)
+        self._scrim_kanan = _ui(scale=(0.001, 0.001), z=0.20,
+                                position=(X_R, r1), color=SCRIM_C)
+        self._scrim_kiri  = _ui(scale=(0.001, 0.001), z=0.20,
+                                position=(X_L, hy), color=SCRIM_C)
+        self._scrim_bawah = _ui(scale=(0.001, 0.001), z=0.20,
+                                position=(X_R, Y_B), color=SCRIM_C)
+
+        # ── Bawah Kanan: petunjuk tombol ──────────────────────
+        # Dua baris manual selebar 640 px yang menuliskan tujuh pintasan
+        # LENGKAP dan tidak pernah pergi. Patokan menaruh empat prompt
+        # pendek, tiap-tiap satu GLIF tombol bundar plus satu kata kerja.
+        #
+        # Jadi: tiga baris, tiap baris satu kepingan tombol bergambar plus
+        # satu kata, dan seluruh bloknya padam sendiri setelah 30 detik —
+        # petunjuk yang tidak pernah selesai mengajar berhenti jadi petunjuk
+        # dan jadi perabot. F1 tetap membuka panduan penuh kapan saja.
         self._control_hint = _txt(
-            '', pos=(0.60, -0.45), scale=0.8,
-            col=color.rgb(220, 235, 255), origin=(0, 0)
+            '', pos=(X_R, Y_B), scale=0.60,
+            col=color.rgb(225, 238, 255), origin=(0.5, -0.5)
         )
+
+        S_TUTS   = 0.58
+        H_TUTS   = 0.0165
+        h_tuts   = _tinggi(S_TUTS)
+        self._H_HINT = H_ROW = max(h_tuts, H_TUTS) + 0.005
+        self._hint_baris = []
+        for i, (tuts, kata) in enumerate(reversed(self._PINTASAN)):
+            y = Y_B + H_ROW * (i + 0.5)
+            tex, rasio = tuts_tex(tuts, 26)
+            cap = _ui(scale=(H_TUTS * rasio, H_TUTS), z=0.02,
+                      position=(X_R, y), texture=tex, color=color.white)
+            txt = _txt(kata, pos=(X_R, y), scale=S_TUTS,
+                       col=color.rgb(228, 240, 252), origin=(0.5, 0.0))
+            self._hint_baris.append((cap, txt, H_TUTS * rasio))
+        self._hint_umur = 0.0
+        self._hint_tampil = True
+
+    # ── Tata letak yang dihitung ulang saat teksnya berubah ──────────
+    #
+    # Dihitung ulang HANYA saat teks berubah, bukan tiap frame: `Text.width`
+    # membuat TextNode baru dan mengukur ulang fontnya tiap kali dipanggil,
+    # dan ada tujuh teks yang perlu diukur. Frame rate di proyek ini sudah
+    # 18-64 ms/frame; mengukur font 420 kali sedetik untuk hasil yang sama
+    # persis adalah ongkos yang tidak dibayar siapa pun.
+
+    @staticmethod
+    def _lebar(e):
+        """Lebar teks yang BENAR-BENAR tergambar, di ruang camera.ui.
+
+        Bukan `Text.width * scale_x`. Rumus itu mengukur ulang fontnya lewat
+        TextNode sementara dan hasilnya meleset ~10% ke bawah dari yang
+        tergambar — terlihat langsung di tangkapan pertama sebagai
+        'Cangkul[1-8] pilih alat' yang menempel tanpa jarak, padahal jaraknya
+        diberi 15 px. `getTightBounds` membaca simpul yang sama dengan yang
+        dirender, jadi tidak bisa meleset dari apa yang dilihat pemain.
+        """
+        try:
+            if not str(e.text).strip():
+                return 0.0
+        except Exception:
+            pass
+        try:
+            tb = e.getTightBounds(camera.ui)
+            if tb is not None:
+                return float(tb[1].x - tb[0].x)
+        except Exception:
+            pass
+        try:
+            return e.width * e.scale_x
+        except Exception:
+            return 0.0
+
+    def _pas_scrim(self, scrim, kiri, kanan, atas, bawah, pad=0.008):
+        if kanan <= kiri or atas <= bawah:
+            scrim.enabled = False
+            return
+        scrim.enabled = True
+        w = (kanan - kiri) + pad * 2
+        h = (atas - bawah) + pad * 2
+        scrim.scale = (w, h)
+        scrim.position = ((kiri + kanan) / 2, (atas + bawah) / 2)
+
+    def _pasang_tepi(self):
+        """Ikuti tepi layar yang SEKARANG, bukan yang saat HUD dibangun.
+
+        `window.aspect_ratio` masih berubah SESUDAH UIManager dibangun —
+        tools/capture.py mencatatnya sendiri: 'changed aspect ratio: 1.81 ->
+        1.778'. HUD yang dijangkar ke angka lama meleset 0.016 satuan ui,
+        dan itu 17 px: jam kanan-atas terpotong di sisi kanan sementara nama
+        alat menggantung 3 px di luar sisi kiri. Terlihat di tangkapan
+        pertama sesudah perubahan ini, bukan diduga-duga.
+
+        Mengembalikan True kalau tepinya bergeser, supaya pemanggilnya tahu
+        harus menata ulang.
+        """
+        ex = window.aspect_ratio / 2
+        if abs(ex - self._edge_x) < 1e-6:
+            return False
+        self._edge_x = ex
+        self._X_L = -ex + self._M
+        self._X_R = ex - self._M
+        self._tata_kiri()
+        self._control_hint.x = self._X_R
+        for cap, txt, _w in getattr(self, '_hint_baris', ()):
+            txt.x = self._X_R
+        return True
+
+    def _tata_kiri(self):
+        """Tempatkan ULANG seluruh isi sudut kiri dari X_L yang berlaku.
+
+        Mutlak, bukan `e.x += dx`. Yang lama menyimpan daftar entity lalu
+        menggesernya relatif, dan daftar itu (`_jangkar_kiri`) TIDAK PERNAH
+        diisi sekali pun — jadi saat aspek berubah 1.81 -> 1.778 sesudah HUD
+        dibangun, satu-satunya yang ikut pindah adalah bilah, karena bilah
+        memang ditulis ulang dari `_BAR_X_LEFT` tiap frame. Sisanya diam.
+        Menghitung ulang dari X_L membuat hasilnya sama berapa kali pun ini
+        dipanggil.
+        """
+        X_L = self._X_L
+        IK, BW, BH = self._IK_BAR, self._BAR_W, self._BAR_H
+        bx = X_L + IK + self._BAR_GAP
+        self._BAR_X_LEFT = bx
+        hy, ey = self._hy, self._ey
+
+        self._hp_ikon.position = (X_L + IK / 2, hy)
+        self._en_ikon.position = (X_L + IK / 2, ey)
+        for e, y in ((self._hp_trek, hy), (self._en_trek, ey)):
+            e.position = (bx + BW / 2, y)
+        self._hp_val.x = bx + BW + self._NUM_GAP
+        self._en_val.x = bx + BW + self._NUM_GAP
+
+        SLOT, SGAP = self._SLOT, self._SGAP
+        for i in range(len(self._alat_petak)):
+            cx = X_L + SLOT / 2 + i * (SLOT + SGAP)
+            self._alat_petak[i].x = cx
+            self._alat_ikon[i].x  = cx
+
+        for e in (self._seed_txt, self._buff_txt, self._queue_txt):
+            e.x = X_L
+
+        # Motif di sudut kiri-bawah.
+        IK_N = self._IK_N
+        self._NBAR_X = nbx = X_L + self._NLBL_W
+        self._mood_ikon.x = X_L + IK_N / 2
+        for e in self._need_ikon_ents:
+            e.x = X_L + IK_N / 2
+        self._mood_bg.x = nbx + self._NBAR_W / 2
+        for e in self._need_bg_ents:
+            e.x = nbx + self._NBAR_W / 2
+        self._motive_panel_bg.x = X_L - self._PAD_N + self._PANEL_W_N / 2
+
+    def _tata_ulang_hud(self):
+        """Susun ulang baris kanan-atas, kiri-atas, dan alas gelapnya."""
+        X_L, X_R = self._X_L, self._X_R
+        Y_T, Y_B = self._Y_T, self._Y_B
+        G = self._GAP
+
+        # Kanan atas, baris 1: jam paling kanan, lalu cuaca, lalu tanggal.
+        x = X_R
+        for e in (self._time_txt, self._weather_txt, self._date_txt):
+            e.x = x
+            if str(e.text).strip():
+                x -= self._lebar(e) + G
+        kiri1 = x + G if x < X_R else X_R
+
+        # Kanan atas, baris 2: emas paling kanan, lalu nama scene.
+        x = X_R
+        for e in (self._gold_txt, self._scene_txt):
+            e.x = x
+            if str(e.text).strip():
+                x -= self._lebar(e) + G
+        kiri2 = x + G if x < X_R else X_R
+
+        h1 = self._time_txt.height * self._time_txt.scale_y
+        h2 = self._gold_txt.height * self._gold_txt.scale_y
+        self._pas_scrim(self._scrim_kanan, min(kiri1, kiri2), X_R,
+                        Y_T, self._ROW2_Y - h2 / 2, pad=0.008)
+
+        # Kiri atas: nama alat dipusatkan DI BAWAH petak yang terpilih, lalu
+        # dijepit supaya tidak keluar dari lebar roda. Nama yang mengambang
+        # di kiri sementara petak yang menyala ada di kanan tidak menamai
+        # apa pun; yang menamai adalah yang berdiri tepat di bawahnya.
+        idx  = min(max(int(getattr(self.state, 'tool_index', 0)), 0),
+                   len(self._alat_petak) - 1)
+        w_nm = self._lebar(self._tool_name)
+        cx   = X_L + self._SLOT / 2 + idx * (self._SLOT + self._SGAP)
+        self._tool_name.x = min(max(cx, X_L + w_nm / 2),
+                                X_L + self._RODA_W - w_nm / 2)
+
+        kanan = max(
+            X_L + self._RODA_W + 0.005,     # petak terpilih menyembul sedikit
+            self._BAR_X_LEFT + self._BAR_W + self._NUM_GAP + self._lebar(self._hp_val),
+            self._BAR_X_LEFT + self._BAR_W + self._NUM_GAP + self._lebar(self._en_val),
+        )
+        bawah = self._tool_name.y - self._h_nama / 2
+        for e in (self._seed_txt, self._buff_txt, self._queue_txt):
+            if str(e.text).strip():
+                kanan = max(kanan, X_L + self._lebar(e))
+                bawah = min(bawah, e.y - (e.height * e.scale_y) / 2)
+        self._pas_scrim(self._scrim_kiri, X_L, kanan, Y_T, bawah, pad=0.008)
+
+        # Pelacak tutorial/quest: di BAWAH blok kiri-atas, bukan di koordinat
+        # mati. Ia dulu dipatok ke (-0.868, 0.434) dari tata letak HUD lama,
+        # dan HUD baru menaruh roda alat persis di sana -- judul tutorial
+        # menindih ikon alat dan nama "Hadiah".
+        if getattr(self, '_obj_bg', None) is not None:
+            atas = bawah - 0.008 - 0.012
+            ada_hint = bool(str(self._obj_hint.text).strip())
+            h = 0.092 if ada_hint else 0.066
+            # Lebar mengikuti baris terpanjang: petunjuk tutorial sering lebih
+            # panjang dari kotak 0,385 dan menjulur keluar alasnya.
+            w = max(0.385, 0.019 + max(
+                self._lebar(t) for t in (self._obj_title, self._obj_step,
+                                         self._obj_hint)
+                if str(t.text).strip()) if any(
+                str(t.text).strip() for t in (self._obj_title, self._obj_step,
+                                              self._obj_hint)) else 0.385)
+            self._obj_bg.scale_x = self._obj_rust.scale_x = w
+            self._obj_rust.position = (X_L + w / 2, atas - 0.003)
+            self._obj_bg.position = (X_L + w / 2, atas - h / 2)
+            self._obj_bg.scale_y = h
+            tx = X_L + 0.0095
+            self._obj_title.position = (tx, atas - 0.010)
+            self._obj_step.position = (tx, atas - 0.036)
+            self._obj_hint.position = (tx, atas - 0.064)
+
+        # Kanan bawah: alas dipas ke petunjuk tombol, bukan selebar layar.
+        ch = self._control_hint
+        if str(ch.text).strip():
+            self._pas_scrim(self._scrim_bawah,
+                            X_R - self._lebar(ch), X_R,
+                            Y_B + ch.height * ch.scale_y, Y_B, pad=0.007)
+        elif getattr(self, '_hint_tampil', False) and self._hint_baris:
+            kiri = X_R
+            for cap, txt, w_cap in self._hint_baris:
+                w_txt = self._lebar(txt)
+                txt.x = X_R
+                cap.x = X_R - w_txt - 0.006 - w_cap / 2
+                kiri = min(kiri, cap.x - w_cap / 2)
+            atas = self._hint_baris[-1][1].y + self._H_HINT / 2
+            self._pas_scrim(self._scrim_bawah, kiri, X_R, atas, Y_B, pad=0.007)
+        else:
+            self._scrim_bawah.enabled = False
+
+    def toggle_motive_panel(self):
+        """TAB: sembunyikan/tampilkan ringkasan motif di sudut kiri-bawah.
+
+        Delapan motif adalah informasi yang berguna, tapi ia juga satu-satunya
+        blok HUD yang tetap memakan tempat walau pemain sudah hafal isinya.
+        Disembunyikan, bukan dibuang.
+        """
+        self._motif_tampil = not getattr(self, '_motif_tampil', True)
+        v = self._motif_tampil
+        for e in (self._motive_panel_bg, self._mood_lbl, self._mood_ikon,
+                  self._mood_bg, self._mood_fill):
+            if e is not None:
+                e.enabled = v
+        for nama in self._DAFTAR_MOTIF:
+            for e in getattr(self, nama, None) or []:
+                e.enabled = v
+        return v
+
+    def _sorot_alat(self, idx: int):
+        """Petak terpilih membesar dan menyala; sisanya diredupkan.
+
+        Redupnya lewat tint entity, bukan lewat tekstur kedua: satu gambar
+        per alat sudah cukup, dan mengalikannya dengan abu-abu memberi versi
+        'tidak aktif' yang konsisten tanpa satu pun bitmap tambahan.
+        """
+        S, SB = self._SLOT, self._SLOT_S
+        for i, (petak, ikon) in enumerate(zip(self._alat_petak, self._alat_ikon)):
+            pilih = (i == idx)
+            u = SB if pilih else S
+            petak.scale = (u, u)
+            ikon.scale  = (u * 0.80, u * 0.80)
+            petak.color = (color.rgb(240, 216, 140, 240) if pilih
+                           else color.rgb(26, 34, 40, 200))
+            ikon.color  = (color.white if pilih
+                           else color.rgb(182, 192, 200))
+
+    def _pasang_hint(self, v: bool):
+        v = bool(v)
+        if v == getattr(self, '_hint_tampil', None):
+            return
+        self._hint_tampil = v
+        for cap, txt, _w in getattr(self, '_hint_baris', ()):
+            cap.enabled = v
+            txt.enabled = v
 
     # Warna termometer: hijau aman, kuning waspada, merah mendesak. Pemain harus
     # bisa membaca "yang mana yang gawat" tanpa membaca satu kata pun.
@@ -221,7 +1196,7 @@ class UIManager:
             return
         q = getattr(getattr(self, 'player', None), 'queue', None)
         if q is None or not q.busy:
-            txt.text = ''
+            self._teks(txt, '')
             return
         cur = q.current
         bar_n = 10
@@ -229,7 +1204,7 @@ class UIManager:
         bar = '#' * filled + '.' * (bar_n - filled)
         sisa = len(q.items) - 1
         ekor = f'  (+{sisa} antri)' if sisa > 0 else ''
-        txt.text = f'{cur.name}  [{bar}] {int(cur.progress*100)}%{ekor}'
+        self._teks(txt, f'{cur.name}  [{bar}] {int(cur.progress*100)}%{ekor}')
 
     def _update_motive_panel(self):
         """Isi termometer dari mesin motif. Bar diisi dari kiri; skala -100..+100
@@ -249,6 +1224,27 @@ class UIManager:
         self._mood_fill.scale_x = max(0.001, self._NBAR_W * frac)
         self._mood_fill.x = self._NBAR_X + self._mood_fill.scale_x / 2
         self._mood_fill.color = self._motive_color(m)
+
+    @staticmethod
+    def _teks(ent, nilai):
+        """Set .text HANYA kalau isinya berubah.
+
+        Setter `.text` Ursina membongkar dan membangun ulang geometri teks tiap
+        kali dipanggil, tanpa memeriksa apakah nilainya sama. HUD ini memanggil
+        belasan setter tiap frame padahal jam, tanggal, cuaca dan nama alat
+        hampir selalu persis sama dengan frame sebelumnya.
+
+        tools/profil.py, scene mountain: panels.update 1,60 ms/frame dengan
+        text.py:82(text) 841 panggilan dan create_text_section 1442 panggilan
+        per 60 frame. Hampir semuanya membangun ulang teks yang tidak berubah.
+
+        Cache disimpan DI ENTITY, bukan di dict panel, supaya entity yang
+        dibangun ulang (ganti scene, ganti mode) otomatis mulai tanpa cache --
+        dict ber-key id() bisa salah cocok kalau id lama dipakai ulang.
+        """
+        if getattr(ent, '_teks_sekarang', None) != nilai:
+            ent.text = nilai
+            ent._teks_sekarang = nilai
 
     def _refresh_hud(self):
         s = self.state
@@ -270,49 +1266,265 @@ class UIManager:
             self._hp_bar.color = color.rgb(255, 170, 30)
         else:
             self._hp_bar.color = color.rgb(220, 55, 55)
-        self._hp_val.text = f'{int(s.hp)}/{s.max_hp}'
+        self._teks(self._hp_val, f'{int(s.hp)}/{s.max_hp}')
 
         # EN bar
         en_r = max(0.001, s.energy / max(s.max_energy, 1))
         _shrink_bar(self._en_bar, BAR_X_LEFT, BAR_W, en_r)
         self._en_bar.color = color.rgb(220, 80, 55) if en_r <= 0.3 else color.rgb(55, 205, 75)
-        self._en_val.text = f'{int(s.energy)}/{s.max_energy}'
+        self._teks(self._en_val, f'{int(s.energy)}/{s.max_energy}')
+
+        # Objective tracker — tutorial / quest aktif (modul game.tutorial)
+        if getattr(self, '_obj_title', None):
+            from .tutorial import tracker_lines
+            title, step, hint = tracker_lines(s)
+            self._teks(self._obj_title, title)
+            self._teks(self._obj_step, step)
+            self._teks(self._obj_hint, hint)
+            if self._obj_hint.enabled != bool(hint) or step != self._obj_last:
+                self._obj_hint.enabled = bool(hint)
+                self._tata_ulang_hud()      # ukuran kotaknya ikut teks
+            if self._obj_last is not None and self._obj_last != step:
+                self.emote('v Selesai!', color.rgb(140, 220, 140), 1.4)
+                sound_play('menu_select', 0.7)
+            self._obj_last = step
+
+        # Needs sim-life (Lapar/Sosial/Senang) — redup saat kritis
+        if getattr(self, '_need_fills', None):
+            from .config import NEED_MAX
+            for key, (fill, nx, nw, ncol) in self._need_fills.items():
+                val = max(0.0, min(1.0, getattr(s, key, NEED_MAX) / max(NEED_MAX, 1)))
+                _shrink_bar(fill, nx, nw, max(0.001, val))
+                fill.color = color.rgb(200, 70, 55) if val <= 0.25 else ncol
+
+        # Chip mood (S4) — nama emosi + warnanya
+        if getattr(self, '_mood_txt', None):
+            from .sims_mood import mood_label, mood_color
+            _mc = mood_color(s)
+            self._mood_txt.text = f"MOOD  {mood_label(s)}"
+            self._mood_txt.color = color.rgb(*_mc)
 
         # Gold + buff (§ simbol web-style)
-        self._gold_txt.text = f'§ {s.gold}G'
-        self._buff_txt.text = '+'.join(b.upper() for b in s.buffs) if s.buffs else ''
+        self._teks(self._gold_txt, f'§ {s.gold}G')
+        self._teks(self._buff_txt, '+'.join(b.upper() for b in s.buffs) if s.buffs else '')
 
-        # Active tool name
-        self._tool_name.text = self._TOOL_NAMES[min(s.tool_index, len(self._TOOL_NAMES) - 1)]
+        # Alat aktif: nama satu kata, dan petaknya yang menyala.
+        from .config import TOOLS
+        idx = min(max(int(s.tool_index), 0), len(self._alat_petak) - 1)
+        self._tool_name.text = TOOLS[idx] if idx < len(TOOLS) else ''
+        if idx != getattr(self, '_idx_alat_tampil', None):
+            self._idx_alat_tampil = idx
+            self._sorot_alat(idx)
 
-        # Seed hint (shown when Tanam/Panen active)
+        # Seed hint (hanya saat Tanam/Panen aktif). Baris '[1-8] pilih alat'
+        # dibuang: nomornya sudah tercetak di tiap petak roda alat.
         if s.tool_index in (2, 3):
             seed_name = CROPS.get(s.seed_key, {}).get('name', s.seed_key)
             seed_qty  = s.inventory.get(s.seed_key + '_seed', 0)
-            self._seed_txt.text = f'Q/R: {seed_name} x{seed_qty}'
+            self._teks(self._seed_txt, f'Q/R: {seed_name} x{seed_qty}')
         else:
-            self._seed_txt.text = '[1-8] pilih alat'
+            self._seed_txt.text = ''
 
         # Time / weather
-        self._time_txt.text = s.get_time_str()
+        self._teks(self._time_txt, s.get_time_str())
         w_icons = {'Cerah': '^', 'Hujan': '~', 'Badai': '!', 'Mendung': '-', 'Berangin': '='}
-        self._weather_txt.text = f"{w_icons.get(s.weather, '?')} {s.weather}"
+        self._teks(self._weather_txt, f"{w_icons.get(s.weather, '?')} {s.weather}")
 
         # Date / scene
         season_n = SEASON_NAMES[s.season_index]
-        self._date_txt.text = f'Hari {s.day_in_season} | {season_n} Thn {s.year}'
+        self._teks(self._date_txt, f'Hari {s.day_in_season} | {season_n} Thn {s.year}')
         from .scenes import SCENES
         sc_display = SCENES.get(s.scene_name,
                      type('o', (object,), {'display': s.scene_name})()).display
-        self._scene_txt.text = f'> {sc_display}'
+        self._teks(self._scene_txt, f'> {sc_display}')
         
-        # Action prompt dynamic
-        if hasattr(s, 'action_prompt'):
-            self._control_hint.text = s.action_prompt
-        else:
-            self._control_hint.text = '[WASD] Jalan  ·  [SPACE] Pakai  ·  [E] Aksi  ·  [F1] Panduan  ·  [J] Jurnal  ·  [I] Inv'
+        # Petunjuk tombol: prompt aksi kontekstual menang atas tiga kepingan
+        # tombol tetap. Kalau ada prompt, kepingannya minggir — dua blok teks
+        # di sudut yang sama akan saling menabrak.
+        prompt = str(getattr(s, 'action_prompt', '') or '')
+        self._control_hint.text = prompt
+        self._pasang_hint(not prompt and self._hint_umur < self._HINT_PADAM)
+
+        # Susun ulang hanya kalau ada teks yang benar-benar berubah.
+        tanda = (self._time_txt.text, self._date_txt.text,
+                 self._weather_txt.text, self._scene_txt.text,
+                 self._gold_txt.text, self._tool_name.text,
+                 self._seed_txt.text, self._hp_val.text, self._en_val.text,
+                 self._buff_txt.text, self._queue_txt.text,
+                 self._control_hint.text, self._hint_tampil)
+        geser = self._pasang_tepi()
+        if geser or tanda != getattr(self, '_tanda_hud', None):
+            self._tanda_hud = tanda
+            self._tata_ulang_hud()
 
     # ─── PUBLIC: FLASH MESSAGE ───────────────────────────
+    def emote(self, text: str, col=None, dur: float = 1.1, x: float = 0.0, y: float = 0.02):
+        """Umpan balik kecil di tengah layar, dipanggil dari tiap interaksi.
+
+        Ditulis ulang, bukan diambil dari feature/3d-mobs, dan alasannya
+        spesifik: versi di sana menaruh tiap emote ke `self._emotes` lalu
+        menyerahkan pemudarannya ke loop tick di dalam blok HUD sisi sana —
+        dan blok itu bertabrakan langsung dengan roda ikon alat milik sisi
+        visual, yang sudah MENANG penilaian buta melawan Story of Seasons.
+        Mengambilnya berarti menukar kemenangan yang sudah dibuktikan dengan
+        sebuah animasi teks.
+
+        Versi ini tidak butuh loop tick sama sekali: tiap emote menjadwalkan
+        penghapusannya SENDIRI. Tidak ada state bersama, tidak ada dua tempat
+        yang harus ingat, dan pemanggilnya (interaction_controller) tidak
+        perlu tahu bedanya.
+        """
+        try:
+            from ursina import invoke as _inv, destroy as _des
+            e = _txt(text, pos=(x, y), scale=1.05,
+                     col=col or color.rgb(255, 238, 150), origin=(0, 0))
+            e.z = -0.6
+            _inv(_des, e, delay=dur)
+        except Exception:
+            pass
+
+    # ── Panel dari feature/3d-mobs yang tidak bertabrakan dengan HUD ───────
+    # Ketiganya DIPANGGIL oleh bagian panels.py yang ikut masuk dari sisi
+    # 3d-mobs, tapi definisinya jatuh di dalam blok yang bertabrakan langsung
+    # dengan roda ikon alat — dan HUD sisi visual sudah MENANG penilaian buta
+    # melawan Story of Seasons, jadi blok itu diambil dari sisi visual.
+    #
+    # Akibatnya `AttributeError: 'UIManager' object has no attribute
+    # '_build_batin'` saat boot: game gagal dibangun sama sekali. Ketiganya
+    # dibawa masuk terpisah di sini — majelis batin (Disco Elysium), panel
+    # Bangun/Beli (Sims S7), dan menu jeda — karena tidak satu pun menyentuh
+    # tata letak HUD yang menang.
+
+    def _build_batin(self):
+        self.batin = None              # diisi app.py setelah Batin dibuat
+        self._batin_open = False
+        self._voice_sub_t = 0.0
+        bg = _skin_chrome(_ui(scale=(0.58, 0.96), position=(-0.60, 0.0), color=color.rgb(20, 18, 16, 237), z=1.0))
+        title = _txt('MAJELIS BATIN', pos=(-0.86, 0.43), scale=0.95, col=color.rgb(231, 178, 61))
+        sub = _txt('Empat sukma, satu tengkorak.', pos=(-0.86, 0.395), scale=0.58, col=color.rgb(150, 135, 100))
+        self._batin_chips = []
+        for i, k in enumerate(['bara', 'akar', 'sukma', 'lapar']):
+            vd = BVOICES[k]
+            chip = _txt(f"{vd['name']} 1", pos=(-0.86 + i * 0.185, 0.35), scale=0.6,
+                        col=color.rgb(*vd['col']))
+            self._batin_chips.append((k, chip))
+        self._batin_log = _txt('', pos=(-0.875, 0.30), scale=0.62, col=color.rgb(224, 216, 188))
+        self._batin_ents = [bg, title, sub, self._batin_log] + [c for _, c in self._batin_chips]
+        for e in self._batin_ents:
+            e.enabled = False
+        # subtitle bawah (selalu ada, fade)
+        self._voice_sub = _txt('', pos=(0, -0.30), scale=0.78, col=color.white, origin=(0, 0))
+        self._voice_sub.enabled = False
+
+    def _build_buy(self):
+        self._buy_sel = 0
+        bg = _skin_chrome(_ui(scale=(0.62, 0.66), position=(0, 0),
+                              color=color.rgb(16, 14, 12, 244), z=0.9))
+        title = _txt('BANGUN / BELI', pos=(0, 0.25), scale=1.25,
+                     col=color.rgb(231, 178, 61), origin=(0, 0))
+        self._buy_items = [_txt('', pos=(0, 0.15 - i * 0.052), scale=0.78,
+                                col=color.white, origin=(0, 0)) for i in range(12)]
+        hint = _txt('[W/S] pilih  [Enter] beli & pasang di depanmu  '
+                    '[X] jual  [Esc] tutup', pos=(0, -0.26), scale=0.5,
+                    col=color.rgb(150, 135, 100), origin=(0, 0))
+        self._buy_gold = _txt('', pos=(0, 0.205), scale=0.7,
+                              col=color.rgb(231, 200, 120), origin=(0, 0))
+        self._buy_ents = [bg, title, hint, self._buy_gold] + self._buy_items
+        for e in self._buy_ents:
+            e.enabled = False
+
+    def _build_pause(self):
+        self._pause_sel = 0
+        self._pause_view = 'root'   # root | save | load | settings
+        bg = _skin_chrome(_ui(scale=(0.52, 0.64), position=(0, 0), color=color.rgb(16, 14, 12, 242), z=0.9))
+        title = _txt('JEDA', pos=(0, 0.24), scale=1.4, col=color.rgb(231, 178, 61), origin=(0, 0))
+        # pool baris (cukup untuk menu terpanjang)
+        self._pause_items = [_txt('', pos=(0, 0.12 - i * 0.074), scale=0.9,
+                                  col=color.white, origin=(0, 0)) for i in range(6)]
+        hint = _txt('[W/S] pilih   [A/D] ubah   [Enter] OK   [Esc] kembali', pos=(0, -0.25),
+                    scale=0.5, col=color.rgb(150, 135, 100), origin=(0, 0))
+        self._pause_title = title
+        self._pause_ents = [bg, title, hint] + self._pause_items
+        for e in self._pause_ents:
+            e.enabled = False
+
+    # ─── MODE BANGUN/BELI (S7) ───────────────────────────
+
+    # ── Mode Bangun/Beli (Sims S7), disambungkan dari feature/3d-mobs ──────
+    # `_build_buy()` di atas cuma membangun PANELNYA. Logikanya — katalog,
+    # membeli, memasang, menjual — hidup di keempat metode ini, dan keempatnya
+    # jatuh di dalam blok HUD yang dimenangkan sisi visual saat merge.
+    #
+    # Akibatnya `sims_build.py` masuk ke pohon tapi dipanggil dari NOL berkas:
+    # sistemnya ada, lengkap, dan tidak bisa dijangkau pemain sama sekali.
+    # Diukur dengan menghitung pemanggil tiap modul sims_* — tujuh dari delapan
+    # tersambung, satu ini tidak. Regresi tetap 14/14 hijau sepanjang waktu itu,
+    # karena regresi tidak menguji satu pun sistem Sims.
+
+    def open_buy(self):
+        self._buy_sel = 0
+        self.mode = 'buy'
+        for e in self._buy_ents:
+            e.enabled = True
+        self._render_buy()
+
+    def close_buy(self):
+        for e in self._buy_ents:
+            e.enabled = False
+        self.mode = 'hud'
+
+    def _render_buy(self):
+        from .sims_build import catalog, BUY_PRICES
+        rows = catalog()
+        self._buy_gold.text = f"Simoleon: {self.state.gold}G"
+        for i, t in enumerate(self._buy_items):
+            if i < len(rows):
+                tid, label, act, price = rows[i]
+                sel = (i == self._buy_sel)
+                afford = self.state.gold >= price
+                t.enabled = True
+                t.text = ('> ' if sel else '    ') + f"{label:<12} {price:>4}G   ({act})"
+                if not afford:
+                    t.color = color.rgb(120, 100, 95)
+                else:
+                    t.color = color.rgb(231, 178, 61) if sel else color.rgb(205, 200, 190)
+            else:
+                t.enabled = False
+                t.text = ''
+
+    def buy_input(self, key, player, world):
+        """Return True bila input dikonsumsi."""
+        from .sims_build import catalog, place, sell
+        rows = catalog()
+        n = max(1, len(rows))
+        if key in ('w', 'up arrow'):
+            self._buy_sel = (self._buy_sel - 1) % n; self._render_buy(); return True
+        if key in ('s', 'down arrow'):
+            self._buy_sel = (self._buy_sel + 1) % n; self._render_buy(); return True
+        if key == 'escape':
+            self.close_buy(); return True
+        tx, ty = player._facing_tile()
+        if key in ('enter', 'space'):
+            tid = rows[self._buy_sel][0]
+            ok, msg = place(self.state, world, tid, tx, ty)
+            sound_play('buy' if ok else 'blocked', 0.8)
+            self.flash_msg(msg, 2.0)
+            if ok:
+                world.load_scene(world.scene_name)      # render objek baru
+                if getattr(player, 'rebuild_pathgrid', None):
+                    player.rebuild_pathgrid()           # objek baru = penghalang
+            self._render_buy(); return True
+        if key == 'x':
+            ok, msg = sell(self.state, world, tx, ty)
+            sound_play('sell' if ok else 'blocked', 0.8)
+            self.flash_msg(msg, 2.0)
+            if ok:
+                world.load_scene(world.scene_name)
+                if getattr(player, 'rebuild_pathgrid', None):
+                    player.rebuild_pathgrid()
+            self._render_buy(); return True
+        return True
+
     def flash_msg(self, text: str, duration: float = 1.2):
         if self._flash_ent:
             self._flash_ent.text    = text
@@ -325,28 +1537,94 @@ class UIManager:
         self.flash_msg(text, duration)
 
     # ─── PUBLIC: DIALOG ──────────────────────────────────
+    # Kotak percakapan ala Harvest Moon: kertas krem berbingkai kayu, potret
+    # pembicara di kiri, papan nama menempel di tepi atas, teks muncul huruf
+    # demi huruf. Geometri dipusatkan di sini supaya mode pilihan dan mode
+    # biasa memakai kotak yang sama (dulu tiap cabang menggeser kotaknya
+    # sendiri dengan angka mati).
+    _DLG_W, _DLG_H, _DLG_Y = 1.24, 0.30, -0.33
+    _POT = 0.235
+
     def _build_dialog_box(self):
-        # Background kotak dialog diperkecil
-        self._dlg_bg = _ui(scale=(0.70, 0.18), position=(0, -0.38),
-                            color=color.rgb(15, 8, 30, 220))
-        self._dlg_border = _ui(scale=(0.71, 0.19), position=(0, -0.38),
-                                color=color.rgb(100, 70, 160, 180))
-        self._dlg_name = _txt('', pos=(-0.33, -0.31), scale=0.90,
-                               col=color.rgb(220, 190, 255))
-        self._dlg_text = _txt('', pos=(-0.33, -0.36), scale=0.85,
-                               col=color.rgb(230, 220, 255))
-        self._dlg_cont = _txt('[E / SPACE: lanjut]', pos=(0.15, -0.44),
-                               scale=0.70, col=color.rgb(150, 130, 200))
+        W, H, Y = self._DLG_W, self._DLG_H, self._DLG_Y
+        kayu, krem = color.rgb(96, 64, 40), color.rgb(242, 230, 204)
+        self._dlg_border = _ui(scale=(W + 0.022, H + 0.022), position=(0, Y),
+                               color=kayu, z=0.06)
+        self._dlg_bg = _ui(scale=(W, H), position=(0, Y), color=krem, z=0.05)
+        x_pot = -W / 2 + 0.03 + self._POT / 2
+        self._dlg_bingkai = _ui(scale=(self._POT + 0.016, self._POT + 0.016),
+                                position=(x_pot, Y), color=kayu, z=0.04)
+        self._dlg_potret_bg = _ui(scale=(self._POT, self._POT), position=(x_pot, Y),
+                                  color=color.rgb(206, 190, 160), z=0.035)
+        self._dlg_potret = _ui(scale=(self._POT, self._POT), position=(x_pot, Y),
+                               color=color.white, z=0.03)
+        x_teks = x_pot + self._POT / 2 + 0.035
+        self._DLG_X_TEKS = x_teks
+        self._dlg_papan = _ui(scale=(0.26, 0.05), position=(x_teks + 0.13, Y + H / 2 + 0.012),
+                              color=color.rgb(150, 96, 60), z=0.02)
+        self._dlg_name = _txt('', pos=(x_teks + 0.13, Y + H / 2 + 0.012), scale=0.85,
+                              col=color.rgb(250, 238, 214), origin=(0, 0))
+        self._dlg_text = _txt('', pos=(x_teks, Y + H / 2 - 0.05), scale=0.86,
+                              col=color.rgb(58, 40, 28))
+        self._dlg_text.text = ' '          # wordwrap Ursina butuh raw_text
+        self._dlg_text.wordwrap = 46
+        self._dlg_cont = _txt('[E / SPASI: lanjut]', pos=(W / 2 - 0.03, Y - H / 2 + 0.03),
+                              scale=0.62, col=color.rgb(130, 96, 66), origin=(0.5, 0))
         self._dlg_choice_ents = [
-            _txt('', pos=(-0.33, -0.34 - i * 0.035), scale=0.80, col=color.rgb(200, 185, 230))
+            _txt('', pos=(x_teks, Y - 0.02 - i * 0.04), scale=0.80, col=color.rgb(80, 56, 36))
             for i in range(3)
         ]
+        self._dlg_penuh = ''
+        self._dlg_ketik = 0.0
         self._set_dialog_visible(False)
 
+    def _pasang_potret(self, npc_id):
+        from pathlib import Path
+        p = Path(__file__).resolve().parent.parent / 'assets' / 'textures' / 'potret' / f'{npc_id}.png'
+        cache = self.__dict__.setdefault('_potret_cache', {})
+        if npc_id not in cache:
+            tex = None
+            if p.exists():
+                try:
+                    from PIL import Image
+                    tex = Texture(Image.open(p).convert('RGBA'))
+                except Exception:
+                    tex = None
+            cache[npc_id] = tex
+        tex = cache[npc_id]
+        self._dlg_potret.texture = tex
+        self._dlg_potret.enabled = tex is not None and self._dlg_bg.enabled
+        return tex is not None
+
+    def _ketik(self, teks):
+        """Mulai efek mesin ketik untuk satu baris."""
+        self._dlg_penuh = teks
+        self._dlg_ketik = 0.0
+        self._dlg_text.text = ''
+
+    def ketik_selesai(self) -> bool:
+        return len(self._dlg_text.text) >= len(self._dlg_penuh)
+
+    def tuntaskan_ketik(self):
+        self._dlg_text.text = self._dlg_penuh
+
+    def _tick_ketik(self, dt):
+        if self.mode != 'dialog' or self.ketik_selesai():
+            return
+        self._dlg_ketik += dt * 55.0          # huruf per detik
+        n = min(len(self._dlg_penuh), int(self._dlg_ketik))
+        if n != len(self._dlg_text.text):
+            self._dlg_text.text = self._dlg_penuh[:n]
+
     def _set_dialog_visible(self, v: bool):
-        for e in (self._dlg_bg, self._dlg_border,
+        for e in (self._dlg_bg, self._dlg_border, self._dlg_bingkai,
+                  self._dlg_potret_bg, self._dlg_papan,
                   self._dlg_name, self._dlg_text, self._dlg_cont):
             e.enabled = v
+        if v and self._dialog_npc:
+            self._pasang_potret(self._dialog_npc)
+        else:
+            self._dlg_potret.enabled = False
         for e in self._dlg_choice_ents:
             e.enabled = v if (self._dlg_choices_active and v) else False
 
@@ -403,6 +1681,14 @@ class UIManager:
                 if chosen is None:
                     chosen = talks_raw.get('default', [["..."]])
                 self._dialog_lines = [chosen[dial_idx % len(chosen)]]
+                # Pembuka sesuai jam, tempat, dan kegiatan (game/percakapan.py)
+                try:
+                    from .percakapan import pembuka
+                    awal = pembuka(npc_id, state)
+                except Exception:
+                    awal = None
+                if awal:
+                    self._dialog_lines.insert(0, [awal])
             else:
                 # Legacy list format fallback
                 self._dialog_lines = [talks_raw[dial_idx % len(talks_raw)]]
@@ -422,7 +1708,7 @@ class UIManager:
             # Branching node dictionary
             text = line.get('text', '')
             self._dlg_name.text = name
-            self._dlg_text.text = text
+            self._ketik(text)
 
             # Filter valid choices by condition
             choices = line.get('choices', [])
@@ -452,23 +1738,13 @@ class UIManager:
                 self._dlg_choices_active = True
 
                 # Expand dialog UI size for choices
-                self._dlg_bg.scale_y = 0.26
-                self._dlg_bg.y = -0.34
-                self._dlg_border.scale_y = 0.27
-                self._dlg_border.y = -0.34
                 self._dlg_cont.text = '[Tekan 1-3 atau Arrow+Space]'
-                self._dlg_text.y = -0.27
 
                 self._refresh_dialog_choices_ui()
             else:
                 self._dlg_choices_active = False
                 self._dlg_choices = []
-                self._dlg_bg.scale_y = 0.18
-                self._dlg_bg.y = -0.38
-                self._dlg_border.scale_y = 0.19
-                self._dlg_border.y = -0.38
-                self._dlg_cont.text = '[E / SPACE: lanjut]'
-                self._dlg_text.y = -0.36
+                self._dlg_cont.text = '[E / SPASI: lanjut]'
                 for ent in self._dlg_choice_ents:
                     ent.enabled = False
 
@@ -477,18 +1753,13 @@ class UIManager:
             # Legacy simple text line
             self._dlg_choices_active = False
             self._dlg_choices = []
-            self._dlg_bg.scale_y = 0.18
-            self._dlg_bg.y = -0.38
-            self._dlg_border.scale_y = 0.19
-            self._dlg_border.y = -0.38
-            self._dlg_cont.text = '[E / SPACE: lanjut]'
-            self._dlg_text.y = -0.36
+            self._dlg_cont.text = '[E / SPASI: lanjut]'
             for ent in self._dlg_choice_ents:
                 ent.enabled = False
 
             text = ' '.join(line) if isinstance(line, list) else line
             self._dlg_name.text = name
-            self._dlg_text.text = text
+            self._ketik(text)
             self._set_dialog_visible(True)
 
     def advance_dialog(self) -> bool:
@@ -513,8 +1784,17 @@ class UIManager:
             s.npc_hearts[self._dialog_npc] = min(10, s.npc_hearts.get(self._dialog_npc, 0) + 0.1)
         self._set_dialog_visible(False)
         self.mode = 'hud'
-        if hasattr(self, 'player') and self.player:
-            self.player._check_quest_progress(self)
+        # Pola yang sama dengan interaction_controller.check_quests dan
+        # TimeController: `quest_manager` tidak pernah ada di Player3D (ia
+        # membuat `quest_controller`), dan `_check_quest_progress` juga tidak
+        # pernah ada di cabang mana pun. `hasattr` di atas dulu selalu False,
+        # jadi cabang itu mati; disederhanakan di sini supaya tidak ada lagi
+        # cabang mati yang terlihat seperti jalur yang hidup.
+        p = getattr(self, 'player', None)
+        if p is not None:
+            qc = getattr(p, 'quest_controller', None) or getattr(p, 'quest_manager', None)
+            if qc is not None:
+                qc.check_quest_progress(self)
 
     def _refresh_dialog_choices_ui(self):
         for i, ent in enumerate(self._dlg_choice_ents):
@@ -591,8 +1871,21 @@ class UIManager:
 
     # ─── PUBLIC: PANEL ───────────────────────────────────
     def _build_panel_bg(self):
-        self._panel_bg = _ui(scale=(1.5, 1.2), position=(0, 0),
-                              color=color.rgb(10, 5, 20, 210))
+        # Lapisan peredup layar penuh (paling belakang)
+        # Selebar LAYAR, bukan 1,5: camera.ui membentang -aspect/2..+aspect/2,
+        # dan pada 16:9 itu 1,78 -- peredup 1,5 menyisakan pita terang di
+        # kiri dan kanan.
+        from ursina import window as _win
+        self._panel_bg = _ui(scale=(_win.aspect_ratio + 0.2, 1.2), position=(0, 0),
+                              color=color.rgb(10, 9, 12, 200), z=0.2)
+        # Alas panel polos dengan garis karat di atas -- bahasa yang sama
+        # dengan pelacak tutorial dan alas HUD. Tekstur chrome TSO yang lama
+        # punya margin transparan lebar, jadi yang tampil cuma kotak krem
+        # kecil di tengah, dan bagian dalamnya yang gelap menindih teks.
+        self._panel_frame = _ui(scale=(1.18, 1.02), position=(0, 0),
+                                color=color.rgb(20, 19, 18, 235), z=0.1)
+        self._panel_garis = _ui(scale=(1.18, 0.008), position=(0, 0.506),
+                                color=color.rgb(150, 96, 60), z=0.09)
         self._panel_title = _txt('', pos=(-0.45, 0.44), scale=1.2,
                                   col=color.rgb(220, 190, 255))
         self._panel_body  = _txt('', pos=(-0.45, 0.36), scale=0.80,
@@ -601,10 +1894,244 @@ class UIManager:
                                   col=color.rgb(140, 130, 180))
         self._set_panel_visible(False)
 
+    # Entity yang membentuk HUD permainan. Didaftar sekali di sini supaya
+    # menyembunyikannya tidak perlu menebak-nebak isi camera.ui — dan supaya
+    # menambah elemen HUD baru cuma butuh satu nama di daftar ini.
+    _NAMA_HUD = (
+        '_tool_name', '_seed_txt', '_hp_bar', '_hp_val', '_en_bar', '_en_val',
+        '_hp_trek', '_en_trek', '_hp_ikon', '_en_ikon',
+        '_time_txt', '_date_txt', '_weather_txt', '_scene_txt', '_gold_txt',
+        '_buff_txt', '_queue_txt', '_mood_bg', '_mood_fill', '_mood_lbl',
+        '_mood_ikon', '_motive_panel_bg', '_control_hint',
+    )
+    # Yang ikut disembunyikan TAB: hanya ringkasan motif. Roda alat tidak —
+    # ia jawaban atas "alat apa yang sedang kupegang", dan pertanyaan itu
+    # tidak hilang ketika pemain menutup panel kebutuhannya.
+    _DAFTAR_MOTIF = ('_need_bg_ents', '_need_fill_ents', '_need_lbl_ents',
+                     '_need_ikon_ents')
+    _DAFTAR_HUD = _DAFTAR_MOTIF + ('_alat_petak', '_alat_ikon')
+
+    def set_hud_visible(self, v: bool):
+        """Sembunyikan/tampilkan seluruh HUD permainan.
+
+        Dibuat untuk sinema: adegan bercerita yang masih menampilkan bar
+        energi dan panel suasana hati tidak terbaca sebagai adegan, ia
+        terbaca sebagai permainan yang macet dengan pita hitam di atasnya.
+        Terlihat jelas di tangkapan pertama — panel SUASANA HATI menabrak
+        baris narasinya sendiri.
+        """
+        for nama in self._NAMA_HUD:
+            e = getattr(self, nama, None)
+            if e is not None:
+                try:
+                    e.enabled = v
+                except Exception:
+                    pass
+        for nama in self._DAFTAR_HUD:
+            for e in getattr(self, nama, None) or []:
+                try:
+                    e.enabled = v
+                except Exception:
+                    pass
+        # Kepingan petunjuk tombol ikut padam saat sinema; ia bukan bagian
+        # dari cerita, dan tiga kotak bertuliskan SPACE di sudut adegan
+        # membuat adegannya terbaca sebagai permainan yang macet.
+        for cap, txt, _w in getattr(self, '_hint_baris', ()):
+            try:
+                cap.enabled = v and self._hint_tampil
+                txt.enabled = v and self._hint_tampil
+            except Exception:
+                pass
+        # Scrim kontras ikut: tanpa ini pita hitamnya bertumpuk dengan
+        # gradien gelap HUD dan tepinya terlihat sebagai dua lapis abu.
+        for nama in ('_scrim_kanan', '_scrim_kiri', '_scrim_bawah'):
+            e = getattr(self, nama, None)
+            if e is not None:
+                try:
+                    e.enabled = v
+                except Exception:
+                    pass
+        # Pilihan pemain menang atas "tampilkan lagi": kalau ringkasan motif
+        # sengaja disembunyikan lewat TAB, keluar dari sinema tidak boleh
+        # diam-diam menyalakannya kembali.
+        if v and not getattr(self, '_motif_tampil', True):
+            self._motif_tampil = True       # toggle akan membalikkannya
+            self.toggle_motive_panel()
+
     def _set_panel_visible(self, v: bool):
-        for e in (self._panel_bg, self._panel_title,
-                  self._panel_body, self._panel_hint):
-            e.enabled = v
+        for e in (self._panel_bg, self._panel_frame, self._panel_title,
+                  self._panel_body, self._panel_hint,
+                  getattr(self, '_panel_garis', None)):
+            if e is not None:
+                e.enabled = v
+        # HUD dan pelacak tutorial minggir selama panel terbuka: keduanya
+        # duduk di kiri-atas, tempat judul dan isi panel juga mulai, dan
+        # tulisannya saling tindih.
+        if hasattr(self, '_time_txt'):
+            self.set_hud_visible(not v)
+        for nama in ('_obj_bg', '_obj_rust', '_obj_title', '_obj_step', '_obj_hint'):
+            e = getattr(self, nama, None)
+            if e is not None:
+                e.enabled = (not v) and (nama != '_obj_hint'
+                                         or bool(str(e.text).strip()))
+        if not v:
+            self._hide_inventory_grid()
+
+    # ─── INVENTORY GRID (gaya Harvest Moon) ──────────────────
+    _INV_COLS = 7
+    _INV_ROWS = 5
+    _INV_CATS = ['Semua', 'Benih', 'Panen', 'Bahan', 'Alat']
+
+    def _build_inventory_grid(self):
+        """Grid slot inventory: kategori tab + border + bg + ikon + jumlah + kursor."""
+        self._inv_slots   = []
+        self._inv_cursor  = 0   # index slot terpilih
+        self._inv_cat_idx = 0   # index kategori aktif
+        x0, y0 = -0.46, 0.28
+        dx, dy = 0.155, 0.150
+
+        # ── Kategori tab di atas grid ──
+        self._inv_cat_tabs = []
+        cat_x0 = -0.48
+        for i, cat in enumerate(self._INV_CATS):
+            tab = _txt(cat, pos=(cat_x0 + i * 0.24, y0 + 0.075), scale=0.68,
+                       col=color.rgb(255, 220, 100) if i == 0 else color.rgb(150, 140, 120),
+                       origin=(0, 0))
+            tab.enabled = False
+            self._inv_cat_tabs.append(tab)
+
+        # ── Detail item (bawah grid) ──
+        self._inv_detail = _txt('', pos=(x0, y0 - self._INV_ROWS * dy - 0.01),
+                                scale=0.60, col=color.rgb(200, 190, 165), origin=(0, 0))
+        self._inv_detail.enabled = False
+
+        for r in range(self._INV_ROWS):
+            for c in range(self._INV_COLS):
+                px = x0 + c * dx
+                py = y0 - r * dy
+                border  = _ui(scale=(0.135, 0.135), position=(px, py), color=color.rgb(95, 74, 52), z=-0.06)
+                bg      = _ui(scale=(0.122, 0.122), position=(px, py), color=color.rgb(38, 32, 28, 240), z=-0.08)
+                icon    = _ui(scale=(0.088, 0.088), position=(px, py + 0.010), color=color.rgb(120, 120, 120), z=-0.12)
+                qty     = _txt('', pos=(px + 0.028, py - 0.052), scale=0.62, col=color.rgb(255, 255, 230), z=-0.16)
+                nm      = _txt('', pos=(px, py - 0.062), scale=0.40, col=color.rgb(205, 205, 215), origin=(0, 0), z=-0.16)
+                cursor  = _ui(scale=(0.140, 0.140), position=(px, py), color=color.rgb(255, 215, 60, 180), z=-0.04)
+                cursor.enabled = False
+                for e in (border, bg, icon, qty, nm):
+                    e.enabled = False
+                self._inv_slots.append({'border': border, 'bg': bg, 'icon': icon,
+                                        'qty': qty, 'nm': nm, 'cursor': cursor})
+
+    def _hide_inventory_grid(self):
+        for slot in getattr(self, '_inv_slots', []):
+            for e in slot.values():
+                e.enabled = False
+        for tab in getattr(self, '_inv_cat_tabs', []):
+            tab.enabled = False
+        if hasattr(self, '_inv_detail'):
+            self._inv_detail.enabled = False
+
+    @staticmethod
+    def _item_icon_color(item_id: str):
+        """Warna kategori untuk fallback ikon (Harvest Moon vibe)."""
+        if item_id.endswith('_seed'):            return color.rgb(110, 180, 90)   # benih hijau
+        if item_id in CROPS:                     return color.rgb(225, 150, 70)   # hasil panen oranye
+        if item_id in ('kayu', 'batu'):          return color.rgb(140, 105, 65)   # bahan coklat
+        if 'besi' in item_id or 'tembaga' in item_id or 'emas' in item_id or 'ore' in item_id or 'kristal' in item_id or 'mithril' in item_id:
+            return color.rgb(165, 170, 190)      # logam abu
+        if 'wild' in item_id or 'herb' in item_id or 'berry' in item_id or 'jamur' in item_id or 'mandrake' in item_id:
+            return color.rgb(90, 175, 150)       # liar teal
+        if item_id in ('susu', 'telur', 'wol'):  return color.rgb(235, 225, 200)  # produk hewan
+        return color.rgb(190, 165, 120)          # default
+
+    def _item_icon_tex(self, item_id: str):
+        """Coba muat tekstur ikon (crop) dari assets/textures, else None."""
+        cache = getattr(self, '_inv_tex_cache', None)
+        if cache is None:
+            cache = self._inv_tex_cache = {}
+        if item_id in cache:
+            return cache[item_id]
+        base = item_id[:-5] if item_id.endswith('_seed') else item_id
+        tex = None
+        for cand in (f'crop_{base}', base, item_id):
+            p = _Path(__file__).resolve().parent.parent / 'assets' / 'textures' / f'{cand}.png'
+            if p.exists():
+                try:
+                    tex = Texture(_PILImg.open(p)); break
+                except Exception:
+                    pass
+        cache[item_id] = tex
+        return tex
+
+    def _inv_filter_items(self):
+        """Kembalikan list (item_id, qty) sesuai kategori aktif."""
+        s   = self.state
+        cat = self._INV_CATS[getattr(self, '_inv_cat_idx', 0)]
+        all_items = [(k, v) for k, v in sorted(s.inventory.items()) if v > 0]
+        if cat == 'Semua':
+            return all_items
+        if cat == 'Benih':
+            return [(k, v) for k, v in all_items if k.endswith('_seed')]
+        if cat == 'Panen':
+            return [(k, v) for k, v in all_items if k in CROPS]
+        if cat == 'Bahan':
+            return [(k, v) for k, v in all_items
+                    if k in ('kayu', 'batu') or any(x in k for x in
+                       ('besi', 'tembaga', 'emas', 'ore', 'kristal', 'mithril', 'wild', 'herb', 'berry', 'mandrake'))]
+        if cat == 'Alat':
+            return [(k, v) for k, v in all_items if k in ('susu', 'telur', 'wol') or
+                    not (k.endswith('_seed') or k in CROPS or
+                         k in ('kayu', 'batu') or
+                         any(x in k for x in ('besi', 'tembaga', 'emas', 'ore', 'kristal', 'mithril',
+                                               'wild', 'herb', 'berry', 'mandrake')))]
+        return all_items
+
+    def _render_inventory_grid(self):
+        """Isi slot dari state.inventory (filter kategori, tampilkan kursor)."""
+        items   = self._inv_filter_items()
+        cursor  = getattr(self, '_inv_cursor', 0)
+        cursor  = min(cursor, max(0, len(items) - 1))
+        self._inv_cursor = cursor
+
+        # Update tab warna
+        for i, tab in enumerate(getattr(self, '_inv_cat_tabs', [])):
+            tab.color = color.rgb(255, 215, 60) if i == getattr(self, '_inv_cat_idx', 0) else color.rgb(150, 140, 120)
+            tab.enabled = True
+
+        for i, slot in enumerate(self._inv_slots):
+            is_cursor = (i == cursor)
+            if i < len(items):
+                item_id, qty = items[i]
+                slot['border'].enabled = True
+                slot['bg'].enabled = True
+                slot['cursor'].enabled = is_cursor
+                ic = slot['icon']
+                tex = self._item_icon_tex(item_id)
+                if tex is not None:
+                    ic.texture = tex
+                    ic.color   = color.white
+                else:
+                    ic.texture = None
+                    ic.color   = self._item_icon_color(item_id)
+                ic.enabled = True
+                slot['qty'].text    = str(qty) if qty > 1 else ''
+                slot['qty'].enabled = True
+                disp = CROPS.get(item_id, {}).get('name') or item_id.replace('_seed', '~').replace('_', ' ')
+                slot['nm'].text    = disp[:9]
+                slot['nm'].enabled = True
+            else:
+                for k, e in slot.items():
+                    e.enabled = False
+
+        # Detail item terpilih
+        if hasattr(self, '_inv_detail'):
+            if items and cursor < len(items):
+                item_id, qty = items[cursor]
+                disp = CROPS.get(item_id, {}).get('name') or item_id.replace('_seed', '~').replace('_', ' ')
+                self._inv_detail.text    = f'{disp}  x{qty}'
+                self._inv_detail.enabled = True
+            else:
+                self._inv_detail.text    = 'Inventori kosong'
+                self._inv_detail.enabled = True
 
     def open_panel(self, name: str):
         self._panel_name = name
@@ -612,7 +2139,21 @@ class UIManager:
         self._set_panel_visible(True)
         self.mode = 'panel'
 
+    # Font HUD tidak punya karakter garis-kotak (U+2500..U+257F); tiap "─"
+    # sampai ke layar sebagai kotak kosong, jadi "── TUGAS UTAMA ──" terbaca
+    # "□□ TUGAS UTAMA □□". Diterjemahkan di satu tempat untuk semua panel.
+    _GARIS = {c: ('|' if c in '│┃║' else '-') for c in map(chr, range(0x2500, 0x2580))}
+    _GARIS = str.maketrans(_GARIS)
+
     def _render_panel(self, name: str):
+        self._render_panel_isi(name)
+        for e in (self._panel_title, self._panel_body, self._panel_hint):
+            t = str(e.text)
+            t2 = t.translate(self._GARIS)
+            if t2 != t:
+                e.text = t2
+
+    def _render_panel_isi(self, name: str):
         s = self.state
         titles = {
             'inventory': 'Inventori',
@@ -624,8 +2165,14 @@ class UIManager:
             'crafting':  'Bengkel Pak Budi',
             'help':      'Panduan Kontrol',
             'catatan':   'Catatan Lembah',
+            'ekosistem': 'Ekosistem Lembah',
+            'wishes':    'Keinginan & Kebahagiaan',
+            'papan':     'Papan Permintaan Warga',
         }
         self._panel_title.text = titles.get(name, name.capitalize())
+        # Grid inventory hanya muncul di panel inventory
+        if name != 'inventory':
+            self._hide_inventory_grid()
         # Update hint sesuai panel
         if name == 'shop':
             self._panel_hint.text = ('[TAB atau 0: ganti BELI/JUAL]   [1-9: pilih baris]'
@@ -634,8 +2181,27 @@ class UIManager:
             self._panel_hint.text = '[1-9: Olah]   [Q/R: halaman]   [ESC: Tutup]'
         elif name == 'crafting':
             self._panel_hint.text = '[1-5: Pickaxe]   [6-9: Pedang]   [ESC: Tutup]'
+        elif name == 'wishes':
+            self._panel_hint.text = ('[1-5: janjikan]   [6-9: lupakan janji]'
+                                     '   [A/B/C: beli hadiah]   [ESC: Tutup]')
+        elif name == 'papan':
+            self._panel_hint.text = ('[1-3: setor permintaan]   [F4: lihat ekosistem]'
+                                     '   [ESC: tutup]')
         else:
             self._panel_hint.text = '[ESC: tutup]'
+
+        if name == 'wishes':
+            # Seluruh isinya dirakit di game/wishes.py, bukan di sini. Panel
+            # hanya mencetak; mesinnya tidak tahu soal UI dan UI tidak punya
+            # aturan sendiri. Kalau keduanya punya aturan, keduanya akan
+            # menyimpang — itu persis yang terjadi pada economy.py vs
+            # husbandry.py (lihat docs/TAHAPAN.md Tahap 2).
+            from .wishes import baris_panel
+            # Janji yang sudah terpenuhi dibayar SEBELUM dipajang, kalau tidak
+            # pemain melihat bar penuh yang menolak selesai.
+            self._bayar_keinginan()
+            self._panel_body.text = '\n'.join(baris_panel(s))
+            return
 
         if name == 'inventory':
             # Tas dulu mencetak kunci dict mentah tanpa harga ('lobak_seed: 3').
@@ -643,28 +2209,76 @@ class UIManager:
             # jadi tiap baris kini membawa nama layak baca, harga satuan, nilai
             # total, dan - hanya kalau mengolahnya memang lebih untung - ke mana
             # barang itu sebaiknya pergi.
-            from .economy import (item_name, sell_price, best_process_hint,
-                                  inventory_value)
+            from .economy import item_name, best_process_hint
+            from .market import price as sell_price, inventory_value as _nilai_tas
             lines = [f"Emas: {s.gold}G   HP: {s.hp}/{s.max_hp}   Energi: {s.energy}/{s.max_energy}",
                      f"Pickaxe: Tier {s.pickaxe_tier}   Pedang: {s.sword_id or 'Tidak punya'}", '']
             rows = [(k, q) for k, q in s.inventory.items() if q > 0]
             if rows:
                 # Paling berharga di atas: itu yang sedang dipikirkan pemain.
-                rows.sort(key=lambda r: (-sell_price(r[0]) * r[1], r[0]))
+                rows.sort(key=lambda r: (-sell_price(s, r[0]) * r[1], r[0]))
                 lines.append(f"  {'BARANG':<18}{'JML':>4}{'@':>7}{'TOTAL':>8}   SARAN")
                 for item, qty in rows[:19]:
-                    harga = sell_price(item)
+                    harga = sell_price(s, item)
                     hrg_s = f"{harga}G" if harga else "-"
                     tot_s = f"{harga * qty}G" if harga else "-"
                     lines.append(f"  {item_name(item)[:18]:<18}{qty:>4}{hrg_s:>7}"
                                  f"{tot_s:>8}   {best_process_hint(item)}")
                 lines.append('')
                 lines.append("  Nilai seluruh tas bila dijual di Warung: "
-                             f"{inventory_value(s.inventory)}G")
+                             f"{_nilai_tas(s, s.inventory)}G")
                 lines.append("  Peti Kirim di kebun membayar 85% tanpa perlu jalan.")
             else:
                 lines.append("  (Kosong)")
             self._panel_body.text = '\n'.join(lines[:28])
+
+        elif name == 'papan':
+            from .jobs import lines as papan_lines
+            self._panel_body.text = '\n'.join(papan_lines(s)[:30])
+
+        elif name == 'ekosistem':
+            # Satu-satunya layar yang menjelaskan kenapa hasil memancing hari
+            # ini lebih sedikit dari minggu lalu. Tanpa layar ini, kelimpahan
+            # yang menurun terbaca sebagai nasib buruk, bukan sebagai akibat.
+            from .ecology import report_lines
+            from .market import movers, demand_note
+            from .economy import item_name
+            lines = report_lines(s)
+            lines.append('')
+            lines.append("── PASAR ──")
+            gerak = movers(s, 5)
+            if gerak:
+                for item, kini, normal, rasio in gerak:
+                    arah = 'naik' if rasio > 1 else 'turun'
+                    lines.append(f"  {item_name(item)[:22]:<22} {kini:>5}G  "
+                                 f"({arah} {abs(int(round((rasio-1)*100))):>2}% "
+                                 f"dari {normal}G)")
+            else:
+                lines.append("  Semua harga sedang di sekitar nilai normalnya.")
+            catatan = demand_note(s)
+            if catatan:
+                lines.append('')
+                lines.append(f"  * {catatan}")
+
+            # Rekor pancing. Ini satu-satunya alasan ikan mas ke-lima-puluh
+            # masih layak dilihat — beratnya, bukan barangnya.
+            from .fishing import SPESIES, tersedia, perairan_untuk, AIR_DANAU
+            log = getattr(s, 'fish_log', None) or {}
+            if log:
+                lines.append('')
+                lines.append("── REKOR PANCING ──")
+                rek = sorted(((k, v) for k, v in log.items() if k in SPESIES),
+                             key=lambda r: -float(r[1]))
+                for sid, kg in rek[:6]:
+                    lines.append(f"  {item_name(sid)[:22]:<22} {float(kg):>6.2f} kg")
+            air = perairan_untuk(s, None)
+            umpan = tersedia(s, air)
+            if umpan:
+                lines.append('')
+                lines.append(f"  Sedang menggigit di sini: "
+                             f"{', '.join(item_name(u) for u in umpan[:4])}")
+
+            self._panel_body.text = '\n'.join(lines[:34])
 
         elif name == 'quest':
             qs   = s.quest_stage
@@ -761,6 +2375,17 @@ class UIManager:
                 mark = '[v]' if already else ('[o]' if (got_gold and got_mat) else '[ ]')
                 lines.append(f"  [{num}] {mark} {r['name']:18s}  {r['cost_gold']:>4}G + {need} (DMG {r['damage']})")
             lines.append('')
+            lines.append("── PERKAKAS ──")
+            base_num = len(PICKAXE_RECIPES) + len(SWORD_RECIPES) + 1
+            for i, r in enumerate(CRAFT_RECIPES):
+                num = base_num + i
+                need = ', '.join(f"{k}×{v}" for k, v in r['needs'].items())
+                got_gold = s.gold >= r['cost_gold']
+                got_mat  = all(inv.get(k, 0) >= v for k, v in r['needs'].items())
+                mark = '[o]' if (got_gold and got_mat) else '[ ]'
+                gtxt = f"{r['cost_gold']:>4}G + " if r['cost_gold'] else "       "
+                lines.append(f"  [{num}] {mark} {r['name']:14s} {gtxt}{need}  — {r['desc']}")
+            lines.append('')
             lines.append("[ ]=kurang bahan  [o]=siap  [v]=sudah punya")
             self._panel_body.text = '\n'.join(lines)
 
@@ -769,6 +2394,8 @@ class UIManager:
                 "── GERAK ──\n"
                 "  WASD / Arrow  : Jalan\n"
                 "  Shift+WASD    : Lari (pakai energi)\n\n"
+                "── KAMERA ──\n"
+                "  Klik kanan + geser : Putar bebas\n\n"
                 "── AKSI ──\n"
                 "  SPACE  : Pakai alat aktif\n"
                 "  E      : Pie Menu interaksi NPC\n"
@@ -781,14 +2408,27 @@ class UIManager:
                 "  B      : Terbang (Sapoe Terbang)\n"
                 "  Y      : Meluncur / Dash Stunt (-15 EN)\n"
                 "  T      : Tidur (hanya di Rumah)\n\n"
-                "── ALAT (angka 1-8) ──\n"
-                "  1-CNG  2-SRM  3-TNM  4-PNS\n"
-                "  5-KPK  6-HDH  7-PCK  8-PDG\n"
+                "── ALAT (angka 1-9) ──\n"
+                "  Roda ikon di kiri-atas. Nomornya tercetak di tiap petak;\n"
+                "  yang menyala adalah yang sedang dipilih, dan namanya\n"
+                "  berdiri tepat di bawahnya. Alat baru keluar ke tangan\n"
+                "  saat SPACE ditekan, lalu disimpan lagi sendiri.\n"
+                "  1 Cangkul  2 Siram  3 Tanam  4 Panen  5 Kapak\n"
+                "  6 Hadiah   7 Pickaxe 8 Pedang 9 Pancing\n"
                 "  Q/R    : Ganti bibit\n\n"
+                "── IKON KEBUTUHAN (kiri-bawah) ──\n"
+                "  Wajah  Suasana hati (jumlah semua di bawahnya)\n"
+                "  Garpu  Lapar        Kursi  Nyaman\n"
+                "  Tetes  Higiene      Kloset Kamar Kecil\n"
+                "  Petir  Energi       Bintang Senang\n"
+                "  Orang  Sosial       Bingkai Ruangan\n\n"
                 "── MENU ──\n"
                 "  I: Inventori   M: Peta\n"
                 "  J: Quest       H: Relasi NPC\n"
+                "  P: Keinginan & Kebahagiaan\n"
                 "  N: Catatan Lembah (lore)\n"
+                "  F6: Papan Permintaan warga (kerja sampingan)\n"
+                "  L: Bangun/Beli   F4: Ekosistem & harga pasar\n"
                 "  K: Warung, beli & JUAL (di Warung)\n"
                 "  O: Dapur, olah hasil panen (di Rumah)\n"
                 "  Peti Kirim di kebun: jual cepat 85% harga\n"
@@ -866,39 +2506,55 @@ class UIManager:
         return rows[start:start + self.ROWS_PER_PAGE], self._market_page, n_pages
 
     def _render_market(self, s) -> list:
-        from .economy import (margin_hint, sellable_items, sell_price,
-                              item_name, inventory_value)
+        from .economy import margin_hint, item_name
+        # Harga yang DIBAYAR hari ini datang dari market.py, bukan dari nilai
+        # kanonik di economy.py. Keduanya sengaja dipisah: economy.py adalah
+        # papan neraca desain yang tidak boleh bergerak, market.py adalah papan
+        # harga warung yang memang harus bergerak.
+        from .market import (price as harga_kini, sellable_items,
+                             inventory_value, trend_mark, demand_note)
         mode, _ = self._market_state()
         tab = ('>> BELI <<      jual' if mode == 'beli'
                else '   beli      >> JUAL <<')
         lines = [f"Emas: {s.gold}G   Musim: {self._season_name(s)}   "
-                 f"Nilai tas: {inventory_value(s.inventory)}G",
+                 f"Nilai tas: {inventory_value(s, s.inventory)}G",
                  tab, '']
+        _pengumuman = demand_note(s)
+        if _pengumuman:
+            lines.append(f"  * {_pengumuman}")
+            lines.append('')
 
         if mode == 'beli':
             rows, page, n_pages = self._page_slice(list(SHOP_ITEMS))
             lines.append(f"  {'BARANG':<20}{'HARGA':>6}  {'MUSIM':<11} HASILNYA NANTI")
             for i, it in enumerate(rows):
                 mampu = '' if s.gold >= it['price'] else '  (gold kurang)'
+                # Ternak yang sudah dibeli tetap terdaftar tapi ditandai, bukan
+                # dihilangkan: daftar yang barisnya berpindah-pindah tiap kali
+                # membeli membuat nomor pilihannya tidak bisa dihafal.
+                if it.get('animal') in getattr(s, 'owned_animals', []):
+                    mampu = '  (sudah di kandang)'
                 lines.append(f"  [{i+1}] {it['name'][:16]:<16}{it['price']:>5}G  "
                              f"{it['season']:<11} {margin_hint(it)}{mampu}")
             lines.append('')
             lines.append("  Angka = beli 1. Kolom kanan memberi tahu berapa hasil")
             lines.append("  panennya nanti, jadi untung-ruginya terlihat sebelum bayar.")
         else:
-            all_rows = sellable_items(s.inventory)
+            all_rows = sellable_items(s, s.inventory)
             if not all_rows:
                 lines.append("  Tidak ada yang bisa dijual. Panen dulu, atau ambil")
                 lines.append("  hasil ternak di kandang.")
                 return lines
             rows, page, n_pages = self._page_slice(all_rows)
-            lines.append(f"  {'BARANG':<20}{'JML':>4}{'@':>7}{'SEMUA':>8}")
+            lines.append(f"  {'BARANG':<20}{'JML':>4}{'@':>7}{'SEMUA':>8}  ARAH")
             for i, (item, qty, total) in enumerate(rows):
                 lines.append(f"  [{i+1}] {item_name(item)[:16]:<16}{qty:>4}"
-                             f"{sell_price(item):>6}G{total:>7}G")
+                             f"{harga_kini(s, item):>6}G{total:>7}G  "
+                             f"{trend_mark(s, item)}")
             lines.append('')
-            lines.append("  Angka = jual SEMUA barang di baris itu, harga penuh.")
-            lines.append("  Peti Kirim di kebun lebih cepat tapi hanya membayar 85%.")
+            lines.append("  Angka = jual SEMUA barang di baris itu, harga hari ini.")
+            lines.append("  ^ = di atas harga normal, v = di bawah. Menjual banyak")
+            lines.append("  sekaligus menekan harganya sendiri; ia pulih tiap pagi.")
 
         if n_pages > 1:
             lines.append(f"  -- halaman {page+1}/{n_pages}  [Q/R] --")
@@ -943,7 +2599,67 @@ class UIManager:
             return self._process_item(idx)
         elif self._panel_name == 'crafting':
             return self._craft_item(idx)
+        elif self._panel_name == 'wishes':
+            return self._aksi_keinginan(idx)
+        elif self._panel_name == 'papan':
+            from .jobs import aksi as papan_aksi
+            pesan = papan_aksi(self.state, idx)
+            self._render_panel('papan')
+            return pesan
         return ''
+
+    # ─── KEINGINAN (Tahap 4) ─────────────────────────────
+    def _bayar_keinginan(self) -> list:
+        """Bayar janji yang sudah terpenuhi, dan beri tahu pemain.
+
+        Dipanggil dari dua tempat: tiap kali panel Keinginan digambar, dan
+        sekali per DETIK dari `Game3D.update` — bukan tiap frame. Yang kedua
+        itu yang membuat hadiahnya terasa datang dari perbuatan; tanpa itu
+        pemain baru tahu keinginannya selesai saat kebetulan membuka panel.
+
+        Sekali per detik, bukan per frame, karena pelajaran Tahap 3: pekerjaan
+        yang diulang 60 kali sedetik untuk hasil yang sama adalah cara paling
+        mudah membuang milidetik (lihat `_teks()` di berkas ini).
+        """
+        from .wishes import periksa
+        lunas = periksa(self.state)
+        for p in lunas:
+            self.flash_msg(f"Keinginan terpenuhi: {p['teks']}  "
+                           f"+{p['bayar']} Kebahagiaan", 3.0)
+        if lunas:
+            from .sound import play as sound_play
+            try:
+                sound_play('magic', 0.8)
+            except Exception:
+                pass
+        return lunas
+
+    def _aksi_keinginan(self, idx: int) -> str:
+        """1-5 janjikan tawaran, 6-9 lupakan janji ke-1..4."""
+        from . import wishes as w
+        s = self.state
+        if 1 <= idx <= w.TAWARAN:
+            kandidat = w.tawaran(s)
+            if idx > len(kandidat):
+                return 'Tidak ada tawaran di nomor itu.'
+            _ok, pesan = w.janjikan(s, kandidat[idx - 1])
+            self._render_panel('wishes')
+            return pesan
+        if 6 <= idx <= 5 + w.SLOT_JANJI:
+            _ok, pesan = w.lupakan(s, idx - 6)
+            self._render_panel('wishes')
+            return pesan
+        return ''
+
+    def beli_hadiah_keinginan(self, huruf: str) -> str:
+        """Tombol a/b/c di panel Keinginan."""
+        from . import wishes as w
+        i = ord(huruf) - ord('a')
+        if not 0 <= i < len(w.HADIAH):
+            return ''
+        _ok, pesan = w.beli_hadiah(self.state, w.HADIAH[i]['id'])
+        self._render_panel('wishes')
+        return pesan
 
     def _buy_shop_item(self, idx: int) -> str:
         s = self.state
@@ -953,6 +2669,24 @@ class UIManager:
         it = rows[idx - 1]
         if s.gold < it['price']:
             return f"Gold kurang ({it['price']}G)."
+
+        # Ternak tidak masuk tas. Ia pindah ke kandang, dan itu satu-satunya
+        # baris toko yang mengubah dunia alih-alih inventori.
+        aid = it.get('animal')
+        if aid:
+            punya = getattr(s, 'owned_animals', None)
+            if punya is None:
+                punya = s.owned_animals = []
+            if aid in punya:
+                return f"{it['name']} sudah ada di kandangmu."
+            s.gold -= it['price']
+            punya.append(aid)
+            if not s.shop_unlocked:
+                s.shop_unlocked = True
+            self._render_panel('shop')
+            return (f"{it['name']} dibeli -{it['price']}G. "
+                    f"Ia menunggu di kandang — beri makan hari ini.")
+
         s.gold -= it['price']
         s.inventory[it['id']] = s.inventory.get(it['id'], 0) + 1
         if not s.shop_unlocked:
@@ -967,17 +2701,25 @@ class UIManager:
         menekan tombol 40 kali. Peti Kirim tetap ada untuk yang ingin menjual
         semuanya sekaligus dengan potongan.
         """
-        from .economy import sellable_items, item_name
+        from .economy import item_name
+        from .market import sellable_items, on_sold, price as harga_kini
         s = self.state
-        rows, _page, _n = self._page_slice(sellable_items(s.inventory))
+        rows, _page, _n = self._page_slice(sellable_items(s, s.inventory))
         if not (1 <= idx <= len(rows)):
             return ''
         item, qty, total = rows[idx - 1]
+        sebelum = harga_kini(s, item)
         del s.inventory[item]
         s.gold += total
         s.stats['earned'] = s.stats.get('earned', 0) + total
+        # Pasar harus TAHU. Kalau satu jalur uang lupa memanggil ini, jalur itu
+        # jadi celah bebas-konsekuensi, dan pemain akan menemukannya sebelum
+        # kita menemukannya.
+        on_sold(s, item, qty)
+        sesudah = harga_kini(s, item)
         self._render_panel('shop')
-        return f"Jual {item_name(item)} x{qty} +{total}G"
+        ekor = f"  (harga turun {sebelum}G > {sesudah}G)" if sesudah < sebelum else ""
+        return f"Jual {item_name(item)} x{qty} +{total}G{ekor}"
 
     def _process_item(self, idx: int) -> str:
         """Olah bahan mentah jadi barang lebih mahal, bayar dengan energi."""
@@ -1019,9 +2761,14 @@ class UIManager:
             if s.sword_id == r['id']:
                 return "Sudah punya pedang ini."
             return self._do_craft(r, set_sword=r['id'])
+        gi = si - len(SWORD_RECIPES)          # lanjut ke perkakas umum
+        if 0 <= gi < len(CRAFT_RECIPES):
+            r = CRAFT_RECIPES[gi]
+            return self._do_craft(r, give_item=(r['id'], r.get('gives', 1)))
         return ''
 
-    def _do_craft(self, r: dict, set_pickaxe: int = None, set_sword: str = None) -> str:
+    def _do_craft(self, r: dict, set_pickaxe: int = None, set_sword: str = None,
+                  give_item: tuple = None) -> str:
         s = self.state
         if s.gold < r['cost_gold']:
             return f"Gold kurang ({r['cost_gold']}G)."
@@ -1036,6 +2783,9 @@ class UIManager:
             s.pickaxe_tier = set_pickaxe
         if set_sword is not None:
             s.sword_id = set_sword
+        if give_item is not None:
+            iid, qty = give_item
+            s.inventory[iid] = s.inventory.get(iid, 0) + qty
         self._render_panel('crafting')
         return f"Berhasil membuat {r['name']}!"
 
@@ -1112,6 +2862,32 @@ class UIManager:
         self._pie_callback = None
         if self.mode == 'pie':
             self.mode = 'hud'
+
+    # ─── INVENTORY NAVIGATION ────────────────────────────────
+    def navigate_inventory(self, dr: int, dc: int):
+        """Gerakkan kursor inventory. dr=baris, dc=kolom."""
+        if getattr(self, '_panel_name', '') != 'inventory':
+            return
+        items  = self._inv_filter_items()
+        if not items:
+            return
+        cur    = getattr(self, '_inv_cursor', 0)
+        cols   = self._INV_COLS
+        r, c   = divmod(cur, cols)
+        c      = max(0, min(cols - 1, c + dc))
+        r      = max(0, min(self._INV_ROWS - 1, r + dr))
+        new    = r * cols + c
+        self._inv_cursor = min(new, len(items) - 1)
+        self._render_inventory_grid()
+
+    def navigate_inventory_cat(self, delta: int):
+        """Ganti tab kategori inventory."""
+        if getattr(self, '_panel_name', '') != 'inventory':
+            return
+        n = len(self._INV_CATS)
+        self._inv_cat_idx = (getattr(self, '_inv_cat_idx', 0) + delta) % n
+        self._inv_cursor  = 0
+        self._render_inventory_grid()
 
     def _refresh_pie_ui(self):
         from .data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS

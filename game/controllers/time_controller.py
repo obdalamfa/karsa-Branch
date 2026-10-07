@@ -1,6 +1,7 @@
 from ..config import (
-    FORCE_SLEEP_HOUR, INGAME_MINUTES_PER_REAL_SECOND, 
-    NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG, NEED_MAX
+    FORCE_SLEEP_HOUR, INGAME_MINUTES_PER_REAL_SECOND,
+    NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG,
+    NEED_DECAY_KANDUNG, NEED_DECAY_BERSIH, NEED_MAX
 )
 from ..data import CROPS
 
@@ -30,8 +31,26 @@ class TimeController:
             selesai = q.tick(ingame_dt)
             if selesai:
                 self._last_action_done = selesai
-
         s.sync_motives()
+
+        # ── Diambil dari feature/3d-mobs, disaring ─────────────────────────
+        # Peluruhan lima motif datar sisi sana TIDAK diikutkan: mesin motif di
+        # atas sudah jadi sumber kebenaran, dan menjalankan keduanya berarti
+        # kebutuhan turun dua kali. Yang diambil hanya yang belum punya
+        # padanan di sini sama sekali.
+        try:                              # tahap hidup (S10): lansia lebih cepat lelah
+            from ..sims_lifestage import traits as _lt
+            _en_m = _lt(s)['energy_decay']
+            if _en_m > 1.0:
+                s.energy = max(0.0, s.energy - 0.010 * (_en_m - 1.0) * ingame_dt)
+        except Exception:
+            pass
+
+        # Kelaparan menguras HP. `sync_motives()` di atas sudah mencerminkan
+        # motif lapar ke `s.lapar`, jadi ambang ini dibaca dari nilai yang baru
+        # saja disegarkan, bukan dari nilai basi.
+        if s.lapar <= 0.0:
+            s.hp = max(0.0, s.hp - 0.15 * ingame_dt)
 
         if s.get_hour() >= FORCE_SLEEP_HOUR:
             self.advance_day(player)
@@ -52,24 +71,138 @@ class TimeController:
         s.day           += 1
         s.day_in_season += 1
 
-        # Satu malam berlalu untuk ternak: kenyang turun, yang terlalu lama
-        # dilalaikan jatuh sakit, yang terawat siap dipanen hasilnya.
-        # game/husbandry.py sudah lengkap tapi tidak ada pemanggilnya sama
-        # sekali — tanpa baris ini, merawat hewan tidak berakibat apa pun.
-        try:
-            from ..husbandry import daily_tick as _ternak_tick
-            self._ternak_pagi = _ternak_tick(s)
-        except Exception as e:
-            import logging
-            logging.warning(f"[TERNAK] daily_tick gagal: {e}")
-            self._ternak_pagi = None
+        # ── husbandry.daily_tick SENGAJA TIDAK dipanggil di sini ──────────
+        #
+        # Baris pemanggilnya pernah ada, dengan alasan yang benar: "husbandry.py
+        # sudah lengkap tapi tidak ada pemanggilnya sama sekali." Yang terlewat
+        # adalah bahwa yang tersambung cuma SEPARUH sistemnya — peluruhannya,
+        # bukan perawatannya. `husbandry.feed`, `water` dan `clean` tidak punya
+        # pemanggil di seluruh game/, jadi takaran yang turun 45-55 tiap malam
+        # tidak punya apa pun yang bisa mengisinya kembali.
+        #
+        # Akibatnya terukur, bukan dikhawatirkan. `tools/verifikasi.py`
+        # menjalankan delapan ternak tanpa aksi pemain (satu-satunya permainan
+        # yang mungkin, karena aksinya tidak terjangkau):
+        #
+        #     hari 3  kenyang semua ternak menyentuh 0
+        #     hari 4  KEDELAPAN ternak sakit permanen
+        #     hari 6  hati SEMUA hewan menyentuh 0
+        #
+        # Dan `_ternak_pagi`, satu-satunya hasil berguna dari tick itu
+        # (ringkasan 'lapar/sakit/siap' untuk diberitahukan pagi hari), ditulis
+        # lalu tidak pernah dibaca siapa pun. Jadi yang mendarat di permainan
+        # cuma efek sampingnya: hewan sakit permanen dan hubungan yang hancur,
+        # tanpa satu pun pintu untuk mencegahnya.
+        #
+        # Menjalankan peluruhan tanpa perawatan LEBIH buruk daripada tidak
+        # menjalankannya. Jadi dihentikan — bukan dihapus. Modulnya utuh dan
+        # siap; yang kurang tiga sambungan di pie menu kandang
+        # (game/controllers/interaction_controller.py, tempat 'Beri Makan' dan
+        # 'Ambil Hasil' sekarang memakai jalur `economy.py`):
+        #
+        #     Beri Makan   -> husbandry.feed(s, animal_id)
+        #     Beri Minum   -> husbandry.water(s, animal_id)   (aksi baru)
+        #     Bersihkan    -> husbandry.clean(s, animal_id)   (aksi baru)
+        #     Ambil Hasil  -> husbandry.collect(s, animal_id)
+        #
+        # Begitu keempatnya tersambung, baris di bawah ini boleh hidup kembali
+        # dan `verifikasi.py` akan berhenti menandainya:
+        #
+        #     from ..husbandry import daily_tick
+        #     self._ternak_pagi = daily_tick(s)
+        #
+        # Tapi menyambungkannya berarti memilih husbandry.py sebagai sumber
+        # kebenaran ternak dan memensiunkan jalur `economy.animals` — dua sistem
+        # itu tidak sepakat soal bebek, kambing dan domba (lihat verifikasi.py).
+        # Memilih salah satu keputusan pemilik, bukan efek samping perbaikan bug.
+        self._ternak_pagi = None
+        # ── MALAM DISIMULASIKAN, BUKAN DILOMPATI ──────────────────────────
+        # Baris lama cuma memindahkan jam ke 06:00 dan mengisi ulang stat lama.
+        # Terukur: motif SEBELUM dan SESUDAH tidur identik sampai satu desimal.
+        # Tidur — satu-satunya sumber pemulihan energi yang bukan interaksi —
+        # tidak berakibat apa pun pada mesin yang menggerakkan mood, panel
+        # SUASANA HATI, dan seluruh pilihan otonomi warga.
+        #
+        # Panjang malam dihitung dari jam BERAPA pemain tidur sampai 06:00,
+        # jadi tidur jam 20:00 memulihkan lebih banyak daripada roboh jam 23:00
+        # lewat FORCE_SLEEP_HOUR — tanpa satu pun tabel hukuman terpisah.
+        menit_tidur = ((1440.0 - s.time_minutes) + 360.0
+                       if s.time_minutes > 360.0 else 360.0 - s.time_minutes)
+        self._tidur_menit = menit_tidur
+        self._tidur_delta = s.mv.lewati_malam(menit_tidur)
+
         s.time_minutes   = 360.0
-        s.energy         = s.max_energy
+
+        # Dua sistem energi paralel disambungkan DI SINI, di satu-satunya
+        # tempat yang penting. `s.energy` (stamina bertani) dan `s.mv.energi`
+        # (mood dan otonomi) selama ini tidak saling tahu: yang pertama diisi
+        # penuh tiap pagi apa pun yang terjadi, yang kedua tidak pernah diisi
+        # sama sekali. Sekarang bangun tidur menurunkan stamina pagi dari
+        # energi motif yang benar-benar didapat semalam.
+        #
+        # Lantai 35% disengaja, dan itu pilihan "longgar" yang diminta pemilik:
+        # malam yang buruk membuat harinya berat, bukan membuat harinya mustahil.
+        frac = (s.mv.energi + 100.0) / 200.0
+        s.energy = max(int(s.max_energy * 0.35),
+                       min(s.max_energy, int(round(s.max_energy * frac))))
         s.hp             = s.max_hp
-        s.lapar  = min(NEED_MAX, s.lapar  + 25)
-        s.senang = min(NEED_MAX, s.senang + 20)
+
+        # `s.lapar += 25` dan `s.senang += 20` DIHAPUS, dan itu bukan
+        # penghilangan fitur: keduanya tulisan mati. `update()` memanggil
+        # `s.sync_motives()` tiap frame, yang menulis ulang kedua angka itu
+        # dari `s.mv`. Terukur: naik ke 50,0 lalu kembali ke 25,0 dalam TIGA
+        # frame. Yang menggantikannya adalah peluruhan malam yang sungguhan —
+        # lapar memang turun semalaman (senang tidak, lajunya nol saat tidur),
+        # jadi sarapan akhirnya punya alasan untuk ada.
+        s.sync_motives()
+
         s.naga_fountain_used_today = False
+        # Shift kerja baru tersedia tiap hari (S6)
+        try:
+            from ..sims_career import reset_daily
+            reset_daily(s)
+        except Exception:
+            pass
+        # Menua (S10) + keinginan harian baru & cek aspirasi (S9)
+        self._last_stage_up = None
+        self._last_wants = []
+        self._last_aspir = None
+        try:
+            from ..sims_lifestage import age_one_day
+            self._last_stage_up = age_one_day(s)
+            if self._last_stage_up and hasattr(player, 'apply_life_stage'):
+                player.apply_life_stage()      # efek langsung terasa
+        except Exception:
+            pass
+        try:
+            from ..sims_aspiration import check_wants, roll_wants, check_aspiration
+            self._last_wants = check_wants(s)
+            self._last_aspir = check_aspiration(s)
+            roll_wants(s)
+        except Exception:
+            pass
+        # Rumah tangga: setoran anggota + tagihan berkala (S8)
+        self._last_household = None
+        try:
+            from ..sims_household import tick_day as _hh_tick
+            self._last_household = _hh_tick(s)
+        except Exception:
+            pass
+        # Relasi meluntur bila diabaikan (S5) — pertemanan perlu dirawat
+        try:
+            from ..sims_relationship import decay_relationships
+            decay_relationships(s)
+        except Exception:
+            pass
         s.buffs.clear()
+        s.animals_collected = []          # ternak siap diperah/diambil lagi
+
+        # Tidur yang CUKUP dicatat, dan enam jam adalah angka yang dipilih
+        # pemilik di #4. Ia dipakai wish 'tidur cukup tiga malam', jadi angka
+        # itu akhirnya punya akibat yang bisa dikejar pemain, bukan cuma
+        # dipakai sekali di perhitungan neraca.
+        if menit_tidur >= 360.0:
+            s.stats['malam_cukup'] = s.stats.get('malam_cukup', 0) + 1
 
         # Rain auto-waters tilled soil
         if s.weather in ('Hujan', 'Badai'):
@@ -77,21 +210,60 @@ class TimeController:
                 if soil.get('tilled') and not soil.get('watered'):
                     soil['watered'] = True
 
-        # Tumbuh tanaman semalam
+        # Tumbuh tanaman semalam — Sakuna: jadwal air, nutrisi, gulma → mutu (★)
         cur_season = s.get_season()
+        akar = (getattr(s, 'batin', {}) or {}).get('akar', 1)
         for soil in s.soil.values():
-            if soil.get('watered') and soil.get('crop'):
-                crop_seasons = CROPS.get(soil['crop'], {}).get('seasons', [])
-                growth = 2 if cur_season in crop_seasons else 1
-                soil['age'] = soil.get('age', 0) + growth
-                soil['watered'] = False
+            crop = soil.get('crop')
+            if not crop:
+                if soil.get('tilled') and _rng.random() < 0.18:      # gulma di petak kosong
+                    soil['weeds'] = min(3, soil.get('weeds', 0) + 1)
+                continue
+            cdata   = CROPS.get(crop, {})
+            days    = cdata.get('days', 4)
+            age     = soil.get('age', 0)
+            q       = soil.get('quality', 3.0)
+            nut     = soil.get('nutrients', 3)
+            weeds   = soil.get('weeds', 0)
+            watered = soil.get('watered', False) or s.weather in ('Hujan', 'Badai')
+            ripening = age >= max(1, days * 0.6)                     # fase menua → ingin kering
+            in_season = cur_season in cdata.get('seasons', [])
+            grow = 0
+            # Jadwal air: muda ingin BASAH, menua ingin KERING (inti Sakuna)
+            if not ripening:
+                if watered:
+                    grow = 2 if in_season else 1; q += 0.15
+                else:
+                    q -= 0.5                                          # kekeringan saat muda
+            else:
+                grow = 1
+                q += 0.2 if not watered else -0.55                   # tergenang saat menua = buruk
+            # Nutrisi tanah
+            if nut > 0:
+                q += 0.2 + akar * 0.05; nut -= 1
+            else:
+                q -= 0.35
+            # Gulma menekan
+            if weeds >= 2:
+                q -= 0.4; grow = max(0, grow - 1)
+            if _rng.random() < 0.32:
+                weeds = min(3, weeds + 1)
+            soil['age']       = age + grow
+            soil['quality']   = max(1.0, min(5.0, q))
+            soil['nutrients'] = nut
+            soil['weeds']     = weeds
+            soil['watered']   = False
 
-        # Ternak maju semalam persis seperti tanaman: yang kenyang mendekat
-        # satu hari ke hasilnya, yang lapar diam di tempat. Diletakkan tepat
-        # di bawah pertumbuhan tanaman supaya kedua siklus hidup di satu tempat
-        # dan tidak bisa lagi menyimpang satu sama lain.
-        from ..economy import tick_animals_daily
-        tick_animals_daily(s)
+        # `economy.tick_animals_daily` DIHAPUS dari sini, dan itu perbaikan
+        # bukan penghilangan fitur. Dulu DUA tick ternak jalan tiap malam:
+        # yang ini di atas catatan economy {kenyang, siap}, dan
+        # `husbandry.daily_tick` di atas catatan {kenyang, air, bersih, lalai,
+        # sakit}. Keduanya mensimulasikan hewan yang sama, di dua tempat, tanpa
+        # saling tahu. Yang dibaca pie menu cuma milik economy — jadi air dan
+        # bersih meluruh tanpa satu pun cara menaikkannya, dan terukur pada
+        # hari ke-4 setiap hewan sakit permanen karena syarat sembuh menuntut
+        # ketiganya >= 60. Sekarang husbandry satu-satunya yang memegang
+        # ternak, dan aksinya sudah tersambung ke pie menu.
 
         if s.day_in_season > DAYS_PER_SEASON:
             s.day_in_season = 1
@@ -100,12 +272,49 @@ class TimeController:
             if s.season_index == 0 and old_season == 3:
                 s.year += 1
 
+        # ── Ekosistem & pasar ────────────────────────────────────────────
+        # Dipanggil SEBELUM cuaca hari baru diundi. Pertumbuhan semalam
+        # ditentukan oleh cuaca yang baru saja lewat — hujan kemarin yang
+        # menyuburkan hutan, bukan hujan yang belum terjadi.
+        try:
+            from ..ecology import daily_tick as _eco_tick, morning_note as _eco_note
+            delta = _eco_tick(s)
+            self._eco_pagi = _eco_note(s, delta)
+        except Exception as e:
+            import logging
+            logging.warning(f"[EKOLOGI] daily_tick gagal: {e}")
+            self._eco_pagi = None
+
+        try:
+            from ..market import daily_tick as _pasar_tick, demand_note as _pasar_note
+            lap = _pasar_tick(s, _rng)
+            self._pasar_pagi = _pasar_note(s) if lap.get('permintaan_baru') else None
+        except Exception as e:
+            import logging
+            logging.warning(f"[PASAR] daily_tick gagal: {e}")
+            self._pasar_pagi = None
+
         _weathers = ['Cerah','Cerah','Cerah','Mendung','Hujan','Berangin','Badai']
         _weights  = [38, 22, 14, 12, 8, 4, 2]
         s.weather = _rng.choices(_weathers, weights=_weights)[0]
 
+        # Jual isi Peti Kirim (shipping bin) — emas masuk saat fajar
+        self._last_ship_sale = (0, 0)
+        bin_ = getattr(s, 'ship_bin', None)
+        if bin_:
+            from ..data import SHIP_PRICES
+            earned, items = 0, 0
+            for item, n in list(bin_.items()):
+                earned += SHIP_PRICES.get(item, 0) * n
+                items += n
+            if earned > 0:
+                s.gold += earned
+                s.stats['earned'] = s.stats.get('earned', 0) + earned
+                self._last_ship_sale = (items, earned)
+            bin_.clear()
+
         sound_play('morning', 0.8)
-        
+
         # In a real setup, wild respawn would be handled by EntityFactory/EntitiesManager
         # Using late import to prevent circular dependencies
         try:
@@ -115,10 +324,11 @@ class TimeController:
             pass
             
         # Optional: check quest progress
-        if hasattr(player, 'quest_manager') and player.quest_manager:
-            player.quest_manager.check_quest_progress()
-        elif hasattr(player, '_check_quest_progress'):
-            player._check_quest_progress()
+        # Lihat catatan di panels.py: `quest_manager` tidak pernah ada.
+        qc = (getattr(player, 'quest_controller', None)
+              or getattr(player, 'quest_manager', None))
+        if qc is not None:
+            qc.check_quest_progress()
 
     def try_sleep(self, panels, player):
         from ursina import invoke
@@ -127,8 +337,70 @@ class TimeController:
             if getattr(player, '_is_flying', False):
                 player.toggle_broom_flying(panels)
             sound_play('sleep', 0.8)
-            panels.flash_msg("Tidur... Hari baru dimulai!", 2.0)
             self.advance_day(player)
+            # Pesannya menyebut ANGKA, bukan cuma "hari baru". Sistem yang
+            # akibatnya tidak terlihat sama saja dengan sistem yang tidak ada —
+            # itu persis kenapa tidur bisa mati bertahun-tahun tanpa ada yang
+            # menyadarinya. Sekarang pemain melihat lama tidurnya dan stamina
+            # yang ia dapat darinya, jadi tidur jam 20:00 lawan roboh jam 23:00
+            # adalah dua angka yang berbeda di layar.
+            jam = getattr(self, '_tidur_menit', 0.0) / 60.0
+            panels.flash_msg(
+                f"Tidur {jam:.1f} jam. Bangun dengan {int(self.state.energy)}"
+                f"/{self.state.max_energy} stamina.", 2.4)
+            # Laporan kandang. `daily_tick` sudah mengembalikan ringkasan ini
+            # sejak lama dan `advance_day` menyimpannya di `_ternak_pagi` —
+            # tapi tidak ada satu pun yang menampilkannya, jadi hewan bisa
+            # kelaparan sampai sakit tanpa pemain pernah diberi tahu. Ternak
+            # yang sakit berhenti menghasilkan sama sekali, jadi diamnya mahal.
+            lap = getattr(self, '_ternak_pagi', None)
+            if lap:
+                if lap.get('sakit'):
+                    invoke(panels.flash_msg,
+                           f"SAKIT: {', '.join(lap['sakit'])} — beri makan, "
+                           f"minum, dan bersihkan kandangnya.", 4.0, delay=2.2)
+                elif lap.get('lapar'):
+                    invoke(panels.flash_msg,
+                           f"Kelaparan: {', '.join(lap['lapar'])}", 3.0,
+                           delay=2.2)
+                elif lap.get('siap'):
+                    invoke(panels.flash_msg,
+                           f"Siap dipanen: {', '.join(lap['siap'])}", 3.0,
+                           delay=2.2)
+
+            # ── Laporan pagi dari feature/3d-mobs ──────────────────────────
+            # Kedua sisi menulis laporan pagi dan keduanya melaporkan hal yang
+            # berbeda: sisi visual melaporkan KANDANG (ternak sakit/lapar/siap
+            # panen), sisi 3d-mobs melaporkan tahap hidup, keinginan, aspirasi,
+            # tagihan rumah tangga, dan Peti Kirim. Tidak ada yang menggantikan
+            # yang lain, jadi keduanya jalan.
+            # Ringkasan penjualan Peti Kirim (Stardew)
+            from ursina import invoke as _inv0
+            if getattr(self, '_last_stage_up', None):
+                from ..sims_lifestage import stage_label
+                _inv0(panels.flash_msg,
+                      f"Kamu memasuki tahap hidup baru: {stage_label(self.state)}!", 3.4, delay=0.6)
+            for _lbl, _g in (getattr(self, '_last_wants', None) or []):
+                _inv0(panels.flash_msg, f"Keinginan tercapai: {_lbl} (+{_g}G)", 2.6, delay=1.0)
+            if getattr(self, '_last_aspir', None):
+                _al, _ag, _at = self._last_aspir
+                _inv0(panels.flash_msg,
+                      f"ASPIRASI TUNTAS: {_al}! +{_ag}G, gelar '{_at}'", 4.0, delay=1.6)
+            hh = getattr(self, '_last_household', None)
+            if hh:
+                from ursina import invoke as _inv
+                if hh.get('bill'):
+                    _txt = (f"Tagihan {hh['bill']}G dibayar."
+                            if not hh.get('unpaid') else
+                            f"Tagihan {hh['bill']}G TAK TERBAYAR — jadi utang!")
+                    _inv(panels.flash_msg, _txt, 3.0, delay=1.2)
+                if hh.get('contrib'):
+                    _inv(panels.flash_msg,
+                         f"Anggota rumah menyetor +{hh['contrib']}G.", 2.4, delay=2.6)
+            items, earned = getattr(self, '_last_ship_sale', (0, 0))
+            if earned > 0:
+                invoke(panels.flash_msg,
+                       f"Peti Kirim: {items} hasil panen terjual — +{earned}G", 3.0, delay=2.3)
             # Deliver pending story messages after sleep
             if getattr(player, '_pending_seasonal_event', None):
                 invoke(panels.flash_msg,
@@ -138,5 +410,15 @@ class TimeController:
             if getattr(player, '_pending_lore_msg', None):
                 invoke(panels.flash_msg, player._pending_lore_msg, 3.5, delay=3.0)
                 player._pending_lore_msg = None
+            # Kabar lembah: hanya muncul kalau ada yang benar-benar berubah.
+            # `morning_note()` dan `demand_note()` mengembalikan None saat
+            # semuanya biasa saja, dan pemberitahuan yang muncul tiap pagi
+            # berhenti dibaca pada pagi keempat.
+            if getattr(self, '_eco_pagi', None):
+                invoke(panels.flash_msg, self._eco_pagi, 3.5, delay=4.0)
+                self._eco_pagi = None
+            if getattr(self, '_pasar_pagi', None):
+                invoke(panels.flash_msg, self._pasar_pagi, 3.5, delay=6.0)
+                self._pasar_pagi = None
         else:
             panels.flash_msg("Tidur hanya di rumah (T).", 0.8)

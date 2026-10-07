@@ -1,11 +1,19 @@
-from game.config import *
-from game.scenes.scene_base import Scene, _build_indoor_room
-import random
-import math
+from game.scenes.scene_base import ruang_denah
+
+# Klinik Pak Raka. Utara: dua ranjang pasien, jam, lemari obat. Meja
+# resepsionis di timur (Pak Raka berjaga di belakangnya), kursi tunggu di
+# dinding barat, rak berkas di timur.
+DENAH = """
+#########
+#B.BJRRR#
+#.......#
+#P...NN.#
+#.......#
+#c.....K#
+#c.L...P#
+####D####
+"""
+
 
 def build_clinic():
-    return _build_indoor_room('clinic', 'Klinik Pak Raka', [
-        (1,1,BD),(2,1,BD),(12,1,BD),(13,1,BD),(1,3,TB),(13,3,BS),
-    ], ('town', 11, 9))
-
-
+    return ruang_denah('clinic', 'Klinik Pak Raka', DENAH, ('town', 13, 9))

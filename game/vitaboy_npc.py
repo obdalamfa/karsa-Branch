@@ -68,20 +68,38 @@ NPC_OUTFIT = {
     'raka':       ['mabd000_sl__teepjs.apr', 'mahd001_ross.apr'],
     'maya':       ['fabd001_slacker.apr', 'fahd001_shannon01.apr', 'fahl001_shannon01.apr'],
     'mbok_jum':   ['fabd002_gma1.apr', 'fahd001_alt.apr', 'fahl001_alt.apr'],
-    'budi':       ['mabd000_leathers.apr', 'mahd000_proxy.apr'],
+    'budi':       ['mabd000_leathers.apr', 'mahd002_asian.apr'],
     'jaka_ronda': ['mabd000_robin.apr', 'mahd001_robin.apr'],
     'kapten_kuro': ['mabd000_leathers3.apr', 'mahd002_asian.apr'],
     'cici':       ['fabd001_summer01.apr'],
     'bowo':       ['mabd000_sl__teepjs2.apr'],
     # ── tambahan: orang yang tadinya tidak punya wajah sendiri ──
     'ningsih':    ['fabd000_sl__defaultpjs.apr', 'fahd001_alt.apr', 'fahl902_spikeyhair.apr'],
-    'joko':       ['mabd000_sl__teepjs.apr', 'mahd000_proxy.apr'],
+    'joko':       ['mabd000_sl__teepjs.apr', 'mahd012_asian.apr'],
     'pak_guru':   ['mabd000_leathers3.apr', 'mahd001_ross.apr'],
 }
 
 # Dipakai kalau npc_id tidak ada di tabel. Bukan None: lebih baik seorang warga
 # memakai baju standar TSO daripada jadi balok 'humanoid'.
-DEFAULT_OUTFIT = ['mabd000_leathers.apr', 'mahd000_proxy.apr']
+#
+# `mahd000_proxy.apr` DIBUANG dari seluruh tabel ini, dan itu satu-satunya
+# perbaikan terbesar untuk potongan WAJAH. Ia bukan kepala: teksturnya
+# (`c000madrk_proxy.jpg`) adalah petak biru bertaburan tanda tanya — placeholder
+# Maxis untuk kepala yang belum dibuat. Ia dipakai pemain, `budi` dan `joko`,
+# dan itulah kepala biru tanpa wajah di `_bench/shots/WAJAH_r0_awal.png`.
+# Penggantinya kepala TSO sungguhan; wajahnya lalu dicat ulang jadi chibi oleh
+# `game/wajah.py`.
+DEFAULT_OUTFIT = ['mabd000_leathers.apr', 'mahd001_ross.apr']
+
+# ─── PEMAIN ──────────────────────────────────────────────────────────────────
+# Dulu pemain memakai `mabd000_leathers.apr` — jaket kulit hitam bermotif nyala
+# api. Pada patokan Story of Seasons yang jadi acuan potongan WAJAH, pakaian
+# warga desa justru polos dan hangat, dan yang penting nilainya jelas terpisah
+# dari kulit dan rambut. `mabd002_casual.apr` adalah atasan krem dengan celana
+# jins biru: tiga bidang warna besar, tidak ada tekstur yang berkedip pada
+# jarak percakapan.
+PEMAIN_DEFAULT = ['mabd002_casual.apr', 'mahd001_ross.apr']
+PEMAIN_ALT     = ['fabd001_summer01.apr', 'fahd001_alt.apr']
 
 DEFAULT_IDLE_ANIM = 'a2a-talk-idle-loop'
 
@@ -104,13 +122,23 @@ def resolve_outfit(npc_id: str, default: bool = True) -> Optional[List[str]]:
 
 def build_vitaboy_avatar(parent: Entity, apr_list: List[str],
                          scale: float = 0.30, tint=color.white,
-                         idle_anim: str = DEFAULT_IDLE_ANIM):
+                         idle_anim: str = DEFAULT_IDLE_ANIM,
+                         varian=None, kunci_varian: Optional[str] = None):
     """Bangun satu avatar Vitaboy. Return avatar atau None.
 
     Coba jalur native (C++) dulu, lalu jalur Python. Keduanya punya API yang
     sama (`set_animation`, `update`, `speed`, `root_entity`, `parts`) sehingga
     pemanggil tidak perlu tahu yang mana yang dapat.
+
+    `kunci_varian` (biasanya npc_id) menentukan wajah orang itu: ukuran mata,
+    warna iris, tebal alis, lengkung mulut, rona kulit dan warna rambut. Kalau
+    keduanya None, semua orang akan berwajah sama — itu justru kelemahan yang
+    dicatat sendiri oleh pembangun ronde 1 dan yang diminta pemilik proyek
+    untuk diperbaiki.
     """
+    if varian is None and kunci_varian is not None:
+        from .wajah import varian_wajah
+        varian = varian_wajah(kunci_varian)
     global _last_backend
     apr_list = [x for x in (apr_list or []) if x]
     if not apr_list:
@@ -120,7 +148,8 @@ def build_vitaboy_avatar(parent: Entity, apr_list: List[str],
     try:
         from .vitaboy_baked import build_native_avatar, native_available
         if native_available():
-            av = build_native_avatar(parent, apr_list, scale=scale, tint=tint)
+            av = build_native_avatar(parent, apr_list, scale=scale, tint=tint,
+                                     varian=varian)
             if av is not None:
                 try:
                     av.set_animation(idle_anim)
@@ -135,7 +164,8 @@ def build_vitaboy_avatar(parent: Entity, apr_list: List[str],
     # ── 2. Python (VitaboyAvatar) ──
     try:
         from .vitaboy import VitaboyAvatar
-        av = VitaboyAvatar(parent, apr_list, scale=scale, tint=tint)
+        av = VitaboyAvatar(parent, apr_list, scale=scale, tint=tint,
+                           varian=varian)
     except Exception as e:
         logging.warning(f"VitaboyAvatar gagal ({e}); tidak ada avatar TSO.")
         _last_backend = None
@@ -160,7 +190,8 @@ def build_vitaboy_human_npc(parent: Entity, npc_id: str,
         apr_list = resolve_outfit(npc_id, default=use_default)
     if not apr_list:
         return None
-    return build_vitaboy_avatar(parent, apr_list, scale=scale, tint=tint)
+    return build_vitaboy_avatar(parent, apr_list, scale=scale, tint=tint,
+                                kunci_varian=npc_id)
 
 
 # Nama lama, dipertahankan supaya kode/probe yang sudah ada tidak putus.

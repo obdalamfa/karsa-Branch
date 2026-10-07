@@ -1,11 +1,20 @@
-from game.config import *
-from game.scenes.scene_base import Scene, _build_indoor_room
-import random
-import math
+from game.scenes.scene_base import ruang_denah
+
+# Warung Bu Sari. Belakang: rak dagangan + kompor (warung masak). Konter
+# melintang dengan CELAH di ujung timur (x=7) supaya Bu Sari bisa keluar-masuk
+# -- konter lama menutup satu baris penuh dan mengurung pemain di depan pintu.
+# Depan: dua meja kopi dengan kursi untuk pembeli.
+DENAH = """
+#########
+#RR.S.RR#
+#.......#
+#NNNNNN.#
+#.......#
+#cTc.cTc#
+#P.....P#
+####D####
+"""
+
 
 def build_shop():
-    return _build_indoor_room('shop', 'Warung Bu Sari',
-        [(x, 4, CT) for x in range(1,14)] + [(x, 1, SH) for x in range(1,14)],
-        ('town', 4, 9))
-
-
+    return ruang_denah('shop', 'Warung Bu Sari', DENAH, ('town', 23, 1))

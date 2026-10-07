@@ -8,6 +8,8 @@ class AnimalState(Enum):
     IDLE = auto()
     WANDER = auto()
     SLEEPING = auto()
+    MINUM = auto()
+    DISIKAT = auto()
 
 class FarmAnimal(BaseActor):
     """
@@ -20,15 +22,383 @@ class FarmAnimal(BaseActor):
         self.speed = NPC_SPEED / TILE_SIZE
         self.animal_pen = (3, 3, 22, 12)  # default bounds
         self.ai_state = AnimalState.IDLE
+        self._walk_anim_t = 0.0
+        # Keadaan minum: (tunda_detik, tujuan_tile, jam_sejak_sampai)
+        self._minum_tunda = 0.0
+        self._minum_tile = None
+        self._minum_t = None
+        # Reaksi disikat: hewan mencondong KE ARAH sikat lalu mengendur.
+        self._sikat_t = None
+        self._sikat_arah = 0.0
+        self._sikat_kuat = 0.0
 
     def set_bounds(self, bounds):
         self.animal_pen = bounds
 
+    def ayun_kaki(self, dt: float, laju: float = 1.0):
+        """Ayunkan keempat kaki mengikuti `_walk_t`.
+
+        Kaki depan-kiri sefase dengan belakang-kanan, dan sebaliknya — itu
+        pola langkah berkaki empat, bukan empat kaki yang berayun serempak.
+        Urutan `_kaki` dari `_legs()`: (-x,-z), (-x,+z), (+x,-z), (+x,+z).
+        """
+        kaki = getattr(self, '_kaki', None)
+        if not kaki:
+            return
+        amp = 26.0 * laju
+        for i, k in enumerate(kaki):
+            fase = 0.0 if (i in (0, 3)) else math.pi
+            try:
+                k.rotation_x = math.sin(self._walk_t + fase) * amp
+            except Exception:
+                pass
+
+    # ── update_anim(), digabung dari feature/3d-mobs ───────────────────────
+    #
+    # Dua sisi sama-sama menambahkan animasi hewan ke kelas ini, dengan
+    # atribut yang berbeda: `ayun_kaki()` di atas membaca `_kaki` yang diisi
+    # `_legs()` dan itulah yang dipakai saat kuda ditunggangi; `update_anim()`
+    # di bawah membaca `_anim_body`/`_anim_head`/`_anim_legs`/`_anim_tail`
+    # yang diisi pembangun hewan sisi 3d-mobs, dan ia jauh lebih kaya —
+    # badan naik-turun, kepala, ekor, dan pose TIDUR.
+    #
+    # Keduanya disimpan, bukan dipilih salah satu. `update_anim()` keluar
+    # lebih awal saat `_anim_body` tidak ada, jadi ia tidak berbahaya selama
+    # pembangun hewan yang aktif masih milik sisi visual — dan ia siap begitu
+    # pembangun sisi 3d-mobs ikut di-port.
+
+    def update_anim(self, dt: float):
+        """Animasikan bagian visual hewan berdasarkan state gerakan."""
+        body = getattr(self, '_anim_body', None)
+        if body is None:
+            return
+
+        head    = getattr(self, '_anim_head', None)
+        legs    = getattr(self, '_anim_legs', [])
+        tail    = getattr(self, '_anim_tail', None)
+        body_y0 = getattr(self, '_anim_body_y', 0.5)
+        head_y0 = getattr(self, '_anim_head_y', 0.9)
+
+        is_sleeping = (self.ai_state == AnimalState.SLEEPING)
+        is_moving   = (abs(self.logical_x - self.target_x) > 0.02 or
+                       abs(self.logical_y - self.target_y) > 0.02)
+
+        if is_sleeping:
+            self._walk_anim_t += dt * 0.8
+            t = self._walk_anim_t
+            body.y = body_y0 + math.sin(t) * 0.008 - 0.04
+            for leg in legs:
+                leg.rotation_x = leg.rotation_x * max(0.0, 1.0 - dt * 6)
+        elif is_moving:
+            self._walk_anim_t += dt * 8.0
+            t = self._walk_anim_t
+            swing = math.sin(t)
+            body.y = body_y0 + abs(swing) * 0.03
+            if head:
+                head.y = head_y0 + abs(swing) * 0.035
+            for i, leg in enumerate(legs):
+                # FL/BR in-phase, FR/BL in-phase (diagonal gait)
+                phase = math.pi if (i == 1 or i == 2) else 0.0
+                leg.rotation_x = math.sin(t + phase) * 30
+            if tail:
+                tail.rotation_z = math.sin(t * 1.5) * 12
+        else:
+            self._walk_anim_t += dt * 1.8
+            t = self._walk_anim_t
+            # Reset legs toward neutral
+            for leg in legs:
+                leg.rotation_x *= max(0.0, 1.0 - dt * 8)
+            # Idle tail wag
+            if tail:
+                tail.rotation_z = math.sin(t * 2.2) * 18
+                tail.rotation_x = math.sin(t * 1.3) * 6
+            # Gentle head sway
+            if head:
+                head.y = head_y0 + math.sin(t * 0.9) * 0.012
+            # Breathing body
+            body.y = body_y0 + math.sin(t * 0.7) * 0.012
+
     def update_ai(self, dt: float, can_walk_fn):
+        # Hewan yang sedang DITUNGGANGI tidak mengemudikan dirinya sendiri.
+        # Tanpa gerbang ini AI-nya tetap berjalan dan menimpa posisi yang baru
+        # saja disamakan dengan pemain — hasilnya kuda berjalan pulang ke
+        # kandangnya sementara penunggangnya melaju ke arah lain, dan dari
+        # kamera penunggang tampak melayang tanpa kuda sama sekali.
+        if getattr(self, '_ditunggangi', False):
+            self.target_x = self.logical_x
+            self.target_y = self.logical_y
+
+    # ── Animasi perawatan dari cabang livestock ───────────────
+    # Menunduk saat minum, dan pose perawatan lain. Tidak bertabrakan
+    # dengan ayun_kaki() di atas: yang itu memutar KAKI saat berjalan,
+    # yang ini memiringkan MONCONG dan badan saat dirawat.
+
+    # ── MINUM ───────────────────────────────────────────────────────────────
+    # Kenapa hewan harus benar-benar berjalan ke palung: kalau air masuk ke
+    # angka tanpa ada yang meminumnya, mengisi palung cuma jadi klik. Yang
+    # membuat merawat terasa seperti merawat adalah melihat akibatnya berjalan
+    # menghampiri.
+    TUNDUK_DERAJAT = 26.0        # sudut moncong turun saat minum
+    TUNDUK_MASUK   = 0.45        # detik untuk menunduk
+    MINUM_DETIK    = 2.6         # lama kepala menunduk di palung
+    TUNDUK_KELUAR  = 0.55        # detik untuk mengangkat kepala lagi
+
+    def panggil_minum(self, tx: int, ty: int, tunda: float = 0.0) -> None:
+        """Suruh hewan ini mendatangi palung di (tx,ty) sesudah `tunda` detik."""
+        self._minum_tunda = max(0.0, float(tunda))
+        self._minum_tile = (int(tx), int(ty))
+        self._minum_t = None
+        self.ai_state = AnimalState.MINUM
+
+    # Setengah ukuran palung dalam UBIN (palung 2,2 m x 0,8 m, ubin 2 m), plus
+    # jarak moncong yang masuk akal. Dipakai untuk berhenti di BIBIR palung,
+    # bukan di pusat ubin sebelah.
+    PALUNG_SETENGAH_X = 0.55
+    PALUNG_SETENGAH_Y = 0.20
+    MONCONG = 0.30
+
+    def _petak_minum(self):
+        """Titik di BIBIR palung, dari sisi terdekat hewan ini.
+
+        Versi pertama mengembalikan pusat ubin sebelah. Ubin berjarak 2 m, jadi
+        hewan berhenti 1,60 m dari bibir palung — terukur, dan pada jarak itu
+        tidak ada yang sedang minum, mereka cuma berdiri berbaris menghadapnya.
+        Kesalahan granularitas ubin yang sama persis dengan yang sudah
+        diperbaiki untuk pemain.
+
+        Sisi terdekat, bukan satu titik tetap: kawanan yang menuju titik sama
+        menumpuk jadi satu tumpukan kotak.
+        """
+        tx, ty = self._minum_tile
+        dx = self.logical_x - tx
+        dy = self.logical_y - ty
+        if abs(dx) * self.PALUNG_SETENGAH_Y >= abs(dy) * self.PALUNG_SETENGAH_X:
+            # Mendekat dari ujung timur/barat.
+            sx = 1.0 if dx >= 0 else -1.0
+            gx = tx + sx * (self.PALUNG_SETENGAH_X + self.MONCONG)
+            gy = ty + max(-0.35, min(0.35, dy))
+        else:
+            # Mendekat dari sisi panjangnya — di sinilah kawanan berbaris.
+            sy = 1.0 if dy >= 0 else -1.0
+            gx = tx + max(-0.55, min(0.55, dx))
+            gy = ty + sy * (self.PALUNG_SETENGAH_Y + self.MONCONG)
+        return gx, gy
+
+    def _tick_minum(self, dt: float, can_walk_fn) -> bool:
+        """Return True kalau keadaan minum sedang memegang kendali."""
+        if self.ai_state != AnimalState.MINUM or self._minum_tile is None:
+            return False
+
+        if self._minum_tunda > 0.0:
+            self._minum_tunda = max(0.0, self._minum_tunda - dt)
+            return True
+
+        if self._minum_t is None:
+            gx, gy = self._petak_minum()
+            # can_walk_fn bekerja per ubin; titik tujuan sengaja pecahan, jadi
+            # yang diperiksa ubin yang memuatnya.
+            if can_walk_fn(int(round(gx)), int(round(gy))):
+                self.target_x, self.target_y = float(gx), float(gy)
+            sampai = (abs(self.logical_x - self.target_x) < 0.06
+                      and abs(self.logical_y - self.target_y) < 0.06)
+            if sampai:
+                self._minum_t = 0.0
+                # Menghadap palung, bukan menunduk ke arah mana saja.
+                tx, ty = self._minum_tile
+                self.rotation_y = math.degrees(
+                    math.atan2(tx - self.logical_x, ty - self.logical_y))
+            return True
+
+        self._minum_t += dt
+        t = self._minum_t
+        total = self.TUNDUK_MASUK + self.MINUM_DETIK + self.TUNDUK_KELUAR
+        if t >= total:
+            self.rotation_x = 0.0
+            self.ai_state = AnimalState.IDLE
+            self._minum_tile = None
+            self._minum_t = None
+            return False
+
+        if t < self.TUNDUK_MASUK:
+            u = t / self.TUNDUK_MASUK
+            sudut = self.TUNDUK_DERAJAT * (1.0 - (1.0 - u) ** 3)   # ease-out
+        elif t < self.TUNDUK_MASUK + self.MINUM_DETIK:
+            # Ditahan menunduk, dengan getaran kecil: kepala yang benar-benar
+            # diam selama 2,6 detik terbaca sebagai patung, bukan sebagai hewan.
+            lokal = t - self.TUNDUK_MASUK
+            sudut = self.TUNDUK_DERAJAT + math.sin(lokal * 7.5) * 1.8
+        else:
+            u = (t - self.TUNDUK_MASUK - self.MINUM_DETIK) / self.TUNDUK_KELUAR
+            sudut = self.TUNDUK_DERAJAT * (1.0 - u) ** 2
+        self.rotation_x = sudut
+        return True
+
+    # ── DISIKAT ─────────────────────────────────────────────────────────────
+    # Kenapa hewan harus bereaksi: menyikat tidak mengubah apa pun yang bisa
+    # dilihat pada hewannya sendiri — bulunya tidak berubah warna, badannya
+    # tidak berpindah. Kalau hewan berdiri diam sementara pemain menyapu udara
+    # di sebelahnya, yang terlihat cuma pemain berkedut. Condongan kecil ke
+    # ARAH sikat adalah satu-satunya tanda bahwa sikat itu menyentuh sesuatu.
+    SIKAT_CONDONG = 7.5      # derajat maksimum
+    SIKAT_LURUH   = 2.4      # per detik
+
+    def tahan_diam(self, detik: float) -> None:
+        """Hewan berhenti berkeliaran selama `detik` — dipakai aksi perawatan.
+
+        Menyikat kebetulan sudah menahan hewannya lewat pemicu tiap sapuan.
+        Memanen tidak menahan apa pun, dan akibatnya terukur: domba MENYENTUH
+        gunting di awal (0,00 m) lalu berjalan pergi di tengah pencukuran
+        sampai median jaraknya 2,06 m. Tidak ada peternak yang bisa mencukur
+        domba yang berjalan pergi.
+        """
+        self._tahan_t = max(getattr(self, '_tahan_t', 0.0) or 0.0, float(detik))
+        self.target_x, self.target_y = self.logical_x, self.logical_y
+
+    SENANG_DETIK = 3.6     # berapa lama hewan terlihat senang sesudah dirawat
+
+    def disayang(self, detik: float = None) -> None:
+        """Hewan baru saja dirawat — ia terlihat senang selama beberapa detik.
+
+        Dipanggil dari tiap aksi perawatan. Sebelum ini satu-satunya tanda
+        bahwa perawatan berhasil adalah baris teks di HUD; hewannya sendiri
+        tidak berubah sedikit pun.
+        """
+        d = self.SENANG_DETIK if detik is None else float(detik)
+        self._senang_t = max(getattr(self, '_senang_t', 0.0) or 0.0, d)
+
+    def disikat(self, px: float, pz: float) -> None:
+        """Satu sapuan mendarat dari arah (px,pz) dalam koordinat dunia."""
+        from .config import TILE_SIZE as _TS
+        dx = px / _TS - self.logical_x
+        dz = pz / _TS - self.logical_y
+        # Condong KE arah penyikat, bukan menjauh: hewan yang nyaman
+        # menyandarkan badannya ke sikat.
+        self._sikat_arah = math.degrees(math.atan2(dx, dz))
+        self._sikat_kuat = 1.0
+        self._sikat_t = 0.0
+        self.ai_state = AnimalState.DISIKAT
+        self.disayang()
+        # Telinga menyentak tiap sapuan. Ini bagian yang benar-benar menjawab
+        # brief: pemain harus melihat hewannya bereaksi terhadap tangannya,
+        # bukan cuma badan yang condong pelan.
+        _g = getattr(self, '_gerak', None)
+        if _g is not None:
+            _g.sentuh()
+
+    def selesai_disikat(self) -> None:
+        self._sikat_kuat = 0.0
+        if self.ai_state == AnimalState.DISIKAT:
+            self.ai_state = AnimalState.IDLE
+
+    # Napas diam. Hewan yang tidak disikat sama sekali tidak menganimasikan
+    # apa pun — diukur, sesudah sapuan terakhir badannya berhenti PERSIS diam
+    # selama 1,30 detik sementara pemain masih menarik tangannya. Itu tanda
+    # patung yang sama seperti pendengar dialog yang membeku, cuma di ujung
+    # aksi. Napas 0,55 derajat terlalu kecil untuk diperhatikan sendiri dan
+    # cukup untuk menghapus keheningan mati itu.
+    NAPAS_DERAJAT = 0.55
+    NAPAS_PERIODE = 3.4
+
+    def _napas(self) -> float:
+        """Sudut napas untuk detik permainan sekarang, digeser per ekor.
+
+        Fase diambil dari id-nya: kawanan yang bernapas serempak terbaca
+        sebagai satu benda, bukan sebagai beberapa hewan.
+        """
+        self._napas_t = getattr(self, '_napas_t', 0.0)
+        # sum(ord) — BUKAN hash(), yang diacak ulang tiap proses Python.
+        # Dengan hash(), fase napas tiap ekor berbeda tiap kali game dijalankan,
+        # jadi dua rekaman dari kode yang sama persis tidak bisa dibandingkan.
+        # Jebakan yang sama sudah tercatat di entities.py:262.
+        geser = (sum(map(ord, self.actor_id)) % 997) / 997.0 * self.NAPAS_PERIODE
+        return self.NAPAS_DERAJAT * math.sin(
+            (self._napas_t + geser) * math.tau / self.NAPAS_PERIODE)
+
+    def _tick_sikat(self, dt: float) -> None:
+        """Peluruhan condongan. Tiap sapuan baru mengisinya kembali, jadi
+        selama disikat badannya bergoyang pelan, bukan miring tetap.
+
+        Sesudah sapuan habis, condongan tidak luruh ke NOL tapi ke napas —
+        supaya tidak ada satu frame pun dengan badan benar-benar diam.
+        """
+        self._napas_t = getattr(self, '_napas_t', 0.0) + dt
+        napas = self._napas()
+        if self._sikat_kuat <= 0.0:
+            self.rotation_z = self.rotation_z * 0.86 + napas * 0.14
+            self.rotation_x = self.rotation_x * 0.86 + napas * 0.14
+            return
+        self._sikat_kuat = max(0.0, self._sikat_kuat - self.SIKAT_LURUH * dt)
+        self._sikat_t = (self._sikat_t or 0.0) + dt
+        # Sedikit denyut supaya condongannya bernapas, bukan turun rata.
+        denyut = 1.0 + math.sin(self._sikat_t * 11.0) * 0.14
+        arah = math.radians(self._sikat_arah - self.rotation_y)
+        besar = self.SIKAT_CONDONG * self._sikat_kuat * denyut
+        self.rotation_z = besar * math.sin(arah) + napas
+        self.rotation_x = besar * math.cos(arah) * 0.45 + napas * 0.6
+
+    def update_ai(self, dt: float, can_walk_fn):
+        # Mata terpejam selama malam. Kedipannya sendiri sudah di-tick oleh
+        # loop entitas (entities.py) bersama warga; yang TIDAK bisa diketahui
+        # dari sana adalah bahwa hewan ini sedang tidur, karena tidur hewan
+        # dibaca dari jam dunia, bukan dari jadwal actor seperti warga.
+        # Tanpa baris ini seekor sapi tidur membelalak semalaman.
+        _malam = self.state.is_night()
+        _w = getattr(self, '_wajah', None)
+        if _w is not None:
+            _w.set_tidur(_malam)
+        # Telinga dan ekor. Disetir oleh kekuatan sapuan yang SAMA yang
+        # memiringkan badan, jadi ketiganya bercerita satu hal: ada tangan di
+        # sini. Ditaruh di sini, bukan di loop entitas, karena kekuatan sapuan
+        # itu milik hewan dan tidak terbaca dari luar.
+        # Sakit dan senang. Keduanya dibaca sekali lalu diteruskan ke wajah
+        # dan ke telinga/ekor, supaya satu keadaan tidak pernah terbaca dua
+        # arah berbeda pada hewan yang sama.
+        _senang_t = max(0.0, (getattr(self, '_senang_t', 0.0) or 0.0) - dt)
+        self._senang_t = _senang_t
+        _senang = min(1.0, _senang_t / max(1e-6, self.SENANG_DETIK))
+        _sakit = False
+        try:
+            from .husbandry import care_of, is_livestock
+            if is_livestock(self.actor_id):
+                _sakit = bool(care_of(self.state, self.actor_id).get('sakit'))
+        except Exception:
+            _sakit = False
+        if _w is not None:
+            _w.set_keadaan(_sakit, _senang)
+
+        _g = getattr(self, '_gerak', None)
+        if _g is not None:
+            _g.set_keadaan(_sakit, _senang)
+            _g.tick(dt, getattr(self, '_sikat_kuat', 0.0) or 0.0, _malam)
+
+        # Minum menang atas jadwal tidur dan atas jalan-jalan: hewan yang
+        # dipanggil ke palung harus sampai ke palung.
+        if self._tick_minum(dt, can_walk_fn):
+            self._gerak_lerp(dt)
+            return
+
+        # Ditahan aksi perawatan: tidak berkeliaran, tapi tetap bernapas dan
+        # tetap bisa bereaksi terhadap sentuhan.
+        tahan = getattr(self, '_tahan_t', 0.0) or 0.0
+        if tahan > 0.0:
+            self._tahan_t = max(0.0, tahan - dt)
+            self.target_x, self.target_y = self.logical_x, self.logical_y
+            self._tick_sikat(dt)
+            return
+
+        self._tick_sikat(dt)
+        if self.ai_state == AnimalState.DISIKAT and self._sikat_kuat > 0.0:
+            # Hewan yang sedang disikat tidak berjalan pergi.
+            self.target_x, self.target_y = self.logical_x, self.logical_y
+            return
+
         if self.state.is_night():
             self.target_x = self.logical_x
             self.target_y = self.logical_y
             self.ai_state = AnimalState.SLEEPING
+            # Hewan tidur pun bernapas — lebih pelan, tapi bukan patung.
+            self._napas_t = getattr(self, '_napas_t', 0.0) + dt * 0.55
+            self.rotation_z = self._napas() * 0.7
             return
             
         is_moving = abs(self.logical_x - self.target_x) > 0.02 or abs(self.logical_y - self.target_y) > 0.02
@@ -44,7 +414,11 @@ class FarmAnimal(BaseActor):
         if not is_moving and self.ai_state != AnimalState.SLEEPING:
             self.ai_state = AnimalState.IDLE
                 
-        # Lerp movement logic
+        self._gerak_lerp(dt)
+
+    def _gerak_lerp(self, dt: float):
+        """Satu langkah menuju target. Dipisah supaya keadaan minum memakai
+        jalur gerak yang persis sama, bukan salinannya."""
         dx = self.target_x - self.logical_x
         dy = self.target_y - self.logical_y
         dist = math.hypot(dx, dy)

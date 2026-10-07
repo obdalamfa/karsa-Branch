@@ -1,0 +1,12 @@
+# Blender 5.1.1 MTL File: 'petapa_srimana_galak.blend'
+# www.blender.org
+
+newmtl mob_kelinci_mat.005
+Ns 90.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd mob_kelinci_baked.png

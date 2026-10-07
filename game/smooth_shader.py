@@ -21,30 +21,38 @@ from ursina import Shader, Vec3
 
 _VERT = """
 #version 140
-// v5 2026-05-17
+// v6 2026-09-09
 uniform mat4 p3d_ModelViewProjectionMatrix;
 uniform mat4 p3d_ModelMatrix;
 uniform mat3 p3d_NormalMatrix;
 in vec4 p3d_Vertex;
 in vec3 p3d_Normal;
 in vec2 p3d_MultiTexCoord0;
+// Warna per-vertex. Kalau geometri tidak punya kolom warna, Panda mengikat
+// ini ke putih, jadi entity lama tidak berubah sedikit pun. Yang dibuka:
+// satu mesh boleh punya banyak warna tanpa dipecah jadi banyak Entity —
+// dan itu satu-satunya cara mewarnai kulit, baju, dan celana pada humanoid
+// tanpa menambah tiga entity per warga desa.
+in vec4 p3d_Color;
 
 out vec3 v_world_pos;
 out vec3 v_world_normal;
 out vec2 v_uv;
+out vec4 v_color;
 
 void main() {
     vec4 world = p3d_ModelMatrix * p3d_Vertex;
     v_world_pos = world.xyz;
     v_world_normal = normalize(mat3(p3d_ModelMatrix) * p3d_Normal);
     v_uv = p3d_MultiTexCoord0;
+    v_color = p3d_Color;
     gl_Position = p3d_ModelViewProjectionMatrix * p3d_Vertex;
 }
 """
 
 _FRAG = """
 #version 140
-// v5 2026-05-17
+// v6 2026-09-09
 uniform sampler2D p3d_Texture0;
 uniform vec4 p3d_ColorScale;
 uniform mat4 p3d_ViewMatrixInverse;
@@ -60,6 +68,7 @@ uniform float sm_saturation;
 in vec3 v_world_pos;
 in vec3 v_world_normal;
 in vec2 v_uv;
+in vec4 v_color;
 
 out vec4 fragColor;
 
@@ -68,9 +77,34 @@ vec3 lift_saturation(vec3 c, float s) {
     return mix(vec3(luma), c, s);
 }
 
+// Bahu sorot. Tanpa ini permukaan terang DIPOTONG di 1,0 dan kehilangan
+// seluruh isinya.
+//
+// Angkanya: siang hari sm_ambient = (95,90,78)/255 dan sm_sun_color =
+// (255,248,215)/255, jadi pengali di sisi yang kena matahari mencapai
+// (1,373 / 1,326 / 1,149) — di atas satu di KETIGA kanal. Tembok rumah
+// (tekstur house_wall rata-rata 234,220,191 dikali tint 248,235,200) keluar
+// di (1,23 / 1,06 / 0,68): dua kanal terpotong penuh dan yang tersisa di layar
+// adalah putih hangus tanpa tekstur, tanpa bayangan sudut, tanpa beda antara
+// satu rumah dan rumah sebelahnya. Itu persis yang terlihat di
+// `_bench/shots/WAJAH_variasi.png`.
+//
+// Memotong pencahayaan sampai aman akan menggelapkan SELURUH dunia untuk
+// menyelamatkan segelintir permukaan pucat. Bahu ini bekerja sebaliknya:
+// di bawah `lutut` sama sekali tidak mengubah apa pun, di atasnya mendekat ke
+// 1,0 secara asimtotik sehingga selisih 1,05 dan 1,25 tetap jadi dua nilai
+// yang berbeda di layar. Karena tiap kanal dikompres sendiri-sendiri,
+// warnanya justru kembali: kanal biru yang tadinya satu-satunya yang tidak
+// terpotong tidak lagi bersaing dengan dua kanal yang mentok.
+vec3 bahu_sorot(vec3 c, float lutut) {
+    vec3 k = vec3(lutut);
+    vec3 atas = vec3(1.0) - (vec3(1.0) - k) * exp(-(c - k) / max(1e-4, 1.0 - lutut));
+    return mix(c, atas, step(k, c));
+}
+
 void main() {
     // Base color dari p3d_ColorScale — Ursina menyimpan entity.color di sini via setColorScale()
-    vec4 base = p3d_ColorScale;
+    vec4 base = p3d_ColorScale * v_color;
     if (sm_has_tex == 1) {
         base *= texture(p3d_Texture0, v_uv);
     }
@@ -78,20 +112,60 @@ void main() {
 
     vec3 N = normalize(v_world_normal);
     vec3 L = normalize(-sm_sun_dir);  // dari permukaan ke sumber cahaya
+    vec3 cam_pos = p3d_ViewMatrixInverse[3].xyz;
+    vec3 V = normalize(cam_pos - v_world_pos);
+
+    // Normal DIBALIK kalau ia membelakangi kamera. Ini perbaikan bug, bukan
+    // penyesuaian selera.
+    //
+    // Atap rumah dibangun dari `ursina.models.procedural.cone.Cone`, dan
+    // normal mesh itu menghadap KE DALAM. Untuk permukaan yang terlihat itu
+    // berarti dot(N,V) negatif, jadi `edge` di bawah selalu 1 dan
+    // `outline_darken` menjatuhkannya ke 45%, sementara dot(N,L) juga negatif
+    // sehingga diffuse jatuh ke pita paling gelap. Dua faktor itu dikalikan:
+    // atap bergenteng emas (215,177,123) keluar di layar sebagai (42,29,9).
+    // Diukur di `_bench/shots/_smoke_env2.png` — SETIAP atap rumah di desa
+    // adalah bidang cokelat-hitam, dan itu sudah begitu jauh sebelum
+    // pekerjaan ini dimulai.
+    //
+    // Membalik normal di sisi yang membelakangi kamera adalah pencahayaan
+    // dua-sisi biasa. Ia sekaligus mengurus geometri `double_sided` yang
+    // memang punya dua muka nyata — helai rumput di mesh sebaran adalah
+    // bidang tanpa tebal, dan separuhnya menghadap menjauh dari kamera pada
+    // sudut orbit mana pun.
+    if (dot(N, V) < 0.0) {
+        N = -N;
+    }
 
     // Toon / Cel-Shading (Cartoon effect)
     float ndl = dot(N, L);
     float diff;
+    // Pita bayangan DIANGKAT dari 0,6/0,3 ke 0,70/0,46.
+    //
+    // Dengan 0,3 sisi yang membelakangi matahari cuma menerima
+    // ambient + 0,3 x matahari = 0,66 dari pengali sisi terang 1,37, yaitu
+    // kurang dari separuh. Untuk permukaan yang warnanya sudah tua — atap
+    // genteng gelap, badan rumah kayu jati, sisi bawah tajuk pohon —
+    // hasilnya HITAM PEKAT tanpa isi: di `_bench/shots/_smoke_env2.png`
+    // seluruh atap rumah desa keluar sebagai satu bidang hitam.
+    //
+    // Angka barunya dipilih setelah bahu sorot ada, bukan sebelumnya: dulu
+    // menaikkan pita bayangan berarti menaikkan juga sisi terang yang sudah
+    // terpotong. Sekarang sisi terang punya bahu, jadi jarak antar pita bisa
+    // dipersempit tanpa kehilangan bentuk.
     if (ndl > 0.3) {
         diff = 1.0;          // Bagian yang kena sinar matahari (Terang)
     } else if (ndl > -0.1) {
-        diff = 0.6;          // Batas bayangan (Sedang)
+        diff = 0.70;         // Batas bayangan (Sedang)
     } else {
-        diff = 0.3;          // Bagian yang tidak kena cahaya (Gelap)
+        diff = 0.46;         // Bagian yang tidak kena cahaya (Gelap)
     }
 
-    vec3 cam_pos = p3d_ViewMatrixInverse[3].xyz;
-    vec3 V = normalize(cam_pos - v_world_pos);
+    // cam_pos dan V sudah dihitung di atas, sebelum normal dibalik — dan harus
+    // di sana, karena pembalikan normal itu sendiri bergantung pada V. Dua baris
+    // yang dulu berdiri di sini adalah deklarasi ULANG: GLSL menolaknya, seluruh
+    // fragment shader gagal dikompilasi, dan Panda diam-diam merender dunia tanpa
+    // shader — itulah kenapa scene town keluar sebagai bidang cyan kosong.
     float ndv = max(0.0, dot(N, V));
     // Outline subtract: tepi gelap tapi tidak memakan warna terang
     float edge = 1.0 - smoothstep(0.0, 0.18, ndv);  // 1 di tepi, 0 di tengah
@@ -105,6 +179,26 @@ void main() {
 
     lit *= outline_darken; // Tepi sedikit gelap, tidak full hitam
     lit = lift_saturation(lit, sm_saturation * 1.08); // Saturasi ringan — tidak neon
+    lit = bahu_sorot(lit, 0.68);   // sorot dikompres, bukan dipotong
+
+    // Jaga RONA saat pencahayaan melewati 1,0.
+    //
+    // ambient (0,45 0,46 0,50) + sun (1,05 1,02 0,92) = pengganda 1,50 di pita
+    // tersinari, dan tidak ada yang pernah membatasinya. Kanal yang lewat 1,0
+    // dipotong oleh perangkat keras SATU PER SATU, jadi warna terang tidak
+    // menjadi lebih terang — ia kehilangan warnanya. Kulit rgb(230,190,148)
+    // dikali 1,50 jadi (1,35 1,10 0,82) lalu terpotong ke rgb(255,255,210):
+    // cokelat hangat berubah jadi kuning-putih menyala. Itulah kenapa wajah
+    // karakter terbaca seperti bercahaya sendiri di hampir setiap tangkapan.
+    //
+    // Bukan dijepit per kanal, tapi diskalakan bersama-sama: kanal tertinggi
+    // didudukkan di 1,0 dan sisanya ikut turun dengan rasio yang sama, jadi
+    // ronanya utuh dan yang hilang cuma kelebihan terang yang memang tidak
+    // bisa ditampilkan.
+    float puncak = max(lit.r, max(lit.g, lit.b));
+    if (puncak > 1.0) {
+        lit /= puncak;
+    }
 
     fragColor = vec4(lit, base.a);
 }
@@ -149,11 +243,51 @@ def get_smooth_shader():
         try:
             _smooth_shader = Shader(vertex=_VERT, fragment=_FRAG,
                                     language=Shader.GLSL,
+                                    # sm_sun_dir / sm_sun_color / sm_ambient
+                                    # SENGAJA TIDAK ADA di sini. Ursina
+                                    # menyalin tiap default_input ke NODE
+                                    # entitas (Entity.shader_setter:
+                                    # `for key, value in
+                                    # value.default_input.items():
+                                    # self.set_shader_input(key, value)`), dan
+                                    # di Panda3D nilai pada node mengalahkan
+                                    # warisan dari induk. Selama ketiganya ada
+                                    # di sini, `scene.set_shader_input(...)`
+                                    # yang dipanggil app tiap frame TIDAK
+                                    # PERNAH sampai ke satu entitas pun:
+                                    # seluruh adegan terkunci pada cahaya
+                                    # tengah hari, siang maupun tengah malam.
+                                    #
+                                    # Terukur di scene farm, warna rata-rata
+                                    # tanah pada 03:00 / 09:00 / 12:00 / 22:00
+                                    # adalah 131,147,16 — sama sampai digit
+                                    # terakhir di keempat jam, sementara
+                                    # langitnya sudah biru tua malam.
+                                    #
+                                    # Ketiganya sekarang datang dari node
+                                    # `scene` saja, disetel
+                                    # app._sync_smooth_lighting() sebelum
+                                    # frame pertama dan tiap kali cahaya
+                                    # berubah.
                                     default_input={
+                                        # HANYA yang tidak pernah berubah.
+                                        #
+                                        # Ursina memasang tiap default_input ke
+                                        # ENTITY (entity.py:692), dan input di
+                                        # entity MENIMPA input di induknya. Jadi
+                                        # menaruh sm_sun_color / sm_ambient /
+                                        # sm_sun_dir di sini berarti tiap entity
+                                        # membawa salinan bekunya sendiri, dan
+                                        # app.py._sync_shader_globals() yang
+                                        # memasangnya di `scene` tidak berefek
+                                        # apa pun. Diukur: mengubah sm_ambient
+                                        # di scene menggeser 0,00% piksel;
+                                        # mengubahnya di entity menggeser 91,9%.
+                                        # Selama itu, siang-malam tidak pernah
+                                        # sampai ke permukaan mana pun — yang
+                                        # berubah malam hari cuma warna langit
+                                        # dan kabut.
                                         'sm_has_tex': 0,
-                                        'sm_sun_dir': Vec3(-0.5, -0.8, -0.4),
-                                        'sm_sun_color': Vec3(1.05, 1.02, 0.92),
-                                        'sm_ambient': Vec3(0.45, 0.46, 0.50),
                                         'sm_rim_strength': 0.55,
                                         'sm_ao_strength': 0.28,
                                         'sm_ao_height': 1.6,
@@ -164,7 +298,52 @@ def get_smooth_shader():
             logging.warning(f"smooth_shader gagal compile (GLSL tidak tersedia di pipeline ini): {e}")
             _shader_failed = True
             return None
+        pasang_uniform_global()
     return _smooth_shader
+
+
+# Pencahayaan siang. Jumlah ambient + sun_color adalah PENGALI pada permukaan
+# yang menghadap matahari penuh, dan itu yang menentukan berapa terang warna
+# boleh ditulis sebelum terpotong.
+#
+# Nilai lama menjumlah 1,50 (0,45 + 1,05), dan akibatnya terukur: warna apa pun
+# di atas 170 dari 255 PASTI terpotong jadi 255 di sisi yang kena matahari.
+# Kulit pemain (230,190,148) jadi putih rata tanpa satu pun detail wajah
+# tersisa; dinding rumah krem (248,235,200) jadi bidang putih. Bukan gaya —
+# tidak ada ruang kepala sama sekali.
+#
+# Sekarang jumlahnya ~1,02: warna yang ditulis tampil hampir persis seperti
+# yang ditulis saat kena matahari penuh, dan sisi bayangannya turun ke ~0,33.
+# Nisbah hangat/dingin aslinya dipertahankan — mataharinya tetap sedikit
+# kekuningan, ambient-nya tetap sedikit kebiruan.
+_UNIFORM_GLOBAL_AWAL = {
+    'sm_sun_dir':   Vec3(-0.5, -0.8, -0.4),
+    'sm_sun_color': Vec3(0.70, 0.68, 0.61),
+    'sm_ambient':   Vec3(0.33, 0.34, 0.37),
+}
+
+
+def pasang_uniform_global(sun_dir=None, sun_color=None, ambient=None):
+    """Pasang uniform siang-malam di `scene`, satu kali per nilai.
+
+    Ini menggantikan `default_input` untuk ketiga uniform ini. Karena tidak
+    ada lagi salinan di entity yang menimpanya, nilai di `scene` benar-benar
+    turun ke semua keturunan — dan mengubah waktu hari jadi TIGA panggilan,
+    bukan tiga panggilan dikali dua ribu entity.
+
+    Dipanggil sekali saat shader dibuat supaya uniform-nya dijamin ADA
+    sebelum frame pertama: shader GLSL Panda melempar "Shader input ... is
+    not present" kalau uniform-nya kosong, dan itu menghentikan game, bukan
+    sekadar membuatnya jelek.
+    """
+    try:
+        from ursina import scene
+        scene.set_shader_input('sm_sun_dir', sun_dir or _UNIFORM_GLOBAL_AWAL['sm_sun_dir'])
+        scene.set_shader_input('sm_sun_color', sun_color or _UNIFORM_GLOBAL_AWAL['sm_sun_color'])
+        scene.set_shader_input('sm_ambient', ambient or _UNIFORM_GLOBAL_AWAL['sm_ambient'])
+        return True
+    except Exception:
+        return False
 
 
 def apply_smooth(entity, has_texture: bool = False):
@@ -184,15 +363,16 @@ def apply_smooth(entity, has_texture: bool = False):
 
 
 def update_globals(entities, sun_dir, sun_color, ambient):
-    """Sinkronisasi uniform global (dipanggil saat transisi siang/malam).
+    """Sinkronisasi uniform siang/malam.
 
-    Camera position diambil langsung dari p3d_ViewMatrixInverse di shader,
-    jadi tidak perlu di-update per frame.
+    `entities` diabaikan dan itu disengaja. Versi lamanya melintasi seluruh
+    daftar dan memasang tiga input ke TIAP entity — di mountain 2.177 x 3 —
+    padahal ketiganya bernilai sama untuk semua orang. Sekarang dipasang di
+    `scene` dan diwariskan. Parameternya dipertahankan supaya pemanggil lama
+    tidak perlu diubah.
+
+    (Fungsi ini sendiri tidak pernah dipanggil siapa pun sampai sekarang;
+    yang dipakai app.py._sync_shader_globals(). Dibiarkan hidup dan BENAR
+    supaya pemanggil berikutnya tidak menghidupkan kembali pola per-entity.)
     """
-    for e in entities:
-        try:
-            e.set_shader_input('sm_sun_dir', sun_dir)
-            e.set_shader_input('sm_sun_color', sun_color)
-            e.set_shader_input('sm_ambient', ambient)
-        except Exception:
-            pass
+    return pasang_uniform_global(sun_dir, sun_color, ambient)

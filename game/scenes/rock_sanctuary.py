@@ -1,6 +1,6 @@
 """Scene-local rock formations and ritual landmarks; all solids follow tile blockers."""
 import math
-from game.config import TILE_SIZE as TS, GROUND_H, CV_W, CRYS, LN
+from game.config import TILE_SIZE as TS, GROUND_H, WALL_H, CV_W, CRYS, LN
 
 
 def _part(world, model, pos, scale, rgb, **kw):
@@ -85,7 +85,15 @@ def _rocks(world, scene, outdoor=False):
                 width+=1
             covered.update((x+i,y) for i in range(width))
             seed=x*13+y*7
-            height=(2.4+.7*math.sin(seed)) if outdoor else (1.5+.5*math.sin(seed))
+            # Tinggi batu dalam ruang diikatkan ke WALL_H (2,8) -- tinggi yang
+            # dipakai tile CV_W yang SAMA di gua bertingkat. Sebelumnya
+            # 1,5+-0,5, yaitu 1,0..2,0: lebih pendek daripada pemain sendiri
+            # (~1,8). Tile yang sama karena itu terbaca sebagai dua benda
+            # berbeda di dua scene -- tembok gua di satu tempat, gundukan batu
+            # setinggi lutut di tempat lain -- dan ruang suci ini kehilangan
+            # dinding yang membuatnya terasa sebagai ruang, bukan pelataran.
+            # Simpangan +-0,6 dipertahankan supaya tepinya tetap bergerigi.
+            height=(2.4+.7*math.sin(seed)) if outdoor else (WALL_H*0.85+.6*math.sin(seed))
             if y < 3: height += 2.3 if outdoor else 1.1
             rgb=(106+seed%12,123+seed%10,111+seed%14) if outdoor else (84+seed%13,105+seed%11,115+seed%15)
             mesh=_rock_mesh(seed, centered=True)
@@ -230,3 +238,67 @@ def build_mountain_landscape(world, scene):
     # Base-origin rocks overlap above the opening, eliminating sky pinholes.
     _part(world,_rock_mesh(31),(29,3.3,3.5),(8.4,2.65,3.7),(114,130,116))
     _part(world,_rock_mesh(43),(28.2,4.4,2.3),(9.5,2.0,3.6),(119,134,122))
+    _lore_lama(world, scene)
+
+
+def _shrine(world, wx, wz):
+    """Altar batu kecil -- sisa titik sembahyang di persimpangan jalan lama.
+
+    Dulu `SHRINE` di grid mountain.py; tidak punya builder atau tekstur
+    sendiri (lihat `objects.py`/`world.py`), jadi di sini ditaruh sebagai
+    primitif polos lewat `_part()`, sama seperti batu dan tambalan tanah di
+    atas -- bukan ubin grid, supaya tidak ikut dibaca `_rocks()` maupun
+    pathfinder.
+    """
+    alas   = _part(world, 'cube', (wx, GROUND_H + 0.09, wz), (TS*0.62, 0.18, TS*0.62), (118, 112, 100))
+    tubuh  = _part(world, 'cube', (wx, GROUND_H + 0.46, wz), (TS*0.30, 0.56, TS*0.30), (132, 128, 118))
+    puncak = _part(world, 'cube', (wx, GROUND_H + 0.80, wz), (TS*0.38, 0.10, TS*0.38), (96, 92, 84))
+
+
+def _debris(world, wx, wz, putar=0.0):
+    """Onggokan kecil -- sisa peralatan perkebunan karet yang ditinggalkan.
+
+    Sama seperti `_shrine`: dulu ubin `DEBRIS`, tanpa builder/tekstur sendiri,
+    sekarang dua kotak kayu lapuk yang diputar beda sudut supaya tidak
+    terbaca sebagai satu balok utuh.
+    """
+    a = _part(world, 'cube', (wx - 0.10, GROUND_H + 0.11, wz + 0.06),
+              (TS*0.34, 0.22, TS*0.28), (82, 70, 54), rotation=(0, putar, 0))
+    b = _part(world, 'cube', (wx + 0.14, GROUND_H + 0.07, wz - 0.10),
+              (TS*0.24, 0.14, TS*0.20), (72, 62, 50), rotation=(0, putar + 41.0, 0))
+
+
+def _lore_lama(world, scene):
+    """Jejak lore dari mountain.py lama (sebelum rock_sanctuary menggantinya).
+
+    Tata letak tangan yang lama (lahan karet bekas, shrine di persimpangan
+    jalan, debris peralatan, lentera di tepi jalan, nisan dekat cabang
+    kuburan) memakai grid bebas yang tidak punya padanan 1:1 di geometri
+    rect/vline prosedural sekarang. Elemen-elemennya dipindah ke titik
+    TERBUKA yang setara secara naratif pada peta baru, dan ditaruh lewat
+    `_part()`/builder prop langsung -- BUKAN lewat `scene.tiles` -- supaya
+    tidak mengubah dinding `CV_W` yang dibaca `_rocks()` atau grid yang
+    dibaca pathfinder. Koordinat dalam UBIN, dikonversi ke dunia di sini.
+    """
+    from game.scenes.props import build_lantern, build_grave
+
+    # Shrine: dua altar di sisi pelataran gua, menggantikan dua SHRINE lama
+    # di persimpangan jalan (m[12][12], m[18][16]).
+    for tx, ty in ((10, 8), (19, 12)):
+        _shrine(world, tx * TS, ty * TS)
+
+    # Debris: sisa peralatan perkebunan, dulu tersebar lima titik lebar;
+    # di sini empat titik di lereng terbuka, kiri dan kanan.
+    for i, (tx, ty) in enumerate(((8, 13), (20, 9), (4, 17), (26, 18))):
+        _debris(world, tx * TS, ty * TS, putar=i * 53.0)
+
+    # Lentera: di tepi jalan utama (bukan DI jalannya), tiga titik dari
+    # pelataran gua sampai turunan ke desa.
+    for tx, ty in ((12, 5), (17, 9), (12, 18)):
+        build_lantern(world, tx * TS, ty * TS)
+
+    # Nisan: kuburan lama di dekat cabang jalan menuju portal (2,24) ->
+    # cemetery, digeser dari kolom jalan (x=2-3 dan y=19-20 dipakai
+    # vline/hline) ke bahu jalan di sebelahnya.
+    for tx, ty in ((5, 21), (4, 22), (7, 22), (5, 23)):
+        build_grave(world, tx * TS, ty * TS)

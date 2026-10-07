@@ -23,3 +23,6 @@ Pillow>=10.0.0
 # dipanggil `main.py` kalau folder `assets/` tidak ada. Tidak dipakai game saat
 # berjalan.
 numpy>=1.24
+
+# Hanya untuk build rilis (M7):
+# pyinstaller>=6.0

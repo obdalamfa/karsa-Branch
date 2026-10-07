@@ -44,6 +44,18 @@ LALAI_JADI_SAKIT = 3
 SEMBUH_BUTUH_HARI = 2
 AMBANG_SEHAT = 60
 
+# Biaya energi tiap aksi perawatan. Ditaruh di sini, bukan di economy.py,
+# karena aksinya milik modul ini — economy.py menyimpan EN_FEED/EN_COLLECT
+# untuk jalur ternaknya sendiri yang sekarang pensiun.
+#
+# Urutannya disengaja: mengisi ember paling murah, menyikat paling mahal.
+# Menyikat sapi memang kerja badan, dan biayanya harus terasa supaya pemain
+# memilih hewan mana yang diurus lebih dulu saat energinya tinggal sedikit.
+EN_MAKAN   = 2
+EN_MINUM   = 1
+EN_GOSOK   = 3
+EN_AMBIL   = 2
+
 
 # ─── ATURAN PER SPESIES ──────────────────────────────────────────────────────
 # `tiap` = jeda hari antar hasil. Ayam bertelur tiap hari, domba dicukur
@@ -51,48 +63,56 @@ AMBANG_SEHAT = 60
 # dicoba berurutan dari inventori pemain.
 SPECIES_CARE: dict[str, dict] = {
     'sapi': {
+        'kandang': True,
         'label': 'Sapi', 'produk': 'susu', 'produk_label': 'Susu',
         'tiap': 1, 'jumlah': 1, 'aksi': 'Perah', 'siap_teks': 'Siap diperah',
         'pakan': ['rumput', 'jerami', 'jagung'], 'harga': 40,
         'catatan': 'Sapi perah butuh air paling banyak — susu 87% air.',
     },
     'ayam': {
+        'kandang': True,
         'label': 'Ayam', 'produk': 'telur', 'produk_label': 'Telur',
         'tiap': 1, 'jumlah': 1, 'aksi': 'Ambil Telur', 'siap_teks': 'Ada telur di sarang',
         'pakan': ['jagung', 'dedak', 'kacang_hijau'], 'harga': 30,
         'catatan': 'Ayam berhenti bertelur kalau kandang kotor atau kekurangan pakan.',
     },
     'bebek': {
+        'kandang': True,
         'label': 'Bebek', 'produk': 'telur_bebek', 'produk_label': 'Telur Bebek',
         'tiap': 2, 'jumlah': 1, 'aksi': 'Ambil Telur', 'siap_teks': 'Ada telur bebek',
         'pakan': ['dedak', 'jagung', 'bayam'], 'harga': 38,
         'catatan': 'Bebek perlu air lebih sering daripada unggas lain.',
     },
     'kambing': {
+        'kandang': True,
         'label': 'Kambing', 'produk': 'susu_kambing', 'produk_label': 'Susu Kambing',
         'tiap': 2, 'jumlah': 1, 'aksi': 'Perah', 'siap_teks': 'Siap diperah',
         'pakan': ['rumput', 'jerami', 'ubi_jalar'], 'harga': 45,
         'catatan': 'Kambing paling tahan pakan seadanya, tapi kandang basah bikin sakit.',
     },
     'domba': {
+        'kandang': True,
         'label': 'Domba', 'produk': 'wol', 'produk_label': 'Wol',
         'tiap': 5, 'jumlah': 1, 'aksi': 'Cukur', 'siap_teks': 'Bulu siap dicukur',
         'pakan': ['rumput', 'jerami'], 'harga': 55,
         'catatan': 'Wol tumbuh pelan: sekali cukur per lima hari.',
     },
     'kuda': {
+        'kandang': True,
         'label': 'Kuda', 'produk': None, 'produk_label': None,
         'tiap': 0, 'jumlah': 0, 'aksi': None, 'siap_teks': None,
         'pakan': ['rumput', 'jerami', 'wortel'], 'harga': 0,
         'catatan': 'Kuda tidak menghasilkan apa-apa, tapi tetap harus diberi makan.',
     },
     'kucing': {
+        'kandang': False,
         'label': 'Kucing', 'produk': None, 'produk_label': None,
         'tiap': 0, 'jumlah': 0, 'aksi': None, 'siap_teks': None,
         'pakan': ['ikan', 'telur', 'susu'], 'harga': 0,
         'catatan': 'Kucing menjaga lumbung dari tikus. Beri makan, jangan dikandangkan.',
     },
     'kelinci': {
+        'kandang': False,
         'label': 'Kelinci', 'produk': None, 'produk_label': None,
         'tiap': 0, 'jumlah': 0, 'aksi': None, 'siap_teks': None,
         'pakan': ['wortel', 'bayam', 'rumput'], 'harga': 0,
@@ -120,9 +140,58 @@ def care_rules(animal_id: str) -> dict:
 
 
 def is_livestock(animal_id: str) -> bool:
-    """Hewan ternak yang memang diurus (rubah liar tidak)."""
+    """Hewan yang memang diurus (rubah liar tidak)."""
     r = care_rules(animal_id)
     return bool(r) and not r.get('liar')
+
+
+# Scene yang airnya terbuka. Hewan yang tinggal di sini tidak pernah kehausan:
+# bebek di danau berenang di air minumnya. Tanpa pengecualian ini, air yang
+# sekarang menggerbangi produksi menghukum bebek karena tinggal di tempat yang
+# memang tempatnya — palung hanya ada di kandang kebun, jadi takarannya meluruh
+# sampai nol dan ia PASTI jatuh sakit, tanpa satu pun cara bagi pemain untuk
+# mencegahnya. Aturan yang tidak bisa dipatuhi bukan aturan, itu jebakan.
+SCENE_BERAIR = {'lake', 'beach'}
+
+
+def di_air_terbuka(state, animal_id: str) -> bool:
+    pos = getattr(state, 'npc_positions', {}).get(animal_id) or {}
+    return pos.get('scene') in SCENE_BERAIR
+
+
+def air_mandiri(state, animal_id: str) -> bool:
+    """Hewan yang mencari minumnya sendiri, jadi takaran air tidak berlaku.
+
+    Dua hal masuk ke sini, dan keduanya karena sebab yang sama: palung hanya
+    ada di KANDANG kebun, jadi hewan yang tidak berada di dalamnya tidak punya
+    satu pun cara untuk diberi minum oleh pemain.
+
+      air terbuka   bebek di danau berenang di air minumnya
+      tidak dikandangkan
+                    kucing dan kelinci berkeliaran; catatan spesiesnya sendiri
+                    sudah bilang "Beri makan, jangan dikandangkan". Mereka
+                    minum dari mana saja seperti kucing sungguhan.
+
+    Tanpa ini, air yang sekarang menggerbangi produksi menghukum mereka karena
+    hidup di tempat yang memang tempatnya: takarannya meluruh sampai nol, tiga
+    hari lalai, lalu SAKIT dan hati turun tiap hari — tanpa jalan keluar.
+    Aturan yang tidak bisa dipatuhi bukan aturan, itu jebakan. Bug yang sama
+    ditemukan dua kali: pertama pada bebek, lalu pada kucing dan kelinci.
+    """
+    return di_air_terbuka(state, animal_id) or not is_penned(animal_id)
+
+
+def is_penned(animal_id: str) -> bool:
+    """Hewan yang tinggal di KANDANG, jadi berbagi palung minum yang sama.
+
+    Kucing dan kelinci diurus tapi tidak dikandangkan — catatan spesiesnya
+    sendiri sudah mengatakannya ("Beri makan, jangan dikandangkan"). Tanpa
+    pemisahan ini, mengisi palung sapi memanggil kucing dari seberang kebun
+    ke palung ternak, dan takaran air kucing ikut menentukan tinggi air yang
+    ditampilkan palung.
+    """
+    r = care_rules(animal_id)
+    return bool(r) and not r.get('liar') and bool(r.get('kandang'))
 
 
 # ─── KEADAAN PER HEWAN ───────────────────────────────────────────────────────
@@ -157,18 +226,41 @@ def daily_tick(state) -> dict:
     Mengembalikan ringkasan supaya pemain bisa diberi tahu pagi harinya:
     {'lapar': [nama...], 'sakit': [nama...], 'siap': [nama...]}
     """
-    from .data import ANIMAL_NPCS
+    from .data import ANIMAL_NPCS, LIVESTOCK_FOR_SALE
     lap = {'lapar': [], 'sakit': [], 'siap': []}
+    punya = getattr(state, 'owned_animals', None) or []
 
     for aid, meta in ANIMAL_NPCS.items():
         if not is_livestock(aid):
+            continue
+        # Ternak yang belum dibeli tidak ada di kandang, jadi ia tidak boleh
+        # lapar, tidak boleh kotor, dan sama sekali tidak boleh jatuh sakit.
+        # Tanpa baris ini laporan pagi menyebut nama hewan yang belum pernah
+        # dimiliki pemain — dan itu sempat terjadi: sapi Betsy tercatat sakit
+        # pada hari ke-4 di save yang tidak punya satu ekor pun.
+        if aid in LIVESTOCK_FOR_SALE and aid not in punya:
             continue
         r    = care_rules(aid)
         rec  = care_of(state, aid)
         mult = PENGALI_SUSUT.get(meta.get('type', ''), 1.0)
 
+        # Keadaan yang DITINGGALKAN pemain tadi malam, sebelum semalam
+        # menggerusnya. Syarat sembuh diperiksa terhadap angka ini, bukan
+        # terhadap sisa sesudah peluruhan — kalau tidak, ia mustahil dipenuhi:
+        # air paling tinggi hanya bisa mencapai ISI_MINUM 100 - SUSUT_AIR 55 =
+        # 45 pada saat pemeriksaan, sementara AMBANG_SEHAT 60. Terukur sebelum
+        # diperbaiki: sapi yang diberi makan, diberi minum, dan digosok setiap
+        # hari selama lima hari berturut-turut tetap sakit selamanya.
+        #
+        # Pertanyaannya memang "apakah kamu merawatnya hari ini", dan itu
+        # dijawab oleh keadaan saat pemain pergi tidur.
+        dirawat = (rec['kenyang'], rec['air'], rec['bersih'])
+
         rec['kenyang'] = _clamp(rec['kenyang'] - SUSUT_KENYANG * mult)
-        rec['air']     = _clamp(rec['air']     - SUSUT_AIR     * mult)
+        if air_mandiri(state, aid):
+            rec['air'] = 100        # mencari minumnya sendiri
+        else:
+            rec['air'] = _clamp(rec['air'] - SUSUT_AIR * mult)
         rec['bersih']  = _clamp(rec['bersih']  - SUSUT_BERSIH  * mult)
 
         # ── Kelalaian. Yang dihitung adalah takaran yang MENYENTUH nol, bukan
@@ -187,8 +279,7 @@ def daily_tick(state) -> dict:
             state.npc_hearts[aid] = max(0, state.npc_hearts.get(aid, 0) - 2)
 
         if rec['sakit']:
-            if (rec['kenyang'] >= AMBANG_SEHAT and rec['air'] >= AMBANG_SEHAT
-                    and rec['bersih'] >= AMBANG_SEHAT):
+            if all(v >= AMBANG_SEHAT for v in dirawat):
                 rec['sembuh_t'] += 1
                 if rec['sembuh_t'] >= SEMBUH_BUTUH_HARI:
                     rec['sakit'] = False
@@ -253,9 +344,24 @@ def water(state, animal_id: str) -> tuple[bool, str]:
 
 
 def clean(state, animal_id: str) -> tuple[bool, str]:
+    """Sikat hewan. Selalu boleh, bahkan saat ia sudah bersih.
+
+    Dulu ini MENOLAK kalau `bersih >= 95`, dan penolakan itu punya dua akibat.
+    Yang pertama soal patokan: di Story of Seasons menyikat ternak adalah aksi
+    afeksi harian yang selalu tersedia, bukan cuma perkakas kebersihan — hewan
+    yang sudah bersih tetap senang disikat. Yang kedua lebih buruk: karena
+    setiap hewan MULAI pada bersih=100, aksi ini ditolak pada hari pertama,
+    sehingga animasi menggosok tidak pernah bisa dijalankan sama sekali — dan
+    apa yang tidak bisa dijalankan tidak bisa difoto, tidak bisa dinilai, dan
+    praktis tidak ada.
+
+    Kebersihan tetap punya arti: menyikat hewan yang sudah bersih tidak
+    menaikkan apa pun selain hatinya, dan pesannya mengatakan begitu.
+    """
     rec = care_of(state, animal_id)
     if rec['bersih'] >= 95:
-        return False, "Kandangnya masih bersih."
+        state.npc_hearts[animal_id] = min(10, state.npc_hearts.get(animal_id, 0) + 0.25)
+        return True, "Disikat sampai mengkilap. Ia menyandarkan kepalanya."
     rec['bersih'] = ISI_BERSIH
     rec['hari_bersih'] = state.day
     state.npc_hearts[animal_id] = min(10, state.npc_hearts.get(animal_id, 0) + 0.5)

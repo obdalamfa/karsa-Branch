@@ -1,5 +1,6 @@
 import logging
 import math
+import os
 import random
 from pathlib import Path as _Path
 from PIL import Image as _PILImg
@@ -35,9 +36,19 @@ from .panels import UIManager
 from .sky import SkyDome
 from .chargen import ChargenScreen
 from . import grass_shader as _grass
-from .config import (SCREEN_W, SCREEN_H, CAM_LERP,
+from .config import (SCREEN_W, SCREEN_H, CAM_LERP, TILE_SIZE,
                      CAM_TARGET_LIFT, INGAME_MINUTES_PER_REAL_SECOND, FORCE_SLEEP_HOUR,
                      NEED_MAX, NEED_CRITICAL, NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG)
+
+# Font: Ursina 5 mencari file font dengan glob rekursif di asset_folder,
+# Ursina 7 menyerahkannya ke loader.loadFont yang HANYA melihat model-path
+# Panda3D. Daftarkan root dan assets/fonts sekali di sini supaya kedua versi
+# menemukan Montserrat-Bold.ttf — tanpa ini panels.py mati saat membangun HUD.
+from panda3d.core import getModelPath as _getModelPath  # noqa: E402
+_ROOT_DIR = _Path(__file__).resolve().parent.parent
+for _fp in (_ROOT_DIR, _ROOT_DIR / 'assets' / 'fonts'):
+    if _fp.is_dir():
+        _getModelPath().appendPath(str(_fp))
 
 # Ambang perubahan warna kabut sebelum di-push ulang ke shader semua entity.
 # 1,5/255 — di bawah satu langkah warna 8-bit, jadi tidak pernah terlihat.
@@ -55,16 +66,109 @@ class GameHandler(Entity):
     def input(self, key):
         self.game.input(key)
 
+
+_OVERLAY_DEBUG = ('exit_button', 'fps_counter', 'entity_counter',
+                  'collider_counter')
+
+
+def _pasang_overlay_debug(nyala: bool) -> None:
+    """Nyalakan/matikan overlay debug bawaan Ursina.
+
+    Dibungkus karena namanya empat dan letaknya di modul window Ursina, bukan
+    di sini — kalau versi Ursina berganti dan salah satu hilang, yang terjadi
+    cuma satu overlay tidak ikut diatur, bukan game yang gagal boot.
+    """
+    from ursina import window
+    for nama in _OVERLAY_DEBUG:
+        e = getattr(window, nama, None)
+        if e is not None:
+            try:
+                e.enabled = nyala
+            except Exception:
+                pass
+
+
 class Game3D:
     def __init__(self):
         logging.info("Inisialisasi Game Engine 3D (Ursina)...")
         
-        # Inisialisasi Ursina Engine
-        self.app = Ursina(size=(SCREEN_W, SCREEN_H),
+        # Inisialisasi Ursina Engine (ukuran pas jendela agar tidak offscreen di monitor 1080p)
+        self.app = Ursina(size=(1280, 720),
                           title='Lembah Karsa 3D — v0.10 [Cozy Edition]',
                           borderless=False)
+        window.center_on_screen()
         window.color = color.rgb(30, 20, 40)
-        window.fps_counter.enabled = True
+
+        # Overlay debug bawaan Ursina dimatikan, dan ini bukan soal selera.
+        #
+        # exit_button, fps_counter, entity_counter dan collider_counter semuanya
+        # duduk di x 0,839–0,897 dan y 0,359–0,500 — persis di atas kolom kanan
+        # HUD: jam di y 0,45, tanggal 0,40, cuaca 0,36. Selama ini jam terlihat
+        # "terpotong" di setiap tangkapan layar; ia tidak terpotong, ia
+        # TERTIMBUN tombol X merah dan tiga angka putih. entity_counter bahkan
+        # menjorok sampai x 0,897, lewat tepi layar 0,889 yang dijaga hud_muat.
+        #
+        # Tidak dibuang, cuma disembunyikan: F3 menyalakannya lagi saat butuh
+        # mengukur. Alat ukur yang dibuang akan ditulis ulang dengan buruk.
+        self._debug_overlay = False
+        _pasang_overlay_debug(False)
+
+        # Pastikan jendela aktif dan muncul di depan di Windows
+        if os.name == 'nt':
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                hwnd = user32.FindWindowW(None, 'Lembah Karsa 3D — v0.10 [Cozy Edition]')
+                if hwnd:
+                    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                    user32.SetForegroundWindow(hwnd)
+            except Exception:
+                pass
+        
+        # Dua penghitung debug bawaan Ursina ("entities: N", "colliders: N")
+        # memindai SELURUH scene.entities tiap frame. Penjaganya ditulis
+        #
+        #     if self.entity_counter.t > 1:
+        #         ...scan...
+        #         self.entity_counter.i = 0     # <- 'i', bukan 't'
+        #
+        # jadi `t` tidak pernah direset: lewat satu detik, syaratnya benar
+        # selamanya dan pemindaiannya berjalan di SETIAP frame, bukan sekali
+        # sedetik seperti yang jelas dimaksud. (Ursina 7.0, window.py:180/190.)
+        #
+        # Harganya di scene mountain (2.210 entity), terukur tools/profil.py:
+        #   window.py:180 <listcomp>   0,95 ms/frame
+        #   window.py:190 <listcomp>   0,33 ms/frame
+        # plus yang diseretnya: enabled_getter 5.669 panggilan/frame,
+        # collider_getter 2.490/frame, has_disabled_ancestor 777/frame.
+        #
+        # Itu bukan biaya menggambar — itu CPU murni, dan berlaku juga di mesin
+        # ber-GPU. Dimatikan, bukan diperbaiki: angkanya tidak pernah dipakai
+        # game ini, dan `fps_counter` yang memang dipakai tetap hidup.
+        # KARSA_DEBUG_COUNTER=1 menghidupkannya kembali kalau sewaktu-waktu
+        # perlu melihat jumlah entity.
+        if not os.environ.get('KARSA_DEBUG_COUNTER'):
+            for _nama in ('entity_counter', 'collider_counter'):
+                _c = getattr(window, _nama, None)
+                if _c is None:
+                    continue
+                try:
+                    _c.update = lambda: None   # penjaga rusak: lumpuhkan loop-nya
+                    _c.enabled = False
+                except Exception:
+                    pass
+
+        # Pastikan jendela aktif dan muncul di depan di Windows
+        if os.name == 'nt':
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                hwnd = user32.FindWindowW(None, 'Lembah Karsa 3D — v0.10 [Cozy Edition]')
+                if hwnd:
+                    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                    user32.SetForegroundWindow(hwnd)
+            except Exception:
+                pass
         
         # Pencahayaan — arah lebih datar agar detail karakter chibi terlihat
         self.sun = DirectionalLight(shadows=False)
@@ -147,6 +251,12 @@ class Game3D:
                 drop.setLightOff()
             self.snow_drops.append(drop)
 
+        # Keadaan nyala/mati partikel cuaca yang terakhir benar-benar
+        # dikirim ke entity. None = belum pernah, jadi frame pertama
+        # selalu menulis sekali.
+        self._hujan_nyala = None
+        self._salju_nyala = None
+
         # Inisialisasi suara prosedural (pygame.mixer, tidak konflik dengan panda3d audio)
         from .sound import init_sound, build_sounds, _build_ambients, set_ambient_for_scene
         if init_sound():
@@ -188,12 +298,23 @@ class Game3D:
         self.player = Player3D(self.state, self.world)
         self.panels.player = self.player
 
+        # Sinema. Dibuat sekali dan dipakai ulang; ia tidak menggambar apa pun
+        # sampai `mulai()` dipanggil, jadi biayanya nol saat tidak ada adegan.
+        from .cutscene import Sinema
+        self.sinema = Sinema(self)
+
         # Terapkan penampilan tersimpan (jika sudah pernah chargen)
         if self.state.char_name:
             self.player.apply_appearance(self.state)
+        from .keahlian import terapkan_awal
+        terapkan_awal(self.state, self.player)
 
         # Grass shader — terapkan ke entity rumput yang sudah dibangun
-        _grass.apply_to_entities(self.world._grass_ents)
+        # Mesh sebaran ikut dapat grass_shader: vertex shader-nya menggeser
+        # vertex berdasarkan tingginya, jadi PANGKAL rumpun diam dan UJUNGnya
+        # ikut melambai. Kerikil ada di bawah ambang 0,15 m, jadi diam.
+        _grass.apply_to_entities(self.world._grass_ents +
+                                 self.world._sebaran_ents)
         self._grass_time = 0.0
 
         # Cache fog: dipakai untuk melewati setter Ursina yang mahal.
@@ -209,6 +330,13 @@ class Game3D:
         self.camera_pitch   = 34.0   # sudut baca ala life-sim isometrik
         self.camera_dist    = 19.0
 
+        # Bingkai kamera SEBELUM frame pertama. Seluruh blok pengikut kamera
+        # ada di dalam gerbang `mode == 'hud'`, jadi selama chargen terbuka
+        # kamera tidak pernah bergerak: pemain baru melihat sudut default
+        # Ursina yang menatap titik nol, bukan karakternya sendiri — padahal
+        # chargen justru layar untuk melihat karakter itu.
+        self._snap_camera_to_player()
+
         # Chargen — muncul jika first run (char_name kosong) atau tekan F2
         self._chargen: ChargenScreen = None
         if not self.state.char_name:
@@ -217,8 +345,14 @@ class Game3D:
         # Inisialisasi lingkungan langsung sesuai waktu awal (bukan fade dari gelap)
         self._init_env()
 
-        # Terapkan VHS/Bloom shader jika menggunakan OpenGL
-        if self._use_unlit_sh:
+        # Terapkan VHS/Bloom shader jika menggunakan OpenGL.
+        #
+        # KARSA_NO_POST=1 mematikannya. Dipakai untuk memisahkan "scene-nya yang
+        # salah" dari "pasca-prosesnya yang salah" — tanpa saklar ini keduanya
+        # cuma bisa dibedakan dengan menyunting kode di tengah penyelidikan,
+        # dan itu mengubah barang yang sedang diukur.
+        import os as _os
+        if self._use_unlit_sh and not _os.environ.get('KARSA_NO_POST'):
             try:
                 from .shaders.vhs_bloom import vhs_bloom_shader
                 camera.shader = vhs_bloom_shader
@@ -238,6 +372,26 @@ class Game3D:
 
         # Update UI HUD
         self.panels.update(s, dt)
+        self._pulihkan_mode_yatim()
+
+        if self.panels.mode == 'sinema':
+            # Sengaja di luar gerbang 'hud' di bawah: dunia memang harus beku,
+            # tapi kamera sinema justru satu-satunya yang masih harus bergerak.
+            self.sinema.tick(dt)
+        # ── Keinginan yang terpenuhi dibayar SEKALI PER DETIK ──────────
+        # Bukan tiap frame. `periksa()` murah (paling banyak empat janji),
+        # tapi pelajaran Tahap 3 jelas: pekerjaan yang diulang 60 kali sedetik
+        # untuk hasil yang sama adalah cara paling mudah membuang milidetik.
+        # Satu detik cukup cepat supaya hadiahnya terasa datang dari perbuatan
+        # — pemain memanen tomat kelima dan pesannya muncul sebelum ia
+        # memindahkan jari.
+        self._jeda_keinginan = getattr(self, '_jeda_keinginan', 0.0) + dt
+        if self._jeda_keinginan >= 1.0:
+            self._jeda_keinginan = 0.0
+            try:
+                self.panels._bayar_keinginan()
+            except Exception as e:
+                logging.warning('[KEINGINAN] periksa gagal: %s', e)
 
         # ── MENJAUH MEMBATALKAN PIE MENU ───────────────────────────────
         # Pie menu objek dibuka dengan E dan sebelumnya hanya bisa ditutup
@@ -255,11 +409,53 @@ class Game3D:
                 except Exception:
                     self.panels.mode = 'hud'
 
+        # ── PERCAKAPAN TIDAK MEMBEKUKAN ORANGNYA ───────────────────────
+        # Semua di bawah ini digerbangi mode == 'hud', jadi selama kotak
+        # dialog terbuka dunia berhenti total: pemain dan lawan bicaranya
+        # jadi dua patung dengan sebuah kotak teks di antaranya. Jam
+        # permainan, gerak, dan input memang HARUS berhenti — itu memang
+        # gunanya modal. Tapi ANIMASI tidak: isyarat tangan dan anggukan
+        # justru satu-satunya hal yang membuat kotak teks terbaca sebagai
+        # percakapan. Jadi khusus mode 'dialog', pose tetap dijalankan tanpa
+        # memajukan waktu atau menerima gerak.
+        mode_kini = self.panels.mode
+        if mode_kini != getattr(self, '_mode_lalu', 'hud'):
+            # Dipasang dari PERUBAHAN mode, bukan dari dalam panels.py: dialog
+            # dibuka dari selusin tempat (pie menu, quest, papan, surat), dan
+            # menambahkan pemanggilan di tiap tempat itu berarti satu hari
+            # nanti ada yang lupa dan percakapannya diam-diam kembali beku.
+            if mode_kini == 'dialog':
+                try:
+                    self.mulai_pose_bicara(getattr(self.panels, '_dialog_npc', '') or '')
+                except Exception:
+                    logging.warning('[BICARA] gagal memasang pose', exc_info=True)
+            elif getattr(self, '_mode_lalu', 'hud') == 'dialog':
+                try:
+                    self.akhiri_pose_bicara()
+                except Exception:
+                    pass
+            self._mode_lalu = mode_kini
+
+        if mode_kini == 'dialog':
+            self._tick_percakapan(dt)
+
         if self.panels.mode == 'hud':
+            # Pemicu sinema. Diletakkan di sini, bukan di quest_controller,
+            # karena tahap quest dinaikkan dari beberapa tempat berbeda —
+            # membandingkan nilainya di satu tempat tidak bisa ketinggalan
+            # satu pun, sementara memanggil pemicu di tiap tempat bisa.
+            # `mulai()` sendiri menolak adegan yang sudah pernah ditonton,
+            # jadi memanggilnya berulang aman.
+            from .cutscene import pemicu_tahap
+            _adegan = pemicu_tahap(s.quest_stage)
+            if _adegan:
+                self.sinema.mulai(_adegan)
+
             # ── Maju waktu in-game & Needs Decay (via TimeManager) ──
             msg = self.player.time_controller.tick(dt, self.player)
             if msg:
                 self.panels.flash_msg(msg, 2.5)
+
             self._check_needs_warning()
 
             self.player.tick(dt, self.panels)
@@ -271,8 +467,12 @@ class Game3D:
                 logging.error(f"Gagal update ambient dynamic: {e}")
             # Jika HP habis → pingsan, balik ke rumah, mulai hari baru
             if s.hp <= 0:
+                # Pingsan juga memindahkan scene, jadi ia juga harus
+                # membatalkan aksi perawatan yang sedang berjalan.
+                from . import care_anim as _ca
+                _ca.bereskan(self.player)
                 s.scene_name = 'house'
-                s.player_x, s.player_y = 7.0, 8.0
+                s.player_x, s.player_y = 1.0, 2.0   # di samping kasur
                 self.player._advance_day()
                 self.panels.flash_msg("Kamu pingsan! Terbangun di rumah...", 3.5)
             self.entities.update(dt)
@@ -305,7 +505,8 @@ class Game3D:
                 # Reset portal cooldown supaya tidak ada lock dari portal sebelumnya
                 self.player._portal_cd = 0.5  # cukup buat hindari portal-ping-pong tapi tidak block movement
                 self._init_env()
-                _grass.apply_to_entities(self.world._grass_ents,
+                _grass.apply_to_entities(self.world._grass_ents +
+                                         self.world._sebaran_ents,
                                          self._grass_time, 0.06)
                 logging.info(f"[SCENE_T] DONE total: {_time.time()-t_start:.3f}s now at {current_scene}({s.player_x},{s.player_y})")
                 # Swap ambient loop sesuai scene baru
@@ -329,10 +530,18 @@ class Game3D:
                         self.camera_pitch += mouse.velocity[1] * 200
                 else:
                     self._right_mouse_down = False
-                    mouse.locked = False
+                    if mouse.locked:
+                        mouse.locked = False
             else:
                 self._right_mouse_down = False
-                mouse.locked = False
+                # Hanya saat berubah. Setter `mouse.locked` Ursina memanggil
+                # win.requestProperties() DAN menandai "mouse terkunci frame
+                # lalu", yang membuat mouse.update() melewati posisi kursor.
+                # Disetel tiap frame, keduanya terjadi tiap frame: jendela
+                # Windows diminta ulang propertinya 20x sedetik (renderFrame
+                # 17 -> 40 ms) dan posisi mouse tidak pernah diperbarui.
+                if mouse.locked:
+                    mouse.locked = False
 
             # Kunci sudut kemiringan (pitch) agar tidak terbalik atau menembus tanah
             self.camera_pitch = max(5.0, min(80, self.camera_pitch))
@@ -377,30 +586,56 @@ class Game3D:
                 target_sky   = color.rgb(20, 15, 25)
                 target_cloud = color.rgb(0, 0, 0, 0)
             else:
-                # Catatan: ambient + sun×dot ≤ 100% agar warna tidak overflow putih
-                # ambient max ~70, sun max ~185 (di floor dot≈0.82: 70/255+185/255×0.82 ≈ 87%)
+                # ambient + sun ≤ 100% supaya warna tidak overflow jadi putih.
+                # ambient max 70, sun max 185 (70/255 + 185/255 = 1,00; di
+                # floor dot≈0.82 jadi ≈87%).
+                #
+                # Batas itu SUDAH tertulis di sini sejak lama, dan nilainya di
+                # bawah melanggarnya: siang memakai sun 255 dan ambient 95,
+                # jumlahnya 1,373. Akibatnya terukur — apa pun di atas 186 dari
+                # 255 pasti terpotong jadi putih. Kulit bawaan "Cerah"
+                # (255,225,180) jadi bidang putih rata tanpa satu pun detail
+                # wajah tersisa, dan dinding rumah krem (248,235,200) ikut.
+                # Nisbah warnanya dipertahankan persis, cuma skalanya diturunkan
+                # ke batas yang komentarnya sendiri sebutkan.
                 if 6 <= hour < 17:
                     # Siang: sinar matahari hangat keemasan (Animal Crossing golden feel)
-                    target_sun = color.rgb(255, 248, 215) if not is_raining else color.rgb(145, 145, 158)
-                    target_amb = color.rgb(95, 90, 78, 255) if not is_raining else color.rgb(62, 62, 72, 255)
+                    target_sun = color.rgb(185, 180, 156) if not is_raining else color.rgb(145, 145, 158)
+                    target_amb = color.rgb(70, 66, 57, 255) if not is_raining else color.rgb(62, 62, 72, 255)
                     target_sky = color.rgb(128, 205, 248) if not is_raining else color.rgb(88, 98, 115)
                     target_cloud = color.rgb(248, 248, 255, 175) if not is_raining else color.rgb(145, 148, 162, 215)
                 elif 17 <= hour < 19:
                     # Senja: oranye kemerahan lembut
-                    target_sun = color.rgb(255, 162, 72) if not is_raining else color.rgb(148, 95, 72)
-                    target_amb = color.rgb(88, 55, 45, 255) if not is_raining else color.rgb(55, 38, 35, 255)
+                    # Senja ikut diturunkan dengan alasan yang sama: 255+88 =
+                    # 343 di kanal merah, jauh di atas batas.
+                    target_sun = color.rgb(185, 118, 52) if not is_raining else color.rgb(148, 95, 72)
+                    target_amb = color.rgb(70, 44, 36, 255) if not is_raining else color.rgb(55, 38, 35, 255)
                     target_sky = color.rgb(248, 138, 88) if not is_raining else color.rgb(115, 82, 82)
                     target_cloud = color.rgb(255, 195, 148, 145) if not is_raining else color.rgb(135, 108, 102, 195)
                 else:
-                    # Malam: biru gelap lembut (bukan hitam total)
-                    target_sun   = color.rgb(35, 48, 92)
-                    target_amb   = color.rgb(28, 28, 52, 255)
+                    # Malam: biru rembulan. Angka lamanya (35,48,92 / 28,28,52)
+                    # ditulis dengan komentar "bukan hitam total" — dan memang
+                    # tidak pernah terbukti salah, karena sampai sekarang
+                    # cahaya adegan TIDAK PERNAH sampai ke satu entitas pun.
+                    # Begitu jalurnya dibuka, terukur: rumput jatuh ke
+                    # 21,29,8 pada 22:00 dan hewannya nyaris tidak terlihat.
+                    # Malam harus redup, bukan buta.
+                    target_sun   = color.rgb(62, 82, 140)
+                    target_amb   = color.rgb(54, 58, 95, 255)
                     target_sky   = color.rgb(18, 12, 42)
                     target_cloud = color.rgb(45, 45, 72, 75)
             
             self.sun.color = lerp(self.sun.color, target_sun, dt)
             self.ambient.color = lerp(self.ambient.color, target_amb, dt)
             window.color = lerp(window.color, target_sky, dt)
+
+            # Dua baris di atas mengubah lampu Panda, dan smooth_shader sama
+            # sekali tidak membacanya — ia membaca sm_sun_color/sm_ambient.
+            # Jembatannya _sync_smooth_lighting(), dipanggil ~25 baris di bawah
+            # ini. Jembatan itu SUDAH ADA dan SUDAH DIPANGGIL sejak lama; yang
+            # membuatnya tidak berefek apa pun adalah default_input shader, yang
+            # menaruh salinan sm_* di TIAP entity dan menimpa nilai di scene.
+            # Lihat smooth_shader.get_smooth_shader().
             
             from ursina import scene
             # PERF (diukur, bukan ditebak): setter `scene.fog_color` milik Ursina
@@ -440,20 +675,38 @@ class Game3D:
             is_snowing  = is_winter and s.weather in ('Hujan', 'Mendung', 'Badai') and not is_indoor
             is_raining_ = is_raining and not is_winter
 
-            # Animasi Hujan
-            for drop in self.rain_drops:
-                drop.enabled = is_raining_
-                if is_raining_:
+            # `.enabled` hanya DIUBAH saat cuacanya berganti, tidak ditulis ulang
+            # tiap frame. Setter `.enabled` Ursina tidak punya jalan pintas untuk
+            # nilai yang sama: ia tetap membaca getter (yang memanggil
+            # has_disabled_ancestor) lalu memanggil stash()/unstash() pada
+            # NodePath. Dengan 150 tetes hujan + 80 butir salju itu 230 kali
+            # per frame bahkan saat cuacanya cerah dan tidak ada yang berubah.
+            #
+            # Terukur di scene town lewat tools/profil.py: stash 232
+            # panggilan/frame (0,83 ms) + enabled_setter 233/frame (0,30 ms).
+            if self._hujan_nyala != is_raining_:
+                self._hujan_nyala = is_raining_
+                for drop in self.rain_drops:
+                    drop.enabled = is_raining_
+
+            # Animasi Hujan — syaratnya di LUAR loop: saat cerah, 150 tetes
+            # tidak perlu disentuh sama sekali.
+            if is_raining_:
+                for drop in self.rain_drops:
                     drop.y -= 25 * dt
                     if drop.y < -0.5:
                         drop.x = self.player.x + random.uniform(-15, 15)
                         drop.z = self.player.z + random.uniform(-15, 15)
                         drop.y = random.uniform(10, 25)
 
-            # Animasi Salju
-            for drop in self.snow_drops:
-                drop.enabled = is_snowing
-                if is_snowing:
+            # Animasi Salju — alasan penjaga yang sama seperti hujan di atas.
+            if self._salju_nyala != is_snowing:
+                self._salju_nyala = is_snowing
+                for drop in self.snow_drops:
+                    drop.enabled = is_snowing
+
+            if is_snowing:
+                for drop in self.snow_drops:
                     drop.y -= 3.2 * dt
                     drop.x += math.sin(self._grass_time * 0.9 + drop.z * 0.3) * 0.6 * dt
                     drop.rotation_z += 22 * dt
@@ -488,6 +741,19 @@ class Game3D:
                 self._chargen.handle_input(key)
             return
 
+        # Mode Bangun/Beli (Sims S7): selama panel terbuka, seluruh tombol
+        # milik panel itu. Rute ini dulu ada di update(), tempat `key`
+        # tidak ada -- NameError tiap frame begitu panel dibuka. Tanpa rute ini `open_buy()` membuka panel yang tidak
+        # bisa dinavigasi maupun ditutup.
+        if self.panels.mode == 'buy':
+            self.panels.buy_input(key, self.player, self.world)
+            return
+
+        # Sinema mengunci semuanya: cuma lanjut dan lewati yang diterima.
+        if self.panels.mode == 'sinema':
+            self.sinema.input(key)
+            return
+
         # Intercept input saat UI / Dialog aktif
         if self.panels.mode == 'dialog':
             if self.panels.is_choice_active():
@@ -501,7 +767,12 @@ class Game3D:
                     self.panels.confirm_dialog_choice()
             else:
                 if key in ('space', 'e', 'enter'):
-                    self.panels.advance_dialog()
+                    # Teks yang masih diketik dituntaskan dulu; tekan sekali
+                    # lagi baru lanjut -- seperti kotak dialog Harvest Moon.
+                    if not self.panels.ketik_selesai():
+                        self.panels.tuntaskan_ketik()
+                    else:
+                        self.panels.advance_dialog()
             return
 
         if self.panels.mode == 'pie':
@@ -529,6 +800,16 @@ class Game3D:
                 # Input panel hanya menerima angka 1-9, jadi daftar yang lebih
                 # panjang dari sembilan baris butuh halaman.
                 self.panels.market_page(-1 if key == 'q' else 1)
+            elif (self.panels._panel_name == 'wishes'
+                  and key in ('a', 'b', 'c')):
+                # Hadiah dipilih dengan huruf, bukan angka: angka 1-9 di panel
+                # ini sudah dipakai untuk menjanjikan tawaran dan melupakan
+                # janji, dan memakai angka yang sama untuk tiga arti berbeda
+                # adalah cara tercepat membuat pemain membeli hadiah padahal
+                # ingin berjanji.
+                msg = self.panels.beli_hadiah_keinginan(key)
+                if msg:
+                    self.panels.flash_msg(msg)
             elif key.isdigit():
                 msg = self.panels.panel_action(int(key))
                 if msg:
@@ -565,6 +846,12 @@ class Game3D:
             # Hotkeys menu
             if key == 'i':
                 self.panels.open_panel('inventory')
+            elif key == 'l':
+                # Bangun/Beli (Sims S7). `sims_build.py` ikut masuk saat merge
+                # feature/3d-mobs tapi tidak dipanggil dari mana pun — panelnya
+                # ada, katalognya ada, dan tidak ada satu tombol pun yang
+                # membukanya.
+                self.panels.open_buy()
             elif key == 'm':
                 self.panels.open_panel('map')
             elif key == 'j':
@@ -573,6 +860,18 @@ class Game3D:
                 self.panels.open_panel('relations')
             elif key == 'n':
                 self.panels.open_panel('catatan')
+            elif key == 'p':
+                # Keinginan. 'p' satu-satunya huruf yang tersisa: a/d/s/w gerak,
+                # sisanya dipakai menu atau aksi pemain.
+                self.panels.open_panel('wishes')
+            elif key == 'f4':
+                # Ekosistem dulu di 'l', tapi 'l' sudah ditangkap Bangun/Beli di
+                # atas sehingga cabang ini tidak pernah tercapai.
+                self.panels.open_panel('ekosistem')
+            elif key == 'f6':
+                # Papan Permintaan Warga. Dua cabang sama-sama mengklaim 'p'
+                # (Keinginan dan Papan); huruf sudah habis, F6 masih kosong.
+                self.panels.open_panel('papan')
             elif key == 'k':
                 if self.state.scene_name == 'shop':
                     self.panels.open_panel('shop')
@@ -593,6 +892,17 @@ class Game3D:
                     self.panels.open_panel('crafting')
                 else:
                     self.panels.flash_msg("Pergi ke Bengkel Budi!")
+            elif key == 'tab':
+                # Ringkasan motif di sudut kiri-bawah adalah satu-satunya blok
+                # HUD yang tetap memakan tempat setelah pemain hafal isinya.
+                # TAB menyembunyikannya, bukan membuangnya.
+                nyala = self.panels.toggle_motive_panel()
+                self.panels.flash_msg(
+                    'Ringkasan kebutuhan: ON' if nyala else
+                    'Ringkasan kebutuhan: OFF  [TAB]', 1.2)
+            elif key == 'f3':
+                self._debug_overlay = not getattr(self, '_debug_overlay', False)
+                _pasang_overlay_debug(self._debug_overlay)
             elif key == 'f1':
                 self.panels.open_panel('help')
             elif key == 'f2':
@@ -612,10 +922,18 @@ class Game3D:
             elif key == 'f9':
                 loaded = GameState.load()
                 if loaded:
-                    self.state = loaded
+                    # Muat data KE state yang sudah dipegang semua komponen,
+                    # bukan mengganti objeknya. Sebelumnya `self.state = loaded`
+                    # hanya me-rebind app + player, sementara panels/world/
+                    # entities/time_controller/quest_controller/queue tetap
+                    # menunjuk GameState lama -> HUD beku & split-state.
+                    self.state.__dict__.clear()
+                    self.state.__dict__.update(loaded.__dict__)
+                    self.state.__dict__.pop('_mv', None)
+                    self.player.queue.motives = self.state.mv
+                    self.player.queue.clear()
                     self.world.load_scene(self.state.scene_name)
                     self.entities.load_scene(self.state.scene_name)
-                    self.player.state = self.state
                     # Safety walkable snap check
                     if not self.world.is_walkable(int(round(self.state.player_x)), int(round(self.state.player_y))):
                         found = None
@@ -634,6 +952,51 @@ class Game3D:
                     self._init_env()
                     self.panels.flash_msg("[F9] Game Dimuat!")
 
+    def _pulihkan_mode_yatim(self):
+        """Kembalikan ke HUD kalau mode aktif kehilangan UI pemiliknya.
+
+        Semua yang menggerakkan dunia — waktu, pemain, entitas, kamera —
+        ada di dalam gerbang `mode == 'hud'`. Itu memang disengaja: panel
+        terbuka berarti permainan berhenti. Konsekuensinya, mode yang
+        tertinggal tanpa UI yang menampakkannya membekukan game TOTAL tanpa
+        satu pun petunjuk di layar, dan tidak ada tombol yang bisa
+        mengeluarkan pemain karena input pun ikut dibajak mode itu.
+
+        Ini bukan kemungkinan yang dikarang: satu exception di tengah dialog
+        atau pie menu sudah cukup untuk meninggalkan mode tanpa pemilik, dan
+        laporan "jalan saja tidak bisa" persis berbentuk seperti itu. Biarkan
+        game menyembuhkan dirinya sendiri di frame berikutnya.
+        """
+        p = self.panels
+        mode = p.mode
+        if mode == 'hud':
+            return
+        yatim = False
+        if mode == 'chargen':
+            yatim = self._chargen is None
+        elif mode == 'pie':
+            yatim = not getattr(p, '_pie_options', None)
+        elif mode == 'panel':
+            yatim = getattr(p, '_panel_name', None) is None
+        elif mode == 'dialog':
+            bg = getattr(p, '_dlg_bg', None)
+            yatim = bg is None or not getattr(bg, 'enabled', False)
+        elif mode == 'sinema':
+            # Pemiliknya runner sinema, bukan entity UI: adegan yang sudah
+            # `selesai()` membongkar UI-nya sendiri, jadi keberadaan quad
+            # bukan tanda yang benar. Yang menentukan `aktif`.
+            #
+            # Baris ini ditambahkan setelah penjaga di bawah menangkap mode
+            # 'sinema' sebagai tak dikenal dan mengembalikannya ke HUD tiap
+            # frame — sinema tidak pernah bisa jalan satu beat pun. Penjaganya
+            # benar; mode barunya yang lupa didaftarkan.
+            yatim = not getattr(getattr(self, 'sinema', None), 'aktif', False)
+        else:
+            yatim = True    # mode yang tidak dikenal sama sekali
+        if yatim:
+            logging.warning(f"Mode UI '{mode}' tidak punya pemilik — kembali ke HUD.")
+            p.mode = 'hud'
+
     # ─── CHARACTER CREATION ─────────────────────────────────
     def _open_chargen(self):
         if self._chargen:
@@ -644,12 +1007,15 @@ class Game3D:
             self.state,
             on_confirm=self._on_chargen_confirm,
             player=self.player,
+            app=self,
         )
         self.panels.mode = 'chargen'
 
     def _on_chargen_confirm(self, state):
         self._chargen = None
         self.player.apply_appearance(state)
+        from .keahlian import terapkan_awal
+        terapkan_awal(self.state, self.player)
         if hasattr(self, 'player') and self.player:
             self.player._set_initial_rotation()
         self.panels.mode = 'hud'
@@ -706,8 +1072,9 @@ class Game3D:
             sky_col   = color.rgb(248, 138, 88)
             cloud_col = color.rgb(255, 195, 148, 145)
         else:
-            sun_col   = color.rgb(35, 48, 92)
-            amb_col   = color.rgb(28, 28, 52, 255)
+            # Sama dengan blok transisi di update() — dua tempat, satu angka.
+            sun_col   = color.rgb(62, 82, 140)
+            amb_col   = color.rgb(54, 58, 95, 255)
             sky_col   = color.rgb(18, 12, 42)
             cloud_col = color.rgb(45, 45, 72, 75)
 
@@ -768,6 +1135,97 @@ class Game3D:
         return Vec3(math.sin(cy) * math.cos(cp),
                     math.sin(cp),
                     -math.cos(cy) * math.cos(cp)) * self.camera_dist
+
+
+    # ─── PERCAKAPAN ─────────────────────────────────────────────────────────
+    def _tick_percakapan(self, dt: float) -> None:
+        """Jalankan pose bicara/dengar selama kotak dialog terbuka.
+
+        Sengaja TIDAK memanggil player.tick() atau entities.update(): itu akan
+        memajukan waktu permainan dan menerima input gerak, dua hal yang memang
+        harus berhenti saat modal terbuka. Yang dijalankan hanya posenya.
+        """
+        from . import care_anim
+        p = self.player
+        aksi = getattr(p, '_care_anim', None)
+        if aksi is not None:
+            aksi.update(dt)
+            if aksi.selesai:
+                # Percakapan berlangsung selama pemain membaca, dan panjangnya
+                # tidak bisa diketahui di depan — jadi isyaratnya diulang,
+                # bukan dimainkan sekali lalu membeku lagi.
+                jenis = aksi.jenis
+                care_anim.bereskan(p)
+                if jenis in ('bicara', 'dengar'):
+                    care_anim.mulai(p, jenis)
+            else:
+                aksi.terapkan(p)
+
+        lawan = getattr(self.panels, '_dialog_npc', None)
+        actor = self.entities.actors.get(lawan) if lawan else None
+        if actor is not None and hasattr(actor, 'tick_percakapan'):
+            actor.tick_percakapan(dt, p.x, p.z)
+
+        # Wajah harus tetap jalan selama modal terbuka. Loop entitas dan
+        # player.tick() sengaja TIDAK dipanggil di sini (itu akan memajukan
+        # waktu permainan dan menerima input gerak), dan akibatnya terukur:
+        # rentang tinggi mata 0,09881 saat main biasa, 0,00000 begitu kotak
+        # dialog terbuka. Orang yang berhenti berkedip TEPAT saat diajak
+        # bicara adalah tanda uncanny yang paling mudah dilihat pemain,
+        # justru pada saat ia menatap wajah itu paling lama.
+        #
+        # Yang berbicara adalah WARGANYA: baris dialog di sini isinya ucapan
+        # warga, dan giliran pemain muncul sebagai daftar pilihan. Jadi mulut
+        # warga bergerak selama baris ditampilkan, dan berhenti saat pilihan
+        # aktif — pemain sedang memilih, bukan berbicara.
+        pilihan = bool(getattr(self.panels, '_dlg_choices_active', False))
+        # Modal membekukan entities.update(), jadi kehangatan warga harus
+        # dipasang di sini juga — kalau tidak, wajahnya justru kehilangan
+        # tanda hati persis saat pemain sedang menatapnya.
+        if lawan and actor is not None:
+            _w = getattr(actor, '_wajah', None)
+            if _w is not None:
+                _w.set_hati(min(1.0, self.state.npc_hearts.get(lawan, 0) / 10.0))
+        for e in (actor, p):
+            w = getattr(e, '_wajah', None) if e is not None else None
+            if w is not None:
+                w.tick(dt)
+        w_actor = getattr(actor, '_wajah', None) if actor is not None else None
+        if w_actor is not None:
+            w_actor.set_bicara(not pilihan)
+
+    def mulai_pose_bicara(self, npc_id: str) -> None:
+        """Pasang pose bicara pada pemain dan pose dengar pada lawan bicara."""
+        from . import care_anim
+        import math
+        p = self.player
+        pos = self.state.npc_positions.get(npc_id) or {}
+        nx, ny = pos.get('x'), pos.get('y')
+        if nx is not None:
+            # Saling menatap. Dua orang yang bercakap-cakap sambil menghadap
+            # arah yang berbeda adalah hal pertama yang terlihat salah.
+            p.rotation_y = math.degrees(
+                math.atan2(nx - p.x / TILE_SIZE, ny - p.z / TILE_SIZE))
+            p.target_rotation_y = p.rotation_y
+        care_anim.mulai(p, 'bicara')
+        actor = self.entities.actors.get(npc_id)
+        if actor is not None and hasattr(actor, 'mulai_percakapan'):
+            actor.mulai_percakapan(p.x, p.z)
+
+    def akhiri_pose_bicara(self) -> None:
+        from . import care_anim
+        aksi = getattr(self.player, '_care_anim', None)
+        if aksi is not None and aksi.jenis in ('bicara', 'dengar'):
+            care_anim.bereskan(self.player)
+        for actor in self.entities.actors.values():
+            if hasattr(actor, 'akhiri_percakapan'):
+                actor.akhiri_percakapan()
+            w = getattr(actor, '_wajah', None)
+            if w is not None:
+                w.set_bicara(False)
+        w = getattr(self.player, '_wajah', None)
+        if w is not None:
+            w.set_bicara(False)
 
     def _snap_camera_to_player(self):
         """Tempatkan kamera langsung di posisi idealnya, tanpa lerp.

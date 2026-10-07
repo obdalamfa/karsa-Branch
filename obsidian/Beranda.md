@@ -56,6 +56,12 @@ TABLE status, ringkas FROM "10-Tahapan" SORT file.name ASC
 
 - [[2026-10-06 — CI menolak penjaga yang saya nyatakan lolos]] — mesin kedua menangkap klaim saya sendiri
 - [[2026-10-06 — Penjaga arah jadi penjaga sungguhan]] — utang yang sesi lalu ciptakan sendiri, ditutup; diagnosis lama dikoreksi
+- [[2026-10-05 — Topi pas di kepala, rambut sesuai suku, tidak semua warga bertopi]] — kerja branch base
+- [[2026-10-05 — Wajah chibi dari wajah.py di rig GLB, mata dipaskan, topi bajak laut]] — kerja branch base
+- [[2026-10-05 — Warga beragam suku dan topi yang pas di kepala (runtime)]] — kerja branch base
+- [[2026-10-05 — Buat Karakter yang berfungsi- kulit, rambut, baju, celana, aksesori, k…|2026-10-05 — Buat Karakter yang berfungsi]] — kerja branch base
+- [[2026-10-05 — Kotak dialog ala Harvest Moon dengan potret, pembuka sesuai jam-tempat]] — kerja branch base
+- [[2026-10-05 — Warga berjalan antar-scene lewat portal, jadwal di scene yang sama dij…|2026-10-05 — Warga berjalan antar-scene lewat portal]] — kerja branch base
 - [[2026-10-04 — Arah WASD akhirnya terukur dan diperbaiki]] — utang 🔴 tertua, tutup; penjaganya gagal tiga kali dulu
 - [[2026-10-03 — Tahap 2 ditutup, entity_mesh terbukti]] — yatim terakhir dibuktikan, 16 pemeriksaan
 - [[2026-10-03 — Probe pertama yang bisa diperiksa]] — 15 dari 16 probe yang dikutip kode tidak ada

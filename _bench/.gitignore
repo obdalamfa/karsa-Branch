@@ -25,6 +25,19 @@ shots/
 sheets/
 regress/
 
+# Bahan kerja benchmark yang BUKAN patokan final -- jangan ikut ter-commit
+# meski suatu saat isinya bukan .png/.jpg/.jpeg (mis. rekaman video sumber).
+# `refs/_video/` berisi ~2,9 GB rekaman sumber (GitHub menolak berkas >100 MB,
+# dan repo sebesar itu menyusahkan siapa pun yang meng-clone-nya). Rekaman
+# sumber bisa diunduh ulang; yang penting hasil potongannya, dan hasil
+# potongan JPG/PNG sudah tertangkap pola di atas.
+# `refs/_kandidat/`, `refs/_pindai/`, `refs/_sb/` adalah bahan kerja untuk
+# MEMILIH patokan, bukan patokannya sendiri.
+refs/_video/
+refs/_kandidat/
+refs/_pindai/
+refs/_sb/
+
 # Log hasil harness.
 progress.jsonl
 progress.html

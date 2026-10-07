@@ -54,7 +54,48 @@ WILD_ITEMS = {
     'wild_berry':       {'name':'Beri Liar','sell':20,'description':'Beri manis'},
     'air_keabadian':    {'name':'Air Keabadian','sell':500,'description':'Air ruqyah dari naga'},
     'ikan_legendaris':  {'name':'Ikan Legendaris','sell':1000,'description':'Ikan raksasa penghuni danau terdalam'},
+    # ── Hasil kerajinan & laut ──
+    'perahu':           {'name':'Perahu Kayu','sell':400,'description':'Perahu kecil untuk berlayar dari dermaga pantai'},
+    'obor':             {'name':'Obor','sell':12,'description':'Penerangan kayu sederhana'},
+    'jala':             {'name':'Jala Ikan','sell':90,'description':'Meningkatkan peluang memancing'},
+    'peti_kayu':        {'name':'Peti Kayu','sell':95,'description':'Peti buatan tangan, laku dijual'},
+    'pagar_kayu':       {'name':'Pagar Kayu','sell':35,'description':'Segmen pagar dekorasi kebun'},
+    'ikan_laut':        {'name':'Ikan Laut','sell':60,'description':'Tangkapan segar dari laut lepas'},
+    'mutiara':          {'name':'Mutiara','sell':250,'description':'Mutiara berkilau dari dasar laut'},
+
+    # ── IKAN ─────────────────────────────────────────────────────────────────
+    # Kapan dan di mana tiap ikan menggigit ada di game/fishing.py; yang ada di
+    # sini hanya NILAI dan namanya, supaya economy.py tetap satu-satunya tempat
+    # harga lahir. 'ikan' yang lama sengaja dipertahankan sebagai tangkapan
+    # paling umum: quest dan save yang menyebut namanya tidak boleh patah, dan
+    # tangkapan biasa yang tidak istimewa memang harus ada — tanpa dasar yang
+    # membosankan, tidak ada yang terasa langka.
+    'ikan_mas':         {'name':'Ikan Mas','sell':55,'description':'Penghuni tenang dasar danau'},
+    'ikan_nila':        {'name':'Ikan Nila','sell':48,'description':'Ramai di air hangat'},
+    'ikan_gabus':       {'name':'Ikan Gabus','sell':75,'description':'Pemburu malam bersirip panjang'},
+    'belut':            {'name':'Belut','sell':95,'description':'Keluar dari lumpur saat hujan'},
+    'udang_galah':      {'name':'Udang Galah','sell':80,'description':'Bercapit biru, hanya pagi musim panas'},
+    'ikan_kembung':     {'name':'Ikan Kembung','sell':52,'description':'Bergerombol di perairan dangkal'},
+    'ikan_kakap':       {'name':'Ikan Kakap','sell':120,'description':'Menyambar umpan menjelang senja'},
+    'cumi':             {'name':'Cumi','sell':88,'description':'Naik ke permukaan setelah gelap'},
+    'kepiting_bakau':   {'name':'Kepiting Bakau','sell':100,'description':'Hanya terlihat saat air surut'},
+    'ikan_layur':       {'name':'Ikan Layur','sell':140,'description':'Perak panjang; badai musim dingin'},
+    'ikan_buta':        {'name':'Ikan Buta','sell':210,'description':'Tak bermata, tak pernah melihat matahari'},
 }
+
+# ─── RESEP KERAJINAN UMUM (meja kerja Bengkel Budi, tombol U) ───────────────
+CRAFT_RECIPES = [
+    {'id':'perahu',    'name':'Perahu Kayu', 'cost_gold':150, 'gives':1,
+     'needs':{'kayu':24,'besi':4}, 'desc':'Berlayar dari dermaga pantai'},
+    {'id':'jala',      'name':'Jala Ikan',   'cost_gold':30,  'gives':1,
+     'needs':{'kayu':3,'besi':1},  'desc':'Mancing lebih mujur'},
+    {'id':'obor',      'name':'Obor (x3)',   'cost_gold':0,   'gives':3,
+     'needs':{'kayu':2},           'desc':'Penerangan murah'},
+    {'id':'peti_kayu', 'name':'Peti Kayu',   'cost_gold':0,   'gives':1,
+     'needs':{'kayu':6},           'desc':'Barang dagangan'},
+    {'id':'pagar_kayu','name':'Pagar (x2)',  'cost_gold':0,   'gives':2,
+     'needs':{'kayu':3},           'desc':'Dekorasi kebun'},
+]
 
 HUMAN_NPCS = {
     'arya':       {'name':'Arya','type':'human','gift':'jagung',
@@ -149,7 +190,7 @@ HUMAN_NPCS = {
             'quest_11': [["Masakan dengan bahan dari lembah yang sehat... tidak ada yang mengalahkannya."]],
         },
         'gift_r':"Sehat!"},
-    'pak_guru':   {'name':'Pak Guru','type':'human','gift':'lobak',
+    'pak_guru':   {'name':'Pak Hadi','type':'human','gift':'lobak',
         'talks':{
             'default': [["Pendidikan kunci kemajuan."],["Murid-muridku perlu buku."]],
             'hearts_3': [["Pendidikan tanpa alam adalah kosong. Aku mengajar anak-anak tentang lembah."]],
@@ -355,29 +396,40 @@ ANIMAL_NPCS = {
     'kelinci_putih':   {'name':'Pinky','type':'kelinci','talks':[["(Hidung berkedut)"]],'product':None},
 }
 
+# ─── Hasil ternak harian (dikumpulkan [R] dari hewan, dijual via Peti Kirim) ───
+ANIMAL_PRODUCTS = {
+    'susu':  {'name': 'Susu',  'sell': 90,  'description': 'Susu segar dari sapi'},
+    'telur': {'name': 'Telur', 'sell': 55,  'description': 'Telur ayam pagi'},
+    'wol':   {'name': 'Wol',   'sell': 130, 'description': 'Wol hangat dari domba/kambing'},
+}
+
+# Harga jual gabungan untuk Peti Kirim (hasil panen + hasil ternak)
+SHIP_PRICES = {**{k: v.get('sell', 0) for k, v in CROPS.items()},
+               **{k: v['sell'] for k, v in ANIMAL_PRODUCTS.items()}}
+
 def all_npcs():
     return list(HUMAN_NPCS.keys()) + list(SUPERNATURAL_NPCS.keys()) + list(ANIMAL_NPCS.keys())
 
 SCHEDULES = {
     'arya':       [(6, 12, 12, 'farm', 'walking'), (12, 15, 15, 'town', 'walking'),
                    (18, 5, 5, 'farm', 'resting')],
-    'sari':       [(6, 4, 4, 'shop', 'preparing'), (8, 4, 4, 'shop', 'working'),
-                   (18, 15, 15, 'town', 'walking'), (21, 5, 5, 'shop', 'sleeping')],
-    'raka':       [(6, 6, 6, 'clinic', 'working'), (13, 12, 18, 'town', 'strolling'),
-                   (17, 6, 6, 'clinic', 'reading')],
-    'maya':       [(8, 10, 10, 'studio', 'painting'), (14, 20, 10, 'mountain', 'sketching'),
-                   (20, 10, 10, 'studio', 'sleeping')],
-    'budi':       [(7, 7, 7, 'smith', 'forging'), (19, 12, 12, 'town', 'drinking'),
-                   (22, 7, 7, 'smith', 'sleeping')],
-    'joko':       [(4, 8, 8, 'lake', 'fishing'), (10, 9, 8, 'lake', 'fishing'),
-                   (15, 4, 4, 'shop', 'shopping'), (18, 8, 8, 'lake', 'fishing'),
-                   (22, 8, 8, 'lake', 'sleeping')],
+    'sari':       [(6, 4, 2, 'shop', 'preparing'), (8, 3, 2, 'shop', 'working'),
+                   (18, 15, 15, 'town', 'walking'), (21, 1, 2, 'shop', 'sleeping')],
+    'raka':       [(6, 5, 2, 'clinic', 'working'), (13, 12, 16, 'town', 'strolling'),
+                   (17, 6, 5, 'clinic', 'reading')],
+    'maya':       [(8, 6, 4, 'studio', 'painting'), (14, 20, 10, 'mountain', 'sketching'),
+                   (20, 1, 2, 'studio', 'sleeping')],
+    'budi':       [(7, 3, 2, 'smith', 'forging'), (19, 11, 12, 'town', 'drinking'),
+                   (22, 7, 2, 'smith', 'sleeping')],
+    'joko':       [(4, 7, 8, 'lake', 'fishing'), (10, 8, 9, 'lake', 'fishing'),
+                   (15, 3, 4, 'shop', 'shopping'), (18, 7, 8, 'lake', 'fishing'),
+                   (22, 7, 8, 'lake', 'sleeping')],
     'cici':       [(7, 10, 14, 'farm', 'playing'), (13, 22, 18, 'town', 'wandering'),
                    (18, 5, 5, 'farm', 'home')],
-    'bowo':       [(7, 7, 16, 'farm', 'helping'), (12, 15, 12, 'town', 'school'),
+    'bowo':       [(7, 7, 16, 'farm', 'helping'), (12, 15, 13, 'town', 'school'),
                    (17, 5, 5, 'farm', 'home')],
     'ningsih':    [(6, 4, 4, 'farm', 'cooking'), (12, 4, 4, 'farm', 'cooking'),
-                   (18, 12, 12, 'town', 'gossiping'), (21, 4, 4, 'farm', 'sleeping')],
+                   (18, 11, 12, 'town', 'gossiping'), (21, 4, 4, 'farm', 'sleeping')],
     'pak_guru':   [(7, 12, 8, 'town', 'teaching'), (15, 22, 18, 'town', 'reading'),
                    (20, 12, 8, 'town', 'sleeping')],
     'mbok_jum':   [(6, 18, 14, 'town', 'cooking'), (14, 18, 14, 'town', 'serving'),
@@ -405,15 +457,15 @@ SCHEDULES = {
                       (20, 11, 4, 'mountain', 'patroling')],
     'banaspati':     [(0, 11, 8, 'naga_cave', 'hovering'), (6, -1, -1, 'hidden', 'dormant'),
                       (18, 11, 8, 'naga_cave', 'hovering')],
-    'leak_bali':     [(0, 2, 2, 'cemetery', 'hovering'), (5, -1, -1, 'hidden', 'dormant'),
-                      (19, 2, 2, 'cemetery', 'hovering')],
+    'leak_bali':     [(0, 1, 2, 'cemetery', 'hovering'), (5, -1, -1, 'hidden', 'dormant'),
+                      (19, 1, 2, 'cemetery', 'hovering')],
     'bidadari':      [(0, 10, 15, 'swarga', 'meditating')],
     'dewa_angin':    [(0, 15, 5, 'swarga', 'hovering')],
     'petapa_srimana':[(0, 20, 15, 'swarga', 'meditating')],
     'sapi_betsy':      [(0, 18, 5, 'farm', 'grazing')],
     'ayam_kuning':     [(0, 16, 5, 'farm', 'pecking')],
     'kambing_jenggot': [(0, 19, 6, 'farm', 'grazing')],
-    'bebek_donald':    [(0, 9, 9, 'lake', 'swimming')],
+    'bebek_donald':    [(0, 8, 9, 'lake', 'swimming')],
     'domba_woolly':    [(0, 17, 7, 'farm', 'grazing')],
     'kuda_pegasus':    [(0, 20, 5, 'farm', 'grazing')],
     'kucing_oren':     [(0, 7, 9, 'farm', 'lounging')],
@@ -553,6 +605,35 @@ SEASONAL_EVENTS = {
 # tidak ada yang menjaga keduanya sama; sekarang mustahil menyimpang.
 # Harga jual-kembali setiap barang ada di game/economy.py — selalu di bawah
 # harga beli, supaya beli-lalu-jual-ulang tidak jadi mesin uang.
+# ─── TERNAK YANG BISA DIBELI ─────────────────────────────
+# Sebelum ini kesembilan hewan di ANIMAL_NPCS muncul gratis sejak hari pertama,
+# jadi "membeli ternak" tidak punya arti — kandangnya sudah penuh sebelum
+# pemain melakukan apa pun. Sekarang ternak penghasil harus dibeli dulu; hewan
+# yang tidak menghasilkan (kuda, kucing, rubah, kelinci) tetap ada apa adanya
+# karena mereka bukan ternak, mereka penghuni.
+#
+# HARGANYA DITURUNKAN, BUKAN DIKARANG. Untung harian satu ekor =
+# nilai hasil / siklus - 18G pakan sehari (FEED_DAY_VALUE). Harga = untung
+# harian x 28 hari (DAYS_PER_SEASON), yaitu balik modal tepat satu musim:
+#
+#   ayam    telur 32 / 1 hari = 32,0 - 18 = 14,0/hari  x28 =  392G
+#   bebek   telur 32 / 1 hari = 32,0 - 18 = 14,0/hari  x28 =  392G
+#   sapi    susu  42 / 1 hari = 42,0 - 18 = 24,0/hari  x28 =  672G
+#   kambing wol   58 / 2 hari = 29,0 - 18 = 11,0/hari  x28 =  308G
+#   domba   wol   58 / 2 hari = 29,0 - 18 = 11,0/hari  x28 =  308G
+#
+# Yang terlihat begitu angkanya disusun begini: WOL PALING TIDAK MENGUNTUNGKAN
+# per hari meski nilainya tertinggi, karena siklus 2 hari membelah dua
+# pemasukannya sementara pakan tetap dibayar tiap hari. Itu temuan neraca,
+# bukan keputusan — dicatat di sini supaya terlihat, bukan diam-diam ditambal.
+LIVESTOCK_FOR_SALE = {
+    'kambing_jenggot': 308,
+    'domba_woolly':    308,
+    'ayam_kuning':     392,
+    'bebek_donald':    392,
+    'sapi_betsy':      672,
+}
+
 SHOP_ITEMS = [
     {'id': f'{_k}_seed', 'name': f"Benih {_c['name']}", 'price': int(_c['cost']),
      'season': '/'.join(_c['seasons']) or 'all', 'crop': _k}
@@ -562,6 +643,12 @@ SHOP_ITEMS = [
     # patokan yang dipakai economy.py untuk menilai pakan buatan sendiri.
     {'id': 'jerami', 'name': 'Jerami',  'price': 18, 'season': 'all', 'crop': None},
     {'id': 'kayu',   'name': 'Kayu',    'price': 20, 'season': 'all', 'crop': None},
+] + [
+    # Ternak. `animal` menandai baris ini bukan barang tas: panels._buy_shop_item
+    # memindahkannya ke kandang, bukan ke inventori.
+    {'id': _aid, 'name': ANIMAL_NPCS[_aid]['name'], 'price': _harga,
+     'season': 'all', 'crop': None, 'animal': _aid}
+    for _aid, _harga in LIVESTOCK_FOR_SALE.items()
 ]
 
 # ─── BRANCHING DIALOGUE TREES ────────────────────────────

@@ -63,6 +63,15 @@ _PRODUCE_VALUES = {
     'telur': 32,   # siklus 1 hari; ayam + bebek
     'susu':  42,   # siklus 1 hari; sapi
     'wol':   58,   # siklus 2 hari; kambing + domba
+    # Dua di bawah ini dihasilkan `husbandry.py` (bebek -> telur_bebek,
+    # kambing -> susu_kambing) tapi tidak pernah punya harga di sini, jadi
+    # `collect()` menaruh barang 0G di tas: tidak laku di warung dan ditolak
+    # Peti Kirim. Angkanya BUKAN karangan baru -- husbandry.SPECIES_CARE sudah
+    # mencatat `harga` per spesies (bebek 38, kambing 45), dan angka itu
+    # memang melacak harga produknya (sapi 40/susu 42, ayam 30/telur 32,
+    # domba 55/wol 58). Jadi dipakai apa adanya, bukan ditebak ulang.
+    'telur_bebek':  38,
+    'susu_kambing': 45,
 }
 
 _PROCESSED_VALUES = {
@@ -117,6 +126,7 @@ ITEM_VALUES: dict[str, int] = _build_values()
 # kunci dict; dia menabung Benih Lobak.
 _EXTRA_NAMES = {
     'telur': 'Telur',              'susu': 'Susu',
+    'telur_bebek': 'Telur Bebek',  'susu_kambing': 'Susu Kambing',
     'wol':   'Wol',                'kayu': 'Kayu',
     'jerami':'Jerami',             'pakan': 'Pakan Ternak',
     'ikan':  'Ikan',
@@ -146,12 +156,62 @@ ITEM_NAMES: dict[str, str] = _build_names()
 
 
 def item_name(item_id: str) -> str:
-    return ITEM_NAMES.get(item_id, item_id.replace('_', ' ').title())
+    """Nama tampilan. Alasan pencarian ulang sama seperti `sell_price`."""
+    n = ITEM_NAMES.get(item_id)
+    if n is not None:
+        return n
+    from .data import CROPS
+    c = CROPS.get(item_id)
+    if c and c.get('name'):
+        ITEM_NAMES[item_id] = c['name']
+        return c['name']
+    if item_id.endswith('_seed'):
+        induk = CROPS.get(item_id[:-5])
+        if induk and induk.get('name'):
+            ITEM_NAMES[item_id] = f"Benih {induk['name']}"
+            return ITEM_NAMES[item_id]
+    return item_id.replace('_', ' ').title()
+
+
+PENGALI_JUAL = 1.0      # keahlian 'Lidah Pedagang' (game/keahlian.py)
 
 
 def sell_price(item_id: str) -> int:
-    """Harga yang dibayar Warung Bu Sari. 0 = tidak laku dijual."""
-    return ITEM_VALUES.get(item_id, 0)
+    v = _sell_price_dasar(item_id)
+    return int(round(v * PENGALI_JUAL)) if v else v
+
+
+def _sell_price_dasar(item_id: str) -> int:
+    """Harga yang dibayar Warung Bu Sari. 0 = tidak laku dijual.
+
+    ITEM_VALUES dibangun SEKALI saat modul ini diimpor. Tapi `crops.py`
+    MENAMBAHKAN 16 palawija + 7 pohon ke `data.CROPS` saat IA diimpor, jadi
+    siapa yang diimpor lebih dulu menentukan apakah 23 barang itu punya harga
+    atau bernilai 0G -- tanpa error, tanpa log, cuma panen yang tidak laku.
+
+    Diukur `tools/verifikasi.py`: padi 45G kalau crops lebih dulu, 0G kalau
+    economy lebih dulu. Permainan SEKARANG aman karena `world.py` mengimpor
+    crops di tingkat modul sebelum economy pertama kali dipakai -- tapi itu
+    kebetulan, bukan jaminan, dan satu impor yang dipindah membatalkannya.
+
+    Jadi kunci yang tidak ada di snapshot dicari ulang ke CROPS yang hidup,
+    lalu disimpan. Snapshot tetap jadi jalur cepat; ia cuma tidak lagi jadi
+    satu-satunya kebenaran.
+    """
+    v = ITEM_VALUES.get(item_id)
+    if v is not None:
+        return v
+    from .data import CROPS
+    c = CROPS.get(item_id)
+    if c and c.get('sell') is not None:
+        ITEM_VALUES[item_id] = int(c['sell'])
+        return ITEM_VALUES[item_id]
+    if item_id.endswith('_seed'):
+        induk = CROPS.get(item_id[:-5])
+        if induk and induk.get('cost') is not None:
+            ITEM_VALUES[item_id] = max(1, int(induk['cost']) // 2)
+            return ITEM_VALUES[item_id]
+    return 0
 
 
 def shipping_price(item_id: str) -> int:
@@ -292,6 +352,13 @@ ANIMAL_PRODUCE = {
 # memungut hasil gratis, ternak jadi uang gratis dan bertani kehilangan makna.
 EN_FEED    = 2
 EN_COLLECT = 2
+# Mengangkat seember air dari sumur ke palung. Lebih mahal daripada menabur
+# pakan karena memang lebih berat — dan supaya "isi palung tiap hari" terasa
+# sebagai pekerjaan pagi, bukan sebagai klik gratis.
+EN_WATER   = 3
+# Menyikat: lebih murah daripada mengangkat air, tapi bukan gratis — ia aksi
+# harian yang paling sering diulang, jadi kalau gratis ia berhenti jadi pilihan.
+EN_BRUSH   = 2
 
 # Berapa hari satu kali pemberian makan bertahan.
 FEED_DAYS = 1
@@ -318,10 +385,50 @@ def has_feed(inventory: dict) -> bool:
 
 
 def animal_record(state, animal_id: str) -> dict:
-    """Catatan per ekor: sisa hari kenyang + hari sejak hasil terakhir."""
+    """Catatan SIKLUS HASIL per ekor: berapa hari sejak hasil terakhir.
+
+    Dulu catatan ini juga menyimpan 'kenyang' sebagai hitungan hari, sementara
+    husbandry.py menyimpan kenyang/air/bersih dalam persen di tempat lain — dan
+    KEDUANYA di-tick tiap malam. Dua simulasi kawanan yang sama, cuma satu yang
+    bisa disentuh menu: memberi makan menaikkan angka economy, sedangkan angka
+    husbandry tetap meluruh sampai nol, jadi hewan yang dirawat rajin tetap
+    jatuh sakit di buku yang satunya. Sekarang takaran perawatan hanya ada di
+    husbandry (lihat care_rec) dan yang tinggal di sini murni siklus hasil.
+    """
     if not isinstance(getattr(state, 'animals', None), dict):
         state.animals = {}
-    return state.animals.setdefault(animal_id, {'kenyang': 0, 'siap': 0})
+    rec = state.animals.setdefault(animal_id, {'siap': 0})
+    # Save lama membawa 'kenyang' berbasis hari. Dibuang sekali saat dibaca:
+    # pemiliknya sekarang husbandry, dan dua angka kenyang adalah bug.
+    rec.pop('kenyang', None)
+    return rec
+
+
+def care_rec(state, animal_id: str) -> dict:
+    """Takaran perawatan (kenyang/air/bersih, dalam persen). SATU pemilik."""
+    from .husbandry import care_of
+    return care_of(state, animal_id)
+
+
+def care_block(state, animal_id: str) -> str | None:
+    """Apa yang MENGHENTIKAN hewan ini berproduksi, dalam kata-kata pemain.
+
+    None = tidak ada yang menghalangi. Urutannya paling mendesak lebih dulu,
+    supaya label pie menu menyebut satu hal yang harus dikerjakan sekarang,
+    bukan daftar keluhan.
+    """
+    from .husbandry import (MIN_KENYANG_PRODUKSI, MIN_AIR_PRODUKSI,
+                            MIN_BERSIH_PRODUKSI)
+    rec = care_rec(state, animal_id)
+    if rec.get('sakit'):
+        return 'Sakit — rawat sampai sembuh'
+    if rec.get('kenyang', 0) < MIN_KENYANG_PRODUKSI:
+        return 'Lapar — beri makan dulu'
+    if rec.get('air', 0) < MIN_AIR_PRODUKSI:
+        return 'Haus — isi palung dulu'
+    if rec.get('bersih', 0) < MIN_BERSIH_PRODUKSI:
+        return 'Kandang kotor — bersihkan dulu'
+    return None
 
 
 def animal_status(state, animal_id: str, species: str) -> tuple[bool, str]:
@@ -332,8 +439,9 @@ def animal_status(state, animal_id: str, species: str) -> tuple[bool, str]:
     rec = animal_record(state, animal_id)
     if rec.get('siap', 0) >= prod['cycle']:
         return True, f"{item_name(prod['item'])} siap ({sell_price(prod['item'])}G)"
-    if rec.get('kenyang', 0) <= 0:
-        return False, 'Lapar — beri makan dulu'
+    halangan = care_block(state, animal_id)
+    if halangan:
+        return False, halangan
     sisa = prod['cycle'] - rec.get('siap', 0)
     return False, f"{item_name(prod['item'])} dalam {sisa} hari"
 
@@ -351,12 +459,16 @@ def tick_animals_daily(state) -> int:
         prod = produce_for(meta.get('type', ''))
         if not prod:
             continue
+        # Syaratnya dibaca dari husbandry, bukan dari hitungan hari sendiri:
+        # peluruhan kenyang/air/bersih sudah dijalankan husbandry.daily_tick
+        # tepat sebelum ini. Menghitungnya dua kali membuat memberi makan
+        # berarti satu hal di satu buku dan hal lain di buku satunya.
+        if care_block(state, aid) is not None:
+            continue
         rec = animal_record(state, aid)
-        if rec.get('kenyang', 0) > 0:
-            rec['kenyang'] -= 1
-            if rec.get('siap', 0) < prod['cycle']:
-                rec['siap'] = rec.get('siap', 0) + 1
-                maju += 1
+        if rec.get('siap', 0) < prod['cycle']:
+            rec['siap'] = rec.get('siap', 0) + 1
+            maju += 1
     return maju
 
 
@@ -378,6 +490,24 @@ def margin_hint(shop_item: dict) -> str:
     Ini satu-satunya tempat pemain bisa melihat seluruh rantai dalam satu
     kalimat sebelum mengeluarkan uang.
     """
+    # Ternak: rantainya beda bentuk — bukan sekali panen, tapi pemasukan
+    # harian dikurangi pakan harian. Yang perlu dilihat pemain sebelum
+    # mengeluarkan 672G adalah berapa hari sampai balik modal, bukan harga
+    # sebotol susu.
+    aid = shop_item.get('animal')
+    if aid:
+        from .data import ANIMAL_NPCS
+        prod = produce_for(ANIMAL_NPCS.get(aid, {}).get('type', ''))
+        if not prod:
+            return ''
+        per_hari = sell_price(prod['item']) / float(prod['cycle'])
+        untung = per_hari - FEED_DAY_VALUE
+        if untung <= 0:
+            return f"{item_name(prod['item'])} {per_hari:.0f}G/hari — RUGI vs pakan"
+        balik = int(round(int(shop_item['price']) / untung))
+        return (f"{item_name(prod['item'])} +{untung:.0f}G/hari, "
+                f"balik modal {balik}h")
+
     crop = shop_item.get('crop')
     if not crop or crop not in CROPS:
         return ''

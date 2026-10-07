@@ -19,11 +19,46 @@ class InteractionController:
         self.player = player
         self.world = world
 
+    def _social(self, s, base: int) -> float:
+        """Naikkan motif sosial dgn pengaruh MOOD (S4): mood bagus membuat
+        interaksi lebih berbuah, mood buruk membuatnya hambar. Selalu >0
+        supaya berinteraksi tak pernah sia-sia. Return delta yang diberikan."""
+        from ..sims_mood import mood_social_bonus
+        delta = max(1.0, base * (1.0 + mood_social_bonus(s) / 100.0))
+        try:                              # tahap hidup (S10)
+            from ..sims_lifestage import social_multiplier
+            delta *= social_multiplier(s)
+        except Exception:
+            pass
+        s.sosial = min(NEED_MAX, s.sosial + delta)
+        return delta
+
+    _TOOL_SKILL = {'Cangkul': ('bertani', 6.0), 'Siram': ('bertani', 4.0),
+                   'Tanam': ('bertani', 6.0), 'Panen': ('bertani', 10.0),
+                   'Kapak': ('kebugaran', 6.0), 'Pickaxe': ('kebugaran', 9.0),
+                   'Pedang': ('kebugaran', 7.0)}
+
+    def _tool_skill_xp(self, tool_name, panels=None):
+        """Latih skill dari pemakaian alat (S6): skill naik dgn MELAKUKAN."""
+        try:
+            from ..sims_career import add_skill_xp, SKILLS
+            ent = self._TOOL_SKILL.get(tool_name)
+            if not ent:
+                return
+            lv, up = add_skill_xp(self.player.state, ent[0], ent[1])
+            if up and panels:
+                panels.flash_msg(f"Skill {SKILLS[ent[0]][0]} naik ke level {lv}!", 2.4)
+        except Exception:
+            pass
     def use_tool(self, entities_mgr, panels):
         tx, ty = self.player._facing_tile()
         self.use_tool_at(self.player.state.tool_index, tx, ty, entities_mgr, panels)
 
     def use_tool_at(self, tool_idx, tx, ty, entities_mgr, panels):
+        # care_anim.py dari cabang livestock: aksi perawatan yang PUNYA
+        # DURASI dan FASE, menggantikan _play_tool_anim() yang satu sendi
+        # 350 ms. Sisi ini KOSONG — tidak ada yang dibuang.
+        from .. import care_anim
         s = self.player.state
         tool = TOOLS[tool_idx] if tool_idx < len(TOOLS) else 'Cangkul'
         sc_name = s.scene_name
@@ -36,13 +71,23 @@ class InteractionController:
         if tool == 'Cangkul':
             if tid in TILLABLE and s.energy >= 2:
                 soil = s.soil.setdefault(soil_key, {})
+                if soil.get('mati'):
+                    # Bongkar tanaman mati (kekeringan) agar petak bisa
+                    # ditanami ulang. Lihat crops.status_line().
+                    soil.clear()
                 soil['tilled'] = True
+                soil.setdefault('nutrients', 3)     # Sakuna: kesuburan tanah
+                soil['weeds'] = 0
+                s.stats['tilled'] = s.stats.get('tilled', 0) + 1
                 self.player._spend_energy(2)
                 self.world.refresh_tile(tx, ty, soil_key)
-                self.player._play_tool_anim('down')
+                self.player._play_tool_anim('hoe')
                 self.player._fx_burst(fx, fy, fz, color.rgb(120, 82, 42))
                 sound_play('hoe', 0.8)
                 panels.flash_msg("Tanah dicangkul!", 0.8)
+                panels.say_batin_once('cangkul', 'akar',
+                    "Bagus. Balik yang gelap ke bawah cahaya. Tiap negeri besar dimulai begini: satu mata bajak, satu larik.")
+                self._batin_first_morning(panels)
             else:
                 sound_play('blocked', 0.6)
 
@@ -53,7 +98,9 @@ class InteractionController:
                 self.player._spend_energy(1)
                 s.stats['watered'] = s.stats.get('watered', 0) + 1
                 self.world.refresh_tile(tx, ty, soil_key)
-                self.player._play_tool_anim('water')
+            # Dipindah ke care_anim: menuang air itu ancang-ancang, turun,
+            # tuang, tegak, redam — bukan satu ayunan segitiga.
+                care_anim.mulai(self.player, 'siram')
                 self.player._fx_burst(fx, fy + 0.2, fz, color.rgb(60, 150, 255, 200), n=6)
                 sound_play('water', 0.8)
                 panels.flash_msg("Tanaman disiram!", 0.8)
@@ -66,7 +113,7 @@ class InteractionController:
             seed_key = s.seed_key + '_seed'
             if soil.get('tilled') and not soil.get('crop') and s.inventory.get(seed_key, 0) > 0:
                 soil = s.soil.setdefault(soil_key, {})
-                soil.update({'crop': s.seed_key, 'age': 0, 'tilled': True})
+                soil.update({'crop': s.seed_key, 'age': 0, 'tilled': True, 'quality': 3.0})
                 s.inventory[seed_key] -= 1
                 self.player._spend_energy(2)
                 self.world.refresh_tile(tx, ty, soil_key)
@@ -75,11 +122,15 @@ class InteractionController:
                 sound_play('plant', 0.8)
                 if s.seed_key == 'lobak':
                     s.stats['lobak_planted'] = s.stats.get('lobak_planted', 0) + 1
+                panels.emote('\\v/', color.rgb(140, 215, 110))
                 panels.flash_msg(f"{CROPS[s.seed_key]['name']} ditanam!", 0.8)
+                panels.say_batin_once('tanam', 'sukma',
+                    "Benih adalah jurus tersegel. Sawah adalah kitab ajiannya. Baca pelan-pelan.")
             else:
                 sound_play('blocked', 0.6)
 
         elif tool == 'Panen':
+            from ..crops import is_ready, harvest
             soil = s.soil.get(soil_key)
             if soil and soil.get('crop'):
                 crop_data = CROPS.get(soil['crop'], {})
@@ -97,11 +148,17 @@ class InteractionController:
                     if crop_name == 'lobak':
                         s.stats['lobak_harvested'] = s.stats.get('lobak_harvested', 0) + 1
                     s.stats['harvested'] = s.stats.get('harvested', 0) + 1
+                    # Penghitung PER TANAMAN. Sebelumnya hanya lobak punya
+                    # penghitungnya sendiri, jadi tidak ada cara mengukur
+                    # kemajuan untuk 16 tanaman lain — dan keinginan seperti
+                    # "Panen 5 Tomat" (game/wishes.py) tidak mungkin dinilai.
+                    per = s.stats.setdefault('panen_tanaman', {})
+                    per[crop_name] = per.get(crop_name, 0) + 1
                     del s.soil[soil_key]
                     self.player._spend_energy(2)
                     s.senang = min(NEED_MAX, s.senang + 8)
                     self.world.refresh_tile(tx, ty, soil_key)
-                    self.player._play_tool_anim('bend')
+                    care_anim.mulai(self.player, 'petik')
                     self.player._fx_burst(fx, fy + 0.3, fz, color.rgb(255, 225, 50), n=7)
                     sound_play('harvest', 0.8)
                     hint = best_process_hint(crop_name)
@@ -131,7 +188,7 @@ class InteractionController:
                     sc.tiles[ty][tx] = G if tid == TR else D
                 self.world.load_scene(s.scene_name)
                 self.player._spend_energy(2)
-                self.player._play_tool_anim('swing')
+                care_anim.mulai(self.player, 'tebang')
                 self.player._fx_burst(fx, fy + 0.5, fz, color.rgb(185, 135, 72), n=6)
                 sound_play('axe', 0.8)
                 self.check_quests(panels)
@@ -166,7 +223,7 @@ class InteractionController:
                         sc.tiles[ty][tx] = 30 # MINED
                         self.world.load_scene(s.scene_name)
                 self.player._spend_energy(2)
-                self.player._play_tool_anim('mine')
+                care_anim.mulai(self.player, 'tambang')
                 self.player._fx_burst(fx, fy + 0.3, fz, spark_col, n=8)
                 sound_play('axe', 0.8)
                 self.check_quests(panels)
@@ -179,17 +236,35 @@ class InteractionController:
         elif tool == 'Pancing':
             self.try_fishing(panels)
 
+        # Skill naik dgn MELAKUKAN (S6) — di AKHIR, setelah seluruh rantai alat.
+        self._tool_skill_xp(tool, panels)
     def interact(self, entities_mgr, panels):
         s = self.player.state
         tx, ty = self.player.get_tile_pos()
 
+        # Menunggang mengambil alih [E] seluruhnya. Tombol yang menaikkanmu
+        # adalah tombol yang menurunkanmu — itu satu-satunya cara turun yang
+        # tidak perlu diajarkan. Ia dicek PALING AWAL karena selagi menunggang
+        # pemain berdiri di tile yang sama dengan kudanya: kalau menu radial
+        # hewan sempat terbuka lebih dulu, pilihan "Turun" berada di dalam menu
+        # yang cuma bisa dibuka dari atas kuda, dan pemain terkunci di sana.
+        if getattr(s, 'menunggang', ''):
+            self.naik_turun_kuda(s.menunggang, entities_mgr, panels)
+            return
+
         if s.scene_name == 'beach' and self.try_repair_lighthouse(panels):
+            return
+        if s.scene_name == 'beach' and self.try_sail(panels):
             return
         if s.scene_name == 'lake' and self.try_fishing(panels):
             return
         if s.scene_name == 'dungeon' and getattr(self.world, 'dungeon_level', 0) == 13 and self.try_fishing(panels):
             return
         if s.scene_name == 'clinic' and self.try_healing(panels):
+            return
+        if self._try_shipping_bin(panels):  # Peti Kirim: setor hasil panen
+            return
+        if self._try_plot_care(panels):     # Sakuna: cabut gulma / pupuk petak di kaki
             return
 
         # Perabot di sekitar: sumber utama pengisian motif. Dicek SEBELUM
@@ -201,11 +276,17 @@ class InteractionController:
         npc_info = entities_mgr.get_nearest_npc(tx, ty, max_dist_tiles=3.0)
         if npc_info:
             npc_id  = npc_info['id']
+            if self._try_collect_animal(npc_id, panels):   # ternak: ambil hasil harian dulu
+                return
+            if npc_id == 'petapa_srimana':
+                self._petapa_awaken(npc_id, entities_mgr, panels)
             options = self.build_pie_options(npc_id)
             panels.open_pie_menu(
                 npc_id, options,
                 lambda nid, act: self.execute_pie_action(nid, act, entities_mgr, panels)
             )
+        elif self._try_harvest_wild(tx, ty, entities_mgr, panels):
+            return
         else:
             ftx, fty = self.player._facing_tile()
             my_tx, my_ty = self.player.get_tile_pos()
@@ -217,35 +298,188 @@ class InteractionController:
             if my_tid == CHR:
                 panels.flash_msg("Kamu sedang duduk bersantai di kursi.", 1.5)
                 self.player.state.energy = min(100, self.player.state.energy + 5)
+                panels.emote('+5 EN', color.rgb(130, 210, 130))
                 sound_play('menu_select', 0.5)
                 return
             elif my_tid == BD:
+                panels.emote('Zzz', color.rgb(150, 170, 235), 1.5)
                 self.player._try_sleep(panels)
                 return
 
+            # ── Objek-beraksi ala Sims (S2) ──────────────────────────────
+            # Menghadap objek berkatalog → antre aksi (jalan ke objek → isi
+            # motif bertahap). BD dikecualikan: tidur = maju-hari (Stardew),
+            # bukan aksi motif biasa. CL/CAL info-saja, tak ada di katalog.
+            from ..sims_objects import SIMS_OBJECTS as _SIMS_OBJ
+            sims_act = getattr(self.player, 'sims_action', None)
+            if sims_act is not None and tid in _SIMS_OBJ and tid != BD:
+                if sims_act.busy:
+                    sims_act.cancel(panels)
+                else:
+                    sims_act.start(tid, ftx, fty, panels)
+                return
             if tid == MB and not self.player.state.mail_read:
                 self.player.state.mail_read = True
                 if self.player.state.quest_stage == 0:
                     self.player.state.quest_stage = 1
                 sound_play('menu_select', 0.8)
+                panels.emote('!', color.rgb(255, 220, 120))
                 panels.start_dialog('mailbox', self.player.state)
-            elif tid == ST:
-                panels.flash_msg("Kamu memasak makanan yang lezat. (+20 Energi)", 1.5)
-                self.player.state.energy = min(100, self.player.state.energy + 20)
-                sound_play('menu_select', 0.8)
             elif tid == CL:
-                h, m = self.player.state.time_hm()
+                h = self.player.state.get_hour()
+                m = int(self.player.state.time_minutes % 60)
                 panels.flash_msg(f"Jam menunjukkan pukul {h:02d}:{m:02d}.", 1.5)
                 sound_play('menu_select', 0.8)
             elif tid == CAL:
-                panels.flash_msg(f"Hari ini adalah Hari ke-{self.player.state.day} Musim {self.player.state.season_name()}.", 1.5)
+                panels.flash_msg(f"Hari ini adalah Hari ke-{self.player.state.day} Musim {self.player.state.get_season()}.", 1.5)
                 sound_play('menu_select', 0.8)
-            elif tid == TV:
-                panels.flash_msg("Kamu menonton acara televisi yang menarik. (+10 Senang)", 1.5)
-                self.player.state.senang = min(100, getattr(self.player.state, 'senang', 100) + 10)
-                sound_play('menu_select', 0.8)
-            elif tid == CHR:
-                panels.flash_msg("Ini kursi yang nyaman. Coba berdiri di atasnya untuk duduk.", 1.5)
+            # ST/TV/CHR kini ditangani jalur objek-beraksi Sims di atas.
+
+    def _petapa_awaken(self, npc_id, entities_mgr, panels):
+        """Arca emas Srimana yang mematung bangkit ke wujud murka
+        (Iblis-Dewa Bertangan Banyak) saat pertama kali didekati pemain."""
+        actor = entities_mgr.actors.get(npc_id)
+        if actor is None or getattr(actor, '_petapa_form', '') == 'galak':
+            return
+        from ..petapa_model import petapa_transform_galak
+        if petapa_transform_galak(actor):
+            panels.flash_msg("Arca emas itu BERGERAK — kedelapan lengan Srimana terbuka!", 2.5)
+            panels.emote('! ! !', color.rgb(255, 120, 80), 1.8)
+            sound_play('menu_select', 1.0)
+
+    def _batin_first_morning(self, panels):
+        """Skill-moment pertama (gaya Disco): saat cangkul pertama, majelis batin
+        memintamu memutuskan jadi siapa. Tiap pilihan menaikkan satu suara."""
+        if not getattr(panels, 'batin', None):
+            return
+        if not panels.batin.once('pagi_pertama'):
+            return
+        panels.open_batin_check(
+            'PAGI PERTAMA',
+            'Berdiri di lumpur yang dulu kau cibir, kau memutuskan jadi siapa?',
+            [
+                {'voice': 'akar', 'label': 'Petani yang kebetulan berkebatinan.',
+                 'fn': lambda: panels.say_batin('akar', 'Tanah mendengarnya. Ia akan ingat.')},
+                {'voice': 'sukma', 'label': 'Pesilat yang memakai jurus tertua: bertani.',
+                 'fn': lambda: panels.say_batin('sukma', 'Ya. Dewa pertama adalah petani yang menolak berhenti.')},
+                {'voice': 'bara', 'label': 'Senjata yang butuh diberi makan.',
+                 'fn': lambda: panels.say_batin('bara', 'Jujur. Aku bisa kerja sama dengan kejujuran.')},
+            ])
+
+    def _try_collect_animal(self, npc_id, panels) -> bool:
+        """Ternak produktif: ambil hasil harian (susu/telur/wol) dgn [R].
+        Return True jika hasil diambil; False (sudah/ bukan ternak) → lanjut pie menu."""
+        from ..data import ANIMAL_NPCS, ANIMAL_PRODUCTS
+        info = ANIMAL_NPCS.get(npc_id)
+        if not info or not info.get('product'):
+            return False
+        s = self.player.state
+        if getattr(s, 'animals_collected', None) is None:
+            s.animals_collected = []
+        if npc_id in s.animals_collected:
+            return False                       # sudah diambil → biarkan pie menu (belai/ngobrol)
+        product = info['product']
+        s.inventory[product] = s.inventory.get(product, 0) + 1
+        s.animals_collected.append(npc_id)
+        s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1)   # merawat = hati naik
+        pname = ANIMAL_PRODUCTS.get(product, {}).get('name', product)
+        sound_play('harvest', 0.7)
+        panels.emote('+1', color.rgb(255, 240, 180))
+        panels.flash_msg(f"Dapat {pname} dari {info['name']}! Kirim ke Peti untuk dijual.", 2.0)
+        panels.say_batin_once('ternak', 'lapar',
+            "Hewan memberi kalau kau memberi dulu. Susu, telur, wol — bunga dari kesabaran.")
+        return True
+
+    def _try_shipping_bin(self, panels) -> bool:
+        """Peti Kirim (Stardew): setor hasil panen → dijual saat tidur (emas masuk fajar)."""
+        s = self.player.state
+        if s.scene_name != 'farm':
+            return False
+        from ..config import SHIP_BIN_TILE
+        tx, ty = self.player.get_tile_pos()
+        if abs(tx - SHIP_BIN_TILE[0]) + abs(ty - SHIP_BIN_TILE[1]) > 1:
+            return False
+        if getattr(s, 'ship_bin', None) is None:
+            s.ship_bin = {}
+        from ..data import SHIP_PRICES
+        moved = 0
+        for item in list(SHIP_PRICES.keys()):     # hasil panen + hasil ternak
+            n = s.inventory.get(item, 0)
+            if n > 0:
+                s.ship_bin[item] = s.ship_bin.get(item, 0) + n
+                s.inventory[item] = 0
+                moved += n
+        if moved > 0:
+            sound_play('menu_select', 0.8)
+            panels.emote('^', color.rgb(231, 178, 61))
+            panels.flash_msg(f"{moved} hasil panen masuk Peti Kirim — terjual saat tidur.", 2.2)
+            panels.say_batin_once('kirim', 'lapar',
+                "Beras masuk peti. Saat fajar, peti jadi emas. Logistik, sayang.")
+        else:
+            total = sum(s.ship_bin.values())
+            if total:
+                panels.flash_msg(f"Peti Kirim — {total} barang menunggu fajar.", 1.4)
+            else:
+                panels.flash_msg("Peti Kirim kosong. Panen dulu, lalu setor di sini [R].", 1.8)
+        return True
+
+    def _try_plot_care(self, panels) -> bool:
+        """Sakuna: perawatan petak di kaki pemain via [R].
+        Prioritas: cabut gulma → pupuk (isi nutrisi). Return True jika menangani."""
+        s = self.player.state
+        tx, ty = self.player.get_tile_pos()
+        key = f"{tx},{ty},{s.scene_name}"
+        soil = s.soil.get(key)
+        if not soil or not soil.get('crop'):
+            return False
+        if soil.get('weeds', 0) > 0:
+            if s.energy < 2:
+                sound_play('blocked', 0.6); panels.flash_msg("Terlalu lelah mencabut gulma.", 1.0); return True
+            soil['weeds'] = 0
+            self.player._spend_energy(2)
+            sound_play('hoe', 0.6)
+            panels.flash_msg("Gulma dicabut.", 0.9)
+            panels.say_batin_once('gulma', 'akar',
+                "Cabut gulma sebelum senja. Gulma itu padi tanpa sopan santun tapi rajinnya luar biasa.")
+            return True
+        if soil.get('nutrients', 3) < 4:
+            if s.energy < 3:
+                sound_play('blocked', 0.6); panels.flash_msg("Terlalu lelah memupuk.", 1.0); return True
+            soil['nutrients'] = 4
+            self.player._spend_energy(3)
+            sound_play('hoe', 0.5)
+            panels.emote('+', color.rgb(180, 160, 90))
+            panels.flash_msg("Tanah dipupuk (+nutrisi).", 0.9)
+            panels.say_batin_once('pupuk', 'lapar',
+                "Yang mati memberi makan yang hidup memberi makan kau. Lembah tak buang apa pun.")
+            return True
+        panels.flash_msg(f"Petak sehat — mutu kini ~{round(soil.get('quality', 3.0))}★", 1.1)
+        return True
+
+    def _try_harvest_wild(self, tx: int, ty: int, entities_mgr, panels) -> bool:
+        """Panen entitas liar di tile player atau tile depan (herba, beri, jamur).
+        Return True jika berhasil memanen sesuatu."""
+        s = self.player.state
+        HARVESTABLE = {'wild_herb', 'wild_berry', 'running_mushroom', 'mandrake'}
+        ftx, fty = self.player._facing_tile()
+        # Cek tile depan dulu, lalu tile player sendiri
+        for chk_x, chk_y in ((ftx, fty), (tx, ty)):
+            result = entities_mgr.try_capture_wild(chk_x, chk_y, s,
+                                                   kinds=HARVESTABLE)
+            if result:
+                kind, sell = result
+                item_info  = WILD_ITEMS.get(kind, {})
+                item_name  = item_info.get('name', kind)
+                s.inventory[kind] = s.inventory.get(kind, 0) + 1
+                self.player._play_tool_anim('bend')
+                self.player._fx_burst(chk_x * TS, GROUND_H + 0.5, chk_y * TS,
+                                      color.rgb(150, 230, 90), n=6)
+                sound_play('harvest', 0.8)
+                panels.emote(f'+1 {item_name}', color.rgb(170, 225, 120), 1.3)
+                panels.flash_msg(f"+1 {item_name}! (jual {sell}G)", 1.4)
+                self.check_quests(panels)
+                return True
+        return False
 
     def attack(self, entities_mgr, panels):
         s = self.player.state
@@ -286,6 +520,8 @@ class InteractionController:
             self.player.state.inventory[name] = self.player.state.inventory.get(name, 0) + 1
             self.player.state.senang = min(NEED_MAX, self.player.state.senang + 20)
             sound_play('capture', 0.8)
+            self.player._play_tool_anim('bend')
+            panels.emote('(o)!', color.rgb(190, 230, 150), 1.4)
             panels.flash_msg(f"{name} ditangkap! (+{sell}G jika dijual)", 1.5)
             self.check_quests(panels)
         else:
@@ -316,9 +552,126 @@ class InteractionController:
         sound_play('blocked', 0.5)
         panels.flash_msg("Tidak ada makanan. (V = makan)", 1.0)
 
+    def context_prompt(self, entities_mgr) -> str:
+        """Prompt kontekstual untuk HUD: apa yang bisa dilakukan SEKARANG.
+        Dipanggil tiap beberapa frame dari app.update — murah & read-only."""
+        s = self.player.state
+        try:
+            from ..config import (TILLABLE, MB, BD, ST, W, DCK, LGH_B, CHR)
+            from ..data import CROPS
+            tx, ty = self.player.get_tile_pos()
+            ftx, fty = self.player._facing_tile()
+            tid_here = self.world.get_tile(tx, ty)
+            tid_face = self.world.get_tile(ftx, fty)
+
+            # 1) NPC terdekat — aksi sosial paling utama
+            npc = entities_mgr.get_nearest_npc(tx, ty, max_dist_tiles=1.8)
+            if npc:
+                nama = npc.get('name') or npc['id'].replace('_', ' ').title()
+                return f"[R] Bicara dengan {nama}"
+
+            # 2) Objek dunia yang dihadap
+            if tid_face == MB:
+                return "[R] Baca surat" if not s.mail_read else ""
+            if tid_face == LGH_B:
+                return "[R] Periksa mercusuar"
+            if tid_here == DCK and tid_face == W and s.inventory.get('perahu', 0) > 0:
+                return "[R] Berlayar ke laut lepas"
+            if tid_face == W or tid_here == DCK:
+                return "[R] Memancing"
+            if tid_here == BD or tid_face == BD:
+                return "[R] Tidur sampai besok"
+            if tid_face == ST:
+                return "[R] Masak (+20 Energi)"
+            if tid_here == CHR:
+                return "[R] Duduk santai"
+
+            # 3) Pertanian — tergantung alat aktif & kondisi petak yang dihadap
+            soil_key = f"{ftx},{fty},{s.scene_name}"
+            soil = s.soil.get(soil_key) or {}
+            crop = soil.get('crop')
+            if crop:
+                grown = soil.get('age', 0) >= CROPS.get(crop, {}).get('days', 4)
+                if grown:
+                    return "[SPACE] Panen!  (alat: Panen [4])"
+                if not soil.get('watered'):
+                    return "[SPACE] Siram tanaman  (alat: Siram [2])"
+                sisa = CROPS.get(crop, {}).get('days', 4) - soil.get('age', 0)
+                return f"Tanaman tumbuh — {sisa} hari lagi"
+            if soil.get('tilled'):
+                return "[SPACE] Tanam benih  (alat: Tanam [3])"
+            if tid_face in TILLABLE:
+                return "[SPACE] Cangkul tanah  (alat: Cangkul [1])"
+        except Exception:
+            pass
+        return ""
+
+    def try_sail(self, panels) -> bool:
+        """Berlayar dari dermaga pantai dengan perahu hasil crafting.
+        Butuh: berdiri di dermaga (DCK), menghadap laut, punya 'perahu'."""
+        import random as _rng
+        from ..config import DCK, W
+        s = self.player.state
+        tx, ty = self.player.get_tile_pos()
+        ftx, fty = self.player._facing_tile()
+        if self.world.get_tile(tx, ty) != DCK or self.world.get_tile(ftx, fty) != W:
+            return False
+        if s.inventory.get('perahu', 0) < 1:
+            return False          # tanpa perahu → jatuh ke aksi lain (mancing)
+        if s.energy < 8:
+            sound_play('blocked', 0.5)
+            panels.flash_msg("Terlalu lelah untuk berlayar.", 1.2)
+            return True
+        s.energy = max(0, s.energy - 8)
+        s.time_minutes += 45      # pelayaran memakan waktu
+        self.player._play_tool_anim('water')
+        panels.emote('~~>', color.rgb(120, 190, 230), 1.4)
+        n_ikan = _rng.randint(2, 4)
+        s.inventory['ikan_laut'] = s.inventory.get('ikan_laut', 0) + n_ikan
+        loot = f"{n_ikan} Ikan Laut"
+        if _rng.random() < 0.18:
+            s.inventory['mutiara'] = s.inventory.get('mutiara', 0) + 1
+            loot += " + MUTIARA!"
+        sound_play('harvest', 0.8)
+        panels.flash_msg(f"Kamu berlayar ke laut lepas... pulang membawa {loot}", 3.0)
+        return True
     def try_fishing(self, panels) -> bool:
+        """SPACE saat memancing. Satu tombol, tiga arti — tergantung fasenya.
+
+        Melempar dan menarik dipisah. Umpan menggantung beberapa detik, ikan
+        menyambar, dan pemain punya jendela pendek untuk menyentak. Ini yang
+        mengubah memancing dari transaksi jadi kejadian, dan ia tidak butuh UI
+        baru sama sekali — cuma teks yang memang sudah ada.
+        """
         import random as _rng
         from ..config import DCK, LLY, W
+        from .. import fishing as fs
+
+        p = getattr(self, '_pancing', None)
+
+        # ── Umpan sudah di air: tombol ini berarti MENYENTAK ─────────────────
+        if p is not None:
+            if p['fase'] == 'gigit':
+                hasil = fs.tarik(self.player.state, p['air'], p['sid'], _rng)
+                self._pancing = None
+                sound_play('harvest', 0.85)
+                from ..economy import item_name
+                ekor = "  REKOR BARU!" if hasil['rekor'] else ""
+                panels.emote('><(((*>  !!', color.rgb(255, 220, 120), 1.8)
+                panels.flash_msg(
+                    f"Dapat {item_name(hasil['id'])} {hasil['kg']} kg "
+                    f"({hasil['nilai']}G){ekor}", 2.2)
+                self.check_quests(panels)
+            else:
+                # Menyentak sebelum disambar. Umpannya hilang, energinya sudah
+                # terbayar. Tanpa hukuman ini jendela gigitan tidak berarti
+                # apa-apa: menekan SPACE secepat mungkin akan jadi taktik.
+                self._pancing = None
+                sound_play('blocked', 0.4)
+                panels.flash_msg("Terlalu cepat — umpan lepas.", 1.2)
+            return True
+
+        # ── Belum melempar: harus benar-benar menghadap air ──────────────────
         tx, ty = self.player.get_tile_pos()
         on_dock      = self.world.get_tile(tx, ty) in (DCK, LLY)
         ftx, fty     = self.player._facing_tile()
@@ -327,32 +680,73 @@ class InteractionController:
             return False
 
         s = self.player.state
-        if s.energy < 2:
+        if s.energy < fs.EN_LEMPAR:
             sound_play('blocked', 0.5)
             panels.flash_msg("Terlalu lelah untuk memancing.", 1.0)
             return True
 
-        s.energy = max(0, s.energy - 2)
-        is_legendary_lake = (s.scene_name == 'dungeon' and getattr(self.world, 'dungeon_level', 0) == 13)
-        
-        if _rng.random() < 0.55:
-            if is_legendary_lake and _rng.random() < 0.25:
-                s.inventory['ikan_legendaris'] = s.inventory.get('ikan_legendaris', 0) + 1
-                sound_play('harvest', 0.8)
-                panels.flash_msg("Luar Biasa! Dapat Ikan Legendaris!", 2.5)
-            else:
-                # Dulu memancing menyetor emas langsung ke dompet. Itu satu
-                # aturan berbeda dari seluruh sisa permainan; sekarang SEMUA
-                # hasil kerja masuk tas dulu dan baru bernilai setelah dijual.
-                from ..economy import sell_price
-                s.inventory['ikan'] = s.inventory.get('ikan', 0) + 1
-                sound_play('harvest', 0.8)
-                panels.flash_msg(f"+1 Ikan (nilai {sell_price('ikan')}G)", 1.5)
-            self.check_quests(panels)
-        else:
-            sound_play('blocked', 0.4)
-            panels.flash_msg("Tidak ada yang menggigit... coba lagi.", 1.0)
+        from ..keahlian import punya
+        biaya = fs.EN_LEMPAR * (0.5 if punya(s, 'pancing') else 1.0)   # Sabar Memancing
+        s.energy = max(0, s.energy - biaya)
+        air = fs.perairan_untuk(s, self.world)
+
+        # Apakah lemparan ini akan berbuah sudah diputuskan SEKARANG, bukan saat
+        # menyentak. Kalau tidak, pemain yang menyentak sempurna tetap bisa
+        # gagal, dan jendela gigitan berubah dari keterampilan jadi hiasan.
+        # Jala Ikan ikut dihitung di dalam peluang_gigit(), bersama kelimpahan
+        # kolam dan pasang-surut — satu tempat, supaya tidak ada dua rumus
+        # peluang yang diam-diam menyimpang.
+        sid = fs.pilih_spesies(s, air, _rng) if _rng.random() < fs.peluang_gigit(s, air) else None
+        self._pancing = {
+            'fase':   'menunggu',
+            't':      0.0,
+            'tunggu': fs.tunggu_gigitan(_rng),
+            'air':    air,
+            'sid':    sid,
+        }
+        sound_play('menu_move', 0.5)
+        self.player._play_tool_anim('water')
+        panels.flash_msg("Melempar umpan... tunggu sampai menyambar.", 1.4)
         return True
+
+    def tick_fishing(self, dt: float, panels) -> None:
+        """Jalankan umpan yang sedang menggantung. Dipanggil tiap frame.
+
+        Baris pertamanya keluar untuk pemain yang tidak sedang memancing, jadi
+        ongkosnya nol bagi semua orang lain.
+        """
+        p = getattr(self, '_pancing', None)
+        if p is None:
+            return
+
+        from .. import fishing as fs
+
+        # Berpindah scene membatalkan lemparan. Umpan yang masih menggantung di
+        # danau saat pemain sudah di dalam gua adalah bug yang menunggu giliran.
+        if self.player.state.scene_name != getattr(self, '_pancing_scene', self.player.state.scene_name):
+            self._pancing = None
+            return
+        self._pancing_scene = self.player.state.scene_name
+
+        p['t'] += dt
+
+        if p['fase'] == 'menunggu':
+            if p['t'] >= p['tunggu']:
+                if p['sid'] is None:
+                    self._pancing = None
+                    sound_play('blocked', 0.35)
+                    panels.emote('. . .', color.rgb(160, 165, 170))
+                    panels.flash_msg("Tidak ada yang menggigit... coba lagi.", 1.0)
+                else:
+                    p['fase'] = 'gigit'
+                    sound_play('menu_select', 0.9)
+                    panels.emote('!', color.rgb(255, 240, 180), 1.0)
+                    panels.flash_msg("!! MENYAMBAR — tekan SPACE sekarang !!", fs.JENDELA)
+        elif p['fase'] == 'gigit':
+            if p['t'] >= p['tunggu'] + fs.JENDELA:
+                self._pancing = None
+                sound_play('blocked', 0.4)
+                panels.flash_msg("Terlambat — ikannya lepas.", 1.2)
 
     def try_healing(self, panels) -> bool:
         s = self.player.state
@@ -375,6 +769,7 @@ class InteractionController:
 
         s.gold -= cost
         s.hp = s.max_hp
+        panels.emote('+HP', color.rgb(140, 220, 140), 1.4)
         sound_play('menu_select', 0.8)
         panels.flash_msg(f"Dirawat oleh Pak Raka (-{cost}G)", 1.5)
         return True
@@ -404,6 +799,8 @@ class InteractionController:
         s.inventory['besi'] -= req_besi
         
         s.lighthouse_fixed = True
+        self.player._play_tool_anim('swing')
+        panels.emote('* ! *', color.rgb(255, 215, 110), 1.6)
         self.world.scene_obj.tiles[fty][ftx] = LGH_F
         self.world.load_scene('beach')
         sound_play('magic', 0.8)
@@ -411,10 +808,13 @@ class InteractionController:
         return True
 
     def check_quests(self, panels=None):
-        if hasattr(self.player, 'quest_manager') and self.player.quest_manager:
-            self.player.quest_manager.check_quest_progress(panels)
-        elif hasattr(self.player, '_check_quest_progress'):
-            self.player._check_quest_progress(panels)
+        # `quest_controller` dulu, baru `quest_manager`. Yang kedua tidak
+        # pernah ada di Player3D, jadi cabang ini SELALU diam dan progres quest
+        # tidak pernah diperiksa — gagal tanpa suara, bukan gagal berisik.
+        qc = (getattr(self.player, 'quest_controller', None)
+              or getattr(self.player, 'quest_manager', None))
+        if qc is not None:
+            qc.check_quest_progress(panels)
     def give_gift(self, entities_mgr, panels, npc_id=None):
         s = self.player.state
         tx, ty = self.player.get_tile_pos()
@@ -459,7 +859,17 @@ class InteractionController:
             return
 
         s.inventory[gift] -= 1
-        s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1.0)
+        from ..keahlian import punya
+        naik = 1.5 if punya(s, 'ramah') else 1.0     # keahlian Ramah Tamah
+        s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + naik)
+        # Denyut senang di wajahnya. Ditaruh di state — bukan di actor —
+        # karena jalur hadiah tidak memegang entities_mgr, dan menambahkan
+        # parameter ke seluruh rantai panggilan demi satu angka tidak sepadan.
+        # Atribut bergaris-bawah: ia tidak ikut json.dump, pola yang sama
+        # dengan state.mv.
+        if not hasattr(s, '_npc_senang'):
+            s._npc_senang = {}
+        s._npc_senang[npc_id] = 2.6
         s.stats['gifts'] = s.stats.get('gifts', 0) + 1
         resp = npc.get('gift_r', 'Terima kasih!')
         sound_play('gift', 0.8)
@@ -492,10 +902,11 @@ class InteractionController:
         # motif. Keduanya disisipkan di puncak menu supaya pemain menemukannya
         # tanpa membaca panduan: peti di kebun = jual cepat, kompor = olah.
         from ..config import CH, ST
-        from ..economy import shippable_items, SHIPPING_RATE
+        from ..economy import SHIPPING_RATE
+        from ..market import shippable_items
         s_ = self.player.state
         if tid == CH:
-            rows  = shippable_items(s_.inventory)
+            rows  = shippable_items(s_, s_.inventory)
             total = sum(r[2] for r in rows)
             n     = sum(r[1] for r in rows)
             options.append((
@@ -546,17 +957,22 @@ class InteractionController:
         menahan barangnya untuk diolah dulu. Potongan 15% adalah harga dari
         kenyamanan tidak berjalan ke Warung.
         """
-        from ..economy import shippable_items, shipping_price, item_name
+        from ..economy import item_name
+        from ..market import shippable_items, shipping_price, on_sold
         s = self.player.state
-        rows = shippable_items(s.inventory)
+        rows = shippable_items(s, s.inventory)
         if not rows:
             sound_play('blocked', 0.5)
             panels.flash_msg("Peti kosong — belum ada hasil untuk dijual.", 1.4)
             return
         total = 0
         for item, qty, _ in rows:
-            total += shipping_price(item) * qty
+            total += shipping_price(s, item) * qty
             del s.inventory[item]
+            # Peti Kirim menekan pasar persis seperti Warung. Kalau tidak,
+            # peti jadi pintu belakang untuk membuang seratus lobak tanpa
+            # harganya bergerak sedikit pun.
+            on_sold(s, item, qty)
         s.gold += total
         s.stats['earned'] = s.stats.get('earned', 0) + total
         sound_play('harvest', 0.9)
@@ -576,6 +992,9 @@ class InteractionController:
         else:
             panels.flash_msg('Antrian penuh')
 
+    # Spesies yang boleh ditunggangi. Daftar, bukan pemeriksaan `== 'kuda'`,
+    # supaya menambah tunggangan lain nanti tidak perlu menyentuh logika.
+    TUNGGANGAN = ('kuda',)
     def build_pie_options(self, npc_id: str) -> list:
         from ..data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS
         all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
@@ -591,6 +1010,39 @@ class InteractionController:
                 ('beri_hadiah', 'Beri Hadiah',   bool(s.inventory.get(gift_item)), '+20 Sosial +2❤'),
                 ('tanya_kabar', 'Tanya Kabar',   hearts >= 3,                      '+8 Sosial +1❤'),
             ]
+        # Import sistem relasi (sims_relationship.py) dari feature/3d-mobs.
+        # Sisi visual KOSONG di sini — tidak ada yang dibuang.
+            # ── Aksi asmara (S5) — butuh modal persahabatan dulu ──
+            from ..sims_relationship import (ROMANCE_MIN_FRIENDSHIP, romance as _rom,
+                                             romance_label as _rlabel)
+            _can_rom = hearts >= ROMANCE_MIN_FRIENDSHIP
+            opts.append(('puji', 'Puji', hearts >= 2, '+Sosial +❤ +sedikit ♥'))
+            # ── Karier (S6): tiap NPC pemberi kerja menawarkan pekerjaan ──
+            from ..sims_career import (CAREERS as _CAR, career_id as _cid,
+                                       can_work_now as _cwn, promotion_status as _pstat)
+            _JOB_NPC = {'arya': 'tani', 'budi': 'pandai_besi', 'sari': 'warung'}
+            _job = _JOB_NPC.get(npc_id)
+            if _job:
+                if _cid(s) != _job:
+                    opts.append(('lamar_kerja', f"Lamar: {_CAR[_job]['label']}", True,
+                                 f"jam {_CAR[_job]['start']}-{_CAR[_job]['end']}"))
+                else:
+                    _ok_work, _why = _cwn(s)
+                    opts.append(('kerja', 'Bekerja', _ok_work, _why or 'Dapat gaji harian'))
+                    _can_pro, _nn, _txt = _pstat(s)
+                    opts.append(('naik_pangkat', 'Minta Naik Pangkat', _can_pro, _txt))
+            # Rumah tangga (S8): ajak pindah bila sudah sangat dekat
+            from ..sims_household import (can_move_in as _cmi, members as _hhm,
+                                          MOVE_IN_MIN_FRIENDSHIP as _MMF)
+            if npc_id in _hhm(s):
+                opts.append(('usir', 'Minta Pindah Keluar', True, 'keluar dari rumah tangga'))
+            else:
+                _ok_mv, _why_mv = _cmi(s, npc_id)
+                opts.append(('ajak_pindah', 'Ajak Tinggal Bersama', _ok_mv,
+                             _why_mv or f'gabung rumah tangga (min {_MMF:.0f} hati)'))
+            opts.append(('gombal', 'Gombal', _can_rom,
+                         f"+♥ {_rlabel(s, npc_id)}" if _can_rom
+                         else f"perlu {ROMANCE_MIN_FRIENDSHIP:.0f}❤ dulu"))
             if npc_id == 'arya':
                 opts.append(('arya_tanya', 'Tanya Kebun', True, '+Misteri Kebun'))
             elif npc_id == 'sari' and hearts >= 2.0:
@@ -621,26 +1073,104 @@ class InteractionController:
             # dan labelnya MENGATAKAN keadaan itu, supaya pemain tahu apa yang
             # kurang tanpa menebak.
             from ..economy import (animal_status, pick_feed, item_name,
-                                   produce_for, EN_FEED, EN_COLLECT,
-                                   FEED_DAY_VALUE, sell_price)
+                                   produce_for, care_rec, EN_FEED, EN_COLLECT,
+                                   EN_WATER, EN_BRUSH, FEED_DAY_VALUE, sell_price)
+            from ..husbandry import (ISI_PAKAN, MIN_AIR_PRODUKSI,
+                                    MIN_BERSIH_PRODUKSI)
             species = npc.get('type', '')
             siap, alasan = animal_status(s, npc_id, species)
+            rec  = care_rec(s, npc_id)
             feed = pick_feed(s.inventory)
             if feed:
                 boros = '' if feed in ('pakan', 'jerami') else ' (boros!)'
                 feed_lbl = f'Beri Makan ({item_name(feed)}){boros}'
-                feed_fx  = f'-{EN_FEED} EN, hewan produktif 1 hari'
+                feed_fx  = f'-{EN_FEED} EN, kenyang +{ISI_PAKAN}%'
             else:
                 feed_lbl = 'Beri Makan (tak ada pakan)'
                 feed_fx  = f'Beli Jerami {FEED_DAY_VALUE}G di Warung'
+
+            # Label minum MENGATAKAN isi palungnya. Aturan yang tidak bisa
+            # dilihat pemain bukan aturan — prinsip yang sudah dipegang
+            # husbandry.py, dan angka persennya yang membuat "kenapa sapiku
+            # berhenti kasih susu" bisa dijawab tanpa menebak.
+            # Palung hanya ada di kandang, dan hanya hewan kandang berbagi
+            # palung. Kucing dan kelinci diurus tapi tidak dikandangkan;
+            # rubah liar tidak diurus sama sekali. Menawarkan "Beri Minum"
+            # kepada mereka berarti menawarkan aksi terhadap benda yang tidak
+            # ada — dan labelnya terpaksa mengarang keadaan palung yang tidak
+            # pernah dibangun.
+            from ..husbandry import is_penned
+            ada_palung = getattr(self.world, 'trough', None) is not None
+            tawarkan_minum = is_penned(npc_id) and ada_palung
+
+            air = self._trough_level() if tawarkan_minum else 0
+            penuh = air >= 95
+            jarak = self._jarak_palung()
+            jauh = jarak is not None and jarak > self.JANGKAU_PALUNG
+            if penuh:
+                minum_lbl = 'Beri Minum - palung masih penuh'
+                minum_fx  = f'Air {air}%'
+            elif jauh:
+                # Ember diisi DI palung, bukan dari seberang kandang. Tanpa
+                # syarat ini pemain menuang ke arah sesuatu yang berjarak lima
+                # meter dan airnya melintas seperti garis lurus di udara —
+                # aturan yang benar, gambar yang bohong.
+                minum_lbl = f'Beri Minum - terlalu jauh dari palung ({jarak:.0f} tile)'
+                minum_fx  = 'Dekati palung di kandang'
+            elif air <= 0:
+                minum_lbl = 'Beri Minum - palung KERING'
+                minum_fx  = f'-{EN_WATER} EN, air {air}% -> 100%'
+            else:
+                kurang = ' (produksi terhenti)' if air < MIN_AIR_PRODUKSI else ''
+                minum_lbl = f'Beri Minum - air {air}%{kurang}'
+                minum_fx  = f'-{EN_WATER} EN, air {air}% -> 100%'
+
             prod = produce_for(species)
             ambil_fx = (f'-{EN_COLLECT} EN, +{sell_price(prod["item"])}G nilai'
                         if prod else 'Hewan ini tidak menghasilkan')
-            return [
+            # Label gosok menyebut kebersihan SEKARANG. Angka yang menghentikan
+            # produksi harus terbaca di tempat pemain memutuskan, bukan di
+            # panel terpisah yang harus dicari dulu.
+            bersih = int(rec.get('bersih', 0))
+            sudah_bersih = bersih >= 95
+            if sudah_bersih:
+                gosok_lbl = 'Gosok - bulunya masih bersih'
+                gosok_fx  = f'Bersih {bersih}%'
+            else:
+                mampet = ' (produksi terhenti)' if bersih < MIN_BERSIH_PRODUKSI else ''
+                gosok_lbl = f'Gosok - bersih {bersih}%{mampet}'
+                gosok_fx  = f'-{EN_BRUSH} EN, bersih -> 100%, +1 hati'
+
+            # Hewan tunggangan dapat dua pilihan tambahan. Digantung di jalur
+            # pie yang SAMA dengan aksi perawatan lain — bukan tombol baru —
+            # supaya apa yang diuji harness adalah apa yang ditempuh pemain.
+            from ..husbandry import species_of
+            opts_naik = []
+            if species_of(npc_id) in self.TUNGGANGAN:
+                if getattr(s, 'menunggangi', None) == npc_id:
+                    opts_naik.append(('turun', 'Turun', True, 'berhenti menunggang'))
+                else:
+                    opts_naik.append(('naik', 'Naik', not getattr(s, 'menunggangi', None),
+                                      'tunggangi, jalan jadi lebih cepat'))
+
+            opsi = [
                 ('belai',       'Belai',                    True,          '+8 Senang'),
+                ('gosok',       gosok_lbl,          not sudah_bersih,      gosok_fx),
                 ('ambil_hasil', f'Ambil Hasil - {alasan}',  siap,          ambil_fx),
                 ('beri_makan',  feed_lbl,                   bool(feed),    feed_fx),
             ]
+            if tawarkan_minum:
+                opsi.append(
+                    ('beri_minum', minum_lbl, not penuh and not jauh, minum_fx))
+            # Opsi tunggangan DI DEPAN. Tanpa baris ini `opts_naik` dibangun
+            # lalu dibuang — dan itu persis yang terjadi sesudah merge
+            # feature/3d-mobs: `TUNGGANGAN` masih terdefinisi, mekanik
+            # menunggang di player.py masih utuh (`mulai_menunggang`,
+            # `_tunggangan`, 9 rujukan), `execute_pie_action` masih menangani
+            # 'naik' dan 'turun' — tapi tidak ada satu pun jalan bagi pemain
+            # untuk MEMILIHNYA. Fitur yang lengkap dan tak terjangkau, bentuk
+            # kegagalan yang sama dengan sims_build.
+            return opts_naik + opsi
 
     def execute_pie_action(self, npc_id: str, action: str, entities_mgr, panels):
         from ..data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS
@@ -649,6 +1179,33 @@ class InteractionController:
         s     = self.player.state
         from ..config import NEED_MAX
 
+        # Setiap aksi yang isinya BERBICARA memakai pose bicara yang sama —
+        # didaftar di satu tempat supaya menambah aksi percakapan baru tidak
+        # bisa lupa animasinya. Sebelum ini berbicara tidak menggerakkan apa
+        # pun: pemain berdiri diam sementara kotak dialog muncul sendiri.
+        if action in ('sapa', 'ngobrol', 'tanya_kabar', 'sapa_halus',
+                      'arya_tanya', 'sari_gossip', 'budi_riddle',
+                      'naga_riddle', 'maya_quest'):
+            self.player._play_tool_anim('bicara', 700)
+
+        if action == 'naik':
+            hewan = entities_mgr.actors.get(npc_id) if entities_mgr else None
+            if hewan is None:
+                sound_play('blocked', 0.5)
+                panels.flash_msg("Hewannya tidak ada di sini.", 1.2)
+                return
+            s.menunggangi = npc_id
+            self.player.mulai_menunggang(hewan)
+            sound_play('menu_select', 0.7)
+            panels.flash_msg(f"Menunggangi {npc.get('name', npc_id)}.", 1.4)
+            return
+
+        if action == 'turun':
+            s.menunggangi = None
+            self.player.berhenti_menunggang()
+            sound_play('menu_select', 0.6)
+            panels.flash_msg("Turun dari tunggangan.", 1.2)
+            return
         if action == 'sapa':
             s.sosial = min(NEED_MAX, s.sosial + 5)
             sound_play('menu_select', 0.7)
@@ -670,21 +1227,100 @@ class InteractionController:
             else:
                 panels.start_dialog(npc_id, s, node_key='maya_quest_start')
         elif action == 'beri_hadiah':
+            # `panels.emote()` dan `_social()` keduanya SUDAH ada di pohon
+            # gabungan ini (panels.py:1192, berkas ini baris 22), jadi baris
+            # sisi 3d-mobs bisa dipakai apa adanya dan ia mengaitkan hadiah
+            # ke sistem relasi, bukan cuma menaikkan angka sosial.
+            panels.emote('<3 !', color.rgb(245, 150, 170), 1.5)
             self.give_gift(entities_mgr, panels, npc_id=npc_id)
-            s.sosial = min(NEED_MAX, s.sosial + 20)
+            self._social(s, 20)
         elif action == 'tanya_kabar':
-            s.sosial = min(NEED_MAX, s.sosial + 8)
+            self._social(s, 8)
             s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1)
             pos = s.npc_positions.get(npc_id, {})
             act = pos.get('activity', 'tidak ada info')
             sound_play('menu_select', 0.7)
             panels.flash_msg(f"{npc.get('name', npc_id)}: Sekarang lagi {act}.", 2.0)
+            # Aksi karier (sims_career.py) dari feature/3d-mobs. Sisi visual
+            # KOSONG di sini: melamar kerja belum pernah ada sama sekali.
+        elif action == 'lamar_kerja':
+            from ..sims_career import CAREERS as _CAR, join_career
+            _JOB_NPC = {'arya': 'tani', 'budi': 'pandai_besi', 'sari': 'warung'}
+            _job = _JOB_NPC.get(npc_id)
+            if _job and join_career(s, _job):
+                c = _CAR[_job]
+                sound_play('quest', 0.9)
+                panels.flash_msg(
+                    f"Diterima sebagai {c['ranks'][0][0]} ({c['label']})! "
+                    f"Kerja jam {c['start']}:00-{c['end']}:00 di {c['scene']}.", 3.2)
+        elif action == 'kerja':
+            from ..sims_career import work_shift, SKILLS
+            res = work_shift(s)
+            if res:
+                sound_play('sell', 0.9)
+                panels.emote(f"+{res['pay']}G", color.rgb(255, 220, 120), 1.6)
+                panels.flash_msg(
+                    f"Kerja selesai sbg {res['rank']}: +{res['pay']}G "
+                    f"(mood {res['mood']}, kinerja {int(res['perf']*100)}%)", 2.8)
+                if res['leveled']:
+                    panels.flash_msg(
+                        f"Skill {SKILLS[res['skill']][0]} naik ke level {res['skill_level']}!", 2.4)
+            else:
+                from ..sims_career import can_work_now
+                _ok, _why = can_work_now(s)
+                sound_play('blocked', 0.6)
+                panels.flash_msg(_why or "Tak bisa bekerja sekarang.", 2.0)
+        elif action == 'naik_pangkat':
+            from ..sims_career import try_promote, promotion_status
+            newr = try_promote(s)
+            if newr:
+                sound_play('quest', 1.0)
+                panels.emote('!', color.rgb(255, 230, 140), 1.8)
+                panels.flash_msg(f"Selamat! Kamu naik pangkat jadi {newr}.", 3.0)
+            else:
+                _c, _n, _t = promotion_status(s)
+                sound_play('blocked', 0.6)
+                panels.flash_msg(_t, 3.0)
+        elif action == 'ajak_pindah':
+            from ..sims_household import move_in, summary as _hhsum
+            ok, msg = move_in(s, npc_id)
+            sound_play('quest' if ok else 'blocked', 0.9)
+            panels.flash_msg(msg, 2.8)
+            if ok:
+                panels.flash_msg(_hhsum(s), 3.0)
+        elif action == 'usir':
+            from ..sims_household import move_out
+            ok, msg = move_out(s, npc_id)
+            sound_play('menu_select' if ok else 'blocked', 0.7)
+            panels.flash_msg(msg, 2.4)
+        elif action == 'puji':
+            # Memuji: menaikkan persahabatan + sedikit asmara (bila sudah akrab)
+            from ..sims_relationship import add_friendship, add_romance, summary
+            self._social(s, 8)
+            _df = add_friendship(s, npc_id, 0.6)
+            add_romance(s, npc_id, 0.2)          # gagal diam-diam bila belum akrab
+            sound_play('menu_select', 0.8)
+            panels.emote('!', color.rgb(255, 225, 150))
+            panels.flash_msg(f"Kamu memuji {npc.get('name', npc_id)}. ({summary(s, npc_id)})", 2.0)
+        elif action == 'gombal':
+            # Merayu: hanya berhasil bila cukup akrab; gagal = canggung
+            from ..sims_relationship import add_romance, summary
+            ok, delta, msg = add_romance(s, npc_id, 1.0)
+            if ok:
+                self._social(s, 10)
+                sound_play('gift', 0.8)
+                panels.emote('<3', color.rgb(245, 150, 170), 1.5)
+                panels.flash_msg(f"Rayuanmu mengena! ({summary(s, npc_id)})", 2.2)
+            else:
+                sound_play('blocked', 0.6)
+                panels.emote('...', color.rgb(180, 180, 180), 1.4)
+                panels.flash_msg(f"{npc.get('name', npc_id)}: {msg}", 2.2)
         elif action == 'amati':
             s.senang = min(NEED_MAX, s.senang + 5)
             sound_play('menu_select', 0.6)
             panels.flash_msg(f"{npc.get('name', npc_id)} tampak misterius...", 1.5)
         elif action == 'sapa_halus':
-            s.sosial = min(NEED_MAX, s.sosial + 10)
+            self._social(s, 10)
             s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1)
             panels.start_dialog(npc_id, s)
         elif action == 'naga_riddle':
@@ -693,9 +1329,12 @@ class InteractionController:
             self.give_gift(entities_mgr, panels, npc_id=npc_id)
             s.senang = min(NEED_MAX, s.senang + 15)
         elif action == 'belai':
-            s.senang = min(NEED_MAX, s.senang + 8)
-            sound_play('menu_select', 0.6)
-            panels.flash_msg(f"Kamu membelai {npc.get('name', npc_id)}.", 1.0)
+            # ── Dua belas aksi ternak dari cabang livestock ─────────────
+            # Ini inti cabang itu, 617 baris: memerah di bawah perut bukan
+            # di atas punggung, tinggi punggung tiap spesies diukur ulang,
+            # lawan bicara berpaling alih-alih mematah. Sisi ini cuma
+            # menaikkan angka senang; tidak ada alasan mempertahankannya.
+            self._belai(npc_id, npc, entities_mgr, panels)
         elif action == 'ambil_hasil':
             from ..economy import (produce_for, animal_record, animal_status,
                                    item_name, sell_price, best_process_hint,
@@ -712,16 +1351,11 @@ class InteractionController:
                 sound_play('blocked', 0.5)
                 panels.flash_msg("Terlalu lelah untuk mengurus kandang.", 1.2)
             else:
-                item = prod['item']
-                s.inventory[item] = s.inventory.get(item, 0) + 1
-                animal_record(s, npc_id)['siap'] = 0
-                self.player._spend_energy(EN_COLLECT)
-                s.stats['produce_collected'] = s.stats.get('produce_collected', 0) + 1
-                sound_play('harvest', 0.8)
-                hint = best_process_hint(item)
-                ekor = f" | {hint}" if hint else ""
-                panels.flash_msg(
-                    f"+1 {item_name(item)} (nilai {sell_price(item)}G){ekor}", 1.6)
+                self._panen(npc_id, npc, prod, entities_mgr, panels)
+        elif action == 'gosok':
+            self._gosok(npc_id, npc, entities_mgr, panels)
+        elif action == 'beri_minum':
+            self._beri_minum(npc_id, npc, entities_mgr, panels)
         elif action == 'beri_makan':
             # Memberi makan mengisi 'kenyang'. Hewan yang kenyang maju satu
             # langkah menuju hasil tiap pagi; yang lapar berhenti. Itu seluruh
@@ -741,15 +1375,590 @@ class InteractionController:
                 if s.inventory[feed] <= 0:
                     del s.inventory[feed]
                 self.player._spend_energy(EN_FEED)
+                # Kenyang ditulis ke husbandry — satu-satunya pemilik takaran
+                # perawatan sejak buku ganda dibereskan. economy hanya memegang
+                # siklus hasil.
+                from ..husbandry import ISI_PAKAN
+                from ..economy import care_rec
+                crec = care_rec(s, npc_id)
+                crec['kenyang'] = min(100, crec.get('kenyang', 0) + ISI_PAKAN)
+                crec['hari_makan'] = s.day
                 rec = animal_record(s, npc_id)
-                rec['kenyang'] = max(rec.get('kenyang', 0), 0) + FEED_DAYS
                 s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1)
                 sound_play('gift', 0.7)
                 prod = produce_for(npc.get('type', ''))
                 janji = (f" {item_name(prod['item'])} besok pagi."
                          if prod and rec.get('siap', 0) + 1 >= prod['cycle'] else '')
                 panels.flash_msg(
-                    f"{npc.get('name', npc_id)} diberi {item_name(feed)}.{janji}", 1.6)
+                    f"{npc.get('name', npc_id)} diberi {item_name(feed)}. "
+                    f"Kenyang {crec['kenyang']}%.{janji}", 1.6)
+
+
+
+
+
+    # ─── PANEN HASIL TERNAK ─────────────────────────────────────────────────
+    # Cara mengambil hasil ditentukan PRODUKNYA, bukan spesiesnya: apa pun yang
+    # menghasilkan susu diperah, apa pun yang bertelur dirogoh sarangnya. Kalau
+    # nanti ada spesies baru, ia otomatis memakai postur yang benar.
+    CARA_PANEN = {
+        'susu':        ('perah', 'Memerah'),
+        'susu_kambing': ('perah', 'Memerah'),
+        'telur':       ('telur', 'Mengambil telur'),
+        'telur_bebek': ('telur', 'Mengambil telur'),
+        'wol':         ('cukur', 'Mencukur'),
+    }
+    # Kapan hasilnya berpindah ke tangan, per resep. Angkanya jatuh di fase
+    # ANGKAT, bukan di awal: barang yang masuk tas sebelum tangannya bergerak
+    # membuat animasinya jadi hiasan yang bisa diabaikan.
+    SAAT_HASIL = {'perah': 1900.0, 'telur': 1620.0, 'cukur': 2180.0}
+
+    def _panen(self, npc_id, npc, prod, entities_mgr, panels):
+        from ..economy import (animal_record, item_name, sell_price,
+                               best_process_hint, EN_COLLECT)
+        from .. import care_anim
+
+        s = self.player.state
+        item = prod['item']
+        jenis, kata = self.CARA_PANEN.get(item, ('telur', 'Mengambil hasil'))
+
+
+        pos = s.npc_positions.get(npc_id) or {}
+        hx, hy = pos.get('x'), pos.get('y')
+        dari, maju_ke, turun, skala = self._tempat_kerja(
+            npc_id, npc, entities_mgr, jenis)
+
+        # Tahan hewannya selama aksi. Tanpa ini domba berjalan pergi di tengah
+        # pencukuran — terukur, jaraknya ke gunting naik dari 0,00 m ke median
+        # 2,06 m dalam satu aksi yang sama.
+        aktor = entities_mgr.actors.get(npc_id)
+        if aktor is not None and hasattr(aktor, 'tahan_diam'):
+            aktor.tahan_diam(3.2)
+
+        def _frame(aksi, dt):
+            self._maju(self.player, dari, maju_ke, aksi.t, 520.0)
+
+        def _ambil(aksi):
+            # Energinya ikut di sini: aksi yang dibatalkan sebelum titik ini
+            # tidak menghasilkan apa-apa, jadi ia juga tidak boleh menagih apa-apa.
+            self.player._spend_energy(EN_COLLECT)
+            s.inventory[item] = s.inventory.get(item, 0) + 1
+            animal_record(s, npc_id)['siap'] = 0
+            # Hewannya ikut terlihat senang, bukan cuma baris teks di HUD.
+            if aktor is not None and hasattr(aktor, 'disayang'):
+                aktor.disayang()
+            s.stats['produce_collected'] = s.stats.get('produce_collected', 0) + 1
+            care_anim.pasang_hasil(self.player)
+            sound_play('harvest', 0.8)
+            hint = best_process_hint(item)
+            ekor = f" | {hint}" if hint else ""
+            panels.flash_msg(
+                f"+1 {item_name(item)} (nilai {sell_price(item)}G){ekor}", 1.6)
+
+        aksi = care_anim.mulai(
+            self.player, jenis,
+            pemicu=[(self.SAAT_HASIL.get(jenis, 1800.0), _ambil)],
+            saat_frame=_frame, turun=turun, skala=skala,
+        )
+        if aksi is None:
+            # Resep hilang: jangan menelan hasilnya. Lebih baik tanpa animasi
+            # daripada pemain kehilangan energi tanpa mendapat apa pun.
+            _ambil(None)
+            return
+        panels.flash_msg(f"{kata} {npc.get('name', npc_id)}...", 1.0)
+
+
+    # Tinggi punggung sapi adalah patokan resep aslinya: semua resep perawatan
+    # ditulis untuk tangan yang bekerja di ketinggian itu. Hewan yang lebih
+    # pendek butuh pemainnya menunduk selisihnya.
+    TINGGI_PATOKAN = 1.37
+    # Setengah-lebar sapi. Dipakai sebagai titik nol kelonggaran-kesempitan:
+    # resep ditulis untuk badan selebar ini, jadi sapi tidak butuh kompensasi.
+    HW_PATOKAN = 0.36
+    # Jangkauan dari sisi badan hewan ke ujung yang bekerja. Sikat menambah
+    # panjang; telapak telanjang tidak. Memakai satu angka untuk keduanya
+    # membuat aksi bertangan kosong berhenti sependek selisih itu — terukur,
+    # telapak saat membelai ayam berhenti 0,11 m dari badannya, persis
+    # selisih 0,62 dan 0,48.
+    JANGKAU_TANGAN = 0.62      # tangan memegang alat (sikat, ember, gunting)
+    JANGKAU_TELAPAK = 0.48     # tangan telanjang
+
+    def _tempat_kerja(self, npc_id, npc, entities_mgr, jenis: str):
+        """(dari, tujuan, turun, skala) — titik berdiri di rusuk hewan.
+
+        Urutannya tidak boleh ditukar: titik rusuk dihitung dulu, pemain
+        DIHADAPKAN dari titik itu, baru langkahnya dihitung. `_geser_tangan()`
+        membaca pergeseran bahu kanan pada rotasi yang sedang berlaku, jadi
+        menghadapkan pemain sesudah melangkah akan menggeser tangannya ke arah
+        yang salah.
+        """
+        import math as _m
+        s = self.player.state
+        pos = s.npc_positions.get(npc_id) or {}
+        hx, hy = pos.get('x'), pos.get('y')
+        diam = (self.player.x, self.player.z)
+        if hx is None:
+            return diam, None, 0.0, 1.0
+        geo = self._geometri_hewan(npc_id, npc, self._jangkau(jenis),
+                                   self._hadap(entities_mgr, npc_id), jenis)
+        if geo is None:
+            self.player.rotation_y = _m.degrees(
+                _m.atan2(hx - self.player.x / TS, hy - self.player.z / TS))
+            self.player.target_rotation_y = self.player.rotation_y
+            return diam, None, 0.0, 1.0
+        tx, tz, turun, skala = geo
+        self.player.rotation_y = _m.degrees(
+            _m.atan2(hx - tx / TS, hy - tz / TS))
+        self.player.target_rotation_y = self.player.rotation_y
+        dari, tujuan = self._langkah_masuk(tx, tz)
+        return dari, tujuan, turun, skala
+
+    @staticmethod
+    def _hadap(entities_mgr, npc_id: str) -> float:
+        """Arah hadap hewan sekarang, dalam derajat. 0 kalau aktornya tidak ada."""
+        aktor = entities_mgr.actors.get(npc_id) if entities_mgr else None
+        return float(getattr(aktor, 'rotation_y', 0.0) or 0.0)
+
+    def _jangkau(self, jenis: str) -> float:
+        """Jangkauan yang benar untuk resep `jenis`, dibaca dari resepnya.
+
+        Dulu tiap pemanggil memilih angkanya sendiri, dan satu di antaranya
+        salah: mengambil telur dikerjakan bertangan kosong tapi memakai
+        jangkauan bertangkai, jadi pemainnya berhenti 14 cm terlalu jauh.
+        Membaca `alat` dari RESEP berarti resep baru ikut benar tanpa ada
+        yang perlu ingat memperbaruinya di sini.
+        """
+        from .. import care_anim
+        resep = care_anim.RESEP.get(jenis) or {}
+        return self.JANGKAU_TANGAN if resep.get('alat') else self.JANGKAU_TELAPAK
+
+    def _geometri_hewan(self, npc_id: str, npc: dict, jangkau: float,
+                        rotasi: float = 0.0, jenis_resep: str = ''):
+        """(x_rusuk, z_rusuk, kedalaman_jongkok, skala_ayunan) untuk hewan ini.
+
+        Dua angka pertama adalah TITIK BERDIRI di rusuk hewan, bukan sekadar
+        jarak. Sebelumnya fungsi ini mengembalikan pusat hewan plus sebuah
+        jarak, dan pemanggilnya berdiri di sinar dari pusat itu ke tempat
+        pemain kebetulan lewat — jadi sisi mana yang dipakai ditentukan oleh
+        kebetulan. Diukur, sudut sisinya tersebar rata 0-180 derajat dan
+        seperempat pemerahan terjadi dalam 45 derajat dari moncong sapi.
+        """
+        from ..animal_models import ukuran, titik_rusuk
+        from .. import care_anim as _ca
+        s = self.player.state
+        pos = s.npc_positions.get(npc_id) or {}
+        hx, hy = pos.get('x'), pos.get('y')
+        if hx is None:
+            return None
+        cx, cz = hx * TS, hy * TS
+        spesies = npc.get('type', '')
+        _hw, _hl, tinggi = ukuran(spesies)
+        # Batas 0,70 m, bukan 0,52: selisih tinggi punggung ayam (0,44 m) ke
+        # sapi menuntut 0,67 m, dan batas lama memotongnya tepat di situ —
+        # terukur, sapuan sikat pada ayam masih melayang di median 0,42 m
+        # sementara sapi dan kambing sudah 0,05-0,12 m. Jongkok 0,70 m pada
+        # karakter 1,76 m memang jongkok penuh; itu memang yang dilakukan
+        # orang saat mengurus ayam.
+        turun = max(0.0, min(0.70, (self.TINGGI_PATOKAN - tinggi) * 0.72))
+        # Jongkok mentok di 0,70 m, jadi hewan yang jauh lebih pendek dari sapi
+        # tidak bisa diselesaikan dengan menunduk saja: ayunannya juga harus
+        # mengecil. Batas bawah 0,50 supaya rentang sendi tetap lewat ambang
+        # 25 derajat — menggosok 73 derajat jadi 40, membelai 53 jadi 29.
+        skala = max(0.50, min(1.0, tinggi / self.TINGGI_PATOKAN))
+        # Jangkauan ikut mengecil bersama ayunannya. Lengan yang berayun lebih
+        # pendek juga MENJULUR lebih pendek: terukur, memperkecil ayunan saja
+        # menurunkan sikat ke ketinggian punggung ayam tapi menariknya 0,07-0,27 m
+        # ke belakang, jadi ia lewat di atas ayam alih-alih menyentuhnya.
+        resep = _ca.RESEP.get(jenis_resep) or {}
+        # Kelonggaran datar + kelonggaran yang sebanding dengan kesempitan
+        # hewan. Yang kedua nol untuk sapi menurut konstruksinya, jadi resep
+        # yang memang ditulis untuk sapi tidak pernah tergeser olehnya.
+        renggang = (resep.get('renggang', 0.0)
+                    + resep.get('renggang_sempit', 0.0)
+                    * max(0.0, self.HW_PATOKAN - _hw))
+        tx, tz = titik_rusuk(cx, cz, spesies, rotasi,
+                             self.player.x, self.player.z,
+                             jangkau * skala + renggang)
+        return tx, tz, turun, skala
+
+    def _langkah_masuk(self, tx: float, tz: float):
+        """Hitung langkah pendek dari posisi sekarang ke titik berdiri (tx,tz).
+
+        Ubin bersebelahan berjarak 2 m. Aksi perawatan yang dimulai dari ubin
+        sebelah selalu terlihat seperti menyentuh udara: sikat berhenti satu
+        setengah meter dari badan hewan, ember menuang ke rumput. Satu langkah
+        kecil di fase pembuka menutup jarak itu — pola yang sama dipakai game
+        bertani lain saat interaksi dimulai. Return (dari, tujuan); tujuan
+        None kalau tidak ada yang perlu didekati.
+        """
+        dari = (self.player.x, self.player.z)
+        if abs(tx - dari[0]) < 1e-3 and abs(tz - dari[1]) < 1e-3:
+            return dari, None
+        # Yang harus lurus dengan hewan adalah TANGAN YANG BEKERJA, bukan
+        # pusar pemain. Semua alat perawatan menggantung di lengan kanan, jadi
+        # ujung kerjanya selalu sekitar 0,30 m ke samping. Pada sapi selisih
+        # itu ditelan badan yang panjangnya 2 m; pada ayam selebar 0,44 m ia
+        # adalah SELURUH celahnya — terukur, tangan berhenti 0,08 m dari kotak
+        # badan ayam sepanjang aksi, persis 0,30 dikurangi setengah-panjang
+        # ayam 0,22. Berdirinya digeser sebanyak itu ke kiri.
+        gx, gz = self._geser_tangan()
+        return dari, (tx - gx, tz - gz)
+
+    def _geser_tangan(self) -> tuple:
+        """Pergeseran (dx,dz) dunia dari pusat pemain ke bahu kanannya.
+
+        Dibaca dari rig, bukan ditulis sebagai angka tetap: kalau bahunya
+        digeser suatu saat, penyelarasan ini ikut benar tanpa ada yang perlu
+        ingat memperbaruinya. Pemain sudah diputar menghadap hewan sebelum ini
+        dipanggil, jadi arahnya sudah benar tanpa perlu dihitung ulang.
+        """
+        bahu = getattr(self.player, '_pivot_shoulder_r', None)
+        if bahu is None:
+            return 0.0, 0.0
+        try:
+            w = bahu.world_position
+        except Exception:
+            return 0.0, 0.0
+        return float(w[0]) - float(self.player.x), float(w[2]) - float(self.player.z)
+
+    @staticmethod
+    def _maju(player, dari, tujuan, t_detik: float, panjang_ms: float) -> None:
+        """Terapkan langkah masuk untuk frame ini (ease-out kubik)."""
+        if tujuan is None:
+            return
+        u = min(1.0, t_detik * 1000.0 / panjang_ms)
+        e = 1.0 - (1.0 - u) ** 3
+        player.x = dari[0] + (tujuan[0] - dari[0]) * e
+        player.z = dari[1] + (tujuan[1] - dari[1]) * e
+
+
+    # ─── BELAI ──────────────────────────────────────────────────────────────
+    def _belai(self, npc_id, npc, entities_mgr, panels):
+        """Sapaan pendek dua usapan. Gratis, tidak membersihkan apa pun.
+
+        Aksi inilah yang dipakai sebagai titik nol sepanjang pekerjaan ini —
+        diukur, ia dulu menghasilkan "TIDAK ADA SENDI YANG BERGERAK". Sekarang
+        ia bergerak, tapi sengaja dengan bobot yang jauh lebih ringan daripada
+        Gosok: separuh rentang, separuh durasi, satu tangan, tanpa alat. Kalau
+        keduanya dianimasikan sama beratnya, salah satunya jadi mubazir.
+        """
+        from ..config import NEED_MAX
+        from .. import care_anim
+
+        s = self.player.state
+        s.senang = min(NEED_MAX, s.senang + 8)
+        sound_play('menu_select', 0.6)
+
+        pos = s.npc_positions.get(npc_id) or {}
+        hx, hy = pos.get('x'), pos.get('y')
+        dari, maju_ke, turun, skala = self._tempat_kerja(
+            npc_id, npc, entities_mgr, 'belai')
+
+        actor = entities_mgr.actors.get(npc_id)
+        if actor is not None and hasattr(actor, 'tahan_diam'):
+            actor.tahan_diam(2.0)
+
+        def _frame(aksi, dt):
+            self._maju(self.player, dari, maju_ke, aksi.t, 300.0)
+
+        def _usap(aksi):
+            # Hewan mencondong ke telapak, sama seperti saat disikat — tapi
+            # dipicu dua kali saja, bukan enam.
+            if actor is not None and hasattr(actor, 'disikat'):
+                actor.disikat(self.player.x, self.player.z)
+
+        def _usai(aksi):
+            if actor is not None and hasattr(actor, 'selesai_disikat'):
+                actor.selesai_disikat()
+
+        care_anim.mulai(
+            self.player, 'belai',
+            pemicu=[(430, _usap), (860, _usap)],
+            saat_frame=_frame, saat_usai=_usai, turun=turun, skala=skala,
+        )
+        panels.flash_msg(f"Kamu membelai {npc.get('name', npc_id)}.", 1.0)
+
+    # ─── GOSOK ──────────────────────────────────────────────────────────────
+    def _gosok(self, npc_id, npc, entities_mgr, panels):
+        """Sikat badan hewan: lima sapuan, hewan mencondong ke arah sikat.
+
+        Menggosok adalah aksi perawatan yang paling sering diulang, jadi ia
+        yang paling cepat terasa murah kalau cuma satu kedutan lalu pesan.
+        Yang membuatnya berharga bukan angkanya — angkanya cuma `bersih` naik
+        — tapi hewan yang bereaksi terhadapnya.
+        """
+        from ..economy import EN_BRUSH, care_rec
+        from ..husbandry import clean as husb_clean, is_livestock
+        from .. import care_anim
+
+        s = self.player.state
+        if not is_livestock(npc_id):
+            panels.flash_msg(f"{npc.get('name', npc_id)} tidak mau disikat.", 1.4)
+            return
+        rec = care_rec(s, npc_id)
+        if rec.get('bersih', 0) >= 95:
+            sound_play('blocked', 0.5)
+            panels.flash_msg("Bulunya masih bersih.", 1.2)
+            return
+        if s.energy < EN_BRUSH:
+            sound_play('blocked', 0.5)
+            panels.flash_msg("Terlalu lelah untuk menyikat.", 1.2)
+            return
+
+        sebelum = int(rec.get('bersih', 0))
+
+        # Menghadap hewannya. Menyikat sambil membelakanginya adalah hal
+        # pertama yang terlihat salah di filmstrip.
+        pos = s.npc_positions.get(npc_id) or {}
+        hx, hy = pos.get('x'), pos.get('y')
+        actor = entities_mgr.actors.get(npc_id)
+        if actor is not None and hasattr(actor, 'tahan_diam'):
+            actor.tahan_diam(3.4)
+
+        # Melangkah ke RUSUK hewan supaya sikatnya benar-benar menyentuh,
+        # dan menunduk sedalam selisih tinggi punggungnya terhadap sapi.
+        dari, maju_ke, turun, skala = self._tempat_kerja(
+            npc_id, npc, entities_mgr, 'gosok')
+
+        def _frame(aksi, dt):
+            self._maju(self.player, dari, maju_ke, aksi.t, 420.0)
+
+        def _sapuan(aksi):
+            """Satu sapuan mendarat: bunyi + hewan mencondong ke sikat."""
+            sound_play('menu_select', 0.35)
+            if actor is not None and hasattr(actor, 'disikat'):
+                actor.disikat(self.player.x, self.player.z)
+
+        def _terapkan(aksi):
+            # Energi ditagih DI SINI, bukan di muka. `AksiRawat.update()`
+            # berhenti memanggil pemicu begitu aksi dibatalkan, jadi biaya yang
+            # dibayar di muka akan mendarat pada aksi yang tidak pernah terjadi:
+            # terukur, menekan W setengah detik sesudah mulai menyikat memotong
+            # 2 energi, menulis "Bersih 100%, +1 hati" di HUD, dan meninggalkan
+            # hewannya tetap 12% kotor tanpa satu hati pun.
+            self.player._spend_energy(EN_BRUSH)
+            ok, pesan = husb_clean(s, npc_id)
+            if ok:
+                s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + 1)
+                s.stats['brushed'] = s.stats.get('brushed', 0) + 1
+            panels.flash_msg(
+                f"Menyikat {npc.get('name', npc_id)}. "
+                f"Bersih {sebelum}% -> 100%, +1 hati.", 1.8)
+
+        def _usai(aksi):
+            if actor is not None and hasattr(actor, 'selesai_disikat'):
+                actor.selesai_disikat()
+
+        care_anim.mulai(
+            self.player, 'gosok',
+            # Satu pemicu per sapuan, di titik TENGAH tiap sapuan — bunyi yang
+            # jatuh di titik balik terdengar seperti klik, bukan seperti bulu
+            # yang menyapu.
+            pemicu=[(560, _sapuan), (870, _sapuan), (1190, _sapuan),
+                    (1500, _sapuan), (1830, _sapuan), (2160, _sapuan),
+                    (2320, _terapkan)],
+            saat_frame=_frame, saat_usai=_usai, turun=turun, skala=skala,
+        )
+        panels.flash_msg(f"Menyikat {npc.get('name', npc_id)}...", 1.0)
+
+    # ─── BERI MINUM ─────────────────────────────────────────────────────────
+    def _pen_livestock(self) -> list:
+        """Ternak yang berbagi palung yang sama: semua ternak di scene ini.
+
+        Palung itu milik KANDANG, bukan milik satu ekor. Mengisinya untuk satu
+        sapi lalu membiarkan kambing di sebelahnya kehausan bukan cuma aneh —
+        itu memaksa pemain mengulang aksi yang sama lima kali untuk satu ember.
+        """
+        from ..data import ANIMAL_NPCS
+        from ..husbandry import is_penned
+        s = self.player.state
+        out = []
+        for aid in ANIMAL_NPCS:
+            if not is_penned(aid):
+                continue
+            pos = s.npc_positions.get(aid) or {}
+            if pos.get('scene') == s.scene_name:
+                out.append(aid)
+        return out
+
+    def _trough_level(self) -> int:
+        """Isi palung = takaran air TERENDAH di kandang.
+
+        Yang terendah, bukan rata-rata: palung yang terlihat setengah penuh
+        sementara satu ekor sudah 0% akan berbohong tentang hal yang justru
+        harus dilihat pemain.
+        """
+        from ..economy import care_rec
+        s = self.player.state
+        kawanan = self._pen_livestock()
+        if not kawanan:
+            return 0
+        return int(min(care_rec(s, aid).get('air', 0) for aid in kawanan))
+
+    JANGKAU_PALUNG = 2.6      # tile
+
+    def _jarak_palung(self) -> float | None:
+        """Jarak pemain ke palung dalam tile. None kalau kandang tak berpalung."""
+        t = getattr(self.world, 'trough', None)
+        if not t:
+            return None
+        tx, ty = t['tile']
+        px, py = self.player.x / TS, self.player.z / TS
+        return ((tx - px) ** 2 + (ty - py) ** 2) ** 0.5
+
+    def sync_trough(self) -> None:
+        """Samakan tinggi air palung dengan keadaan sekarang."""
+        try:
+            from ..scenes.props import set_trough_level
+            set_trough_level(self.world, self._trough_level())
+        except Exception:
+            pass
+
+    def _beri_minum(self, npc_id, npc, entities_mgr, panels):
+        from ..economy import EN_WATER, care_rec
+        from ..husbandry import water as husb_water, is_penned
+        from ..scenes.props import trough_pour_point, set_trough_level
+        from .. import care_anim
+
+        s = self.player.state
+        if not is_penned(npc_id):
+            panels.flash_msg(
+                f"{npc.get('name', npc_id)} tidak dikandangkan — tidak minum "
+                "dari palung ternak.", 1.6)
+            return
+        if getattr(self.world, 'trough', None) is None:
+            panels.flash_msg("Tidak ada palung minum di sini.", 1.4)
+            return
+        if self._trough_level() >= 95:
+            sound_play('blocked', 0.5)
+            panels.flash_msg("Palungnya masih penuh.", 1.2)
+            return
+        jarak = self._jarak_palung()
+        if jarak is not None and jarak > self.JANGKAU_PALUNG:
+            sound_play('blocked', 0.5)
+            panels.flash_msg(
+                f"Terlalu jauh dari palung ({jarak:.0f} tile). Dekati dulu.", 1.6)
+            return
+        if s.energy < EN_WATER:
+            sound_play('blocked', 0.5)
+            panels.flash_msg("Terlalu lelah untuk mengangkat ember.", 1.2)
+            return
+
+        kawanan = self._pen_livestock() or [npc_id]
+        sebelum = self._trough_level()
+
+        titik = trough_pour_point(self.world)
+        if titik is None:
+            # Kandang tanpa palung (scene lain): tuang di depan kaki pemain,
+            # supaya aksinya tetap punya sasaran yang terlihat.
+            titik = (self.player.x, 0.15, self.player.z + 0.6)
+        else:
+            # Bidik BIBIR palung yang paling dekat, bukan titik tengahnya.
+            # Membidik tengah membuat kolom airnya melintas separuh panjang
+            # palung secara mendatar; membidik bibir terdekat membuatnya jatuh.
+            tx, ty, tz = titik
+            titik = (tx + max(-1.0, min(1.0, self.player.x - tx)),
+                     ty,
+                     tz + max(-0.35, min(0.35, self.player.z - tz)))
+            # Pemain menghadap palung sebelum menuang. Menuang ke samping
+            # sambil menghadap ke arah lain adalah hal pertama yang terlihat
+            # salah di filmstrip.
+            import math as _m
+            self.player.rotation_y = _m.degrees(
+                _m.atan2(titik[0] - self.player.x, titik[2] - self.player.z))
+            self.player.target_rotation_y = self.player.rotation_y
+
+        aliran = care_anim.AliranAir(titik)
+
+        # Melangkah ke bibir palung. Ubin bersebelahan berjarak 2 m, jadi
+        # pemain yang berdiri di ubin sebelah menuang air melintasi jarak
+        # satu setengah meter — angkanya benar, gambarnya bohong. Satu langkah
+        # kecil selama fase ancang-ancang menutup jarak itu; ini pola yang
+        # sama dipakai game bertani lain saat interaksi dimulai.
+        pal = getattr(self.world, 'trough', None)
+        dari, maju_ke = (self.player.x, self.player.z), None
+        if pal is not None:
+            cx, _cy, cz = pal['pos']
+            # Palung tidak punya arah hadap, jadi titik berdirinya masih di
+            # sinar dari pemain ke palung — 1,02 m dari pusatnya.
+            ddx, ddz = self.player.x - cx, self.player.z - cz
+            dd = (ddx * ddx + ddz * ddz) ** 0.5 or 1.0
+            dari, maju_ke = self._langkah_masuk(cx + ddx / dd * 1.02,
+                                                cz + ddz / dd * 1.02)
+
+        def _mulai_tuang(aksi):
+            aliran.nyala(True)
+            sound_play('water', 0.85)
+
+        def _isi(aksi):
+            """Air benar-benar masuk saat air TERLIHAT jatuh, bukan saat menu
+            diklik. Akibat yang mendahului sebabnya di layar terbaca sebagai
+            bug, bahkan kalau angkanya benar.
+
+            Energi dan pesannya ikut di sini karena alasan yang sama dari sisi
+            sebaliknya: aksi yang dibatalkan sebelum titik ini tidak mengisi
+            palung, jadi ia juga tidak boleh menagih ember yang tidak pernah
+            terangkat."""
+            self.player._spend_energy(EN_WATER)
+            for aid in kawanan:
+                husb_water(s, aid)
+            s.stats['trough_filled'] = s.stats.get('trough_filled', 0) + 1
+            for aid in kawanan:
+                s.npc_hearts[aid] = min(10, s.npc_hearts.get(aid, 0) + 0.5)
+                # Seluruh kawanan yang ikut minum terlihat senang, bukan cuma
+                # yang diklik: palungnya memang diisi untuk mereka semua.
+                _a = entities_mgr.actors.get(aid)
+                if _a is not None and hasattr(_a, 'disayang'):
+                    _a.disayang()
+            ekor = '' if len(kawanan) <= 1 else f" ({len(kawanan)} ekor ikut minum)"
+            panels.flash_msg(
+                f"Palung diisi untuk {npc.get('name', npc_id)}. "
+                f"Air {sebelum}% -> 100%.{ekor}", 1.8)
+
+        def _selesai_tuang(aksi):
+            aliran.nyala(False)
+
+        def _frame(aksi, dt):
+            # Langkah masuk diselesaikan sebelum ember mulai miring, supaya
+            # yang terlihat adalah "mendekat lalu menuang", bukan "menuang
+            # sambil melayang".
+            self._maju(self.player, dari, maju_ke, aksi.t, 620.0)
+            prop = getattr(self.player, '_care_prop', None)
+            if prop is not None and aliran.aktif:
+                try:
+                    wp = prop.world_position
+                    aliran.perbarui((wp[0], wp[1] - 0.10, wp[2]))
+                except Exception:
+                    pass
+            # Palung terisi BERTAHAP selama fase tuang — melompat dari kering
+            # ke penuh dalam satu frame membuang satu-satunya bagian yang
+            # benar-benar memuaskan untuk ditonton.
+            if aksi.fase in ('tuang', 'tegak'):
+                mulai_ms, panjang_ms = 1030.0, 700.0
+                u = min(1.0, max(0.0, (aksi.t * 1000.0 - mulai_ms) / panjang_ms))
+                set_trough_level(self.world, sebelum + (100 - sebelum) * u)
+
+        def _usai(aksi):
+            aliran.hapus()
+            self.sync_trough()
+
+        care_anim.mulai(
+            self.player, 'minum',
+            pemicu=[(1030.0, _mulai_tuang), (1240.0, _isi), (1760.0, _selesai_tuang)],
+            saat_frame=_frame, saat_usai=_usai,
+        )
+
+        # Ternak menghampiri palung dan menunduk. Diberi jeda supaya mereka
+        # bergerak SESUDAH air terlihat jatuh, bukan sebelum.
+        tile = getattr(self.world, 'trough', None)
+        if tile:
+            tx, ty = tile['tile']
+            for aid in kawanan:
+                actor = entities_mgr.actors.get(aid)
+                if actor is not None and hasattr(actor, 'panggil_minum'):
+                    actor.panggil_minum(tx, ty, tunda=1.4)
+
+        panels.flash_msg(f"Mengisi palung untuk {npc.get('name', npc_id)}...", 1.0)
 
     def queue_toggle(self, panels):
         tx, ty = self.player._facing_tile()
@@ -775,6 +1984,56 @@ class InteractionController:
         for (pos, _pri) in queue_copy:
             self.use_tool_at(tool_idx, pos[0], pos[1], entities_mgr, panels)
         panels.flash_msg(f"{len(queue_copy)} aksi antrian selesai!", 1.2)
+
+    def naik_turun_kuda(self, npc_id: str, entities_mgr=None, panels=None):
+        """Naik ke punggung kuda, atau turun darinya.
+
+        Tunggangan disimpan sebagai `state.menunggang`, bukan sebagai bendera
+        di Player3D, karena tiga sistem lain harus ikut tahu (lihat state.py).
+        Yang dikerjakan di sini cuma peralihannya sendiri.
+        """
+        s = self.player.state
+
+        if getattr(s, 'menunggang', ''):
+            turun_dari = s.menunggang
+            s.menunggang = ''
+            # Kuda digeser satu tile ke BELAKANG pemain, kalau tile itu bisa
+            # diinjak. Tanpa ini pemain mendarat persis di dalam badan kudanya
+            # dan keduanya saling menembus sampai kuda itu kebetulan berjalan.
+            actor = (entities_mgr.actors.get(turun_dari)
+                     if entities_mgr is not None else None)
+            if actor is not None:
+                rad = math.radians(self.player.rotation_y)
+                nx = int(round(actor.logical_x - math.sin(rad)))
+                ny = int(round(actor.logical_y - math.cos(rad)))
+                try:
+                    from ..entities import _can_walk
+                    bisa = _can_walk(nx, ny, s.scene_name, s.dungeon_tiles)
+                except Exception:
+                    bisa = False
+                if bisa:
+                    actor.logical_x, actor.logical_y = float(nx), float(ny)
+                    actor.target_x, actor.target_y = float(nx), float(ny)
+            sound_play('menu_select', 0.7)
+            if panels:
+                panels.flash_msg("Turun dari kuda.", 1.0)
+            return
+
+        # Sapu terbang dan kuda dua-duanya mengangkat pemain dari tanah dan
+        # dua-duanya mengalikan kecepatan; dinyalakan bersamaan, pemain
+        # melayang 1,25 m DI ATAS kuda dengan laju 4,2x. Sapu dimatikan dulu.
+        if getattr(self.player, '_is_flying', False):
+            self.toggle_broom_flying(panels)
+
+        s.menunggang = npc_id
+        # Naik ke kuda menaikkan hati dan senang: ini satu-satunya hal yang
+        # bisa dilakukan dengan Pegasus (produk None), jadi ia harus membayar
+        # sesuatu, atau hewan ini tidak punya alasan untuk ada.
+        s.senang = min(NEED_MAX, getattr(s, 'senang', 100) + 10)
+        s.npc_hearts[npc_id] = min(10.0, s.npc_hearts.get(npc_id, 0) + 0.2)
+        sound_play('quest', 0.9)
+        if panels:
+            panels.flash_msg("Naik kuda! [E] untuk turun.", 1.6)
 
     def toggle_broom_flying(self, panels=None):
         self.player._is_flying = not getattr(self.player, '_is_flying', False)

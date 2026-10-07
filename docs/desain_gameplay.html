@@ -1,0 +1,346 @@
+<title>Neraca Motif Lembah Karsa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --void:#FBF7E8; --surface:#F2EBD6; --edge:#D8C89B;
+  --ink:#12251F; --ink-soft:#4A6459; --ink-faint:#7C9086;
+  --bronze:#8A6428; --bronze-hi:#C79B45;
+  --teal:#0E6B4F; --teal-hi:#12867A;
+  --pink:#C4536F;
+  --shadow:0 1px 0 rgba(18,37,31,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --void:#07120F; --surface:#0D1E19; --edge:#1E3A31;
+    --ink:#E9F1EA; --ink-soft:#8FAFA4; --ink-faint:#5C7A72;
+    --bronze:#C79B45; --bronze-hi:#EBD08A;
+    --teal:#3FB3A0; --teal-hi:#6FD8C4;
+    --pink:#E77E9A;
+    --shadow:0 1px 0 rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"]{
+  --void:#07120F; --surface:#0D1E19; --edge:#1E3A31;
+  --ink:#E9F1EA; --ink-soft:#8FAFA4; --ink-faint:#5C7A72;
+  --bronze:#C79B45; --bronze-hi:#EBD08A;
+  --teal:#3FB3A0; --teal-hi:#6FD8C4;
+  --pink:#E77E9A;
+  --shadow:0 1px 0 rgba(0,0,0,.4);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--void); color:var(--ink);
+  font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  font-size:15.5px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:940px;margin:0 auto;padding:52px 28px 110px}
+
+h1{
+  font-family:"Bodoni Moda",Didot,"Times New Roman",serif;
+  font-weight:600; font-size:clamp(32px,5vw,50px); line-height:1.04;
+  margin:0 0 10px; text-wrap:balance; letter-spacing:-.012em;
+}
+.lede{color:var(--ink-soft);max-width:62ch;margin:0 0 6px;font-size:17px}
+.stamp{
+  display:inline-block;margin-top:14px;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--bronze);border:1px solid var(--edge);padding:4px 9px;border-radius:2px;
+}
+h2{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--ink-faint);font-weight:500;
+  border-top:1px solid var(--edge);padding-top:12px;margin:56px 0 18px;
+}
+h3{
+  font-family:"Bodoni Moda",Didot,serif;font-weight:600;
+  font-size:22px;line-height:1.22;margin:0 0 8px;text-wrap:balance;
+}
+p{max-width:66ch;margin:0 0 15px}
+.muted{color:var(--ink-soft)}
+code{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.9em;
+  background:var(--surface);border:1px solid var(--edge);
+  padding:1px 5px;border-radius:2px;
+}
+strong{font-weight:600}
+
+/* rantai mekanik */
+.rantai{
+  display:flex;flex-wrap:wrap;gap:1px;background:var(--edge);
+  border:1px solid var(--edge);border-radius:3px;overflow:hidden;margin:0 0 18px;
+}
+.rantai .langkah{background:var(--surface);padding:12px 15px;flex:1 1 150px;min-width:150px}
+.rantai .n{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10px;
+  letter-spacing:.15em;color:var(--bronze);display:block;margin-bottom:4px;
+}
+.rantai .t{font-weight:600;display:block;margin-bottom:3px}
+.rantai .d{color:var(--ink-soft);font-size:13.5px;line-height:1.45}
+
+/* neraca */
+.tabel-bungkus{overflow-x:auto;margin:0 0 16px;
+  border:1px solid var(--edge);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--edge)}
+th{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);font-weight:500;
+}
+td.n{font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr.jumlah td{font-weight:600;background:color-mix(in srgb,var(--bronze) 9%,transparent)}
+td.kurang{color:var(--pink)}
+td.cukup{color:var(--teal)}
+
+/* angka besar */
+.sorot{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:1px;background:var(--edge);border:1px solid var(--edge);
+  border-radius:3px;overflow:hidden;margin:0 0 18px;
+}
+.sorot .sel{background:var(--surface);padding:15px 16px}
+.sorot .k{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10px;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--ink-faint);
+  display:block;margin-bottom:4px;
+}
+.sorot .v{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:27px;
+  font-variant-numeric:tabular-nums;line-height:1.1;display:block;
+}
+.sorot .v.buruk{color:var(--pink)}
+.sorot .v.baik{color:var(--teal)}
+.sorot .c{color:var(--ink-soft);font-size:12.5px;display:block;margin-top:4px;line-height:1.4}
+
+/* keputusan */
+.keputusan{
+  border:1px solid var(--edge);border-left:3px solid var(--bronze);
+  border-radius:3px;background:var(--surface);
+  padding:18px 20px;margin:0 0 14px;box-shadow:var(--shadow);
+}
+.keputusan h3{margin-bottom:6px}
+.keputusan .knop{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;
+  letter-spacing:.1em;color:var(--bronze);display:block;margin-bottom:10px;
+}
+.keputusan p{margin-bottom:10px}
+.keputusan .akibat{
+  border-left:2px solid var(--edge);padding-left:12px;margin:0;
+  color:var(--ink-soft);font-size:14px;
+}
+.keputusan .akibat b{color:var(--ink);font-weight:600}
+
+.catatan{
+  border:1px dashed var(--edge);border-radius:3px;padding:16px 18px;
+  color:var(--ink-soft);font-size:14px;margin:0 0 16px;
+}
+.catatan b{color:var(--ink)}
+
+ul{max-width:66ch;padding-left:20px;margin:0 0 15px}
+li{margin-bottom:7px}
+
+footer{
+  margin-top:60px;border-top:1px solid var(--edge);padding-top:16px;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;
+  color:var(--ink-faint);line-height:1.7;
+}
+</style>
+
+<div class="wrap">
+
+<h1>Neraca Motif Lembah Karsa</h1>
+<p class="lede">Mesin otonomi warga desa sekarang hidup dan membaca perabot
+nyata di sekitarnya. Dokumen ini soal apa yang terjadi setelah itu: sebuah
+ekonomi yang, kalau diukur, menghukum persis kegiatan yang membuat desa
+terlihat hidup.</p>
+<span class="stamp">semua angka dihitung dari kode, bukan diperkirakan</span>
+
+<h2>Mekaniknya, tepatnya</h2>
+
+<p>Tidak ada aturan prioritas di mana pun. Perilaku muncul dari lima langkah,
+dan itu saja:</p>
+
+<div class="rantai">
+  <div class="langkah"><span class="n">1</span><span class="t">Motif meluruh</span>
+  <span class="d">Delapan motif, tiap satu meluruh asimtotik menuju lantai −100.</span></div>
+  <div class="langkah"><span class="n">2</span><span class="t">Objek beriklan</span>
+  <span class="d">Iklan menempel pada <em>interaksi</em>, bukan objek. Kasur tidak memberi energi; <em>Tidur pada kasur</em> yang mengiklankannya.</span></div>
+  <div class="langkah"><span class="n">3</span><span class="t">Gerbang minimum</span>
+  <span class="d">Iklan hanya berlaku kalau motifnya sudah di bawah ambang. Inilah yang mencegah sim tidur saat segar — tanpa satu pun aturan khusus.</span></div>
+  <div class="langkah"><span class="n">4</span><span class="t">Skor per jarak</span>
+  <span class="d">Delta-happy yang diprediksi, dibagi falloff jarak. Sim boleh menyeberangi ruangan demi sesuatu yang cukup berharga.</span></div>
+  <div class="langkah"><span class="n">5</span><span class="t">Roulette empat teratas</span>
+  <span class="d">Bukan argmax. Keacakan terkendali inilah sumber “kebodohan” yang lucu, dan yang membuat rumah terasa hidup alih-alih deterministik.</span></div>
+</div>
+
+<p>Sistem ini bagus, dan sudah lengkap sejak lama. Yang belum ada sampai
+sekarang cuma satu: tidak ada yang pernah memanggilnya. Warga desa memilih
+dari daftar mati tiga baris dan tidak pernah melihat sekelilingnya.</p>
+
+<h2>Neraca sehari</h2>
+
+<p>Satu hari-sim adalah 1.440 menit. Delapan motif meluruh sepanjang itu, dan
+tiap interaksi membayar sejumlah poin selama durasinya. Jadi ini ekonomi, dan
+ekonomi bisa dihitung.</p>
+
+<div class="tabel-bungkus">
+<table>
+<thead><tr><th>Motif</th><th>Luruh / hari</th><th>Per jam</th></tr></thead>
+<tbody>
+<tr><td>Energi</td><td class="n">180</td><td class="n">7,50</td></tr>
+<tr><td>Kamar Kecil</td><td class="n">170</td><td class="n">7,08</td></tr>
+<tr><td>Lapar</td><td class="n">160</td><td class="n">6,67</td></tr>
+<tr><td>Nyaman</td><td class="n">150</td><td class="n">6,25</td></tr>
+<tr><td>Senang</td><td class="n">140</td><td class="n">5,83</td></tr>
+<tr><td>Higiene</td><td class="n">122</td><td class="n">5,08</td></tr>
+<tr><td>Sosial</td><td class="n">84</td><td class="n">3,50</td></tr>
+<tr class="jumlah"><td>Permintaan</td><td class="n">1.006</td><td class="n">41,9</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Di sisi suplai, dua puluh interaksi di katalog membayar antara 0,13 dan
+2,00 poin per menit. Mediannya <strong>0,78</strong>. Kalau seorang sim sibuk
+seratus persen waktunya pada laju median, ia menghasilkan 1.116 poin — di atas
+permintaan.</p>
+
+<p>Jadi di atas kertas ekonominya surplus 11%. Kertas itu mengabaikan satu
+hal.</p>
+
+<h2>Perangkap tidur</h2>
+
+<p><strong>Tidur</strong> membayar 110 energi selama 420 menit: 0,262 poin per
+menit. Energi meluruh 0,125 poin per menit — <em>dan luruhnya tidak berhenti
+saat tidur</em>. Jadi selama tidur, energi hanya naik bersih 0,137 per menit,
+sementara sepanjang sisa hari ia turun 0,125.</p>
+
+<p>Titik seimbangnya bisa diselesaikan langsung:</p>
+
+<div class="sorot">
+  <div class="sel"><span class="k">Harus tidur</span><span class="v buruk">47,7%</span>
+  <span class="c">11,5 jam per hari, hanya untuk <em>menahan</em> energi — bukan menaikkannya</span></div>
+  <div class="sel"><span class="k">Waktu tersisa</span><span class="v">753</span>
+  <span class="c">menit untuk enam motif lainnya</span></div>
+  <div class="sel"><span class="k">Laju dibutuhkan</span><span class="v buruk">1,10</span>
+  <span class="c">poin/menit — di atas median katalog 0,78</span></div>
+  <div class="sel"><span class="k">Yang sanggup</span><span class="v buruk">5 / 20</span>
+  <span class="c">interaksi yang membayar selaju itu</span></div>
+</div>
+
+<p>Lima interaksi itu semuanya pendek dan fungsional: Cuci Tangan, Cuci Muka,
+Bikin Kopi, Makan, Rapikan Diri. Dan inilah kesimpulan yang sebenarnya:</p>
+
+<div class="catatan">
+<b>Katalognya menghukum persis kegiatan yang membuat desa terlihat hidup.</b>
+Nonton TV membayar 0,56/menit. Duduk di Dermaga 0,53. Baca Buku 0,29. Berdoa
+di nisan 0,13. Semuanya jauh di bawah laju bertahan hidup. Seorang sim yang
+menonton televisi, membaca, atau duduk memandang danau sedang memilih untuk
+kelaparan — dan mesin skornya cukup pintar untuk tahu itu, jadi lama-kelamaan
+ia berhenti melakukannya.
+</div>
+
+<p class="muted">Terukur setelah satu hari-sim hidup sendiri di scene
+<code>farm</code>: mood keempat warga berkisar −13 sampai −38, dengan energi
+tiga di antaranya menyentuh lantai. Ini berlaku untuk <strong>pemain
+juga</strong> — mesin motifnya sama persis.</p>
+
+<h2>Tiga keputusan, dan angkanya masing-masing</h2>
+
+<p>Ketiganya mengubah rasa permainan ke arah yang berbeda. Tidak ada yang
+“benar”; yang ada pilihan tentang seberapa menuntut game ini. Karena itu ini
+keputusan pemilik, bukan keputusan yang pantas diambil diam-diam oleh siapa pun
+yang kebetulan sedang menyunting kode.</p>
+
+<div class="keputusan">
+  <span class="knop">KNOP A — Tidur membayar lebih</span>
+  <h3>Naikkan energi Tidur dari 110 ke 190</h3>
+  <p>Satu angka, satu baris di <code>objects.py</code>. Laju isi jadi 0,452
+  per menit, dan porsi hidup yang harus dihabiskan di kasur turun dari 47,7%
+  ke 27,6% — 6,6 jam, angka yang orang kenali sebagai “semalam”.</p>
+  <p class="akibat"><b>Akibatnya:</b> waktu bangun naik dari 753 ke 1.042
+  menit, dan laju yang dibutuhkan turun ke 0,79 poin/menit — persis di median
+  katalog. Nonton TV masih merugi, tapi tidak lagi mematikan. Ini perubahan
+  paling kecil yang menyentuh akar masalahnya.</p>
+</div>
+
+<div class="keputusan">
+  <span class="knop">KNOP B — Dunia meluruh lebih lambat</span>
+  <h3>Turunkan seluruh laju luruh 30%</h3>
+  <p>Permintaan turun dari 1.006 ke 704 poin per hari. Semua interaksi jadi
+  sepadan, termasuk yang panjang dan santai.</p>
+  <p class="akibat"><b>Akibatnya:</b> game jadi jauh lebih longgar, dan
+  kebutuhan berhenti menjadi tekanan. Untuk sebuah game bertani yang santai
+  itu mungkin justru benar — tapi sadari yang dilepas: kalau motif tidak
+  pernah mendesak, mesin iklan berhenti punya sesuatu untuk diputuskan, dan
+  otonomi warga jadi terlihat acak alih-alih termotivasi.</p>
+</div>
+
+<div class="keputusan">
+  <span class="knop">KNOP C — Kegiatan santai membayar dua kali</span>
+  <h3>Beri interaksi panjang iklan <em>Senang</em> yang sepadan</h3>
+  <p>Nonton TV, Baca Buku, Duduk di Dermaga, Berdoa. Bukan menaikkan
+  efisiensinya sampai setara mencuci tangan — tapi cukup untuk membuatnya
+  bukan pilihan yang merugikan.</p>
+  <p class="akibat"><b>Akibatnya:</b> paling banyak kerja, dan paling banyak
+  imbalannya. Ini satu-satunya knop yang mengubah <em>apa yang terlihat</em> di
+  desa, bukan cuma seberapa keras hidup di sana. Warga akan duduk di dermaga
+  karena itu masuk akal baginya, dan itu yang membuat sebuah desa terbaca
+  sebagai tempat yang dihuni.</p>
+</div>
+
+<p class="muted">A dan C bisa digabung; B mengubah rasa keseluruhan dan
+sebaiknya diputuskan sendiri. Apa pun yang dipilih, <code>regress.py</code>
+sudah menjaga bahwa motif tetap di rentang −100..100 dan otonominya tetap
+tersambung.</p>
+
+<h2>Yang masih hilang: alasan untuk peduli</h2>
+
+<p>Neraca di atas soal <em>bertahan</em>. Tapi TAHAPAN.md menaruh satu hal di
+atas seni apa pun, dan alasannya tepat: sekarang pemain bisa main lima menit
+lalu bertanya “terus?”. Sudah ada kebutuhan, objek, aksi, dan antrian. Belum
+ada arah.</p>
+
+<p>Jawaban The Sims 3 adalah <strong>Wishes</strong>: sim memunculkan keinginan
+kontekstual, pemain menjanjikan beberapa, dan memenuhinya membayar sesuatu yang
+bertahan. Yang membuatnya bekerja adalah ia memberi arah <em>tanpa</em>
+mencabut kebebasan — dan “kebebasannya seru” adalah kata-kata pemilik game ini
+sendiri.</p>
+
+<p>Bentuk yang paling murah di sini, karena seluruh bahannya sudah ada:</p>
+
+<ul>
+<li><strong>Wish lahir dari yang sudah dihitung.</strong> Mesin skor sudah
+menghasilkan daftar (objek, interaksi, skor) tiap kali seorang sim memilih.
+Sebuah wish tinggal kandidat berskor tinggi yang <em>dinaikkan ke permukaan</em>
+alih-alih langsung dieksekusi — “Arya ingin memancing di dermaga”.</li>
+<li><strong>Menjanjikan itu tindakan pemain.</strong> Empat slot; sisanya
+mengambang dan berganti. Itu yang mengubah wish dari daftar tugas menjadi
+pilihan.</li>
+<li><strong>Bayarannya harus bertahan.</strong> Poin yang tidak pernah meluruh,
+berbeda dari delapan motif yang semuanya meluruh. Itu bedanya antara “hari ini
+lancar” dan “aku sedang membangun sesuatu”.</li>
+<li><strong>Konteks memberi cerita gratis.</strong> Wish yang muncul karena
+hujan, karena musim berganti, atau karena seseorang baru saja pindah ke desa
+akan terbaca sebagai kepribadian, padahal ia cuma pemfilteran kandidat.</li>
+</ul>
+
+<p>Setelah Wishes ada, Tahap 6 menyusul murah: lima sifat per sim yang
+mengubah <em>wish mana</em> yang muncul, dan moodlet bernama yang menjelaskan
+dengan kata-kata kenapa sim merasa begitu — menggantikan satu angka mood yang
+hari ini tidak menjelaskan apa pun.</p>
+
+<footer>
+Dihitung dari <code>game/motives.py</code> dan <code>game/objects.py</code> pada
+commit yang sama dengan dokumen ini. Laju luruh diukur dengan menjalankan
+<code>Motives.tick(1440)</code> pada state awal; laju suplai dihitung sebagai
+jumlah delta iklan dibagi durasi tiap interaksi. Angka mana pun di sini bisa
+diulang.
+</footer>
+
+</div>

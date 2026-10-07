@@ -1,0 +1,67 @@
+{
+  "bar": "Story of Seasons: A Wonderful Life (remake 2023)",
+  "source": "Screenshot gameplay — game yang sedang dimainkan, oleh siapa pun. Bukan art resmi, bukan render, bukan still cutscene, bukan frame trailer. Yang dibandingkan apa yang benar-benar terlihat saat bermain.",
+  "cara_mengambil": "Screenshot GAMEPLAY, dari sumber mana pun — Anda main sendiri, halaman Steam, atau frame dari video gameplay. Yang tidak boleh: art resmi, render, still cutscene, dan frame trailer. Semuanya lewat pipeline berbeda, sering di-stage, dan biasanya HUD-nya dicopot — untuk `hud_default` itu membuat frame-nya tidak berguna, dan untuk `character_closeup` still cutscene punya kamera dan pencahayaan yang bukan kamera main. Minimal 1280x720, tidak di-crop dan tidak disunting. Idealnya kedelapan frame dari sumber dan pengaturan grafis yang sama, supaya perbandingannya tidak tercemar beda setting. Simpan sebagai _bench/refs/<slug>.png — jangan di-commit.",
+  "frames": [
+    {
+      "slug": "farm_wide",
+      "catatan": "Ladang pertanian dari jarak main biasa, siang cerah, kamera pada sudut default. Ini patokan untuk rumput, tanah, dan bagaimana petak ladang dibedakan dari rumput di sekelilingnya."
+    },
+    {
+      "slug": "farm_closeup",
+      "catatan": "Berdiri di antara tanaman, kamera dekat. Patokan untuk detail permukaan tanah dan tanaman dari dekat — jarak di mana tekstur ubin paling mudah ketahuan mengulang."
+    },
+    {
+      "slug": "hud_default",
+      "catatan": "Layar main biasa tanpa menu terbuka. Patokan untuk berapa banyak layar yang boleh dimakan HUD, di mana ia menempel, dan seberapa besar teksnya."
+    },
+    {
+      "slug": "character_closeup",
+      "catatan": "Satu penduduk desa dari jarak percakapan, menghadap kamera. Patokan untuk proporsi, warna kulit dan pakaian, dan seberapa jauh wajah dibaca sebagai wajah."
+    },
+    {
+      "slug": "character_midshot",
+      "catatan": "Penduduk desa dari jarak main biasa, seluruh badan. Jarak inilah yang menentukan apakah orang terbaca sebagai orang, dan di jarak inilah avatar kita paling sering gagal."
+    },
+    {
+      "slug": "village_wide",
+      "catatan": "Pemandangan desa dengan beberapa bangunan dan penduduk sekaligus. Patokan untuk kepadatan, jarak antar-bangunan, dan bagaimana banyak benda tetap terbaca dalam satu frame."
+    },
+    {
+      "slug": "barn_interior",
+      "catatan": "Di dalam kandang bersama ternak. Patokan untuk pencahayaan dalam ruangan, lantai, dan skala hewan terhadap pemain."
+    },
+    {
+      "slug": "evening_light",
+      "catatan": "Adegan luar ruang saat senja. Patokan untuk warna langit, arah bayangan, dan seberapa jauh warna dunia bergeser mengikuti waktu."
+    },
+    {
+      "slug": "gua_interior",
+      "catatan": "Ruang bawah tanah dari jarak main biasa, diterangi lentera. Patokan untuk lantai tanah galian, seberapa jauh cahaya lentera menjangkau sebelum habis, dan bagaimana dinding batu tetap terbaca dalam gelap tanpa jadi hitam pekat. Ditambahkan karena delapan slug pertama semuanya menilai kehidupan permukaan, sementara separuh pekerjaan yang sedang berjalan ada di Gua Sang Hyang dan dungeon — dan potongan yang tidak punya patokan akan dinilai dari ingatan, yang persis kegagalan yang gerbang ini dibangun untuk mencegah."
+    }
+  ],
+  "jangan_di_commit": "Repo ini PUBLIK. Frame patokan boleh ada di disk untuk pembandingan internal, tapi tidak boleh ter-commit — itu redistribusi karya orang lain. `_bench/.gitignore` menjaganya, dan `bar_gate.py check` menolak jalan kalau ada yang bocor. Akibat yang diterima dengan sadar: berkasnya hilang tiap container ditarik, jadi loop ini hanya bisa dijalankan di mesin yang menyimpan berkasnya, bukan di sesi web.",
+  "klip_sumber": "Klip gameplay, bukan trailer dan bukan cutscene. Gerak tidak bisa dinilai dari gambar diam: animasi yang hidup dan pose yang BEKU menghasilkan tangkapan layar yang sama. Tiap klip disimpan sebagai STRIP — 6 ubin 960x540 berjarak tetap — dibuat `tools/klip.py ambil`. Strip kita dibuat `tools/capture.py --strip 6 --strip-every N`. Jumlah dan ukuran ubin HARUS sama di kedua sisi, kalau tidak kritikus bisa menebak mana yang mana dari bentuknya.",
+  "klip": [
+    {
+      "slug": "gerak_berkuda",
+      "catatan": "Pemain menaiki kuda dan BERGERAK. Patokan untuk tinggi duduk, sikap badan di atas pelana, ayunan kaki kuda, dan bagaimana kamera mengikuti saat berkuda — bukan sekadar pemain menempel di punggung kuda."
+    },
+    {
+      "slug": "gerak_panen",
+      "catatan": "Memanen atau mengerjakan petak ladang dengan alat. Patokan untuk ayunan badan, jeda antar ayunan, dan apakah alatnya benar-benar menyentuh tanah pada frame yang tepat."
+    },
+    {
+      "slug": "gerak_gosok",
+      "catatan": "Menggosok/menyikat ternak. Patokan untuk gerak tangan berulang, jarak pemain ke hewan, dan reaksi hewannya."
+    },
+    {
+      "slug": "gerak_bicara",
+      "catatan": "Berbicara dengan penduduk desa. Patokan untuk gerak tubuh saat bicara — kepala, tangan, pergeseran berat badan — dan untuk bagaimana kotak dialog duduk di layar."
+    }
+  ],
+  "repo_privat": true,
+  "repo_privat_catatan": "Repo dipindahkan ke PRIVAT supaya frame patokan tidak perlu dihapus tiap kali. Selama ini benar, delapan frame diam dan empat strip gerak boleh ter-commit. Kalau repo dikembalikan jadi publik, setel ini ke false DAN keluarkan patokannya dari git (`git rm --cached`) — meng-commit tangkapan layar Story of Seasons ke repo publik adalah redistribusi karya orang lain. Rekaman sumber di refs/_video/ tidak pernah ikut: 2,9 GB, di atas batas GitHub.",
+  "klip_catatan": "Potongan bertipe 'klip' menilai GERAK, dan gerak tidak bisa dinilai dari gambar diam. Rekam layar gameplay AWL 1-3 detik yang memuat satu gerakan PENUH, simpan sebagai _bench/refs/<slug>.webp (animasi), minimal 12 frame dan sisi terpendek 480 px. .mp4/.webm diterima tapi ISINYA TIDAK BISA DIPERIKSA di sini — tidak ada pembaca video, jadi gerbangnya hanya melihat ukurannya. Sisi kita direkam dengan `python tools/rekam.py`.",
+  "klip_struktur": "Gerak disimpan sebagai daftar `klip` terpisah dengan slug `gerak_*`, BUKAN sebagai entri `frames` bernama naik_kuda/anim_* seperti di cabang gauntlet-loop-setup. Alasannya bukan selera: bahan patokan untuk slug `gerak_*` SUDAH ADA di disk (_bench/refs/gerak_berkuda.png dan tiga lainnya, masing-masing strip 6 ubin 960x540 yang diambil dari rekaman gameplay tanpa komentar). Mengganti nama slug berarti membuang bahan itu dan mengambilnya ulang."
+}

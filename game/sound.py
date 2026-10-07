@@ -61,6 +61,14 @@ def _chord(freqs: list, dur_ms: int, vol: float = 0.3) -> pygame.mixer.Sound:
 
 SOUNDS: dict = {}
 _enabled: bool = False
+_master: float = 0.8   # volume master (0..1), diatur dari menu Pengaturan
+
+def set_master(v: float):
+    global _master
+    _master = max(0.0, min(1.0, v))
+
+def get_master() -> float:
+    return _master
 
 def init_sound() -> bool:
     global _enabled
@@ -101,6 +109,9 @@ def build_sounds():
             'morning':    _chord([261, 329, 392, 523], 580, 0.30),
             'capture':    _sweep(275, 740, 330, 0.36),
             'heal':       _sweep(330, 560, 210, 0.20),
+            'mob_windup': _sweep(150, 430, 340, 0.24),    # geraman naik — telegraph serangan
+            'mob_death':  _sweep(360, 70, 420, 0.34),     # tumbang — nada turun
+            'hurt':       _wave(150, 130, 0.30, 'square'),# pemain kena pukul
         })
     except Exception:
         _enabled = False
@@ -116,7 +127,7 @@ def play(name: str, volume: float = 1.0):
     if cd: _cooldowns[name] = now + cd
     try:
         s = SOUNDS[name]
-        s.set_volume(max(0.0, min(1.0, volume)))
+        s.set_volume(max(0.0, min(1.0, volume)) * _master)
         s.play()
     except Exception: pass
 
@@ -386,8 +397,21 @@ def _ambient_loop(scene: str, dur_sec: float = 16.0) -> pygame.mixer.Sound:
     return pygame.mixer.Sound(buffer=buf)
 
 
+_director = None  # MusicDirector dari music.py; None → sistem loop lama
+
+
 def _build_ambients():
+    global _director
     if not _enabled: return
+    try:
+        from . import music
+        if music.AVAILABLE:
+            _director = music.MusicDirector()
+            _director.prewarm()
+            return
+    except Exception as e:
+        print(f"[Sound] musik adaptif mati, pakai loop lama: {e}")
+        _director = None
     try:
         for scene_type in ('outdoor', 'forest', 'cave', 'indoor', 'water', 'dungeon_combat'):
             _AMBIENT_LOOPS[scene_type] = _ambient_loop(scene_type)
@@ -409,6 +433,8 @@ _SCENE_AMBIENT = {
 def set_ambient_for_scene(scene_name: str, volume: float = 0.30):
     """Switch ambient loop berdasarkan scene aktif."""
     global _current_ambient
+    if _director is not None:
+        return  # update_ambient_dynamic memilih suasana tiap frame
     if not _enabled or not _AMBIENT_LOOPS:
         return
     category = _SCENE_AMBIENT.get(scene_name, 'outdoor')
@@ -434,6 +460,9 @@ def update_ambient_dynamic(state, player, dt):
     """Secara dinamis menyesuaikan volume/BGM berdasarkan intensitas pertempuran, 
     HP kritis, maupun mode Sapoe Terbang melesat cepat."""
     global _current_ambient
+    if _director is not None:
+        _update_director(state, player, dt)
+        return
     if not _enabled or not _AMBIENT_LOOPS:
         return
         
@@ -492,3 +521,28 @@ def update_ambient_dynamic(state, player, dt):
             ch.set_volume(max(0.0, min(1.0, new_vol)))
         except Exception:
             pass
+
+
+def _mobs_near(state, player, radius=4.5):
+    for mob in getattr(state, 'mobs', None) or ():
+        try:
+            if math.hypot(mob['x'] - player.x / 2.0, mob['y'] - player.z / 2.0) < radius:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _update_director(state, player, dt):
+    combat = state.scene_name == 'dungeon' and _mobs_near(state, player)
+    # HP kritis meredupkan musik, terbang Sapoe menaikkannya -- perilaku lama.
+    hp_ratio = max(0.0, state.hp / max(state.max_hp, 1))
+    gain = 0.2 + 0.8 * (hp_ratio / 0.35) if hp_ratio < 0.35 else 1.0
+    if getattr(player, '_is_flying', False):
+        gain *= 1.25
+    gain *= _master  # ikut volume master dari menu Pengaturan
+    try:
+        _director.update(state.scene_name, state.get_hour(), state.weather,
+                         state.get_season(), combat=combat, gain=gain, dt=dt)
+    except Exception as e:
+        print(f"[Sound] musik adaptif: {e}")

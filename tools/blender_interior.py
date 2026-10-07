@@ -823,6 +823,91 @@ def pancuran():
     box('kuningan', (0.03, 0.2, 0.025), (0.38, -0.05, 0.47), bevel=0)
 
 
+def gapura_swarga():
+    """Candi bentar (gapura terbelah) batu andesit berhias emas, 2 ubin lebar.
+
+    Celah tengah 2,4 m -- jalur dua ubin lewat di antaranya. Pusat = tengah celah.
+    """
+    for sx in (-1, 1):
+        x = sx * 2.1
+        box('batu_gelap', (1.6, 1.6, 0.5), (x, 0, 0), bevel=0.03)
+        for i, (w, h) in enumerate(((1.4, 1.2), (1.2, 1.0), (1.0, 0.9), (0.8, 0.8), (0.6, 0.7), (0.4, 0.6))):
+            z = 0.5 + sum(hh for _, hh in ((1.4, 1.2), (1.2, 1.0), (1.0, 0.9), (0.8, 0.8), (0.6, 0.7), (0.4, 0.6))[:i])
+            # Sisi dalam gapura TEGAK lurus (ciri candi bentar), sisi luar bertingkat.
+            off = sx * (1.4 - w) / 2
+            box('batu' if i % 2 else 'batu_gelap', (w, w, h), (x + off, 0, z), bevel=0.03)
+            box('kuningan', (w + 0.04, w + 0.04, 0.06), (x + off, 0, z + h - 0.06), bevel=0)
+        box('kuningan', (0.2, 0.2, 0.5), (x + sx * 0.5, 0, 5.7))
+        ball('kuningan', 0.14, (x + sx * 0.5, 0, 6.3))
+        # relief daun di muka depan
+        for j in range(3):
+            leaf('kuningan', 0.5, 0.3, (x, -0.72, 1.3 + j * 1.0), sx * 0.4, 1.2)
+    # anak tangga di bawah celah
+    for i in range(3):
+        box('batu', (2.4, 0.5, 0.12), (0, -0.4 - i * 0.5, 0.24 - i * 0.12), bevel=0.02)
+    # pot sesajen + payung tedung di kiri-kanan
+    for sx in (-1, 1):
+        cyl('gerabah', 0.18, 0.3, (sx * 3.3, -1.0, 0), verts=10)
+        for k in range(3):
+            leaf(('daun', 'kain_mustard', 'kain_merah')[k], 0.2, 0.1, (sx * 3.3, -1.0, 0.3), k * 2.1, -0.4)
+        cyl('kayu_gelap', 0.03, 2.6, (sx * 3.0, 0.6, 0), verts=6)
+        cyl('kain_mustard', 0.55, 0.3, (sx * 3.0, 0.6, 2.4), verts=12, r2=0.05)
+        cyl('putih', 0.56, 0.12, (sx * 3.0, 0.6, 2.3), verts=12)
+
+
+def mulut_gua():
+    """Mulut gua di kaki jalur: lengkung batu kasar dengan kegelapan di dalam.
+
+    Pusat = ubin ambang (dua ubin lebar). Muka menghadap -Y (ke jalur).
+    """
+    box('hitam', (2.6, 0.3, 2.6), (0, 0.6, 0), bevel=0)
+    for i in range(9):
+        a = math.pi * i / 8
+        x = math.cos(a) * 1.75
+        z = math.sin(a) * 2.2
+        ball('batu_gelap' if i % 2 else 'batu', 0.55 + 0.1 * (i % 3), (x, 0.3, z + 0.2), seg=7, ring=5,
+             scale=(1.0, 0.9, 1.15))
+    for sx in (-1, 1):
+        box('batu_gelap', (0.9, 1.4, 1.8), (sx * 1.9, 0.5, 0), rot=(0, 0, sx * 0.08), bevel=0.08)
+    box('batu', (4.6, 1.4, 1.0), (0, 0.5, 2.4), bevel=0.15)
+    for i in range(5):
+        leaf(('daun', 'daun_gelap')[i % 2], 0.6, 0.25, (-1.4 + i * 0.7, -0.1, 3.1), i * 0.9, 2.4)  # sulur
+    # obor di kedua sisi
+    for sx in (-1, 1):
+        cyl('kayu_gelap', 0.04, 1.3, (sx * 2.4, -0.4, 0), verts=6)
+        cyl('besi_gelap', 0.09, 0.15, (sx * 2.4, -0.4, 1.3), verts=8, r2=0.12)
+        cyl('api', 0.08, 0.25, (sx * 2.4, -0.4, 1.42), verts=6, r2=0.0)
+
+
+def lubang_dungeon():
+    """Lubang ke gua bertingkat: bibir batu, kegelapan, tangga kayu, tali, obor.
+
+    Pusat = ubin TANGGA_TURUN. Muka menghadap -Y.
+    """
+    box('hitam', (1.5, 1.5, 0.02), (0, 0, 0.005), bevel=0)
+    for i in range(12):
+        a = 2 * math.pi * i / 12
+        ball('batu' if i % 3 else 'batu_gelap', 0.26 + 0.05 * (i % 2),
+             (math.cos(a) * 0.86, math.sin(a) * 0.86, 0.05), seg=7, ring=5, scale=(1.2, 1.0, 0.6))
+    # dua tiang tangga mencuat dari lubang + anak tangga
+    for sx in (-0.22, 0.22):
+        box('kayu', (0.07, 0.07, 1.6), (sx, 0.42, -0.6), rot=(-0.35, 0, 0))
+    for i in range(4):
+        box('kayu_gelap', (0.5, 0.06, 0.05), (0, 0.42 - i * 0.12 + 0.3, -0.25 + i * 0.3), rot=(-0.35, 0, 0))
+    # kerangka kerekan kayu dan tali
+    for sx in (-0.8, 0.8):
+        box('kayu_gelap', (0.1, 0.1, 1.9), (sx, -0.75, 0), bevel=0.01)
+    box('kayu_gelap', (1.8, 0.1, 0.1), (0, -0.75, 1.85))
+    cyl('karung', 0.012, 1.9, (0.1, -0.75, 0.0), verts=5)
+    cyl('kayu', 0.09, 0.14, (0.1, -0.75, 1.68), rot=(0, math.pi / 2, 0), verts=10)
+    # obor & tanda peringatan
+    cyl('kayu_gelap', 0.035, 1.2, (0.95, 0.6, 0), verts=6)
+    cyl('api', 0.08, 0.22, (0.95, 0.6, 1.2), verts=6, r2=0.0)
+    box('kayu', (0.45, 0.04, 0.3), (-0.9, 0.55, 0.75), rot=(0, 0, 0.1))
+    box('merah_salib', (0.3, 0.045, 0.05), (-0.9, 0.548, 0.85), rot=(0, 0, 0.1), bevel=0)
+    cyl('kayu_gelap', 0.03, 0.8, (-0.9, 0.58, 0), verts=5)
+
+
 FURNITURE = {
     'kasur': kasur, 'kasur_klinik': kasur_klinik, 'kompor': kompor,
     'meja': meja, 'meja_panjang': meja_panjang, 'kursi': kursi, 'tv': tv,
@@ -834,6 +919,7 @@ FURNITURE = {
     'landasan': landasan, 'kuda_kuda': kuda_kuda, 'meja_tulis': meja_tulis,
     'pintu': pintu, 'jendela': jendela,
     'kulkas': kulkas, 'toilet': toilet, 'pancuran': pancuran,
+    'gapura_swarga': gapura_swarga, 'mulut_gua': mulut_gua, 'lubang_dungeon': lubang_dungeon,
 }
 
 

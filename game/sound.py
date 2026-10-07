@@ -540,6 +540,7 @@ def _update_director(state, player, dt):
     gain = 0.2 + 0.8 * (hp_ratio / 0.35) if hp_ratio < 0.35 else 1.0
     if getattr(player, '_is_flying', False):
         gain *= 1.25
+    gain *= _master  # ikut volume master dari menu Pengaturan
     try:
         _director.update(state.scene_name, state.get_hour(), state.weather,
                          state.get_season(), combat=combat, gain=gain, dt=dt)

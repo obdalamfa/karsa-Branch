@@ -84,7 +84,8 @@ Semua sesi: folder `20-Sesi/`.
 [[Mesh NodePath dipakai bersama]] · [[WASD terbalik]] · [[Terjepit permanen]] ·
 [[Pendaratan scene di luar peta]] · [[Pemain beku saat panel terbuka]] ·
 [[Font HUD tidak ketemu di mesin bersih]] · [[Pemeriksaan motif mengotori keadaan]] ·
-[[Arah WASD basis sumbu salah]]
+[[Arah WASD basis sumbu salah]] ·
+[[Pemeriksaan HUD membandingkan tangkapan lama]]
 
 ---
 

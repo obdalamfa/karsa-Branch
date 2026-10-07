@@ -2,28 +2,36 @@
 judul: Status Sekarang
 tipe: peta
 diperbarui: 2026-10-07
-commit_acuan: 342facf (merge base + kerja sesi 2026-09-22)
-regresi: 14/14 lulus — lokal DAN di CI GitHub (2026-09-22)
+commit_acuan: 8f5da30 (merge base 250 commit, 2026-10-07)
+regresi: 10/14 lulus — diukur di pohon hasil merge 8f5da30 (2026-10-07)
 tags: [moc, status]
 ---
 
 # Status Sekarang
 
-> [!warning] Pembaruan 2026-10-05 (branch `integrasi/satu`, commit 17d570b)
-> Regresi **tidak lagi 14/14**: swarga gagal `cahaya_global` (sudah gagal sebelum
-> 17d570b, belum diselidiki); `hud_terbaca` gagal acak di larian penuh tapi
-> lulus per scene. Yang baru berdiri: karakter beragam suku, wajah chibi per
-> gender, topi model Blender yang pas ([[Topi diukur dari kepala sebelum diperbesar]]),
-> kotak dialog berpotret, jadwal warga lintas scene, layar Buat Karakter.
-> Belum: suasana semua scene setara farm, animasi pakai alat, pohon/gua Blender.
+> [!caution] Regresi 10/14 — diukur 2026-10-07 di pohon hasil merge `8f5da30`
+> **10/14 scene lulus, 4 pemeriksaan gagal, exit 1.** Dua jenis, dan bedanya penting:
+>
+> - **Nyata**: `cahaya_global` gagal di `beach` dan `swarga` — deterministik,
+>   gagal juga saat keempat scene diuji sendiri. Base menandai swarga "belum
+>   diselidiki"; **`beach` tidak disebut nota base sama sekali**.
+> - **Tuduhan palsu**: `hud_terbaca` gagal di `house` dan `naga_cave` di larian
+>   14 scene, lalu **lulus** di larian 4 scene →
+>   [[Pemeriksaan HUD membandingkan tangkapan lama]].
+>
+> Keempatnya **bukan** bawaan merge: CI base branch sendiri sudah merah di
+> `3877418` pada 20:03:20 UTC, sembilan menit sebelum commit merge ini ada.
+> Ditulis di [komentar PR #13](https://github.com/obdalamfa/karsa-Branch/pull/13#issuecomment-6046083991).
+>
+> Yang tetap berdiri setelah merge: `arah_maju` **LULUS** di kedua larian
+> (W=atas, S=bawah, A=kiri, D=kanan), termasuk terhadap basis arah baru yang
+> base tulis di `player.py:890`. `otonomi_hidup` LULUS, `sims_tersambung` LULUS.
 
-> [!success] Regresi sudah dijalankan sungguhan
-> **14/14 scene lulus, 0 pemeriksaan gagal** — dua kali: di mesin sesi ini, dan
-> di **GitHub Actions** (4 larian, semuanya `success`, artifact bukti 3,28 MB).
-> Catatan sebelumnya harus menulis "belum diuji ulang"; sekarang tidak perlu
-> lagi, dan jaringnya terpasang sendiri di tiap push.
-> Rincian: [[2026-09-22 — Regresi jalan sungguhan, CI dipasang]] ·
-> [[2026-09-22 — Merge base, CI terbukti hijau]].
+> [!info] Riwayat: pernah 14/14
+> Klaim "14/14 lulus, dua kali, lokal dan di CI" benar untuk commit `342facf`
+> (2026-09-22) dengan 6 pemeriksaan → [[2026-09-22 — Regresi jalan sungguhan, CI dipasang]].
+> Base sejak itu menambah 12 pemeriksaan baru, dan empat di antaranya berbunyi.
+> Angka lama tidak dihapus, tapi ia **bukan** status hari ini.
 
 ## Yang berdiri, dan buktinya
 
@@ -50,10 +58,14 @@ tags: [moc, status]
 ## Angka terbaru
 
 ```
-14/14 scene lulus · 0 pemeriksaan gagal · boot 3,6 detik
-ms/frame  46,4 (house)  →  119,6 (mountain)      [dirender CPU, bukan GPU]
-entity     384 (studio) →   2177 (mountain)
+10/14 scene lulus · 4 pemeriksaan gagal · boot 15,0 detik   (2026-10-07, 8f5da30)
+ms/frame  28,9 (house)  →   71,5 (beach)         [dirender CPU, bukan GPU]
+entity     424 (smith)  →   2097 (mountain)
 ```
+
+Boot melonjak 3,6 → 15,0 detik sesudah merge: 497 model baru di `assets/`.
+Belum diselidiki, dan belum tentu masalah — ia diukur sekali, di runner tanpa
+GPU.
 
 Angka ms/frame berasal dari runner tanpa GPU (Mesa software). Ia berguna untuk
 **tren antar-commit**, bukan sebagai FPS sebenarnya → [[Tahap 3 — Performa]].
@@ -64,6 +76,8 @@ Angka ms/frame berasal dari runner tanpa GPU (Mesa software). Ia berguna untuk
 |---|---|---|
 | 4–29 FPS di mesin pemilik, belum pernah diprofil di GPU | 🔴 | [[Tahap 3 — Performa]] |
 | `PLAY.md` menunjuk baris & flag yang sudah tidak ada | 🟡 | [[Utang Teknis]] |
+| `cahaya_global` gagal di `beach` dan `swarga` — cahaya scene tidak sampai ke dunia | 🔴 | deterministik, lolos urutan; base menandainya belum diselidiki dan tidak menyebut `beach` |
+| `hud_terbaca` menuduh palsu tergantung urutan scene | 🟠 | [[Pemeriksaan HUD membandingkan tangkapan lama]] — tambalan sudah diusulkan, belum dipasang |
 | 16 dari 24 benih tidak bisa dibeli — baris tokonya siap tapi tidak dipasang | 🟠 | [[Peta Sistem Konten]] — syaratnya (panel toko berhalaman) sudah ada sejak `panels.py:861` |
 | `SEASONAL_EVENTS`, 25 model, `random_stairs_chance()` — konten tanpa pemakai | 🟡 | [[Peta Sistem Konten]] |
 | `scene_export.py --check` tidak dijalankan CI maupun `regress.py` | 🟡 | detektor penyimpangan kode↔data digantung tapi tidak dipasang → [[Regresi]] |

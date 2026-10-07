@@ -2,7 +2,7 @@
 judul: Beranda
 tipe: moc
 proyek: Lembah Karsa 3D
-diperbarui: 2026-09-22
+diperbarui: 2026-10-07
 tags: [moc, beranda]
 ---
 
@@ -25,6 +25,7 @@ catatan ini tidak menggantikannya, ia menjelaskan *kenapa* kodenya begitu.
 | tahu keadaan proyek hari ini | [[Status Sekarang]] |
 | tahu urutan kerja berikutnya | [[Peta Progres]] |
 | cari modul kode tertentu | [[Peta Kode]] |
+| tahu dari mana isi dunia datang | [[Peta Sistem Konten]] |
 | tahu apa yang masih berutang | [[Utang Teknis]] |
 | menambah catatan baru | [[Aturan Pencatatan]] |
 
@@ -86,3 +87,6 @@ Semua sesi: folder `20-Sesi/`.
 [[Motif]] · [[Antrian Aksi]] · [[Objek dan Interaksi]] · [[Ternak]] ·
 [[Ekonomi]] · [[Palawija]] · [[Avatar Vitaboy]] · [[Tata Letak Scene]] ·
 [[Regresi]] · [[Dungeon dan Combat]]
+
+Lapisan datanya sendiri — kosakata ubin, tabel isi, peta, aset, dan loop
+pengarangnya — dipetakan di [[Peta Sistem Konten]].

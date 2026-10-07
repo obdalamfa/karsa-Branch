@@ -1,7 +1,7 @@
 ---
 judul: Peta Kode
 tipe: peta
-diperbarui: 2026-09-22
+diperbarui: 2026-10-07
 tags: [moc, kode]
 ---
 
@@ -10,6 +10,9 @@ tags: [moc, kode]
 19.514 baris di `game/`. Tabel ini bukan salinan `docs/CODE_MAP.md` (880 baris,
 lebih rinci) — ini pintu masuknya: modul mana untuk urusan apa, dan modul mana
 yang statusnya perlu diwaspadai.
+
+Untuk **isi** dunia — ubin, tabel data, berkas scene, aset, dan siapa yang
+boleh menulisnya — lihat [[Peta Sistem Konten]].
 
 ## Tulang punggung
 
@@ -80,7 +83,7 @@ yang statusnya perlu diwaspadai.
 | `game/guardian_models.py` | model guardian |
 | `gauntlet/` | harness uji terpisah (`check.py`), punya skill `.claude/skills/gauntlet-loop/` |
 | `ursina_editor/` | editor peta — menempatkan dan menggeser objek dengan gizmo (`EDITOR.md`) |
-| `game/scenes/beach.json` | scene berbasis data, bukan kode |
+| `game/scenes/beach.json` | scene berbasis data, bukan kode — sejak itu **kelima belas** scene punya berkasnya sendiri → [[Peta Sistem Konten]] |
 
 ## Dokumen panjang di `docs/`
 

@@ -1,7 +1,7 @@
 ---
 judul: Utang Teknis
 tipe: peta
-diperbarui: 2026-09-22
+diperbarui: 2026-10-07
 tags: [moc, utang, status/terbuka]
 ---
 
@@ -102,6 +102,39 @@ ulang siapa pun. Masih dipercaya, tapi tidak bisa diaudit.
 Pola aturannya sudah diperbaiki base branch: sekarang hanya **keluaran** yang
 diabaikan, alat ukurnya bisa di-commit. Yang tersisa: tiap probe baru harus
 ikut masuk → [[2026-10-03 — Probe pertama yang bisa diperiksa]].
+
+## 🟠 Konten yang lengkap tapi tidak tersambung (2026-10-07)
+
+Lima temuan dari pemetaan sistem konten → [[Peta Sistem Konten]]. Semuanya
+konten yang **sudah selesai ditulis** lalu berhenti sebelum ada yang
+memakainya — pola yang sama dengan modul yatim di [[Tahap 2 — Verifikasi modul yatim]],
+kali ini di lapisan data.
+
+| Utang | Buktinya | Kenapa layak diperbaiki |
+|---|---|---|
+| 16 dari 24 benih tidak bisa dibeli | `grep -rn SEED_SHOP_ROWS` → nol pemanggil; `len(SHOP_ITEMS)` 10 lawan `len(CROPS)` 24 | Alasan yang ditulis `crops.py:335` (panel toko belum berhalaman) **sudah tidak berlaku** — `panels.py:861 _page_slice()` sudah berhalaman dan dipakai di `:879` dan `:950`. Syaratnya terpenuhi, pemasangannya belum |
+| `SEASONAL_EVENTS` nol pemanggil | `grep -rn SEASONAL_EVENTS --include=*.py` → hanya `data.py:523` | Empat festival lengkap dengan hari dan scene-nya; tidak ada yang membacanya |
+| 25 dari 33 model tanpa pemuat | `load_model_file()` hanya dipanggil dengan 5 nama dari `get_npc_model_name()` | 24 `au-*.glb` + `sari_idle.glb` menumpang di repo tanpa jalur pemakaian |
+| `ORE_SPAWN_TABLE` baris 14–15 mati, dan `13` ditulis ulang sebagai angka | `DUNGEON_MAX_LEVEL = 13`; `interaction_controller.py:190` dan `:336` menulis `== 13` | Dua sumber kebenaran untuk lantai maksimum; mengubah satu akan meninggalkan yang lain |
+| `random_stairs_chance()` nol pemanggil | `grep -rn random_stairs_chance` → hanya `dungeon.py:179` | |
+
+## 🟡 Detektor penyimpangan scene tidak dijalankan siapa pun (2026-10-07)
+
+`tools/scene_export.py --check` membandingkan kode scene dengan berkas
+`game/scenes/*.json` dan keluar 1 kalau berbeda. Hari ini keduanya cocok
+(**15/15**, dibuktikan dengan larian sungguhan), dan `scene_roundtrip.py` juga
+hijau 15/15.
+
+Yang berutang bukan keadaannya, tapi penjaganya: CI hanya menjalankan
+`tools/regress.py`, dan `regress.py` tidak menyebut `scene_export`. Penjaga
+yang digantung tapi tidak dipasang adalah persis utang yang dilunasi
+2026-09-22 untuk regresi → [[Regresi]].
+
+## 🟡 `docs/EKONOMI.md` dikutip tapi tidak ada (2026-10-07)
+
+`data.py:11` dan `economy.py:20` menunjuk ke dokumen itu untuk perhitungan
+harga per energi. Berkasnya tidak ada di `docs/`. Perhitungannya sendiri masih
+terbaca di komentar `data.py`, jadi yang hilang adalah alamatnya, bukan isinya.
 
 ## 🔴 Dua utang besar yang sudah punya rumah sendiri
 

@@ -1,7 +1,7 @@
 ---
 judul: Status Sekarang
 tipe: peta
-diperbarui: 2026-09-22
+diperbarui: 2026-10-07
 commit_acuan: 342facf (merge base + kerja sesi 2026-09-22)
 regresi: 14/14 lulus — lokal DAN di CI GitHub (2026-09-22)
 tags: [moc, status]
@@ -36,6 +36,8 @@ tags: [moc, status]
 | Avatar Vitaboy jalur native C++ (0,288 ms/avatar) | [[Avatar Vitaboy]] |
 | **Otonomi NPC hidup** — NPC berjalan ke perabot, motif pulih saat memakai | [[Tahap 5 — Autonomi]] · pemanggil di `game/npc.py:92` |
 | CI terbukti hijau di GitHub, bukan cuma di mesin lokal | 4 larian `success` |
+| 15 scene sebagai DATA, dan datanya tidak menyimpang dari kode | `tools/scene_export.py --check` 15/15 + `tools/scene_roundtrip.py` 15/15, dijalankan 2026-10-07 → [[Peta Sistem Konten]] |
+| 36 NPC semuanya punya jadwal, 36 portal semuanya dua arah | pembacaan data 2026-10-07 → [[Peta Sistem Konten]] |
 
 ## Angka terbaru
 
@@ -52,9 +54,11 @@ Angka ms/frame berasal dari runner tanpa GPU (Mesa software). Ia berguna untuk
 
 | Hal | Berat | Catatan |
 |---|---|---|
-| Arah WASD basis sumbu salah benar | 🔴 | [[Arah WASD basis sumbu salah]] — regresi tidak menguji arah |
 | 4–29 FPS di mesin pemilik, belum pernah diprofil di GPU | 🔴 | [[Tahap 3 — Performa]] |
 | `PLAY.md` menunjuk baris & flag yang sudah tidak ada | 🟡 | [[Utang Teknis]] |
+| 16 dari 24 benih tidak bisa dibeli — baris tokonya siap tapi tidak dipasang | 🟠 | [[Peta Sistem Konten]] — syaratnya (panel toko berhalaman) sudah ada sejak `panels.py:861` |
+| `SEASONAL_EVENTS`, 25 model, `random_stairs_chance()` — konten tanpa pemakai | 🟡 | [[Peta Sistem Konten]] |
+| `scene_export.py --check` tidak dijalankan CI maupun `regress.py` | 🟡 | detektor penyimpangan kode↔data digantung tapi tidak dipasang → [[Regresi]] |
 
 ## Yang baru saja lunas
 
@@ -75,6 +79,8 @@ Angka ms/frame berasal dari runner tanpa GPU (Mesa software). Ia berguna untuk
 2. [[Tahap 4 — Wishes]] — bahan-bahannya kini semuanya terbukti hidup: motif, kandidat objek, antrian, dan autonomi.
 3. Perbaiki instruksi Vitaboy di `PLAY.md` yang menyuruh mengedit flag tidak ada → [[Utang Teknis]].
 4. Tulis ulang probe yang masih dibutuhkan dari 14 yang hilang → [[2026-10-03 — Probe pertama yang bisa diperiksa]].
+5. Pasang `SEED_SHOP_ROWS` ke panel toko yang kini berhalaman — 16 tanaman sudah bermekanika lengkap tapi benihnya tidak bisa dibeli → [[Peta Sistem Konten]].
+6. Jalankan `scene_export.py --check` di CI, supaya kode dan data scene tidak bisa menyimpang diam-diam.
 
 Dengan Tahap 5 lunas, [[Tahap 4 — Wishes]] jadi kandidat berikutnya yang paling
 mengubah rasa bermain: bahan-bahannya (motif, kandidat objek, antrian) kini

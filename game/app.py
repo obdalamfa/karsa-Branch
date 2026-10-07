@@ -472,7 +472,7 @@ class Game3D:
                 from . import care_anim as _ca
                 _ca.bereskan(self.player)
                 s.scene_name = 'house'
-                s.player_x, s.player_y = 7.0, 8.0
+                s.player_x, s.player_y = 1.0, 2.0   # di samping kasur
                 self.player._advance_day()
                 self.panels.flash_msg("Kamu pingsan! Terbangun di rumah...", 3.5)
             self.entities.update(dt)

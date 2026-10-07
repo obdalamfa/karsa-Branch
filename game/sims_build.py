@@ -12,7 +12,7 @@ scene.tiles setiap kali scene dimuat (World3D.load_scene).
 
     state.placed_objects = { 'house': { '4,6': <tile_id>, ... }, ... }
 """
-from .config import WALKABLE, TILE_NAMES
+from .config import WALKABLE, TILE_NAMES, DR
 from .sims_objects import SIMS_OBJECTS
 
 # tile_id → harga beli (Simoleon). Hanya objek di katalog S2 yang bisa dibeli.
@@ -76,10 +76,27 @@ def apply_placed(state, scene):
             tx, ty = (int(v) for v in key.split(','))
         except Exception:
             continue
-        if 0 <= ty < scene.h and 0 <= tx < scene.w:
-            scene.tiles[ty][tx] = int(tid)
-            n += 1
+        if not (0 <= ty < scene.h and 0 <= tx < scene.w):
+            continue
+        # Denah ruangan bisa berubah antar versi: barang dari save lama yang
+        # kini jatuh di dinding, pintu, atau perabot bawaan TIDAK ditimpakan --
+        # kalau ditimpakan, pintu bisa hilang dan pemain terkurung di dalam.
+        if scene.tiles[ty][tx] not in WALKABLE or scene.tiles[ty][tx] == DR                 or (tx, ty) in _titik_mendarat(scene):
+            continue
+        scene.tiles[ty][tx] = int(tid)
+        n += 1
     return n
+
+
+def _titik_mendarat(scene) -> set:
+    """Ubin tempat pemain muncul saat masuk scene ini dari scene lain."""
+    try:
+        from .scenes import SCENES
+    except Exception:
+        return set()
+    nama = getattr(scene, 'name', '')
+    return {(int(p[3]), int(p[4])) for s in SCENES.values() for p in s.portals
+            if p[2] == nama}
 
 
 def can_place(state, world, tx: int, ty: int):
@@ -92,6 +109,8 @@ def can_place(state, world, tx: int, ty: int):
     tid = scene.tiles[ty][tx]
     if tid not in WALKABLE:
         return False, f"Petak terisi ({TILE_NAMES.get(tid, tid)})."
+    if tid == DR or (tx, ty) in _titik_mendarat(scene):
+        return False, "Jangan halangi pintu."
     return True, None
 
 

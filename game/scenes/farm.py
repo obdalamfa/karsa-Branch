@@ -172,7 +172,10 @@ def build_farm():
             {'kind': 'jam',   'x': 4.5, 'y': 3.5, 'h': 1.15, 'rot_y': 180},
         ],
         portals=[
-        (DOOR_HOUSE[0], DOOR_HOUSE[1], 'house', 7, 9),
+        # Dua ubin ambang: pintu rumah digambar di tengah blok 4 ubin (antara
+        # x=3 dan x=4), jadi kedua ubin di depannya harus membawa masuk.
+        (DOOR_HOUSE[0], DOOR_HOUSE[1], 'house', 4, 6),
+        (DOOR_HOUSE[0] + 1, DOOR_HOUSE[1], 'house', 4, 6),
         (DOOR_GREEN[0], DOOR_GREEN[1], 'greenhouse', 7, 10),
         (GATE_OUT[0][0], GATE_OUT[0][1], 'town', 1, 14),
         (GATE_OUT[1][0], GATE_OUT[1][1], 'town', 1, 15),

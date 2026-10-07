@@ -68,6 +68,25 @@ def _crystal_mesh(seed, sides=5):
     return Mesh(vertices=verts, normals=normals, mode='triangle')
 
 
+def _kristal_pijar_mesh(seed, rgb, sides=5):
+    """Kristal yang menyala sendiri, dengan faset tetap terbaca.
+
+    Digambar tanpa cahaya scene (gua sengaja gelap), jadi terang tiap faset
+    dipanggang ke warna verteks dari arah cahaya tetap: tanpa itu kristal
+    unlit hanyalah siluet satu warna.
+    """
+    from ursina import Mesh, Vec3, color
+    dasar = _crystal_mesh(seed, sides)
+    arah = Vec3(.35, .8, -.45).normalized()
+    cols = []
+    for i in range(0, len(dasar.vertices), 3):
+        n = dasar.normals[i]
+        terang = .62 + .48 * max(0.0, n.dot(arah)) + .12 * max(0.0, n.y)
+        c = tuple(min(255, v * terang) for v in rgb)
+        cols.extend([color.rgb(*c)] * 3)
+    return Mesh(vertices=dasar.vertices, normals=dasar.normals, colors=cols, mode='triangle')
+
+
 def _rocks(world, scene, outdoor=False):
     # Remove the default cuboid walls from the visibility/cutaway registry too.
     for entry in world._wall_ents:
@@ -85,13 +104,22 @@ def _rocks(world, scene, outdoor=False):
                 width+=1
             covered.update((x+i,y) for i in range(width))
             seed=x*13+y*7
-            height=(2.4+.7*math.sin(seed)) if outdoor else (1.5+.5*math.sin(seed))
-            if y < 3: height += 2.3 if outdoor else 1.1
-            rgb=(106+seed%12,123+seed%10,111+seed%14) if outdoor else (84+seed%13,105+seed%11,115+seed%15)
+            # Tebing lembah gunung jauh lebih tinggi dari dinding gua: ia harus
+            # terbaca sebagai bahu gunung yang mengapit jalan, bukan pagar batu.
+            height=(3.8+1.3*math.sin(seed)) if outdoor else (1.5+.5*math.sin(seed))
+            if y < 3: height += 4.6 if outdoor else 1.1
+            rgb=(106+seed%12,123+seed%10,111+seed%14) if outdoor else (66+seed%13,80+seed%11,96+seed%15)
             mesh=_rock_mesh(seed, centered=True)
             xx=(x+(width-1)/2)*TS
             e=_part(world,mesh,(xx,GROUND_H+height/2,y*TS),(TS*width*1.02,height,TS*1.02),rgb)
             world._wall_ents.append([e,height,GROUND_H+height/2,x+(width-1)/2,y])
+            if outdoor and seed%3!=1:
+                # Puncak kedua yang lebih sempit memecah siluet tebing rata.
+                h2=height*(.35+.2*abs(math.sin(seed*1.7)))
+                e2=_part(world,_rock_mesh(seed+5,centered=True),
+                         (xx+.3*math.sin(seed),GROUND_H+height+h2/2-.15,y*TS+.25*math.cos(seed)),
+                         (TS*width*.62,h2,TS*.7),tuple(c-8 for c in rgb))
+                world._wall_ents.append([e2,h2,GROUND_H+height+h2/2-.15,x+(width-1)/2,y])
 
 
 def _disc(world, x, z, radius, rgb, y=0.215, inner=0):
@@ -131,10 +159,10 @@ def build_cavern(world, scene):
             e.enabled = False
         else:
             e.color = color.rgb(170,205,215)
-    _part(world,'cube',((scene.w-1)*TS/2,.1,(scene.h-1)*TS/2),(scene.w*TS,.2,scene.h*TS),(82,99,112))
+    _part(world,'cube',((scene.w-1)*TS/2,.1,(scene.h-1)*TS/2),(scene.w*TS,.2,scene.h*TS),(70,84,98))
     _rocks(world,scene)
     for x,z,rx,rz in ((6,8,3.6,5),(23,7,4,3),(5,18,4,3),(22,18,4,3),(14,3,3,2)):
-        _ground_patch(world,x,z,rx,rz,(85,103,114),x+z)
+        _ground_patch(world,x,z,rx,rz,(62,76,90),x+z)
     # Sparse strata seams, not an alternating checkerboard. Flush decoration.
     for y in range(1,11):
         for x in range(1,14):
@@ -161,37 +189,151 @@ def build_cavern(world, scene):
         _part(world,'cube',(x*TS,.22,y*TS),(1.75,.035,1.75),(129,120,83) if up else (46,59,72))
         for i in range(4):
             _part(world,'cube',(x*TS,.245,y*TS-.57+i*.37),(1.4,.025,.14),(180,166,118) if up else (120,140,153))
+    from game.scenes.fx_suasana import kolam_cahaya, pijar, halo, Partikel
     for y,row in enumerate(scene.tiles):
         for x,tid in enumerate(row):
             if tid==CRYS:
-                _disc(world,x*TS,y*TS,.85,(65,82,91),.212)
+                _disc(world,x*TS,y*TS,.85,(40,52,62),.212)
+                kolam_cahaya(world,x*TS,y*TS,3.2,(70,210,220),kuat=.42)
                 for k in range(3):
-                    # Seed ikut koordinat tile. Sebelumnya `_rock_mesh(k)` hanya
-                    # punya tiga mesh tetap, jadi keempat klaster kristal di gua
-                    # ini identik satu sama lain.
+                    # Seed ikut koordinat tile supaya keempat klaster berbeda.
                     seed=x*17+y*29+k
-                    # Tint lama (107..151, 201..225, 213..233) dikali 1,50 pada
-                    # pita terang smooth_shader menembus 1,0 di kanal G dan B,
-                    # sehingga faset paling terang terpotong pucat kelabu dan
-                    # pita toon-nya hilang. Batas amannya base <= 170; nilai di
-                    # bawah duduk tepat di bawah batas itu supaya faset terang
-                    # mencapai ~(147,249,252) tanpa clipping. Menurunkan tint
-                    # lebih jauh dari ini adalah kegagalan yang berlawanan --
-                    # kristal jadi rimbun gelap, bukan jenuh.
-                    _part(world,_crystal_mesh(seed),(x*TS+(k-1)*.36,.2,y*TS+(k%2)*.3),
-                          (.48,.9+k*.33,.48),(78+10*k,142+12*k,150+9*k),
-                          rotation=(0,(seed*47)%360,0))
+                    pijar(world,_kristal_pijar_mesh(seed,(70+18*k,196+14*k,206+10*k)),
+                          (x*TS+(k-1)*.36,.2,y*TS+(k%2)*.3),(.48,.9+k*.33,.48),
+                          (255,255,255),rotation=(0,(seed*47)%360,0))
+                halo(world,(x*TS,1.0,y*TS),1.9,(90,220,230),kuat=.30)
             elif tid==LN:
-                _disc(world,x*TS,y*TS,.53,(67,83,92),.212)
-                _part(world,'cube',(x*TS,.53,y*TS),(.6,.65,.6),(137,143,138))
-                _part(world,'cube',(x*TS,.91,y*TS),(.83,.13,.83),(140,131,104))
-                _part(world,'sphere',(x*TS,1.1,y*TS),(.36,.4,.36),(255,208,105),smooth=False)
+                _disc(world,x*TS,y*TS,.53,(44,56,66),.212)
+                _part(world,'cube',(x*TS,.53,y*TS),(.6,.65,.6),(110,114,112))
+                _part(world,'cube',(x*TS,.91,y*TS),(.83,.13,.83),(118,108,84))
+                pijar(world,'sphere',(x*TS,1.1,y*TS),(.34,.42,.34),(255,196,96))
+                pijar(world,'sphere',(x*TS,1.16,y*TS),(.18,.26,.18),(255,244,200))
+                halo(world,(x*TS,1.12,y*TS),1.6,(255,170,80),kuat=.50)
+                kolam_cahaya(world,x*TS,y*TS,3.6,(255,150,70),kuat=.38)
+
+    # Lingkaran ritual memancarkan cahaya emas tipis di bawah sang penjaga.
+    kolam_cahaya(world,7*TS,6*TS,4.6,(230,190,110),kuat=.22)
+    for r in (3.4, 2.8):
+        _cincin_pijar(world,7*TS,6*TS,r,(240,205,130))
+    # Debu kristal melayang di seluruh ruang, bara kecil di atas tiap obor.
+    Partikel(world,1*TS,13*TS,1*TS,10*TS,.4,3.2,30,(140,235,240),
+             ukuran=.05,naik=.08,goyang=.25,seed=11)
+    for y,row in enumerate(scene.tiles):
+        for x,tid in enumerate(row):
+            if tid==LN:
+                Partikel(world,x*TS-.25,x*TS+.25,y*TS-.25,y*TS+.25,1.15,2.4,5,
+                         (255,180,90),ukuran=.035,naik=.55,goyang=.18,seed=x*7+y)
+
+
+def _cincin_pijar(world, x, z, r, rgb, y=.226, tebal=.06):
+    from ursina import Mesh
+    from game.scenes.fx_suasana import _aditif, _daftar
+    from ursina import Entity, color
+    from ursina.shaders import unlit_shader
+    verts = []
+    for i in range(72):
+        a, b = i * math.tau / 72, (i + 1) * math.tau / 72
+        p = [(math.cos(a)*(r-tebal), 0, math.sin(a)*(r-tebal)), (math.cos(a)*(r+tebal), 0, math.sin(a)*(r+tebal)),
+             (math.cos(b)*(r+tebal), 0, math.sin(b)*(r+tebal)), (math.cos(b)*(r-tebal), 0, math.sin(b)*(r-tebal))]
+        verts.extend([p[0], p[2], p[1], p[0], p[3], p[2]])
+    e = Entity(model=Mesh(vertices=verts), position=(x, y, z), color=color.rgba(*rgb, 150),
+               shader=unlit_shader, double_sided=True)
+    _aditif(e)
+    _daftar(world, e)
+
+
+def _pinus(world, wx, wz):
+    """Pinus gunung: batang lurus dan empat kerucut daun yang menyempit ke atas."""
+    from ursina.models.procedural.cone import Cone
+    from game.config import TREE_H
+    v = abs(math.sin(wx * 17.3 + wz * 29.1))
+    s = .85 + .3 * v
+    ents = [_part(world, 'cylinder', (wx, TREE_H * .3 * s, wz), (.36, TREE_H * .6 * s, .36),
+                  (116 + int(v * 20), 92 + int(v * 14), 72))]
+    for k, (r, h, y) in enumerate(((1.9, 1.7, .55), (1.55, 1.5, .9), (1.15, 1.3, 1.22), (.72, 1.1, 1.5))):
+        warna = (46 + k * 9 + int(v * 10), 86 + k * 10 + int(v * 12), 70 + k * 6)
+        ents.append(_part(world, Cone(resolution=8), (wx, TREE_H * y * s, wz),
+                          (r * s, h * s, r * s), warna, rotation=(0, v * 90 + k * 20, 0)))
+    return ents
+
+
+def _puncak_mesh(seed):
+    """Gunung jauh: faset terpanggang, kaki biru berkabut, puncak bersalju."""
+    from ursina import Mesh, Vec3, color
+    rng = __import__('random').Random(seed)
+    n = 9
+    cincin = []
+    for lvl, rad in ((0.0, 1.0), (0.38, 0.66), (0.66, 0.36)):
+        cincin.append([Vec3(math.cos(i * math.tau / n) * rad * rng.uniform(.8, 1.15),
+                            lvl + rng.uniform(-.04, .04),
+                            math.sin(i * math.tau / n) * rad * rng.uniform(.8, 1.15)) for i in range(n)])
+    puncak = Vec3(rng.uniform(-.08, .08), 1.0, rng.uniform(-.08, .08))
+    arah = Vec3(.4, .7, -.55).normalized()
+    verts, cols = [], []
+    def segi(a, b, c):
+        nrm = (b - a).cross(c - a).normalized()
+        if nrm.y < 0:
+            nrm = -nrm
+        tinggi = (a.y + b.y + c.y) / 3
+        if tinggi > .6:
+            dasar = (232, 238, 246)
+        elif tinggi > .3:
+            dasar = (150, 164, 178)
+        else:
+            dasar = (126, 144, 160)
+        terang = .72 + .38 * max(0.0, nrm.dot(arah))
+        col = color.rgb(*(min(255, c_ * terang) for c_ in dasar))
+        verts.extend((a, b, c)); cols.extend((col, col, col))
+    for k in range(2):
+        for i in range(n):
+            j = (i + 1) % n
+            segi(cincin[k][i], cincin[k + 1][i], cincin[k + 1][j])
+            segi(cincin[k][i], cincin[k + 1][j], cincin[k][j])
+    for i in range(n):
+        segi(cincin[2][i], puncak, cincin[2][(i + 1) % n])
+    return Mesh(vertices=verts, colors=cols, mode='triangle')
+
+
+def _pegunungan_jauh(world, scene):
+    """Cincin pegunungan di luar peta, ditambah dataran luas di bawahnya."""
+    from game.scenes.fx_suasana import pijar
+    cx, cz = (scene.w - 1) * TS / 2, (scene.h - 1) * TS / 2
+    _part(world, 'cube', (cx, .05, cz), (520, .1, 520), (78, 102, 76))
+    rng = __import__('random').Random(77)
+    for i in range(18):
+        a = i * math.tau / 18 + rng.uniform(-.12, .12)
+        d = rng.uniform(85, 140)
+        tinggi = rng.uniform(34, 70)
+        lebar = tinggi * rng.uniform(.9, 1.3)
+        pijar(world, _puncak_mesh(i * 13 + 5), (cx + math.cos(a) * d, -2, cz + math.sin(a) * d),
+              (lebar, tinggi, lebar), (255, 255, 255), double_sided=True)
+
+
+def _padang(world, scene):
+    """Rumput tidak lagi satu hijau rata: petak gelap, bunga liar, kerikil."""
+    from game.config import G
+    rng = __import__('random').Random(31)
+    rumput = [(x, y) for y, row in enumerate(scene.tiles) for x, t in enumerate(row) if t == G]
+    rng.shuffle(rumput)
+    for x, y in rumput[:18]:
+        _ground_patch(world, x * TS, y * TS, rng.uniform(1.0, 1.9), rng.uniform(.9, 1.7),
+                      (78, 108, 70), x * 5 + y, .214)
+    for x, y in rumput[18:58]:
+        warna = rng.choice(((236, 214, 86), (238, 238, 232), (176, 140, 214), (232, 132, 120)))
+        for _ in range(rng.randint(3, 6)):
+            _part(world, 'sphere', (x * TS + rng.uniform(-.8, .8), .3, y * TS + rng.uniform(-.8, .8)),
+                  (.14, .1, .14), warna)
+    for x, y in rumput[58:78]:
+        for _ in range(rng.randint(2, 4)):
+            s = rng.uniform(.18, .38)
+            _part(world, _rock_mesh(x * 3 + y), (x * TS + rng.uniform(-.7, .7), .2, y * TS + rng.uniform(-.7, .7)),
+                  (s, s * .55, s), (128, 132, 124), rotation=(0, rng.uniform(0, 360), 0))
 
 
 def build_mountain_landscape(world, scene):
     from game.scenes.props import default_prop_builder
     from game.config import G,P,D,DR,TR,DT
-    default_prop_builder(world,scene)
+    default_prop_builder(world,scene,pembangun_pohon=_pinus)
     # Replace the broken checker/road textures locally, leaving tree geometry.
     for e in world._tile_ents:
         if e.model and e.scale_x < scene.w*TS*2:
@@ -214,6 +356,14 @@ def build_mountain_landscape(world, scene):
                            (15,31,5,5,(94,123,82)),(42,34,6,5,(87,116,76))):
         _ground_patch(world,x,z,rx,rz,rgb,x+z,.223)
     _rocks(world,scene,True)
+    # Penyaring di atas ikut mematikan tutup rumput bertekstur (yang diayun
+    # angin) dan sebaran helai rumput -- lereng jadi satu hijau polos.
+    for e in world._grass_ents:
+        e.enabled=True
+    for e in getattr(world,'_sebaran_ents',()):
+        e.enabled=True
+    _pegunungan_jauh(world,scene)
+    _padang(world,scene)
     # The irregular dark silhouette and broad overlapping overhang form one
     # continuous mouth. Solids remain behind the walkable door thresholds.
     from ursina import Mesh

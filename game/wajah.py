@@ -686,7 +686,15 @@ def chibikan_humanoid(np_) -> bool:
 # Tidak satu pun nama fungsinya bertabrakan, dan `entities.py` serta `player.py`
 # hasil merge ini memanggil KEDUANYA. Jadi keduanya tinggal.
 
+MATA_WARNA  = (46, 36, 42)
+# Mulut sengaja diredam: merah menyala pada bidang sekecil ini terbaca sebagai
+# luka, bukan mulut.
+MULUT_WARNA = (168, 108, 100)
+PIPI_WARNA  = (243, 176, 172)
+
+
 def _kotak(induk, pos, skala, warna):
+    from ursina import Entity, Vec3
     e = Entity(model='cube', position=Vec3(*pos), scale=skala,
                color=warna, parent=induk)
     from .smooth_shader import apply_smooth
@@ -730,6 +738,7 @@ def bangun_wajah(induk, hw: float, ht: float, muka_z: float):
     pada ambang keras, jadi batas bayangannya membentuk tangga yang terlihat
     di pipi dari jarak dekat.
     """
+    from ursina import color
     out = []
     z = muka_z
 
@@ -760,6 +769,7 @@ def bangun_wajah(induk, hw: float, ht: float, muka_z: float):
     return out
 
 def warna_rambut(state, indeks_default: int = 0):
+    from ursina import color
     from .chargen import HAIR_PRESETS
     i = getattr(state, 'char_hair', indeks_default) or indeks_default
     rgb = HAIR_PRESETS[i][1] if i < len(HAIR_PRESETS) else HAIR_PRESETS[0][1]

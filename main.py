@@ -20,6 +20,9 @@ if sys.platform == 'win32':
 from panda3d.core import loadPrcFileData
 loadPrcFileData('', 'load-display pandagl')
 loadPrcFileData('', 'aux-display pandadx9')
+# Buffer kedalaman 24-bit; tanpa ini sebagian driver memberi 16-bit dan lantai
+# berlapis tipis berkedip (z-fighting).
+loadPrcFileData('', 'depth-bits 24')
 
 # Saat dibundel PyInstaller (frozen): arahkan asset_folder Ursina ke folder
 # tempat exe berada supaya font (glob **/*.ttf) & aset internal ditemukan.

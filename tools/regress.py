@@ -112,6 +112,7 @@ loadPrcFileData('', 'load-display pandagl')
 loadPrcFileData('', 'aux-display pandadx9')
 loadPrcFileData('', 'audio-library-name null')
 loadPrcFileData('', 'sync-video false')
+loadPrcFileData('', 'depth-bits 24')
 
 # `--offscreen` melepas ketergantungan pada jendela sungguhan. Dipakai saat
 # lingkungan menolak memfokuskan jendela: di situ tiap tangkapan layar kembali

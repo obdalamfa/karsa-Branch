@@ -116,7 +116,7 @@ def build_town():
     sc = Scene('town', 'Desa Karsa', m, portals=[
         (0, 14, 'farm', 26, 9), (0, 15, 'farm', 26, 10),
         (6, 0, 'mountain', 14, 23), (7, 0, 'mountain', 15, 23),
-        (29, 14, 'lake', 1, 7), (29, 15, 'lake', 1, 8),
+        (29, 14, 'lake', 1, 7), (29, 15, 'lake', 1, 7),   # (1,8) adalah pohon
         (23, 2, 'shop', 4, 6), (13, 10, 'clinic', 4, 6), (23, 11, 'studio', 4, 6),
         (12, 17, 'smith', 4, 6),
         (6, 24, 'beach', 14, 1), (7, 24, 'beach', 15, 1),

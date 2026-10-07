@@ -16,4 +16,4 @@ DENAH = """
 
 
 def build_studio():
-    return ruang_denah('studio', 'Studio Maya', DENAH, ('town', 22, 9))
+    return ruang_denah('studio', 'Studio Maya', DENAH, ('town', 23, 10))

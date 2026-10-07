@@ -17,4 +17,4 @@ DENAH = """
 
 
 def build_shop():
-    return ruang_denah('shop', 'Warung Bu Sari', DENAH, ('town', 4, 9))
+    return ruang_denah('shop', 'Warung Bu Sari', DENAH, ('town', 23, 1))

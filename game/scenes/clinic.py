@@ -16,4 +16,4 @@ DENAH = """
 
 
 def build_clinic():
-    return ruang_denah('clinic', 'Klinik Pak Raka', DENAH, ('town', 11, 9))
+    return ruang_denah('clinic', 'Klinik Pak Raka', DENAH, ('town', 13, 9))

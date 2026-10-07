@@ -119,7 +119,39 @@ def main():
             print('   -', m)
         gagal += bool(masalah)
     print(f'\n{len(ruang) - gagal}/{len(ruang)} ruangan lulus')
+    gagal += cek_dunia()
     sys.exit(1 if gagal else 0)
+
+
+def cek_dunia():
+    """Pemeriksaan lintas scene.
+
+      pintu_buta   ubin pintu (DR) di luar ruangan tanpa portal -- bangunan
+                   yang tampak bisa dimasuki tapi tidak (dulu desa (21,21)).
+      portal       setiap portal mendarat di ubin yang bisa dijalani.
+      jadwal       setiap posisi jadwal NPC bisa dijalani di scene-nya.
+    """
+    masalah = []
+    for nama, sc in SCENES.items():
+        ada = {(p[0], p[1]) for p in sc.portals}
+        if not sc.indoor:
+            for y in range(sc.h):
+                for x in range(sc.w):
+                    if sc.tiles[y][x] == DR and (x, y) not in ada:
+                        masalah.append(f'{nama}: pintu ({x},{y}) tanpa portal')
+        for (px, py, t, tx, ty) in sc.portals:
+            if t not in SCENES:
+                masalah.append(f'{nama}({px},{py}) -> scene {t} tidak ada')
+            elif t != 'dungeon' and not jalan(SCENES[t], tx, ty):
+                masalah.append(f'{nama}({px},{py}) -> {t}({tx},{ty}) tak bisa dijalani')
+    for npc, jadwal in SCHEDULES.items():
+        for (_, x, y, s, _) in jadwal:
+            if s in SCENES and s != 'dungeon' and not jalan(SCENES[s], x, y):
+                masalah.append(f'jadwal {npc}: {s}({x},{y}) tak bisa dijalani')
+    print(f"\ndunia      {'LULUS' if not masalah else 'GAGAL'}")
+    for m in masalah:
+        print('   -', m)
+    return int(bool(masalah))
 
 
 if __name__ == '__main__':

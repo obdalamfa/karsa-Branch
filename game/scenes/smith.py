@@ -16,4 +16,4 @@ DENAH = """
 
 
 def build_smith():
-    return ruang_denah('smith', 'Bengkel Budi', DENAH, ('town', 7, 22))
+    return ruang_denah('smith', 'Bengkel Budi', DENAH, ('town', 12, 16))

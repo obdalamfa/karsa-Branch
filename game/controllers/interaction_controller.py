@@ -7,7 +7,7 @@ from ..config import (
     PLAYER_ATTACK_RANGE, PLAYER_ATTACK_COOLDOWN_MS,
     ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS
 )
-from ..data import CROPS, SWORD_RECIPES, CONSUMABLES, WILD_ITEMS
+from ..data import CROPS, SWORD_RECIPES, CONSUMABLES, WILD_ITEMS, DUNGEON_MAX_LEVEL
 from ..sound import play as sound_play
 
 TS = TILE_SIZE
@@ -187,7 +187,7 @@ class InteractionController:
             return
         if s.scene_name == 'lake' and self.try_fishing(panels):
             return
-        if s.scene_name == 'dungeon' and getattr(self.world, 'dungeon_level', 0) == 13 and self.try_fishing(panels):
+        if s.scene_name == 'dungeon' and getattr(self.world, 'dungeon_level', 0) == DUNGEON_MAX_LEVEL and self.try_fishing(panels):
             return
         if s.scene_name == 'clinic' and self.try_healing(panels):
             return
@@ -333,7 +333,7 @@ class InteractionController:
             return True
 
         s.energy = max(0, s.energy - 2)
-        is_legendary_lake = (s.scene_name == 'dungeon' and getattr(self.world, 'dungeon_level', 0) == 13)
+        is_legendary_lake = (s.scene_name == 'dungeon' and getattr(self.world, 'dungeon_level', 0) == DUNGEON_MAX_LEVEL)
         
         if _rng.random() < 0.55:
             if is_legendary_lake and _rng.random() < 0.25:

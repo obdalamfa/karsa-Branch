@@ -333,12 +333,10 @@ def register_consumables(target: dict) -> dict:
 
 
 def seed_shop_rows() -> list[dict]:
-    """Baris toko untuk semua benih baru — DIEKSPOR, tidak dipasang sendiri.
+    """Baris toko untuk semua benih baru; dipasang ke SHOP_ITEMS oleh _install().
 
-    Panel toko sekarang memilih barang dengan tombol angka 1-9, jadi menambah
-    18 baris ke SHOP_ITEMS akan membuat sebagian besar tidak bisa dibeli.
-    Agen ekonomi yang memegang panel itu; daftar ini disiapkan supaya mereka
-    tinggal memasangnya setelah panel toko bisa berhalaman.
+    Panel toko berhalaman (panels._page_slice), jadi baris tambahan tetap bisa
+    dipilih dengan tombol 1-9 per halaman.
     """
     rows = []
     for cid, spec in CROP_CATALOG.items():
@@ -346,10 +344,11 @@ def seed_shop_rows() -> list[dict]:
                    'tomat', 'labu', 'bayam', 'jamur'):
             continue    # sudah ada di SHOP_ITEMS
         rows.append({'id': f'{cid}_seed', 'name': f"Benih {spec['name']}",
-                     'price': spec['cost'], 'season': '/'.join(spec['seasons'])})
+                     'price': int(spec['cost']),
+                     'season': '/'.join(spec['seasons']) or 'all', 'crop': cid})
     for tid, spec in TREE_CATALOG.items():
         rows.append({'id': f'{tid}_seed', 'name': f"Bibit {spec['name']}",
-                     'price': spec['cost'], 'season': 'all'})
+                     'price': int(spec['cost']), 'season': 'all', 'crop': tid})
     return rows
 
 
@@ -361,6 +360,12 @@ def _install():
     from . import data
     register_into(data.CROPS)
     register_consumables(data.CONSUMABLES)
+    # Benih baru disisipkan sebelum barang non-benih (jerami, kayu).
+    ada = {it['id'] for it in data.SHOP_ITEMS}
+    baru = [r for r in SEED_SHOP_ROWS if r['id'] not in ada]
+    pos = next((i for i, it in enumerate(data.SHOP_ITEMS) if not it.get('crop')),
+               len(data.SHOP_ITEMS))
+    data.SHOP_ITEMS[pos:pos] = baru
 
 
 _install()

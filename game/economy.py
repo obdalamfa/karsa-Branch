@@ -16,8 +16,7 @@ Rantai yang dibangun di sini:
                                                         |
                                                   hasil ternak --> jual
 
-Aturan yang dipakai untuk menyusun angka, semuanya ditulis ulang lengkap di
-`docs/EKONOMI.md`:
+Aturan yang dipakai untuk menyusun angka:
 
 1. **Energi, bukan waktu, adalah sumber daya langka.** Satu hari = 100 energi
    dan 900 detik nyata. Seorang pemain kehabisan energi jauh sebelum kehabisan

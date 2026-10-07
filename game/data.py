@@ -8,7 +8,7 @@ Identik dengan v17 — tidak ada perubahan (pure data, bebas dari rendering).
 # penyiraman yang dibutuhkan (N) adalah ceil(days/2) di musimnya sendiri.
 # Energi satu siklus penuh = cangkul 2 + tanam 2 + siram N + panen 2 = 6+N.
 # Harga jual disusun supaya (sell-cost)/(6+N) jatuh di pita 3,0-5,7 G/energi;
-# lihat docs/EKONOMI.md untuk perhitungan tiap baris.
+# perhitungan tiap baris ada di komentar ini dan di game/economy.py.
 # Dua angka diubah dari versi lama: lobak 22->26 (dulu 2,4 G/EN, tidak pernah
 # layak ditanam lagi setelah hari kedua) dan labu 70->66 (dulu 6,1 G/EN,
 # mendominasi semua tanaman lain).

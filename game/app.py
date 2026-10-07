@@ -28,6 +28,16 @@ _FONTS_DIR = _Path(__file__).resolve().parent.parent / 'assets' / 'fonts'
 if _FONTS_DIR.is_dir():
     _getModelPath().append_path(str(_FONTS_DIR))
 
+from . import suasana as _suasana
+
+
+def _warna_suasana(scene_name, sun, amb, sky):
+    """Preset suasana per scene di atas warna jam (Vec4 0-1 masuk, Vec4 keluar)."""
+    ke255 = lambda v: (v[0] * 255.0, v[1] * 255.0, v[2] * 255.0)
+    s, a, k = _suasana.atur(scene_name, ke255(sun), ke255(amb), ke255(sky))
+    return color.rgb(*s), color.rgb(*a, 255), color.rgb(*k)
+
+
 from .state import GameState
 from .world import World3D
 from .player import Player3D
@@ -326,6 +336,11 @@ class Game3D:
         # Setup Kamera (Harvest Moon AWL / Third-person 3D)
         camera.orthographic = False
         camera.fov          = 60
+        # Bawaan Ursina 0,1/10000 menghabiskan presisi kedalaman di depan lensa;
+        # pada jarak main (~25 unit) dekorasi lantai yang terpisah 0,01 saling
+        # berebut dan tanah berkedip saat kamera bergerak.
+        camera.clip_plane_near = 0.5
+        camera.clip_plane_far  = 2000
         self.camera_yaw     = 0.0
         self.camera_pitch   = 34.0   # sudut baca ala life-sim isometrik
         self.camera_dist    = 19.0
@@ -567,7 +582,8 @@ class Game3D:
             # ── Sky Dome + Grass Shader update ──────────────
             is_indoor = self.world.scene_obj.indoor if self.world.scene_obj else False
             hour = (s.time_minutes / 60.0) % 24.0
-            self.sky.update(hour, s.weather, is_indoor)
+            self.sky.update(hour, s.weather, is_indoor,
+                            palet=_suasana.palet_langit(s.scene_name))
 
             # FreeSO GrassShader.fx: update uniform time + wind per frame
             self._grass_time += dt
@@ -624,7 +640,10 @@ class Game3D:
                     target_amb   = color.rgb(54, 58, 95, 255)
                     target_sky   = color.rgb(18, 12, 42)
                     target_cloud = color.rgb(45, 45, 72, 75)
-            
+
+            target_sun, target_amb, target_sky = _warna_suasana(
+                s.scene_name, target_sun, target_amb, target_sky)
+
             self.sun.color = lerp(self.sun.color, target_sun, dt)
             self.ambient.color = lerp(self.ambient.color, target_amb, dt)
             window.color = lerp(window.color, target_sky, dt)
@@ -1078,6 +1097,7 @@ class Game3D:
             sky_col   = color.rgb(18, 12, 42)
             cloud_col = color.rgb(45, 45, 72, 75)
 
+        sun_col, amb_col, sky_col = _warna_suasana(s.scene_name, sun_col, amb_col, sky_col)
         self.sun.color     = sun_col
         self.ambient.color = amb_col
         self._sync_smooth_lighting()

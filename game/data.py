@@ -460,7 +460,7 @@ SCHEDULES = {
     'leak_bali':     [(0, 1, 2, 'cemetery', 'hovering'), (5, -1, -1, 'hidden', 'dormant'),
                       (19, 1, 2, 'cemetery', 'hovering')],
     'bidadari':      [(0, 10, 15, 'swarga', 'meditating')],
-    'dewa_angin':    [(0, 15, 5, 'swarga', 'hovering')],
+    'dewa_angin':    [(0, 15, 6, 'swarga', 'hovering')],
     'petapa_srimana':[(0, 20, 15, 'swarga', 'meditating')],
     'sapi_betsy':      [(0, 18, 5, 'farm', 'grazing')],
     'ayam_kuning':     [(0, 16, 5, 'farm', 'pecking')],

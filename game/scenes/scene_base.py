@@ -132,6 +132,9 @@ def resolve_builder(name: str, scene):
     if name == 'interior':
         from .interior import build_interior
         return lambda world: build_interior(world, scene)
+    if name == 'swarga':
+        from .kahyangan import build_kahyangan
+        return lambda world: build_kahyangan(world, scene)
     from .props import default_prop_builder
     return lambda world: default_prop_builder(world, scene)
 

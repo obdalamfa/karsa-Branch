@@ -213,18 +213,22 @@ class SkyDome:
         # Inisialisasi dengan warna siang
         self._apply(6.5, 'Cerah')
 
-    def update(self, hour: float, weather: str, is_indoor: bool):
-        """Dipanggil tiap frame dari app.py update()."""
+    def update(self, hour: float, weather: str, is_indoor: bool, palet=None):
+        """Dipanggil tiap frame dari app.py update().
+
+        `palet` (zenith, horizon, sun_glow, sun_dir) menggantikan palet jam --
+        dipakai scene yang langitnya tidak ikut waktu desa (lihat suasana.py).
+        """
         if self._sphere is None:
             # Tanpa shader: cukup update window.color via _apply ke horizon palette
             if not is_indoor:
-                self._apply(hour, weather)
+                self._apply(hour, weather, palet)
             return
         self._sphere.enabled = not is_indoor
         if not is_indoor:
-            self._apply(hour, weather)
+            self._apply(hour, weather, palet)
 
-    def _apply(self, hour: float, weather: str):
+    def _apply(self, hour: float, weather: str, palet=None):
         # Catatan yang belum diselesaikan: palet ini dan `window.color` tidak
         # sepakat soal warna langit. Jam 10 palet memberi zenith (0,93 0,83
         # 1,00) dan horizon (0,80 0,62 0,80) — lavender/merah muda pucat yang
@@ -235,7 +239,7 @@ class SkyDome:
         # Akibatnya warna langit bergantung pada apakah jalur GLSL tersedia di
         # mesin pemain: ada shader -> nyaris putih, tidak ada -> biru. Itu bukan
         # selera, itu dua kebenaran untuk satu hal yang sama.
-        zenith, horizon, sun_glow, sun_dir = _sky_palette(hour, weather)
+        zenith, horizon, sun_glow, sun_dir = palet or _sky_palette(hour, weather)
         if self._sphere is None:
             # Fallback: set window background ke horizon color
             try:

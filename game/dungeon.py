@@ -28,8 +28,6 @@ ORE_SPAWN_TABLE = {
     11: [(ORE_EMS, 5),  (ORE_MTH, 4),  (ORE_KRS, 5),  (CV_W, 86)],
     12: [(ORE_EMS, 4),  (ORE_MTH, 6),  (CRYS, 4),     (CV_W, 86)],
     13: [(ORE_MTH, 8),  (ORE_EMS, 3),  (CRYS, 5),     (CV_W, 84)],
-    14: [(ORE_MTH, 10), (CRYS, 8),     (ORE_EMS, 2),  (CV_W, 80)],
-    15: [(CRYS, 15),    (ORE_MTH, 8),  (CV_W, 77)],
 }
 
 
@@ -174,12 +172,3 @@ def generate_dungeon_level(level, seed=None):
         })
 
     return grid, spawn_x, spawn_y, mob_specs
-
-
-def random_stairs_chance(level, rng=None):
-    if rng is None:
-        rng = random
-    if level >= DUNGEON_MAX_LEVEL:
-        return False
-    chance = 0.30 + min(0.20, level * 0.02)
-    return rng.random() < chance

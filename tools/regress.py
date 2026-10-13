@@ -391,7 +391,7 @@ def cek_arah_maju(g):
     # sudah tertinggal. Sesudahnya, satu larian penuh memberi 0 deg di ketiga
     # yaw di keempat belas scene. Lalu rumus lama (.x,.y) dipasang kembali di
     # player.py, dan cek ini GAGAL -- lihat
-    # [[2026-10-13 — arah_maju naik pangkat jadi vonis]] di vault.
+    # nota sesi 2026-10-13 "M2- arah_maju memvonis" di obsidian/20-Sesi.
     if buruk:
         return _fail('; '.join(buruk[:2]))
     bersih = [d for d in diuji if 'terhalang' not in d]

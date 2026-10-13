@@ -67,12 +67,12 @@ Angka ms/frame berasal dari runner tanpa GPU (Mesa software). Ia berguna untuk
 
 | Hal | Berat | Catatan |
 |---|---|---|
-| Arah WASD basis sumbu salah benar | 🔴 | [[Arah WASD basis sumbu salah]] — regresi tidak menguji arah |
 | 4–29 FPS di mesin pemilik, belum pernah diprofil di GPU | 🔴 | [[Tahap 3 — Performa]] |
-| Cek `arah_maju` masih lapor-saja, belum memvonis | 🟠 | menuduh 6 scene sehat di larian panjang → [[Utang Teknis]] |
 | `PLAY.md` menunjuk baris & flag yang sudah tidak ada | 🟡 | [[Utang Teknis]] |
 
 ## Yang baru saja lunas
+
+- **`arah_maju` memvonis** (13 Okt, gauntlet M2). "Kontaminasi antar-scene" ternyata cacat di alat ukurnya sendiri: tabrakan peta membelokkan lintasan, dan arah acuan dibaca dari kamera yang tertinggal. Setelah diperbaiki, 42/42 pengukuran menunjukkan 0°. Rumus lama dipasang kembali → farm/town/house GAGAL 180°.
 
 - **Arah WASD** 🔴 → selesai (kodenya; penjaganya belum). Basisnya membaca komponen `(.x,.y)` padahal bidang mendatar Ursina `(x,z)`; menyimpang sampai 180° dan di yaw 90/270 vektor "kanan" runtuh jadi nol. Diukur di 8 yaw, diperbaiki, dan dijaga pemeriksaan `arah_maju` yang **terbukti gagal** saat bug dipasang kembali → [[2026-10-04 — Arah WASD akhirnya terukur dan diperbaiki]].
 

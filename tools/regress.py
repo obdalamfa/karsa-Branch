@@ -1292,6 +1292,16 @@ def main():
                     if hasil_frame[0]:
                         break
 
+            # Cek HUD membandingkan piksel tangkapan dengan keadaan entity
+            # SEKARANG, jadi harus jalan sebelum cek lain menjalankan frame.
+            # arah_maju dan motif_waras memutar taskMgr; motif meluruh
+            # melewati ambang warna, dan bar yang di layar hijau dituduh
+            # tertimbun karena entity-nya kini minta kuning. Gagal acak
+            # 'hud_terbaca' di larian penuh berasal dari situ.
+            hasil['hud_kontras'] = cek_hud_kontras(g, png) if png.exists() \
+                else _fail('tidak ada tangkapan layar')
+            hasil['hud_terbaca'] = cek_hud_terbaca(g, png) if png.exists() \
+                else _fail('tidak ada tangkapan layar')
             hasil['geom_nol'] = cek_geom_nol(nama)
             hasil['frame_kosong'] = hasil_frame
             if png.exists():
@@ -1305,10 +1315,6 @@ def main():
             hasil['rumput_catur'] = cek_rumput_tak_catur(g)
             hasil['avatar_warna'] = cek_avatar_berwarna(g)
             hasil['hud_muat'] = cek_hud_muat(g)
-            hasil['hud_kontras'] = cek_hud_kontras(g, png) if png.exists() \
-                else _fail('tidak ada tangkapan layar')
-            hasil['hud_terbaca'] = cek_hud_terbaca(g, png) if png.exists() \
-                else _fail('tidak ada tangkapan layar')
             hasil['save_bolak'] = cek_save_bolak(g)
             hasil['rumput_lambai'] = cek_rumput_melambai(g, base, OUT)
             hasil['cahaya_global'] = cek_cahaya_global(g, base, OUT)

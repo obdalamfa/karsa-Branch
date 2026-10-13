@@ -24,7 +24,7 @@ probe `_bench/`, atau angka) tidak dicentang.
 
 | # | Milestone | Definition of done (harus ada bukti) | Status |
 |---|---|---|---|
-| M1 | Regresi hijau lagi | swarga `cahaya_global` lulus; `hud_terbaca` lulus 3 larian penuh berturut-turut | ⬜ |
+| M1 | Regresi hijau lagi | swarga `cahaya_global` lulus; `hud_terbaca` lulus 3 larian penuh berturut-turut | ✅ 13 Okt — 3 larian penuh 14/14 ([[Ubin dilebur membekukan cahaya siang-malam]], [[Cek HUD membaca keadaan setelah motif meluruh]]) |
 | M2 | Penjaga arah WASD memvonis | cek `arah_maju` jadi pemeriksaan gagal/lulus tanpa menuduh scene sehat; terbukti gagal bila bug dipasang kembali | ⬜ |
 | M3 | Alat capture gauntlet | skrip mengambil capture tiap scene dari jalur asli `app.py` (aturan #2) ke `_bench/gauntlet/`; galeri bar *A Short Hike* tersimpan | ⬜ |
 | M4 | Farm mengalahkan bar | kritikus buta memilih capture farm kita atas *A Short Hike* | ⬜ |

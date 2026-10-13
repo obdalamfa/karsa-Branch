@@ -551,6 +551,18 @@ class World3D:
                                   'TransparencyAttrib', 'ColorAttrib'):
                         from panda3d import core as _pc
                         bersama = bersama.removeAttrib(getattr(_pc, jenis))
+                    # Net state ubin membawa SALINAN uniform siang-malam
+                    # (sm_ambient dst.) di ShaderAttrib-nya. Dipasang di akar,
+                    # salinan beku itu menimpa uniform `scene` dan tanah
+                    # seluruh scene tetap seterang tengah hari -- regresi
+                    # menangkapnya sebagai `cahaya_global` gagal. Dicabut
+                    # supaya nilainya turun dari `scene` seperti entity lain.
+                    sa = bersama.getAttrib(_pc.ShaderAttrib)
+                    if sa is not None:
+                        from game.smooth_shader import _UNIFORM_GLOBAL_AWAL
+                        for nama in _UNIFORM_GLOBAL_AWAL:
+                            sa = sa.clearShaderInput(nama)
+                        bersama = bersama.setAttrib(sa)
                     akar.setState(bersama)
                 c = gnp.copyTo(akar)
                 # Per ubin cuma teksturnya. Warnanya (ColorScaleAttrib ber-flag

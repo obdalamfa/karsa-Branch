@@ -9,6 +9,13 @@ tags: [moc, status]
 
 # Status Sekarang
 
+> [!success] Pembaruan 2026-10-13 — gauntlet M1
+> Regresi **kembali 14/14**, tiga larian penuh berturut-turut. Ada dua sebab.
+> Pertama, ubin yang dilebur membekukan uniform siang-malam
+> ([[Ubin dilebur membekukan cahaya siang-malam]]). Kedua, cek HUD membaca
+> keadaan setelah motif meluruh ([[Cek HUD membaca keadaan setelah motif meluruh]]).
+> Rencana empat hari ada di [[Gauntlet Oktober 2026 — 10 Milestone]].
+
 > [!warning] Pembaruan 2026-10-05 (branch `integrasi/satu`, commit 17d570b)
 > Regresi **tidak lagi 14/14**: swarga gagal `cahaya_global` (sudah gagal sebelum
 > 17d570b, belum diselidiki); `hud_terbaca` gagal acak di larian penuh tapi

@@ -1364,14 +1364,19 @@ class World3D:
         # pucat dari kejauhan, sebelum pemain sempat memeriksa satu per satu.
         basah = soil.get('watered')
         soil_tex = 'soil_wet' if basah else 'soil_dry'
+        # Tint hangat dan jenuh: petak garapan harus tampil sebagai tanah
+        # GEMBUR yang gelap di atas ladang kering yang terang, bukan cokelat
+        # kusam di atas cokelat kusam (lihat TANAH_LADANG di zone_paint.py).
         if basah:
-            tint = color.rgb(255, 255, 255)
+            tint = color.rgb(214, 150, 112)
         elif soil.get('kering', 0) >= 2:
-            tint = color.rgb(214, 198, 172)
+            tint = color.rgb(226, 196, 160)
         else:
-            tint = color.rgb(236, 226, 210)
-        e = _e('cube', (wx, GROUND_H + 0.06, wz),
-               (TS * 0.92, 0.10, TS * 0.92), soil_tex, tint)
+            tint = color.rgb(240, 176, 128)
+        # Sedikit lebih tinggi dan lebih sempit: dari kamera main, sisinya
+        # terbaca sebagai gundukan bedengan, dan celah di antaranya sebagai alur.
+        e = _e('cube', (wx, GROUND_H + 0.09, wz),
+               (TS * 0.86, 0.16, TS * 0.86), soil_tex, tint)
         self._soil_ents[key] = e
 
     # ─── INTERNAL: TANAMAN & POHON ───────────────────────

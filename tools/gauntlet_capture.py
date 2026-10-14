@@ -38,7 +38,9 @@ KELUAR = ROOT / '_bench' / 'gauntlet'
 # slug patokan -> argumen tools/capture.py. Jam dipilih supaya cocok dengan
 # cahaya di frame patokannya (siang untuk lapangan, senja untuk evening_light).
 PENGAMBILAN: dict[str, list[str]] = {
-    'farm_wide':         ['--scene', 'farm', '--hour', '10'],
+    # Ladang yang sedang digarap, seperti di patokan -- bukan hari pertama.
+    'farm_wide':         ['--scene', 'farm', '--hour', '10',
+                          '--save', 'tools/fixtures/ladang_hari10_save.json'],
     'farm_closeup':      ['--scene', 'farm', '--hour', '10', '--dist', '5', '--pitch', '28'],
     'hud_default':       ['--scene', 'farm', '--hour', '11'],
     'character_midshot': ['--scene', 'town', '--hour', '10'],

@@ -89,6 +89,10 @@ def main():
                          'Sekaligus bukti bug NodePath-ganda: kalau mesh '
                          'di-cache tanpa salinan, hanya alat TERAKHIR yang '
                          'punya geometri.')
+    ap.add_argument('--save', default=None,
+                    help='fixture save yang dipakai, mis. '
+                         'tools/fixtures/ladang_hari10_save.json. Ditolak '
+                         'kalau save pemain sungguhan sudah ada.')
     ap.add_argument('--width', type=int, default=1280)
     ap.add_argument('--height', type=int, default=720)
     # --- mode STRIP: gerak tidak bisa dinilai dari gambar diam ---------------
@@ -140,9 +144,15 @@ def main():
     # sungguhan tidak pernah disentuh.
     global _FIXTURE
     _save = ROOT / cfg.SAVE_FILE
+    if args.save and _save.exists():
+        # Menimpa save pemain demi tangkapan layar tidak pernah sepadan.
+        print(f'CAPTURE_ERR: {_save.name} sudah ada; --save tidak menimpanya',
+              file=sys.stderr)
+        sys.exit(2)
     if not _save.exists():
         import shutil
-        shutil.copyfile(ROOT / 'tools' / 'fixtures' / 'regress_save.json', _save)
+        shutil.copyfile(Path(args.save) if args.save else
+                        ROOT / 'tools' / 'fixtures' / 'regress_save.json', _save)
         _FIXTURE = _save
         import atexit
         atexit.register(_buang_fixture)    # jalur sys.exit(2)

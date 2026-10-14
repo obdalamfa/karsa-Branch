@@ -9,7 +9,14 @@ tags: [tahapan, gauntlet]
 
 # Gauntlet Oktober 2026 — 10 Milestone
 
-**Bar:** *A Short Hike* (adamgryu, 2019). Dibandingkan langsung dari
+> [!warning] 14 Okt — bar diganti sementara
+> *A Short Hike* tidak bisa diambil dari sesi cloud: kebijakan jaringan menolak
+> `store.steampowered.com`, `*.steamstatic.com`, Wikipedia, dan `ashorthike.com`.
+> Mulai M4, gauntlet memakai patokan **Story of Seasons: A Wonderful Life**
+> yang sudah ada di `_bench/refs/` (9 frame gameplay, gerbang `bar_gate.py`).
+> Kalau akses Steam dibuka, `tools/ambil_patokan.py` bisa mengambil frame ASH.
+
+**Bar awal:** *A Short Hike* (adamgryu, 2019). Dibandingkan langsung dari
 screenshot/footage rilis, bukan dari deskripsi. Syarat terukurnya:
 `python tools/regress.py` 14/14 lulus.
 
@@ -26,7 +33,7 @@ probe `_bench/`, atau angka) tidak dicentang.
 |---|---|---|---|
 | M1 | Regresi hijau lagi | swarga `cahaya_global` lulus; `hud_terbaca` lulus 3 larian penuh berturut-turut | ✅ 13 Okt — 3 larian penuh 14/14 ([[Ubin dilebur membekukan cahaya siang-malam]], [[Cek HUD membaca keadaan setelah motif meluruh]]) |
 | M2 | Penjaga arah WASD memvonis | cek `arah_maju` jadi pemeriksaan gagal/lulus tanpa menuduh scene sehat; terbukti gagal bila bug dipasang kembali | ✅ 13 Okt — 42/42 ukuran 0°, 2 larian penuh 14/14; rumus lama dipasang → farm/town/house GAGAL 180° |
-| M3 | Alat capture gauntlet | skrip mengambil capture tiap scene dari jalur asli `app.py` (aturan #2) ke `_bench/gauntlet/`; galeri bar *A Short Hike* tersimpan | ⬜ |
+| M3 | Alat capture gauntlet | skrip mengambil capture tiap scene dari jalur asli `app.py` (aturan #2) ke `_bench/gauntlet/`; galeri bar *A Short Hike* tersimpan | ✅ 14 Okt — `tools/gauntlet_capture.py`, 9/9 slug → lembar A/B buta. ⛔ *A Short Hike* diblokir jaringan (403 Steam/Wikipedia/situs resmi); bar diganti patokan AWL yang sudah ada (9/9, `bar_gate.py check` terbuka) |
 | M4 | Farm mengalahkan bar | kritikus buta memilih capture farm kita atas *A Short Hike* | ⬜ |
 | M5 | Suasana batch 1 setara farm | town, beach, house dan studio menang blind | ⬜ |
 | M6 | Suasana batch 2 setara farm | mountain, lake, cemetery dan swarga menang blind; sisa scene dicatat | ⬜ |

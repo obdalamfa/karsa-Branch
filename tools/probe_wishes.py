@@ -245,6 +245,23 @@ def uji_janji_terpenuhi(g):
         return
     butuh = w.kemajuan(s, janji[0])[1]
 
+    # HUD: janji yang baru dibuat harus terlihat setelah panel ditutup.
+    for _ in range(6):
+        base.taskMgr.step()
+    jn = getattr(g.panels, '_obj_janji', None)
+    teks = str(jn.text) if jn is not None else ''
+    cek('HUD memajang janji setelah panel ditutup',
+        jn is not None and jn.enabled and janji[0]['teks'] in teks
+        and f'0/{butuh}' in teks, repr(teks))
+    _tangkap('wishes_hud_janji')     # untuk mata: kotak pelacak ikut memanjang
+    if jn is not None:
+        from ursina import camera
+        ex, ey = _batas_ui()
+        lo, hi = jn.getTightBounds(camera.ui)
+        cek('baris janji HUD di dalam layar',
+            -ex <= lo.x and hi.x <= ex and -ey <= lo.y and hi.y <= ey,
+            f'x {lo.x:.3f}..{hi.x:.3f}  y {lo.y:.3f}..{hi.y:.3f}')
+
     # 2. pilih alat Panen dengan tombol angka, seperti pemain
     g.input('4')
     cek('tombol 4 memilih alat Panen', s.tool_index == 3, f'tool_index={s.tool_index}')
@@ -269,6 +286,9 @@ def uji_janji_terpenuhi(g):
         and g.panels.mode == 'hud',
         f"janji tersisa={len(s.janji)} kebahagiaan={s.kebahagiaan} "
         f"mode={g.panels.mode}")
+    if jn is not None:
+        cek('baris janji HUD hilang setelah dibayar',
+            not jn.enabled and not str(jn.text).strip(), repr(str(jn.text)))
 
 
 def main():

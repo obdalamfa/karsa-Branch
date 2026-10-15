@@ -513,6 +513,22 @@ def baris_panel(s) -> list[str]:
     return out
 
 
+def baris_hud(s) -> str:
+    """Satu baris untuk pelacak HUD: janji pertama beserta kemajuannya.
+
+    Sengaja satu baris, bukan empat. HUD kiri-atas sudah memuat tutorial dan
+    quest; empat janji di sana akan menutupi dunia. Janji lainnya cukup
+    dihitung ("+2"), dan panel `p` tetap tempat melihat semuanya.
+    """
+    janji = _janji_list(s)
+    if not janji:
+        return ''
+    p = janji[0]
+    maju, butuh = kemajuan(s, p)
+    ekor = f'   +{len(janji) - 1}' if len(janji) > 1 else ''
+    return f"Keinginan: {p['teks']}  {min(maju, butuh)}/{butuh}{ekor}"
+
+
 def panduan() -> list[str]:
     return [
         'Keinginan muncul sendiri dari apa yang sedang kamu lakukan.',

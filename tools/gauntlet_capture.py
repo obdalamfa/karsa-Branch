@@ -39,8 +39,11 @@ KELUAR = ROOT / '_bench' / 'gauntlet'
 # cahaya di frame patokannya (siang untuk lapangan, senja untuk evening_light).
 PENGAMBILAN: dict[str, list[str]] = {
     # Ladang yang sedang digarap, seperti di patokan -- bukan hari pertama.
+    # Jarak kamera lewat zoom roda mouse yang sungguhan (g.input), bukan
+    # --dist: empat kali scroll up = jarak 13, sudut yang bisa dicapai pemain.
     'farm_wide':         ['--scene', 'farm', '--hour', '10',
-                          '--save', 'tools/fixtures/ladang_hari10_save.json'],
+                          '--save', 'tools/fixtures/ladang_hari10_save.json',
+                          '--keys', ','.join(['scroll up'] * 4)],
     'farm_closeup':      ['--scene', 'farm', '--hour', '10', '--dist', '5', '--pitch', '28'],
     'hud_default':       ['--scene', 'farm', '--hour', '11'],
     'character_midshot': ['--scene', 'town', '--hour', '10'],

@@ -1,7 +1,7 @@
 {
  "scene_name": "farm",
  "player_x": 15.0,
- "player_y": 10.0,
+ "player_y": 15.0,
  "facing": "down",
  "day": 10,
  "year": 1,
@@ -26,104 +26,104 @@
  },
  "soil": {
   "9,12,farm": {
-   "crop": "lobak",
-   "age": 0.0,
+   "crop": "padi",
+   "age": 2.5,
    "tilled": true,
    "kering": 0,
    "petik": 0,
    "watered": false
   },
   "10,12,farm": {
-   "crop": "lobak",
-   "age": 0.17,
+   "crop": "padi",
+   "age": 2.71,
    "tilled": true,
    "kering": 0,
    "petik": 0,
    "watered": true
   },
   "11,12,farm": {
-   "crop": "lobak",
-   "age": 0.33,
+   "crop": "padi",
+   "age": 2.92,
    "tilled": true,
    "kering": 0,
    "petik": 0,
    "watered": true
   },
   "12,12,farm": {
-   "crop": "lobak",
-   "age": 0.5,
+   "crop": "padi",
+   "age": 3.12,
    "tilled": true,
    "kering": 0,
    "petik": 0,
    "watered": false
   },
   "13,12,farm": {
-   "crop": "lobak",
-   "age": 0.67,
+   "crop": "padi",
+   "age": 3.33,
    "tilled": true,
    "kering": 0,
    "petik": 0,
    "watered": true
   },
   "14,12,farm": {
-   "crop": "lobak",
-   "age": 0.83,
+   "crop": "padi",
+   "age": 3.54,
    "tilled": true,
    "kering": 0,
    "petik": 0,
    "watered": true
   },
   "15,12,farm": {
-   "crop": "lobak",
-   "age": 1.0,
+   "crop": "padi",
+   "age": 3.75,
    "tilled": true,
    "kering": 0,
    "petik": 0,
    "watered": false
   },
   "16,12,farm": {
-   "crop": "lobak",
-   "age": 1.17,
+   "crop": "padi",
+   "age": 3.96,
    "tilled": true,
    "kering": 0,
    "petik": 0,
    "watered": true
   },
   "17,12,farm": {
-   "crop": "lobak",
-   "age": 1.33,
+   "crop": "padi",
+   "age": 4.17,
    "tilled": true,
    "kering": 0,
    "petik": 0,
    "watered": true
   },
   "18,12,farm": {
-   "crop": "lobak",
-   "age": 1.5,
+   "crop": "padi",
+   "age": 4.38,
    "tilled": true,
    "kering": 0,
    "petik": 0,
    "watered": false
   },
   "19,12,farm": {
-   "crop": "lobak",
-   "age": 1.67,
+   "crop": "padi",
+   "age": 4.58,
    "tilled": true,
    "kering": 0,
    "petik": 0,
    "watered": true
   },
   "20,12,farm": {
-   "crop": "lobak",
-   "age": 1.83,
+   "crop": "padi",
+   "age": 4.79,
    "tilled": true,
    "kering": 0,
    "petik": 0,
    "watered": true
   },
   "21,12,farm": {
-   "crop": "lobak",
-   "age": 2.0,
+   "crop": "padi",
+   "age": 5.0,
    "tilled": true,
    "kering": 0,
    "petik": 0,
@@ -135,7 +135,7 @@
   },
   "9,13,farm": {
    "crop": "lobak",
-   "age": 0.0,
+   "age": 1.0,
    "tilled": true,
    "kering": 0,
    "petik": 0,
@@ -143,7 +143,7 @@
   },
   "10,13,farm": {
    "crop": "lobak",
-   "age": 0.17,
+   "age": 1.08,
    "tilled": true,
    "kering": 0,
    "petik": 0,
@@ -151,7 +151,7 @@
   },
   "11,13,farm": {
    "crop": "lobak",
-   "age": 0.33,
+   "age": 1.17,
    "tilled": true,
    "kering": 0,
    "petik": 0,
@@ -159,7 +159,7 @@
   },
   "12,13,farm": {
    "crop": "lobak",
-   "age": 0.5,
+   "age": 1.25,
    "tilled": true,
    "kering": 0,
    "petik": 0,
@@ -167,7 +167,7 @@
   },
   "13,13,farm": {
    "crop": "lobak",
-   "age": 0.67,
+   "age": 1.33,
    "tilled": true,
    "kering": 0,
    "petik": 0,
@@ -175,7 +175,7 @@
   },
   "14,13,farm": {
    "crop": "lobak",
-   "age": 0.83,
+   "age": 1.42,
    "tilled": true,
    "kering": 0,
    "petik": 0,
@@ -183,7 +183,7 @@
   },
   "15,13,farm": {
    "crop": "lobak",
-   "age": 1.0,
+   "age": 1.5,
    "tilled": true,
    "kering": 0,
    "petik": 0,
@@ -191,7 +191,7 @@
   },
   "16,13,farm": {
    "crop": "lobak",
-   "age": 1.17,
+   "age": 1.58,
    "tilled": true,
    "kering": 0,
    "petik": 0,
@@ -199,7 +199,7 @@
   },
   "17,13,farm": {
    "crop": "lobak",
-   "age": 1.33,
+   "age": 1.67,
    "tilled": true,
    "kering": 0,
    "petik": 0,
@@ -207,7 +207,7 @@
   },
   "18,13,farm": {
    "crop": "lobak",
-   "age": 1.5,
+   "age": 1.75,
    "tilled": true,
    "kering": 0,
    "petik": 0,
@@ -215,7 +215,7 @@
   },
   "19,13,farm": {
    "crop": "lobak",
-   "age": 1.67,
+   "age": 1.83,
    "tilled": true,
    "kering": 0,
    "petik": 0,
@@ -223,7 +223,7 @@
   },
   "20,13,farm": {
    "crop": "lobak",
-   "age": 1.83,
+   "age": 1.92,
    "tilled": true,
    "kering": 0,
    "petik": 0,
@@ -241,163 +241,7 @@
    "tilled": true,
    "kering": 0
   },
-  "9,15,farm": {
-   "crop": "wortel",
-   "age": 0.0,
-   "tilled": true,
-   "kering": 0,
-   "petik": 0,
-   "watered": false
-  },
-  "10,15,farm": {
-   "crop": "wortel",
-   "age": 0.25,
-   "tilled": true,
-   "kering": 0,
-   "petik": 0,
-   "watered": true
-  },
-  "11,15,farm": {
-   "crop": "wortel",
-   "age": 0.5,
-   "tilled": true,
-   "kering": 0,
-   "petik": 0,
-   "watered": true
-  },
-  "12,15,farm": {
-   "crop": "wortel",
-   "age": 0.75,
-   "tilled": true,
-   "kering": 0,
-   "petik": 0,
-   "watered": false
-  },
-  "13,15,farm": {
-   "crop": "wortel",
-   "age": 1.0,
-   "tilled": true,
-   "kering": 0,
-   "petik": 0,
-   "watered": true
-  },
-  "14,15,farm": {
-   "crop": "wortel",
-   "age": 1.25,
-   "tilled": true,
-   "kering": 0,
-   "petik": 0,
-   "watered": true
-  },
-  "15,15,farm": {
-   "crop": "wortel",
-   "age": 1.5,
-   "tilled": true,
-   "kering": 0,
-   "petik": 0,
-   "watered": false
-  },
-  "16,15,farm": {
-   "crop": "wortel",
-   "age": 1.75,
-   "tilled": true,
-   "kering": 0,
-   "petik": 0,
-   "watered": true
-  },
-  "17,15,farm": {
-   "crop": "wortel",
-   "age": 2.0,
-   "tilled": true,
-   "kering": 0,
-   "petik": 0,
-   "watered": true
-  },
-  "18,15,farm": {
-   "crop": "wortel",
-   "age": 2.25,
-   "tilled": true,
-   "kering": 0,
-   "petik": 0,
-   "watered": false
-  },
-  "19,15,farm": {
-   "crop": "wortel",
-   "age": 2.5,
-   "tilled": true,
-   "kering": 0,
-   "petik": 0,
-   "watered": true
-  },
-  "20,15,farm": {
-   "crop": "wortel",
-   "age": 2.75,
-   "tilled": true,
-   "kering": 0,
-   "petik": 0,
-   "watered": true
-  },
-  "21,15,farm": {
-   "crop": "wortel",
-   "age": 3.0,
-   "tilled": true,
-   "kering": 0,
-   "petik": 0,
-   "watered": false
-  },
-  "22,15,farm": {
-   "tilled": true,
-   "kering": 0
-  },
-  "9,16,farm": {
-   "crop": "stroberi",
-   "age": 0.0,
-   "tilled": true,
-   "kering": 0,
-   "petik": 3,
-   "watered": false
-  },
-  "10,16,farm": {
-   "crop": "stroberi",
-   "age": 0.33,
-   "tilled": true,
-   "kering": 0,
-   "petik": 3,
-   "watered": true
-  },
-  "11,16,farm": {
-   "crop": "stroberi",
-   "age": 0.67,
-   "tilled": true,
-   "kering": 0,
-   "petik": 3,
-   "watered": true
-  },
-  "12,16,farm": {
-   "crop": "stroberi",
-   "age": 1.0,
-   "tilled": true,
-   "kering": 0,
-   "petik": 3,
-   "watered": false
-  },
-  "13,16,farm": {
-   "crop": "stroberi",
-   "age": 1.33,
-   "tilled": true,
-   "kering": 0,
-   "petik": 3,
-   "watered": true
-  },
-  "14,16,farm": {
-   "crop": "stroberi",
-   "age": 1.67,
-   "tilled": true,
-   "kering": 0,
-   "petik": 3,
-   "watered": true
-  },
-  "15,16,farm": {
+  "9,14,farm": {
    "crop": "stroberi",
    "age": 2.0,
    "tilled": true,
@@ -405,7 +249,15 @@
    "petik": 3,
    "watered": false
   },
-  "16,16,farm": {
+  "10,14,farm": {
+   "crop": "stroberi",
+   "age": 2.17,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": true
+  },
+  "11,14,farm": {
    "crop": "stroberi",
    "age": 2.33,
    "tilled": true,
@@ -413,7 +265,15 @@
    "petik": 3,
    "watered": true
   },
-  "17,16,farm": {
+  "12,14,farm": {
+   "crop": "stroberi",
+   "age": 2.5,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": false
+  },
+  "13,14,farm": {
    "crop": "stroberi",
    "age": 2.67,
    "tilled": true,
@@ -421,7 +281,15 @@
    "petik": 3,
    "watered": true
   },
-  "18,16,farm": {
+  "14,14,farm": {
+   "crop": "stroberi",
+   "age": 2.83,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": true
+  },
+  "15,14,farm": {
    "crop": "stroberi",
    "age": 3.0,
    "tilled": true,
@@ -429,7 +297,15 @@
    "petik": 3,
    "watered": false
   },
-  "19,16,farm": {
+  "16,14,farm": {
+   "crop": "stroberi",
+   "age": 3.17,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": true
+  },
+  "17,14,farm": {
    "crop": "stroberi",
    "age": 3.33,
    "tilled": true,
@@ -437,7 +313,15 @@
    "petik": 3,
    "watered": true
   },
-  "20,16,farm": {
+  "18,14,farm": {
+   "crop": "stroberi",
+   "age": 3.5,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": false
+  },
+  "19,14,farm": {
    "crop": "stroberi",
    "age": 3.67,
    "tilled": true,
@@ -445,7 +329,15 @@
    "petik": 3,
    "watered": true
   },
-  "21,16,farm": {
+  "20,14,farm": {
+   "crop": "stroberi",
+   "age": 3.83,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": true
+  },
+  "21,14,farm": {
    "crop": "stroberi",
    "age": 4.0,
    "tilled": true,
@@ -453,59 +345,227 @@
    "petik": 3,
    "watered": false
   },
+  "22,14,farm": {
+   "tilled": true,
+   "kering": 0
+  },
+  "9,16,farm": {
+   "crop": "wortel",
+   "age": 1.5,
+   "tilled": true,
+   "kering": 0,
+   "petik": 0,
+   "watered": false
+  },
+  "10,16,farm": {
+   "crop": "wortel",
+   "age": 1.62,
+   "tilled": true,
+   "kering": 0,
+   "petik": 0,
+   "watered": true
+  },
+  "11,16,farm": {
+   "crop": "wortel",
+   "age": 1.75,
+   "tilled": true,
+   "kering": 0,
+   "petik": 0,
+   "watered": true
+  },
+  "12,16,farm": {
+   "crop": "wortel",
+   "age": 1.88,
+   "tilled": true,
+   "kering": 0,
+   "petik": 0,
+   "watered": false
+  },
+  "13,16,farm": {
+   "crop": "wortel",
+   "age": 2.0,
+   "tilled": true,
+   "kering": 0,
+   "petik": 0,
+   "watered": true
+  },
+  "14,16,farm": {
+   "crop": "wortel",
+   "age": 2.12,
+   "tilled": true,
+   "kering": 0,
+   "petik": 0,
+   "watered": true
+  },
+  "15,16,farm": {
+   "crop": "wortel",
+   "age": 2.25,
+   "tilled": true,
+   "kering": 0,
+   "petik": 0,
+   "watered": false
+  },
+  "16,16,farm": {
+   "crop": "wortel",
+   "age": 2.38,
+   "tilled": true,
+   "kering": 0,
+   "petik": 0,
+   "watered": true
+  },
+  "17,16,farm": {
+   "crop": "wortel",
+   "age": 2.5,
+   "tilled": true,
+   "kering": 0,
+   "petik": 0,
+   "watered": true
+  },
+  "18,16,farm": {
+   "crop": "wortel",
+   "age": 2.62,
+   "tilled": true,
+   "kering": 0,
+   "petik": 0,
+   "watered": false
+  },
+  "19,16,farm": {
+   "crop": "wortel",
+   "age": 2.75,
+   "tilled": true,
+   "kering": 0,
+   "petik": 0,
+   "watered": true
+  },
+  "20,16,farm": {
+   "crop": "wortel",
+   "age": 2.88,
+   "tilled": true,
+   "kering": 0,
+   "petik": 0,
+   "watered": true
+  },
+  "21,16,farm": {
+   "crop": "wortel",
+   "age": 3.0,
+   "tilled": true,
+   "kering": 0,
+   "petik": 0,
+   "watered": false
+  },
   "22,16,farm": {
    "tilled": true,
    "kering": 0
   },
+  "9,17,farm": {
+   "crop": "stroberi",
+   "age": 2.0,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": false
+  },
+  "10,17,farm": {
+   "crop": "stroberi",
+   "age": 2.17,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": true
+  },
+  "11,17,farm": {
+   "crop": "stroberi",
+   "age": 2.33,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": true
+  },
+  "12,17,farm": {
+   "crop": "stroberi",
+   "age": 2.5,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": false
+  },
+  "13,17,farm": {
+   "crop": "stroberi",
+   "age": 2.67,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": true
+  },
+  "14,17,farm": {
+   "crop": "stroberi",
+   "age": 2.83,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": true
+  },
+  "15,17,farm": {
+   "crop": "stroberi",
+   "age": 3.0,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": false
+  },
+  "16,17,farm": {
+   "crop": "stroberi",
+   "age": 3.17,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": true
+  },
+  "17,17,farm": {
+   "crop": "stroberi",
+   "age": 3.33,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": true
+  },
+  "18,17,farm": {
+   "crop": "stroberi",
+   "age": 3.5,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": false
+  },
+  "19,17,farm": {
+   "crop": "stroberi",
+   "age": 3.67,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": true
+  },
+  "20,17,farm": {
+   "crop": "stroberi",
+   "age": 3.83,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": true
+  },
+  "21,17,farm": {
+   "crop": "stroberi",
+   "age": 4.0,
+   "tilled": true,
+   "kering": 0,
+   "petik": 3,
+   "watered": false
+  },
+  "22,17,farm": {
+   "tilled": true,
+   "kering": 0
+  },
   "9,18,farm": {
-   "crop": "kacang_panjang",
-   "age": 0.0,
-   "tilled": true,
-   "kering": 0,
-   "petik": 4,
-   "watered": false
-  },
-  "10,18,farm": {
-   "crop": "kacang_panjang",
-   "age": 0.17,
-   "tilled": true,
-   "kering": 0,
-   "petik": 4,
-   "watered": true
-  },
-  "11,18,farm": {
-   "crop": "kacang_panjang",
-   "age": 0.33,
-   "tilled": true,
-   "kering": 0,
-   "petik": 4,
-   "watered": true
-  },
-  "12,18,farm": {
-   "crop": "kacang_panjang",
-   "age": 0.5,
-   "tilled": true,
-   "kering": 0,
-   "petik": 4,
-   "watered": false
-  },
-  "13,18,farm": {
-   "crop": "kacang_panjang",
-   "age": 0.67,
-   "tilled": true,
-   "kering": 0,
-   "petik": 4,
-   "watered": true
-  },
-  "14,18,farm": {
-   "crop": "kacang_panjang",
-   "age": 0.83,
-   "tilled": true,
-   "kering": 0,
-   "petik": 4,
-   "watered": true
-  },
-  "15,18,farm": {
    "crop": "kacang_panjang",
    "age": 1.0,
    "tilled": true,
@@ -513,7 +573,15 @@
    "petik": 4,
    "watered": false
   },
-  "16,18,farm": {
+  "10,18,farm": {
+   "crop": "kacang_panjang",
+   "age": 1.08,
+   "tilled": true,
+   "kering": 0,
+   "petik": 4,
+   "watered": true
+  },
+  "11,18,farm": {
    "crop": "kacang_panjang",
    "age": 1.17,
    "tilled": true,
@@ -521,7 +589,15 @@
    "petik": 4,
    "watered": true
   },
-  "17,18,farm": {
+  "12,18,farm": {
+   "crop": "kacang_panjang",
+   "age": 1.25,
+   "tilled": true,
+   "kering": 0,
+   "petik": 4,
+   "watered": false
+  },
+  "13,18,farm": {
    "crop": "kacang_panjang",
    "age": 1.33,
    "tilled": true,
@@ -529,7 +605,15 @@
    "petik": 4,
    "watered": true
   },
-  "18,18,farm": {
+  "14,18,farm": {
+   "crop": "kacang_panjang",
+   "age": 1.42,
+   "tilled": true,
+   "kering": 0,
+   "petik": 4,
+   "watered": true
+  },
+  "15,18,farm": {
    "crop": "kacang_panjang",
    "age": 1.5,
    "tilled": true,
@@ -537,7 +621,15 @@
    "petik": 4,
    "watered": false
   },
-  "19,18,farm": {
+  "16,18,farm": {
+   "crop": "kacang_panjang",
+   "age": 1.58,
+   "tilled": true,
+   "kering": 0,
+   "petik": 4,
+   "watered": true
+  },
+  "17,18,farm": {
    "crop": "kacang_panjang",
    "age": 1.67,
    "tilled": true,
@@ -545,9 +637,25 @@
    "petik": 4,
    "watered": true
   },
-  "20,18,farm": {
+  "18,18,farm": {
+   "crop": "kacang_panjang",
+   "age": 1.75,
+   "tilled": true,
+   "kering": 0,
+   "petik": 4,
+   "watered": false
+  },
+  "19,18,farm": {
    "crop": "kacang_panjang",
    "age": 1.83,
+   "tilled": true,
+   "kering": 0,
+   "petik": 4,
+   "watered": true
+  },
+  "20,18,farm": {
+   "crop": "kacang_panjang",
+   "age": 1.92,
    "tilled": true,
    "kering": 0,
    "petik": 4,

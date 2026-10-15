@@ -26,6 +26,7 @@ FPS      = 60
 # game/app.py. Menyetel angka di sini tidak berpengaruh apa-apa, dan itu
 # menyesatkan siapa pun yang mencoba menyetel kamera dari config.
 CAM_TARGET_LIFT = 1.0   # titik fokus kamera lebih terpusat ke badan karakter
+CAM_DIST_MIN, CAM_DIST_MAX = 8.0, 24.0   # batas zoom roda mouse (bawaan camera_dist 19)
 CAM_LERP        = 8.0   # kamera bergerak mengikuti lebih cepat
 
 SHIP_BIN_TILE   = (6, 4)   # posisi Peti Kirim di scene farm (tile)

@@ -29,9 +29,9 @@ TUJUAN = ROOT / 'tools' / 'fixtures' / 'ladang_hari10_save.json'
 # per baris berselang supaya ada jalan setapak di antaranya, seperti cara
 # pemain menanam supaya bisa lewat untuk menyiram.
 BARIS = {
-    12: 'lobak', 13: 'lobak',
-    15: 'wortel', 16: 'stroberi',
-    18: 'kacang_panjang',
+    12: 'padi', 13: 'lobak',
+    14: 'stroberi', 16: 'wortel',
+    17: 'stroberi', 18: 'kacang_panjang',
 }
 X_MULAI, X_SELESAI = 9, 21
 
@@ -43,16 +43,17 @@ def main():
         hari = spec(cid).get('days', 3)
         for x in range(X_MULAI, X_SELESAI + 1):
             p = plant_payload(cid)
-            # Umur menyebar dari baru tanam sampai siap panen di sepanjang
-            # baris, jadi satu tangkapan memperlihatkan semua tahap.
-            p['age'] = round(hari * (x - X_MULAI) / (X_SELESAI - X_MULAI), 2)
+            # Umur menyebar dari setengah jalan sampai siap panen di sepanjang
+            # baris: hari ke-10 musim, kebanyakan tanaman sudah besar, dan satu
+            # tangkapan tetap memperlihatkan beberapa tahap.
+            p['age'] = round(hari * (0.5 + 0.5 * (x - X_MULAI) / (X_SELESAI - X_MULAI)), 2)
             p['watered'] = (x % 3) != 0
             soil[f'{x},{y},farm'] = p
         # Satu petak di ujung baris dicangkul tapi belum ditanami.
         soil[f'{X_SELESAI + 1},{y},farm'] = {'tilled': True, 'kering': 0}
     d['soil'] = soil
     d['day'] = d['day_in_season'] = 10
-    d['player_x'], d['player_y'] = 15.0, 10.0
+    d['player_x'], d['player_y'] = 15.0, 15.0   # di lorong tengah ladang
     TUJUAN.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding='utf-8')
     print(f'{len(soil)} petak -> {TUJUAN.relative_to(ROOT)}')
 

@@ -37,7 +37,7 @@ probe `_bench/`, atau angka) tidak dicentang.
 | M4 | Farm mengalahkan bar | kritikus buta memilih capture farm kita atas *A Short Hike* | 🟥 5 ronde, 0 menang (bar AWL) — ditutup tanpa menang 15 Okt. Lahir: fixture ladang hari-10, petak garapan hangat bergundukan, **zoom kamera roda mouse** (8–24). Celah tersisa: cahaya matahari terarah/bayangan, rumput & bunga di tepi ladang, model tanaman, penanda air → pekerjaan seni besar, lihat nota sesi |
 | M5 | Suasana batch 1 setara farm | town, beach, house dan studio menang blind | ⬜ |
 | M6 | Suasana batch 2 setara farm | mountain, lake, cemetery dan swarga menang blind; sisa scene dicatat | ⬜ |
-| M7 | Tahap 4 Wishes — mesin | wish lahir dari motif/hubungan, terpenuhi, dan berakibat; probe menempuh jalur asli | ⬜ |
+| M7 | Tahap 4 Wishes — mesin | wish lahir dari motif/hubungan, terpenuhi, dan berakibat; probe menempuh jalur asli | ✅ 15 Okt — mesinnya ternyata sudah ada (e72577b) dan tersambung; yang kurang bukti. `probe_wishes.py` diperbaiki (macet di sinema, 5/11 → 12/12) dan ditambah uji janji→panen `space`→dibayar loop update: 17/17; pembayaran dimatikan → GAGAL. Catatan jujur: wish lahir dari konteks & hubungan (hati NPC), **bukan** dari motif |
 | M8 | Wishes terlihat pemain | wish muncul di dialog berpotret/HUD dan lulus cek `hud_terbaca` | ⬜ |
 | M9 | Animasi memakai alat | cangkul, siram dan kapak punya pose yang bisa dibedakan di capture; menang blind atas klip *A Short Hike* | ⬜ |
 | M10 | Pohon & gua Blender + 5 menit pertama | aset pohon/gua terpasang dan punya pemanggil (aturan #4); probe main 5 menit dari layar judul sampai panen pertama | ⬜ |

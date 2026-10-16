@@ -17,7 +17,7 @@ TUTORIAL_STEPS = [
     {
         'id': 'surat',
         'label': 'Baca surat Paman Arsa',
-        'hint': 'Kotak pos ada di depan rumah - dekati lalu tekan [R]',
+        'hint': 'Kotak pos ada di depan rumah - dekati lalu tekan [E]',
         'done': lambda s: bool(getattr(s, 'mail_read', False)),
     },
     {
@@ -41,7 +41,7 @@ TUTORIAL_STEPS = [
     {
         'id': 'tidur',
         'label': 'Tidur untuk ganti hari',
-        'hint': 'Masuk rumah, berdiri di kasur, tekan [R]',
+        'hint': 'Masuk rumah lalu tekan [T] untuk tidur',
         'done': lambda s: getattr(s, 'day', 1) >= 2,
     },
     {
@@ -53,7 +53,7 @@ TUTORIAL_STEPS = [
     {
         'id': 'kirim',
         'label': 'Kirim hasil ke Peti & tidur untuk dapat emas',
-        'hint': 'Bawa panen ke Peti Kirim (tanda kuning) dekat rumah, tekan [R], lalu tidur [T]',
+        'hint': 'Bawa panen ke Peti Kirim (tanda kuning) dekat rumah, tekan [E], lalu tidur [T]',
         'done': lambda s: s.stats.get('earned', 0) > 0,
     },
 ]

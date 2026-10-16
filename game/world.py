@@ -496,8 +496,59 @@ class World3D:
         if hasattr(self.scene_obj, 'builder') and self.scene_obj.builder:
             self.scene_obj.builder(self)
         self._build_objects()
+        self._pasang_penanda_pintu()
         self._satukan_ubin()
         self._lepas_dari_loop_ursina()
+
+    # Model Blender penanda pintu masuk tempat-tempat penting. Ketiganya
+    # dibuat di tools/blender_interior.py (08bbf5b) lalu tidak pernah punya
+    # pemanggil -- aturan #4 CLAUDE.md: modul tanpa pemanggil efeknya nol.
+    # Kunci (scene, tujuan portal) -> (model, rotasi y, geser x). Penanda
+    # diletakkan di titik tengah ubin-ubin portal yang sama tujuannya.
+    # Diukur dari tangkapan 16 Okt 2026: mulut_gua pada rotasi 0 menghadap
+    # selatan, membelakangi pemain yang datang dari desa; gapura_swarga
+    # berpusat di x=+2,1 dalam berkasnya (rentang -1,46..5,66), jadi celahnya
+    # meleset dua ubin dari portal kalau tidak digeser.
+    _PENANDA_PORTAL = {
+        ('mountain', 'naga_cave'): ('mulut_gua', 180, 0.0),
+        ('naga_cave', 'swarga'):   ('gapura_swarga', 0, -2.1),
+    }
+    # Penanda di atas ubin tertentu, bukan portal: tangga turun ke dungeon.
+    _PENANDA_UBIN = {
+        'naga_cave': {STAIRS_DOWN: ('lubang_dungeon', 0)},
+    }
+
+    def _pasang_penanda_pintu(self):
+        """Pasang model pintu masuk; dibersihkan `_clear()` lewat _obj_ents."""
+        sc = self.scene_obj
+        if sc is None:
+            return
+        try:
+            from .scenes.interior import _pasang
+        except Exception:
+            return
+        kelompok = {}
+        for p in getattr(sc, 'portals', None) or []:
+            kunci = (self.scene_name, p[2])
+            if kunci in self._PENANDA_PORTAL:
+                kelompok.setdefault(kunci, []).append((p[0], p[1]))
+        self._penanda = []
+        for kunci, ubin in kelompok.items():
+            nama, rot, geser = self._PENANDA_PORTAL[kunci]
+            mx = sum(t[0] for t in ubin) / len(ubin)
+            my = sum(t[1] for t in ubin) / len(ubin)
+            e = _pasang(self, nama, mx * TS + geser, my * TS, rot)
+            if e is not None:
+                self._penanda.append((nama, e))
+        per_ubin = self._PENANDA_UBIN.get(self.scene_name, {})
+        if per_ubin:
+            for ty, baris in enumerate(sc.tiles):
+                for tx, tid in enumerate(baris):
+                    if tid in per_ubin:
+                        nama, rot = per_ubin[tid]
+                        e = _pasang(self, nama, tx * TS, ty * TS, rot)
+                        if e is not None:
+                            self._penanda.append((nama, e))
 
     def _satukan_ubin(self):
         """Gabungkan ubin statis jadi satu mesh per keadaan render.

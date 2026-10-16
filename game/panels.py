@@ -1435,6 +1435,32 @@ class UIManager:
         self._voice_sub = _txt('', pos=(0, -0.30), scale=0.78, col=color.white, origin=(0, 0))
         self._voice_sub.enabled = False
 
+    # Suara batin. Keduanya hilang bersama merge yang menelan _build_batin
+    # (lihat catatan di atas), sementara enam pemanggilnya di
+    # interaction_controller tetap tinggal -- jadi ayunan cangkul PERTAMA
+    # pemain baru melempar AttributeError. Ditemukan 16 Okt 2026 oleh
+    # tools/probe_lima_menit.py. Versi aslinya (ae03456) menulis ke subtitle
+    # `_voice_sub`, tapi pemudar subtitle itu ikut hilang dan Batin tidak
+    # pernah dibuat; jadi ucapannya lewat flash_msg yang memudar sendiri,
+    # dan bendera sekali-ucap disimpan di sini kalau Batin belum ada.
+    def say_batin(self, voice, text):
+        if getattr(self, 'batin', None):
+            self.batin.say(voice, text)
+        vd = BVOICES.get(voice)
+        self.flash_msg(f"{vd['name']} — {text}" if vd else text, 3.0)
+
+    def say_batin_once(self, flag, voice, text):
+        b = getattr(self, 'batin', None)
+        if b is not None:
+            if not b.once('say_' + flag):
+                return
+        else:
+            sekali = self.__dict__.setdefault('_batin_sekali', set())
+            if flag in sekali:
+                return
+            sekali.add(flag)
+        self.say_batin(voice, text)
+
     def _build_buy(self):
         self._buy_sel = 0
         bg = _skin_chrome(_ui(scale=(0.62, 0.66), position=(0, 0),

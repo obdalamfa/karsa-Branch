@@ -37,7 +37,7 @@ from .sky import SkyDome
 from .chargen import ChargenScreen
 from . import grass_shader as _grass
 from .config import (SCREEN_W, SCREEN_H, CAM_LERP, TILE_SIZE,
-                     CAM_TARGET_LIFT, INGAME_MINUTES_PER_REAL_SECOND, FORCE_SLEEP_HOUR,
+                     CAM_TARGET_LIFT, CAM_DIST_MIN, CAM_DIST_MAX, INGAME_MINUTES_PER_REAL_SECOND, FORCE_SLEEP_HOUR,
                      NEED_MAX, NEED_CRITICAL, NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG)
 
 # Font: Ursina 5 mencari file font dengan glob rekursif di asset_folder,
@@ -733,6 +733,17 @@ class Game3D:
             except Exception:
                 pass
             self.panels.mode = 'hud'    # jaring terakhir kalau close_all lupa
+            return
+
+        # Zoom kamera dengan roda mouse, hanya di mode hud (panel memakai
+        # roda untuk menggulir). Dulu jarak kamera terkunci di 19: dari sana
+        # ladang dan pemain terbaca sebagai papan catur kecil, dan kritikus
+        # buta gauntlet M4 menyebutnya celah terbesar. Bawaan tetap 19;
+        # pemain yang mau dekat bisa mendekat.
+        if self.panels.mode == 'hud' and key in ('scroll up', 'scroll down'):
+            langkah = -1.5 if key == 'scroll up' else 1.5
+            self.camera_dist = max(CAM_DIST_MIN,
+                                   min(CAM_DIST_MAX, self.camera_dist + langkah))
             return
 
         # Chargen mode — semua input ke ChargenScreen

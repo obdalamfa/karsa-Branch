@@ -105,8 +105,8 @@ bukan pada kemungkinan yang dikarang:
   arah_maju      basis arah gerak membaca komponen sumbu yang salah, jadi WASD
                  menyimpang 91-180 derajat di yaw selain 0. Selamat dari DUA
                  kali perbaikan tanda karena yang diuji selalu yaw awal.
-                 LAPOR SAJA untuk sekarang: instrumennya masih terkontaminasi
-                 antar-scene di larian panjang (lihat catatannya di fungsi).
+                 Diukur dengan tabrakan dimatikan sementara, supaya yang
+                 dinilai hanya basis arah (lihat catatannya di fungsi).
 
 Pemakaian:
     python tools/regress.py                 semua scene
@@ -303,6 +303,19 @@ def cek_arah_maju(g):
     vel_asli = (g.player.velocity_x, g.player.velocity_z)
     buruk = []
     diuji = []
+    # TABRAKAN DIMATIKAN SELAMA PENGUKURAN, lewat atribut instance yang
+    # dicabut lagi di `finally`. Yang dijaga di sini basis arah, bukan peta.
+    # Terukur 13 Okt 2026: dengan tabrakan hidup, langkah diagonal di yaw 135
+    # yang satu sumbunya membentur dinding meluncur sepanjang sumbu lain, jadi
+    # menyimpang ~45 deg (clinic 40, studio 41). Lereng dan dorongan keluar
+    # dari petak terjepit memberi angka lebih liar lagi (mountain 66 dan 168
+    # deg, 24,7 satuan dalam 40 frame). Itulah "kontaminasi" yang dulu memaksa
+    # cek ini cuma melapor. Jalurnya tetap jalur asli app.py -> player.tick;
+    # yang dibuang hanya jawaban "boleh diinjak?".
+    world = g.player.world
+    punya_walk = 'is_walkable' in world.__dict__
+    walk_asli = world.__dict__.get('is_walkable')
+    world.is_walkable = lambda *a, **k: True
     try:
         for yaw in (yaw_asli if yaw_asli is not None else 0.0, 135.0, 270.0):
             if yaw_asli is not None:
@@ -322,6 +335,11 @@ def cek_arah_maju(g):
                 _b.taskMgr.step()
 
             x0, _, z0 = g.player.world_position
+            # Arah "atas layar" diambil SEBELUM berjalan, saat kamera baru
+            # di-snap. Kamera mengikuti dengan lerp, jadi arahnya di akhir
+            # langkah sudah tertinggal dari yang dilihat pemain saat menekan W.
+            cx, _, cz = camera.world_position
+            ux, uz = g.camera_focus[0] - cx, g.camera_focus[2] - cz
             held_keys['w'] = 1
             for _ in range(40):
                 _b.taskMgr.step()
@@ -341,8 +359,6 @@ def cek_arah_maju(g):
                 diuji.append(f'{yaw:.0f}:terhalang({jarak:.1f}u)')
                 continue
 
-            cx, _, cz = camera.world_position
-            ux, uz = g.camera_focus[0] - cx, g.camera_focus[2] - cz
             nu = _m.hypot(ux, uz)
             if nu < 1e-4:
                 continue                      # kamera tegak lurus: tak terukur
@@ -353,6 +369,10 @@ def cek_arah_maju(g):
                 buruk.append(f'yaw{yaw:.0f}: W menyimpang {beda:.0f} deg '
                              f'(jarak {jarak:.2f}u)')
     finally:
+        if punya_walk:
+            world.is_walkable = walk_asli
+        else:
+            del world.is_walkable
         for k in ('w', 'a', 's', 'd', 'shift'):
             held_keys[k] = 0
         if yaw_asli is not None:
@@ -364,30 +384,21 @@ def cek_arah_maju(g):
         for _ in range(5):
             _b.taskMgr.step()
 
-    # LAPOR SAJA -- SENGAJA BELUM MENGGAGALKAN LARIAN.
-    #
-    # Instrumen ini belum bisa dipercaya, dan itu terukur: larian 14 scene
-    # menuduh town, lake, cemetery, beach, shop, dan studio (dua di antaranya
-    # "menyimpang 180 derajat"), padahal town LULUS kalau dijalankan sendirian
-    # DAN kalau dijalankan sesudah farm. Jadi kegagalannya bergantung pada
-    # panjang larian, bukan pada kode yang diperiksa -- ciri kontaminasi antar-
-    # scene yang belum ketemu sumbernya, bukan ciri bug arah.
-    #
-    # Penjaga yang salah menuduh enam scene lebih berbahaya daripada tidak ada
-    # penjaga: yang berikutnya akan mematikannya, lalu bug yang sebenarnya
-    # lewat tanpa suara. Jadi angkanya tetap DILAPORKAN di kolom catatan supaya
-    # penyimpangan besar tetap terlihat mata, tapi ia belum memvonis.
-    #
-    # Yang MEMANG membuktikan arah sekarang: _bench/probes/probe_arah_wasd.py
-    # dan probe_basis_kamera.py, keduanya ter-commit dan bisa dijalankan ulang
-    # siapa pun. Pemeriksaan ini naik pangkat jadi penjaga sungguhan begitu
-    # sumber kontaminasinya ketemu.
+    # MEMVONIS sejak 13 Okt 2026. Sebelumnya cek ini cuma melapor karena
+    # menuduh enam scene sehat di larian panjang. Sumbernya ternyata dua cacat
+    # di alat ukurnya sendiri, keduanya diperbaiki di atas: tabrakan peta yang
+    # ikut membelokkan lintasan, dan arah acuan yang dibaca dari kamera yang
+    # sudah tertinggal. Sesudahnya, satu larian penuh memberi 0 deg di ketiga
+    # yaw di keempat belas scene. Lalu rumus lama (.x,.y) dipasang kembali di
+    # player.py, dan cek ini GAGAL -- lihat
+    # nota sesi 2026-10-13 "M2- arah_maju memvonis" di obsidian/20-Sesi.
     if buruk:
-        return _ok('LAPOR: ' + '; '.join(buruk[:2]))
+        return _fail('; '.join(buruk[:2]))
     bersih = [d for d in diuji if 'terhalang' not in d]
     if not bersih:
-        # Jujur: semua yaw terhalang, jadi scene ini tidak menguji apa pun.
-        return _ok('W tak terukur: ' + ' '.join(diuji) if diuji else 'W tak terukur')
+        # Tanpa tabrakan, "terhalang" berarti pemain tidak bergerak sama
+        # sekali. Itu kegagalan input, bukan alasan untuk lulus diam-diam.
+        return _fail('W tidak menggerakkan pemain: ' + ' '.join(diuji))
     return _ok('W ' + ' '.join(diuji))
 
 
@@ -1187,6 +1198,7 @@ def main():
     minta = [a for a in sys.argv[1:] if not a.startswith('-')]
     scenes = minta or [s for s in SCENES if s != 'dungeon']
 
+    lima_baris = None
     _pasang_save_fixture(ROOT / cfg.SAVE_FILE)
     t0 = time.time()
     try:
@@ -1292,6 +1304,16 @@ def main():
                     if hasil_frame[0]:
                         break
 
+            # Cek HUD membandingkan piksel tangkapan dengan keadaan entity
+            # SEKARANG, jadi harus jalan sebelum cek lain menjalankan frame.
+            # arah_maju dan motif_waras memutar taskMgr; motif meluruh
+            # melewati ambang warna, dan bar yang di layar hijau dituduh
+            # tertimbun karena entity-nya kini minta kuning. Gagal acak
+            # 'hud_terbaca' di larian penuh berasal dari situ.
+            hasil['hud_kontras'] = cek_hud_kontras(g, png) if png.exists() \
+                else _fail('tidak ada tangkapan layar')
+            hasil['hud_terbaca'] = cek_hud_terbaca(g, png) if png.exists() \
+                else _fail('tidak ada tangkapan layar')
             hasil['geom_nol'] = cek_geom_nol(nama)
             hasil['frame_kosong'] = hasil_frame
             if png.exists():
@@ -1305,10 +1327,6 @@ def main():
             hasil['rumput_catur'] = cek_rumput_tak_catur(g)
             hasil['avatar_warna'] = cek_avatar_berwarna(g)
             hasil['hud_muat'] = cek_hud_muat(g)
-            hasil['hud_kontras'] = cek_hud_kontras(g, png) if png.exists() \
-                else _fail('tidak ada tangkapan layar')
-            hasil['hud_terbaca'] = cek_hud_terbaca(g, png) if png.exists() \
-                else _fail('tidak ada tangkapan layar')
             hasil['save_bolak'] = cek_save_bolak(g)
             hasil['rumput_lambai'] = cek_rumput_melambai(g, base, OUT)
             hasil['cahaya_global'] = cek_cahaya_global(g, base, OUT)
@@ -1475,6 +1493,26 @@ def main():
     for k, ok, c in sims_baris:
         print(f'{"sistem sims":14s} {"LULUS" if ok else "GAGAL":>7s} '
               f'{"":>9s} {"":>7s}  {c[:44]}')
+    # ── lima menit pertama (subproses, SETELAH semua scene, tanpa fixture) ──
+    # Di AKHIR, setelah semua scene dan setelah save fixture dibuang, supaya
+    # probe tidak bisa menyentuh pemeriksaan scene mana pun.
+    # Probe ini memainkan tutorial dari game baru sampai panen, dan karena
+    # itu butuh keadaan tanpa save. Ia menjaga tiga bug yang lolos dari
+    # seluruh regresi ini karena tidak ada yang pernah memainkan tutorial:
+    # petunjuk [R] yang mengganti benih, [E] yang ditelan menu peti, dan
+    # say_batin_once yang hilang sehingga cangkul pertama crash. Hanya saat
+    # semua scene diminta; kode 2 = ada save pemain, jadi dilewati jujur.
+    if not minta:
+        _buang_save_fixture()
+        import subprocess
+        r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'probe_lima_menit.py')],
+                           cwd=ROOT, capture_output=True, text=True, timeout=600)
+        akhir = [b for b in r.stdout.splitlines() if 'lulus' in b][-1:] or ['tanpa keluaran']
+        if r.returncode == 2:
+            lima_baris = (True, 'dilewati: save pemain ada')
+        else:
+            lima_baris = (r.returncode == 0, akhir[0].strip())
+
     print('-' * 78)
     tanda_hud = 'LULUS' if not hud_baris else 'GAGAL'
     ring_hud = '; '.join(f'{k} {c}' for k, c in hud_baris) or 'semua di dalam layar'
@@ -1492,6 +1530,12 @@ def main():
     ok_gua, catatan_gua = gua_baris[0] if gua_baris else (True, '-')
     print(f'{"bentuk gua":14s} {"LULUS" if ok_gua else "GAGAL":>7s} '
           f'{"":>9s} {"":>7s}  {catatan_gua[:44]}')
+    if lima_baris is not None:
+        ok_lima, catatan_lima = lima_baris
+        print(f'{"lima menit":14s} {"LULUS" if ok_lima else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {catatan_lima[:44]}')
+        if not ok_lima:
+            gagal_total += 1
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)
     print(f'{n_lulus}/{len(baris)} scene lulus, {gagal_total} pemeriksaan gagal, '

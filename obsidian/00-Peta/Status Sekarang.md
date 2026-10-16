@@ -9,6 +9,23 @@ tags: [moc, status]
 
 # Status Sekarang
 
+> [!success] Pembaruan 2026-10-16 — gauntlet Okt selesai
+> Regresi 14/14 + baris baru **"lima menit"** (tutorial dimainkan dari game
+> baru sampai panen). Diperbaiki minggu ini: cahaya siang-malam di tanah,
+> `arah_maju` kini memvonis, `capture.py` memotret dunia, keinginan
+> terlihat di HUD, zoom kamera, penanda gua/gapura/dungeon Blender, dan tiga
+> bug lima menit pertama ([[Tutorial menyuruh R, cangkul pertama crash]]).
+> Belum: suasana visual kalah 0/5 melawan AWL (cahaya terarah, tepi rumput,
+> model tanaman); sisa Majelis Batin hilang; pohon Blender belum dipasang.
+> Rincian: [[Gauntlet Oktober 2026 — 10 Milestone]].
+
+> [!success] Pembaruan 2026-10-13 — gauntlet M1
+> Regresi **kembali 14/14**, tiga larian penuh berturut-turut. Ada dua sebab.
+> Pertama, ubin yang dilebur membekukan uniform siang-malam
+> ([[Ubin dilebur membekukan cahaya siang-malam]]). Kedua, cek HUD membaca
+> keadaan setelah motif meluruh ([[Cek HUD membaca keadaan setelah motif meluruh]]).
+> Rencana empat hari ada di [[Gauntlet Oktober 2026 — 10 Milestone]].
+
 > [!warning] Pembaruan 2026-10-05 (branch `integrasi/satu`, commit 17d570b)
 > Regresi **tidak lagi 14/14**: swarga gagal `cahaya_global` (sudah gagal sebelum
 > 17d570b, belum diselidiki); `hud_terbaca` gagal acak di larian penuh tapi
@@ -60,12 +77,12 @@ Angka ms/frame berasal dari runner tanpa GPU (Mesa software). Ia berguna untuk
 
 | Hal | Berat | Catatan |
 |---|---|---|
-| Arah WASD basis sumbu salah benar | 🔴 | [[Arah WASD basis sumbu salah]] — regresi tidak menguji arah |
 | 4–29 FPS di mesin pemilik, belum pernah diprofil di GPU | 🔴 | [[Tahap 3 — Performa]] |
-| Cek `arah_maju` masih lapor-saja, belum memvonis | 🟠 | menuduh 6 scene sehat di larian panjang → [[Utang Teknis]] |
 | `PLAY.md` menunjuk baris & flag yang sudah tidak ada | 🟡 | [[Utang Teknis]] |
 
 ## Yang baru saja lunas
+
+- **`arah_maju` memvonis** (13 Okt, gauntlet M2). "Kontaminasi antar-scene" ternyata cacat di alat ukurnya sendiri: tabrakan peta membelokkan lintasan, dan arah acuan dibaca dari kamera yang tertinggal. Setelah diperbaiki, 42/42 pengukuran menunjukkan 0°. Rumus lama dipasang kembali → farm/town/house GAGAL 180°.
 
 - **Arah WASD** 🔴 → selesai (kodenya; penjaganya belum). Basisnya membaca komponen `(.x,.y)` padahal bidang mendatar Ursina `(x,z)`; menyimpang sampai 180° dan di yaw 90/270 vektor "kanan" runtuh jadi nol. Diukur di 8 yaw, diperbaiki, dan dijaga pemeriksaan `arah_maju` yang **terbukti gagal** saat bug dipasang kembali → [[2026-10-04 — Arah WASD akhirnya terukur dan diperbaiki]].
 

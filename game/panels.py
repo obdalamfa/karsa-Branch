@@ -852,6 +852,12 @@ class UIManager:
                               col=color.rgb(228, 222, 198))
         self._obj_hint = _txt('', pos=(-0.868, 0.380), scale=0.58,
                               col=color.rgb(150, 158, 168))
+        # Keinginan yang sedang dikejar (Tahap 4). Tanpa baris ini janji cuma
+        # terlihat di panel `p`, jadi pemain yang menutup panel lupa apa yang
+        # ia janjikan -- dan keinginan yang terlupa tidak memberi arah apa pun.
+        self._obj_janji = _txt('', pos=(-0.868, 0.354), scale=0.58,
+                               col=color.rgb(236, 190, 120))
+        self._obj_janji_last = None
         self._obj_last = None   # cache: deteksi pergantian langkah → emote
 
         # ── Flash message tengah ──
@@ -1089,15 +1095,18 @@ class UIManager:
         if getattr(self, '_obj_bg', None) is not None:
             atas = bawah - 0.008 - 0.012
             ada_hint = bool(str(self._obj_hint.text).strip())
-            h = 0.092 if ada_hint else 0.066
+            jn = getattr(self, '_obj_janji', None)
+            ada_janji = jn is not None and bool(str(jn.text).strip())
+            h = (0.092 if ada_hint else 0.066) + (0.026 if ada_janji else 0.0)
             # Lebar mengikuti baris terpanjang: petunjuk tutorial sering lebih
             # panjang dari kotak 0,385 dan menjulur keluar alasnya.
             w = max(0.385, 0.019 + max(
                 self._lebar(t) for t in (self._obj_title, self._obj_step,
-                                         self._obj_hint)
-                if str(t.text).strip()) if any(
-                str(t.text).strip() for t in (self._obj_title, self._obj_step,
-                                              self._obj_hint)) else 0.385)
+                                         self._obj_hint, jn)
+                if t is not None and str(t.text).strip()) if any(
+                t is not None and str(t.text).strip()
+                for t in (self._obj_title, self._obj_step,
+                          self._obj_hint, jn)) else 0.385)
             self._obj_bg.scale_x = self._obj_rust.scale_x = w
             self._obj_rust.position = (X_L + w / 2, atas - 0.003)
             self._obj_bg.position = (X_L + w / 2, atas - h / 2)
@@ -1106,6 +1115,8 @@ class UIManager:
             self._obj_title.position = (tx, atas - 0.010)
             self._obj_step.position = (tx, atas - 0.036)
             self._obj_hint.position = (tx, atas - 0.064)
+            if jn is not None:
+                jn.position = (tx, atas - (0.090 if ada_hint else 0.064))
 
         # Kanan bawah: alas dipas ke petunjuk tombol, bukan selebar layar.
         ch = self._control_hint
@@ -1289,6 +1300,14 @@ class UIManager:
                 sound_play('menu_select', 0.7)
             self._obj_last = step
 
+            from .wishes import baris_hud
+            janji = baris_hud(s)
+            if janji != self._obj_janji_last:
+                self._obj_janji_last = janji
+                self._teks(self._obj_janji, janji)
+                self._obj_janji.enabled = bool(janji)
+                self._tata_ulang_hud()
+
         # Needs sim-life (Lapar/Sosial/Senang) — redup saat kritis
         if getattr(self, '_need_fills', None):
             from .config import NEED_MAX
@@ -1415,6 +1434,32 @@ class UIManager:
         # subtitle bawah (selalu ada, fade)
         self._voice_sub = _txt('', pos=(0, -0.30), scale=0.78, col=color.white, origin=(0, 0))
         self._voice_sub.enabled = False
+
+    # Suara batin. Keduanya hilang bersama merge yang menelan _build_batin
+    # (lihat catatan di atas), sementara enam pemanggilnya di
+    # interaction_controller tetap tinggal -- jadi ayunan cangkul PERTAMA
+    # pemain baru melempar AttributeError. Ditemukan 16 Okt 2026 oleh
+    # tools/probe_lima_menit.py. Versi aslinya (ae03456) menulis ke subtitle
+    # `_voice_sub`, tapi pemudar subtitle itu ikut hilang dan Batin tidak
+    # pernah dibuat; jadi ucapannya lewat flash_msg yang memudar sendiri,
+    # dan bendera sekali-ucap disimpan di sini kalau Batin belum ada.
+    def say_batin(self, voice, text):
+        if getattr(self, 'batin', None):
+            self.batin.say(voice, text)
+        vd = BVOICES.get(voice)
+        self.flash_msg(f"{vd['name']} — {text}" if vd else text, 3.0)
+
+    def say_batin_once(self, flag, voice, text):
+        b = getattr(self, 'batin', None)
+        if b is not None:
+            if not b.once('say_' + flag):
+                return
+        else:
+            sekali = self.__dict__.setdefault('_batin_sekali', set())
+            if flag in sekali:
+                return
+            sekali.add(flag)
+        self.say_batin(voice, text)
 
     def _build_buy(self):
         self._buy_sel = 0
@@ -1969,10 +2014,11 @@ class UIManager:
         # tulisannya saling tindih.
         if hasattr(self, '_time_txt'):
             self.set_hud_visible(not v)
-        for nama in ('_obj_bg', '_obj_rust', '_obj_title', '_obj_step', '_obj_hint'):
+        for nama in ('_obj_bg', '_obj_rust', '_obj_title', '_obj_step',
+                     '_obj_hint', '_obj_janji'):
             e = getattr(self, nama, None)
             if e is not None:
-                e.enabled = (not v) and (nama != '_obj_hint'
+                e.enabled = (not v) and (nama not in ('_obj_hint', '_obj_janji')
                                          or bool(str(e.text).strip()))
         if not v:
             self._hide_inventory_grid()

@@ -267,6 +267,18 @@ class InteractionController:
         if self._try_plot_care(panels):     # Sakuna: cabut gulma / pupuk petak di kaki
             return
 
+        # Surat pertama menang atas perabot di sekitar. context_prompt() sudah
+        # menjanjikan "[E] Baca surat" kepada pemain yang menghadap kotak pos,
+        # tapi menu perabot (radius 1) dicek lebih dulu dan peti di sebelah
+        # kotak pos menelan tombolnya. Terukur 16 Okt 2026 lewat
+        # tools/probe_lima_menit.py: pemain baru macet di langkah PERTAMA
+        # tutorial, karena [E] membuka menu peti, bukan surat.
+        from ..config import MB
+        if (not s.mail_read and
+                self.world.get_tile(*self.player._facing_tile()) == MB):
+            self._baca_surat(panels)
+            return
+
         # Perabot di sekitar: sumber utama pengisian motif. Dicek SEBELUM
         # perilaku tile lama supaya kasur/kompor/kursi memberi menu aksi ala
         # The Sims, bukan satu pesan tetap.
@@ -319,12 +331,7 @@ class InteractionController:
                     sims_act.start(tid, ftx, fty, panels)
                 return
             if tid == MB and not self.player.state.mail_read:
-                self.player.state.mail_read = True
-                if self.player.state.quest_stage == 0:
-                    self.player.state.quest_stage = 1
-                sound_play('menu_select', 0.8)
-                panels.emote('!', color.rgb(255, 220, 120))
-                panels.start_dialog('mailbox', self.player.state)
+                self._baca_surat(panels)
             elif tid == CL:
                 h = self.player.state.get_hour()
                 m = int(self.player.state.time_minutes % 60)
@@ -367,7 +374,7 @@ class InteractionController:
             ])
 
     def _try_collect_animal(self, npc_id, panels) -> bool:
-        """Ternak produktif: ambil hasil harian (susu/telur/wol) dgn [R].
+        """Ternak produktif: ambil hasil harian (susu/telur/wol) dgn [E].
         Return True jika hasil diambil; False (sudah/ bukan ternak) → lanjut pie menu."""
         from ..data import ANIMAL_NPCS, ANIMAL_PRODUCTS
         info = ANIMAL_NPCS.get(npc_id)
@@ -420,11 +427,11 @@ class InteractionController:
             if total:
                 panels.flash_msg(f"Peti Kirim — {total} barang menunggu fajar.", 1.4)
             else:
-                panels.flash_msg("Peti Kirim kosong. Panen dulu, lalu setor di sini [R].", 1.8)
+                panels.flash_msg("Peti Kirim kosong. Panen dulu, lalu setor di sini [E].", 1.8)
         return True
 
     def _try_plot_care(self, panels) -> bool:
-        """Sakuna: perawatan petak di kaki pemain via [R].
+        """Sakuna: perawatan petak di kaki pemain via [E].
         Prioritas: cabut gulma → pupuk (isi nutrisi). Return True jika menangani."""
         s = self.player.state
         tx, ty = self.player.get_tile_pos()
@@ -568,23 +575,23 @@ class InteractionController:
             npc = entities_mgr.get_nearest_npc(tx, ty, max_dist_tiles=1.8)
             if npc:
                 nama = npc.get('name') or npc['id'].replace('_', ' ').title()
-                return f"[R] Bicara dengan {nama}"
+                return f"[E] Bicara dengan {nama}"
 
             # 2) Objek dunia yang dihadap
             if tid_face == MB:
-                return "[R] Baca surat" if not s.mail_read else ""
+                return "[E] Baca surat" if not s.mail_read else ""
             if tid_face == LGH_B:
-                return "[R] Periksa mercusuar"
+                return "[E] Periksa mercusuar"
             if tid_here == DCK and tid_face == W and s.inventory.get('perahu', 0) > 0:
-                return "[R] Berlayar ke laut lepas"
+                return "[E] Berlayar ke laut lepas"
             if tid_face == W or tid_here == DCK:
-                return "[R] Memancing"
+                return "[E] Memancing"
             if tid_here == BD or tid_face == BD:
-                return "[R] Tidur sampai besok"
+                return "[E] Tidur sampai besok"
             if tid_face == ST:
-                return "[R] Masak (+20 Energi)"
+                return "[E] Masak (+20 Energi)"
             if tid_here == CHR:
-                return "[R] Duduk santai"
+                return "[E] Duduk santai"
 
             # 3) Pertanian — tergantung alat aktif & kondisi petak yang dihadap
             soil_key = f"{ftx},{fty},{s.scene_name}"
@@ -876,6 +883,15 @@ class InteractionController:
         panels.flash_msg(f"{npc.get('name', npc_id)}: {resp}  (+*)", 2.0)
         if hasattr(self.player, 'check_npc_lore_gift'):
             self.player.check_npc_lore_gift(npc_id, panels)
+
+    def _baca_surat(self, panels):
+        st = self.player.state
+        st.mail_read = True
+        if st.quest_stage == 0:
+            st.quest_stage = 1
+        sound_play('menu_select', 0.8)
+        panels.emote('!', color.rgb(255, 220, 120))
+        panels.start_dialog('mailbox', st)
 
     def open_object_menu(self, panels) -> bool:
         """Buka menu aksi untuk perabot terdekat. True kalau ada yang dibuka.

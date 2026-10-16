@@ -496,8 +496,59 @@ class World3D:
         if hasattr(self.scene_obj, 'builder') and self.scene_obj.builder:
             self.scene_obj.builder(self)
         self._build_objects()
+        self._pasang_penanda_pintu()
         self._satukan_ubin()
         self._lepas_dari_loop_ursina()
+
+    # Model Blender penanda pintu masuk tempat-tempat penting. Ketiganya
+    # dibuat di tools/blender_interior.py (08bbf5b) lalu tidak pernah punya
+    # pemanggil -- aturan #4 CLAUDE.md: modul tanpa pemanggil efeknya nol.
+    # Kunci (scene, tujuan portal) -> (model, rotasi y, geser x). Penanda
+    # diletakkan di titik tengah ubin-ubin portal yang sama tujuannya.
+    # Diukur dari tangkapan 16 Okt 2026: mulut_gua pada rotasi 0 menghadap
+    # selatan, membelakangi pemain yang datang dari desa; gapura_swarga
+    # berpusat di x=+2,1 dalam berkasnya (rentang -1,46..5,66), jadi celahnya
+    # meleset dua ubin dari portal kalau tidak digeser.
+    _PENANDA_PORTAL = {
+        ('mountain', 'naga_cave'): ('mulut_gua', 180, 0.0),
+        ('naga_cave', 'swarga'):   ('gapura_swarga', 0, -2.1),
+    }
+    # Penanda di atas ubin tertentu, bukan portal: tangga turun ke dungeon.
+    _PENANDA_UBIN = {
+        'naga_cave': {STAIRS_DOWN: ('lubang_dungeon', 0)},
+    }
+
+    def _pasang_penanda_pintu(self):
+        """Pasang model pintu masuk; dibersihkan `_clear()` lewat _obj_ents."""
+        sc = self.scene_obj
+        if sc is None:
+            return
+        try:
+            from .scenes.interior import _pasang
+        except Exception:
+            return
+        kelompok = {}
+        for p in getattr(sc, 'portals', None) or []:
+            kunci = (self.scene_name, p[2])
+            if kunci in self._PENANDA_PORTAL:
+                kelompok.setdefault(kunci, []).append((p[0], p[1]))
+        self._penanda = []
+        for kunci, ubin in kelompok.items():
+            nama, rot, geser = self._PENANDA_PORTAL[kunci]
+            mx = sum(t[0] for t in ubin) / len(ubin)
+            my = sum(t[1] for t in ubin) / len(ubin)
+            e = _pasang(self, nama, mx * TS + geser, my * TS, rot)
+            if e is not None:
+                self._penanda.append((nama, e))
+        per_ubin = self._PENANDA_UBIN.get(self.scene_name, {})
+        if per_ubin:
+            for ty, baris in enumerate(sc.tiles):
+                for tx, tid in enumerate(baris):
+                    if tid in per_ubin:
+                        nama, rot = per_ubin[tid]
+                        e = _pasang(self, nama, tx * TS, ty * TS, rot)
+                        if e is not None:
+                            self._penanda.append((nama, e))
 
     def _satukan_ubin(self):
         """Gabungkan ubin statis jadi satu mesh per keadaan render.
@@ -551,6 +602,18 @@ class World3D:
                                   'TransparencyAttrib', 'ColorAttrib'):
                         from panda3d import core as _pc
                         bersama = bersama.removeAttrib(getattr(_pc, jenis))
+                    # Net state ubin membawa SALINAN uniform siang-malam
+                    # (sm_ambient dst.) di ShaderAttrib-nya. Dipasang di akar,
+                    # salinan beku itu menimpa uniform `scene` dan tanah
+                    # seluruh scene tetap seterang tengah hari -- regresi
+                    # menangkapnya sebagai `cahaya_global` gagal. Dicabut
+                    # supaya nilainya turun dari `scene` seperti entity lain.
+                    sa = bersama.getAttrib(_pc.ShaderAttrib)
+                    if sa is not None:
+                        from game.smooth_shader import _UNIFORM_GLOBAL_AWAL
+                        for nama in _UNIFORM_GLOBAL_AWAL:
+                            sa = sa.clearShaderInput(nama)
+                        bersama = bersama.setAttrib(sa)
                     akar.setState(bersama)
                 c = gnp.copyTo(akar)
                 # Per ubin cuma teksturnya. Warnanya (ColorScaleAttrib ber-flag
@@ -1352,14 +1415,19 @@ class World3D:
         # pucat dari kejauhan, sebelum pemain sempat memeriksa satu per satu.
         basah = soil.get('watered')
         soil_tex = 'soil_wet' if basah else 'soil_dry'
+        # Tint hangat dan jenuh: petak garapan harus tampil sebagai tanah
+        # GEMBUR yang gelap di atas ladang kering yang terang, bukan cokelat
+        # kusam di atas cokelat kusam (lihat TANAH_LADANG di zone_paint.py).
         if basah:
-            tint = color.rgb(255, 255, 255)
+            tint = color.rgb(214, 150, 112)
         elif soil.get('kering', 0) >= 2:
-            tint = color.rgb(214, 198, 172)
+            tint = color.rgb(226, 196, 160)
         else:
-            tint = color.rgb(236, 226, 210)
-        e = _e('cube', (wx, GROUND_H + 0.06, wz),
-               (TS * 0.92, 0.10, TS * 0.92), soil_tex, tint)
+            tint = color.rgb(240, 176, 128)
+        # Sedikit lebih tinggi dan lebih sempit: dari kamera main, sisinya
+        # terbaca sebagai gundukan bedengan, dan celah di antaranya sebagai alur.
+        e = _e('cube', (wx, GROUND_H + 0.09, wz),
+               (TS * 0.86, 0.16, TS * 0.86), soil_tex, tint)
         self._soil_ents[key] = e
 
     # ─── INTERNAL: TANAMAN & POHON ───────────────────────

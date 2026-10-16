@@ -1198,6 +1198,7 @@ def main():
     minta = [a for a in sys.argv[1:] if not a.startswith('-')]
     scenes = minta or [s for s in SCENES if s != 'dungeon']
 
+    lima_baris = None
     _pasang_save_fixture(ROOT / cfg.SAVE_FILE)
     t0 = time.time()
     try:
@@ -1492,6 +1493,26 @@ def main():
     for k, ok, c in sims_baris:
         print(f'{"sistem sims":14s} {"LULUS" if ok else "GAGAL":>7s} '
               f'{"":>9s} {"":>7s}  {c[:44]}')
+    # ── lima menit pertama (subproses, SETELAH semua scene, tanpa fixture) ──
+    # Di AKHIR, setelah semua scene dan setelah save fixture dibuang, supaya
+    # probe tidak bisa menyentuh pemeriksaan scene mana pun.
+    # Probe ini memainkan tutorial dari game baru sampai panen, dan karena
+    # itu butuh keadaan tanpa save. Ia menjaga tiga bug yang lolos dari
+    # seluruh regresi ini karena tidak ada yang pernah memainkan tutorial:
+    # petunjuk [R] yang mengganti benih, [E] yang ditelan menu peti, dan
+    # say_batin_once yang hilang sehingga cangkul pertama crash. Hanya saat
+    # semua scene diminta; kode 2 = ada save pemain, jadi dilewati jujur.
+    if not minta:
+        _buang_save_fixture()
+        import subprocess
+        r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'probe_lima_menit.py')],
+                           cwd=ROOT, capture_output=True, text=True, timeout=600)
+        akhir = [b for b in r.stdout.splitlines() if 'lulus' in b][-1:] or ['tanpa keluaran']
+        if r.returncode == 2:
+            lima_baris = (True, 'dilewati: save pemain ada')
+        else:
+            lima_baris = (r.returncode == 0, akhir[0].strip())
+
     print('-' * 78)
     tanda_hud = 'LULUS' if not hud_baris else 'GAGAL'
     ring_hud = '; '.join(f'{k} {c}' for k, c in hud_baris) or 'semua di dalam layar'
@@ -1509,6 +1530,12 @@ def main():
     ok_gua, catatan_gua = gua_baris[0] if gua_baris else (True, '-')
     print(f'{"bentuk gua":14s} {"LULUS" if ok_gua else "GAGAL":>7s} '
           f'{"":>9s} {"":>7s}  {catatan_gua[:44]}')
+    if lima_baris is not None:
+        ok_lima, catatan_lima = lima_baris
+        print(f'{"lima menit":14s} {"LULUS" if ok_lima else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {catatan_lima[:44]}')
+        if not ok_lima:
+            gagal_total += 1
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)
     print(f'{n_lulus}/{len(baris)} scene lulus, {gagal_total} pemeriksaan gagal, '

@@ -9,6 +9,16 @@ tags: [moc, status]
 
 # Status Sekarang
 
+> [!success] Pembaruan 2026-10-16 — gauntlet Okt selesai
+> Regresi 14/14 + baris baru **"lima menit"** (tutorial dimainkan dari game
+> baru sampai panen). Diperbaiki minggu ini: cahaya siang-malam di tanah,
+> `arah_maju` kini memvonis, `capture.py` memotret dunia, keinginan
+> terlihat di HUD, zoom kamera, penanda gua/gapura/dungeon Blender, dan tiga
+> bug lima menit pertama ([[Tutorial menyuruh R, cangkul pertama crash]]).
+> Belum: suasana visual kalah 0/5 melawan AWL (cahaya terarah, tepi rumput,
+> model tanaman); sisa Majelis Batin hilang; pohon Blender belum dipasang.
+> Rincian: [[Gauntlet Oktober 2026 — 10 Milestone]].
+
 > [!success] Pembaruan 2026-10-13 — gauntlet M1
 > Regresi **kembali 14/14**, tiga larian penuh berturut-turut. Ada dua sebab.
 > Pertama, ubin yang dilebur membekukan uniform siang-malam

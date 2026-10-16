@@ -86,3 +86,8 @@ sendiri, bukan satu slot.
 > ms/frame, Selasa 63). Sebabnya **belum terverifikasi**. CI GitHub pada commit
 > M10 hijau. Langkah berikut: bandingkan isi `scene.children` farm di
 > larian penuh vs sendirian.
+>
+> **Pembaruan 16 Okt 09.04 UTC:** CI GitHub pada commit penutupan (9fab45b,
+> sudah termasuk baris "lima menit") **hijau, dua larian**. Kegagalan farm
+> hanya muncul di mesin sesi cloud yang lambat. Dugaan kuat: lingkungan,
+> tapi sebabnya tetap belum diukur.

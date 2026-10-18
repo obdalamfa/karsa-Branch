@@ -83,8 +83,9 @@ menua=kering), nutrisi tanah, dan gulma. Mutu tinggi -> hasil lebih banyak.
 | WASD | Jalan | I | Inventaris |
 | Shift | Lari | J | Jurnal quest |
 | Q/E | Putar kamera | M | Peta |
-| 1-9 | Pilih alat | TAB | Majelis Batin |
-| SPACE | Pakai alat | Esc | Menu Jeda |
+| 1-9 | Pilih alat | F7 | Majelis Batin |
+| SPACE | Pakai alat | Esc | Simpan (di HUD) / tutup panel |
+| TAB | Ringkasan kebutuhan on/off | F5 / F9 | Simpan / Muat |
 | R | Interaksi (objek/NPC) | T | Tidur |
 | Z | Serang | V | Makan |
 | F | Tangkap makhluk halus | G | Beri hadiah |
@@ -106,7 +107,9 @@ Alat: 1 Cangkul, 2 Siram, 3 Tanam, 4 Panen, 5 Kapak, 7 Pickaxe, 8 Pedang.
 - Jangan abaikan kandung kemih — paling cepat habis.
 - Mood bagus = kerja lebih cepat & sosial lebih mudah.
 - Rawat pertemanan; luntur bila lama tak ditemui.
-- **TAB** = Majelis Batin: 4 suara batin + skill-check 2d6 ala Disco Elysium.
+- **F7** = Majelis Batin: 4 suara batin (BARA/AKAR/SUKMA/LAPAR) yang berkomentar
+  tentang yang kau kerjakan. Cangkul pertama membuka pilihan PAGI PERTAMA —
+  jawab dengan angka **1-3** (ESC melewatinya untuk selamanya).
 - NPC punya jadwal per jam: pedagang buka pagi, hantu muncul malam di
   kuburan & gunung. Awas **telegraph merah** mob — itu aba-aba mereka
   memukul, mengelaklah.

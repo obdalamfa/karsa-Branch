@@ -600,6 +600,13 @@ def trough_pour_point(world):
 #   lake (TR 15, DT 14) -- pohon tepinya adalah batas peta, dan scene ini
 #       dibiarkan prosedural sebagai pembanding rupa di regresi yang sama
 #       sampai kalibrasi itu diputuskan pemilik.
+#   pohon_bambu -- 53 GeomNode / 76.632 vertex per pohon. flattenStrong
+#       hanya menurunkannya ke 33 geom (bukan segelintir), dan 12 salinan
+#       tidak lebih cepat (ms/frame 33-37 asli lawan 35-44 diratakan, tiga
+#       ronde). Puluhan draw call per rumpun; jangan pasang sebelum dibake
+#       ulang menjadi satu material.
+#   kenney_tree_* -- sengaja tidak dipakai: tinggi 1,15-1,71 unit, warna
+#       teal yang lain gaya, dan mtllib-nya merujuk nama berkas yang salah.
 POHON_BLENDER = {
     ('beach', PALM):  ('pohon_kelapa', 1.0, False),
     ('mountain', TR): ('pohon_tropis', 1.2, False),

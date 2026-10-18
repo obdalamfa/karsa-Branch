@@ -80,7 +80,23 @@ berpola `*` saat merge) dan memang tidak memuat `panels.py`.
 
 `tools/probe_batin.py`, tiga subproses lewat `g.app.input`, HUD dicapai
 dengan SPACE sampai `not g.sinema.aktif`: 0/21 (3132c89, sebelum pemulihan) → 22/22.
-Uji mutasi: lihat laporan cabang bangun-B (tiap mutasi membuat probe merah).
+Uji mutasi (bug dipasang kembali satu per satu; semuanya membuat probe merah):
+
+| mutasi | probe_batin |
+|---|---|
+| `'batin'` dibuang dari `_pulihkan_mode_yatim` | 11/22 |
+| pembersihan `_bc_ents` di `close_all` dibuang | 20/22 |
+| pembuatan `Batin` di app.py dibuang | 1/22 |
+| TAB kembali ke `toggle_batin` | 21/22 (cek motif) |
+| `say_batin` kembali ke flash | 16/22 |
+| pemudar `_voice_sub_t` dibuang | 21/22 (padam) |
+| pemudar dikembalikan ke dalam gerbang HUD | 21/22 (padam) |
+| `Batin.once` kembali ke list di memori | 20/22 (C1, C2) |
+| `development_mode=True` (F7 milik HotReloader) | 19/22 |
+| subtitle kembali ke y -0,30 | 20/22 (tata letak) |
+| chrome tidak dipangkas | 20/22 (alfa latar 0,00) |
+| rute input `'batin'` dibuang | 10/22 |
+| panel majelis kembali ke kiri | 21/22 (menimpa pelacak tutorial) |
 
 ## Yang belum beres
 

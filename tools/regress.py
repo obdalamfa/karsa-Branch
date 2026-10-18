@@ -299,6 +299,7 @@ def cek_arah_maju(g):
     # cacat yang sama persis dengan `motif_waras` dulu: pemeriksaan yang
     # meninggalkan bekas pada apa yang diperiksanya.
     yaw_asli = getattr(g, 'camera_yaw', None)
+    scene_awal = g.state.scene_name
     pos_asli = tuple(g.player.position)
     vel_asli = (g.player.velocity_x, g.player.velocity_z)
     buruk = []
@@ -341,16 +342,43 @@ def cek_arah_maju(g):
             cx, _, cz = camera.world_position
             ux, uz = g.camera_focus[0] - cx, g.camera_focus[2] - cz
             held_keys['w'] = 1
+            # Berhenti di JARAK, bukan di jumlah frame. Jarak 40 frame ikut
+            # lama frame (v += 85*dt, v *= exp(-14*dt) di player.py), dan
+            # tabrakan dimatikan di atas: terukur 16-18 Okt 2026, 6,5-10,6 u
+            # pada ~60 ms/frame dan ~11 u pada ~115 ms/frame. Di farm yaw 270
+            # itu cukup untuk menembus petak portal greenhouse (25,5), 11,0 u
+            # dari titik mulai, dan sisa pemeriksaan scene mengukur greenhouse
+            # (689 entity, "W menyimpang 157 deg", 26,00 u = lompatan ke tujuan
+            # portal). naga_cave diam-diam terlempar dua kali ke swarga dan
+            # kembali, dan LULUS hanya karena kebetulan geometri. Lihat
+            # obsidian/40-Bug "arah_maju terlempar portal di mesin lambat".
             for _ in range(40):
                 _b.taskMgr.step()
+                if g.state.scene_name != scene_awal:
+                    break
+                _px, _, _pz = g.player.world_position
+                if _m.hypot(_px - x0, _pz - z0) >= 3.0:
+                    break
             held_keys['w'] = 0
+            if g.state.scene_name != scene_awal:
+                # Portal tetap terpicu (mis. petak mulai bersebelahan dengan
+                # pintu): itu kegagalan ALAT UKUR, dan harus bersuara -- bukan
+                # vonis arah, dan bukan lulus. Scene dipulihkan lewat jalur
+                # transisi asli app.py supaya cek berikutnya mengukur scene
+                # yang benar.
+                buruk.append(f'yaw{yaw:.0f}: alat ukur terlempar portal ke '
+                             f'{g.state.scene_name} -- bukan vonis arah')
+                g.state.scene_name = scene_awal
+                for _ in range(10):
+                    _b.taskMgr.step()
+                continue
             x1, _, z1 = g.player.world_position
             g.player.velocity_x = g.player.velocity_z = 0.0
 
             dx, dz = x1 - x0, z1 - z0
             jarak = _m.hypot(dx, dz)
-            # Jalan bebas 40 frame memberi 3-4 satuan. Jarak jauh di bawah itu
-            # berarti pemain TERHALANG, dan arah sisa geraknya adalah hasil
+            # Jalan bebas berhenti di 3 satuan (lihat loop W). Jarak jauh di
+            # bawah 1,5 berarti pemain TERHALANG, dan arah sisa geraknya adalah hasil
             # menggeser dinding -- bukan jawaban soal basis arah. `house` ruang
             # kecil: terukur 102 derajat menyimpang hanya karena pemainnya
             # menabrak. Pemeriksaan yang menghukum itu melaporkan bug yang
@@ -1331,6 +1359,13 @@ def main():
             hasil['rumput_lambai'] = cek_rumput_melambai(g, base, OUT)
             hasil['cahaya_global'] = cek_cahaya_global(g, base, OUT)
             hasil['otonomi_hidup'] = cek_otonomi_hidup(g)
+            # Jaring umum: angka di baris ini tidak boleh diam-diam milik scene
+            # lain. Pernah nyata 16 Okt 2026 -- arah_maju menembus portal farm
+            # dan cahaya_global serta jumlah entity mengukur greenhouse.
+            if g.world.scene_name != nama or g.state.scene_name != nama:
+                hasil['scene_tetap'] = _fail(
+                    f'scene bergeser ke {g.world.scene_name}/{g.state.scene_name} '
+                    f'selama pemeriksaan')
             n_ent = len(uscene.children)
         except Exception as e:
             hasil['boot'] = _fail(f'{type(e).__name__}: {e}')

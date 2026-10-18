@@ -247,27 +247,38 @@ def ukur(args):
     benda = []
     sampel = {}          # nama -> titik dunia
     ndl = {}
+    def kubus_di(pre, sisi, cx, cz, s, albedo):
+        kubus = Entity(parent=uscene, model=_kubus_mesh((albedo, albedo, albedo, 1)),
+                       position=Vec3(cx, y0 + s / 2, cz),
+                       scale=Vec3(s, s, s), double_sided=True)
+        apply_smooth(kubus)
+        benda.append(kubus)
+        sampel[f'{pre}{sisi}_atas'] = (cx, y0 + s + 0.001, cz)
+        ndl[f'{pre}{sisi}_atas'] = L.y
+        sampel[f'{pre}{sisi}_depan'] = (cx, y0 + s / 2, cz - s / 2 - 0.001)
+        ndl[f'{pre}{sisi}_depan'] = -L.z
+        if sisi == 'kiri':
+            sampel[f'{pre}kiri_+x'] = (cx + s / 2 + 0.001, y0 + s / 2, cz)
+            ndl[f'{pre}kiri_+x'] = L.x
+        else:
+            sampel[f'{pre}kanan_-x'] = (cx - s / 2 - 0.001, y0 + s / 2, cz)
+            ndl[f'{pre}kanan_-x'] = -L.x
+
     for sisi, dx in (('kiri', -args.geser), ('kanan', args.geser)):
         cx, cz = p[0] + dx, p[2] + args.maju
         pelat = Entity(parent=uscene, model=_kubus_mesh((0.5, 0.5, 0.5, 1)),
                        position=Vec3(cx, y0 - 0.01, cz),
                        scale=Vec3(args.pelat, 0.02, args.pelat), double_sided=True)
-        kubus = Entity(parent=uscene, model=_kubus_mesh(),
-                       position=Vec3(cx, y0 + s / 2, cz),
-                       scale=Vec3(s, s, s), double_sided=True)
-        for e in (pelat, kubus):
-            apply_smooth(e)
-            benda.append(e)
-        sampel[f'{sisi}_atas'] = (cx, y0 + s + 0.001, cz)
-        ndl[f'{sisi}_atas'] = L.y
-        sampel[f'{sisi}_depan'] = (cx, y0 + s / 2, cz - s / 2 - 0.001)
-        ndl[f'{sisi}_depan'] = -L.z
-        if sisi == 'kiri':
-            sampel['kiri_+x'] = (cx + s / 2 + 0.001, y0 + s / 2, cz)
-            ndl['kiri_+x'] = L.x
-        else:
-            sampel['kanan_-x'] = (cx - s / 2 - 0.001, y0 + s / 2, cz)
-            ndl['kanan_-x'] = -L.x
+        apply_smooth(pelat)
+        benda.append(pelat)
+        kubus_di('', sisi, cx, cz, s, 1.0)
+        # Kubus KELABU (albedo 0,5) lebih jauh ke samping, melayang setinggi
+        # pelat. Kubus putih menguji kasus terburuk -- sisi terangnya masuk
+        # bahu_sorot (lutut 0,68) yang menekan beda rona di sorotan --
+        # sedangkan albedo 0,5 mewakili bahan dunia biasa (tanah, rumput,
+        # kayu) yang tidak pernah menyentuh lutut itu.
+        kubus_di('kelabu_', sisi, p[0] + (1 if dx > 0 else -1) * args.geser_kelabu,
+                 cz, args.kubus_kelabu, 0.5)
         # Titik pelat: satu di tengah bayangan jatuhan kubus (kalau ada), satu
         # di samping yang pasti terbuka. Bayangan tengah-atas kubus jatuh di
         # alas + arah_xz * tinggi / -D.y.
@@ -327,9 +338,14 @@ def ukur(args):
 
     # Sisi tegak terang dan gelap ditentukan dari ndl SEBENARNYA, bukan
     # dikarang: kalau arah matahari diubah, label ikut berubah.
-    tegak_ = [k for k in ('kiri_+x', 'kanan_-x', 'kiri_depan', 'kanan_depan') if k in nilai]
-    terang = max(tegak_, key=lambda k: ndl[k]) if tegak_ else None
-    gelap = min(tegak_, key=lambda k: ndl[k]) if tegak_ else None
+    def terang_gelap(pre):
+        t_ = [pre + k for k in ('kiri_+x', 'kanan_-x', 'kiri_depan', 'kanan_depan')
+              if pre + k in nilai]
+        if not t_:
+            return None, None
+        return max(t_, key=lambda k: ndl[k]), min(t_, key=lambda k: ndl[k])
+    terang, gelap = terang_gelap('')
+    k_terang, k_gelap = terang_gelap('kelabu_')
     teduh_buka = [rasio(f'{s_}_pelat_buka', f'{s_}_pelat_teduh') for s_ in ('kiri', 'kanan')]
     teduh_buka = [v for v in teduh_buka if v is not None]
 
@@ -344,6 +360,8 @@ def ukur(args):
         'terang': terang, 'gelap': gelap,
         'rasio_terang/gelap': rasio(terang, gelap) if terang and gelap else None,
         'geser_BG_gelap-terang': geser(gelap, terang) if terang and gelap else None,
+        'kelabu_terang/gelap': rasio(k_terang, k_gelap) if k_terang and k_gelap else None,
+        'kelabu_geser_BG': geser(k_gelap, k_terang) if k_terang and k_gelap else None,
         'rasio_atas/depan': rasio('kiri_atas', 'kiri_depan') or rasio('kanan_atas', 'kanan_depan'),
         'rasio_kanan/kiri(+x/-x)': rasio('kiri_+x', 'kanan_-x'),
         'geser_BG_depan-atas': geser('kiri_depan', 'kiri_atas') or geser('kanan_depan', 'kanan_atas'),
@@ -361,6 +379,7 @@ def _ringkas(h):
     d = h['dunia']
     return (f"{h['mode']:7s} konv={h['frame_konvergen']:4d}  "
             f"terang/gelap={h['rasio_terang/gelap']}  B/G gelap-terang={h['geser_BG_gelap-terang']}  "
+            f"[kelabu {h['kelabu_terang/gelap']} / {h['kelabu_geser_BG']}]  "
             f"atas/depan={h['rasio_atas/depan']}  +x/-x={h['rasio_kanan/kiri(+x/-x)']}  "
             f"pelat buka/teduh={h['pelat_buka/teduh']} (B/G {h['geser_BG_pelat_teduh-buka']})  "
             f"dunia p50={d['p50']} p95={d['p95']} p95/p5={d['p95/p5']}")
@@ -377,6 +396,8 @@ def main():
     ap.add_argument('--pelat', type=float, default=3.2)
     ap.add_argument('--geser', type=float, default=3.6,
                     help='jarak lateral kubus dari pemain')
+    ap.add_argument('--geser-kelabu', type=float, default=6.0)
+    ap.add_argument('--kubus-kelabu', type=float, default=1.0)
     ap.add_argument('--angkat', type=float, default=0.2,
                     help='tinggi permukaan pelat di atas tanah')
     ap.add_argument('--maju', type=float, default=0.0,

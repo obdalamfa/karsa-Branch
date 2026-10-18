@@ -47,20 +47,39 @@ def target_cahaya(hour: float, indoor: bool, hujan: bool):
     # Akibatnya terukur -- apa pun di atas 186 dari 255 pasti terpotong jadi
     # putih. Kulit bawaan "Cerah" (255,225,180) jadi bidang putih rata tanpa
     # satu pun detail wajah tersisa, dan dinding rumah krem (248,235,200) ikut.
+    #
+    # HANGAT LAWAN SEJUK. Jumlah sun+ambient tetap ~1,0 per kanal, tapi kini
+    # dibagi berlawanan rona: matahari kuning-jingga, ambient biru langit.
+    # Sisi yang kena matahari jadi hangat, sisi gelap -- yang cuma menerima
+    # ambient plus sisa matahari di pita gelap -- jadi sejuk. Itu yang
+    # dilakukan patokan (rumput teduh B/G 0,92-0,98 lawan tersinar
+    # 0,67-0,69); dulu keduanya serona hangat (R/B 1,19 dan 1,23) dan sisi
+    # gelap cuma lebih redup. probe_cahaya, farm jam 10 setelah post:
+    #
+    #                          dulu (185,180,156)+(70,66,57)   kini
+    #   geser B/G gelap, putih       -0,039                    +0,116
+    #   geser B/G gelap, kelabu      +0,001                    +0,135
+    #   terang/gelap, kelabu          1,528                     1,644
+    #
+    # Muka atas yang tersinar (tanah) tetap hangat-netral (B/G 0,96-0,98):
+    # ambient hemisfer di smooth_shader cuma menambah sedikit biru dari atas.
     if 6 <= hour < 17:
         # Siang: sinar matahari hangat keemasan (Animal Crossing golden feel)
         if hujan:
             return (_w(145, 145, 158), _w(62, 62, 72), _w(88, 98, 115),
                     _w(145, 148, 162, 215))
-        return (_w(185, 180, 156), _w(70, 66, 57), _w(128, 205, 248),
+        return (_w(222, 188, 122), _w(46, 68, 110), _w(128, 205, 248),
                 _w(248, 248, 255, 175))
     if 17 <= hour < 19:
-        # Senja: oranye kemerahan lembut. Ikut diturunkan dengan alasan yang
-        # sama: 255+88 = 343 di kanal merah, jauh di atas batas.
+        # Senja: matahari jingga rendah, ambient ungu-biru dari langit yang
+        # sudah meredup. Dulu ambient senja cokelat kemerahan (70,44,36), jadi
+        # bayangan senja cuma versi gelap dari sinarnya; patokan evening_light
+        # punya bayangan yang jelas lebih biru dari sinarnya. Diukur jam 17,6:
+        # geser B/G sisi gelap +0,065 -> +0,197 setelah post.
         if hujan:
             return (_w(148, 95, 72), _w(55, 38, 35), _w(115, 82, 82),
                     _w(135, 108, 102, 195))
-        return (_w(185, 118, 52), _w(70, 44, 36), _w(248, 138, 88),
+        return (_w(200, 122, 52), _w(52, 46, 80), _w(248, 138, 88),
                 _w(255, 195, 148, 145))
     # Malam: biru rembulan. Angka lamanya (35,48,92 / 28,28,52) ditulis dengan
     # komentar "bukan hitam total" -- dan tidak pernah terbukti salah, karena

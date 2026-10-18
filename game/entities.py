@@ -384,6 +384,22 @@ def _punya_tekstur(np_) -> bool:
     return np_.findAllTextures().getNumTextures() > 0
 
 
+# Tint bawaan (ColorScale, dikalikan ke tekstur bake) untuk pohon Blender.
+# Atlas bake-nya sengaja kusam ("muted" di build_trees_lighthouse.py) dan di
+# bawah smooth_shader tampil abu-abu terang di samping pohon prosedural.
+# Angka = rata-rata RGB tajuk prosedural / tajuk Blender, diukur di frame yang
+# sama pukul 11.00 (masker tampil/sembunyi, jalur Game3D):
+#   kelapa L 94 -> 81 (target 75), tropis L 97-102 -> 57-61 (target 50),
+#   pohon_mati L 81 -> 65 (target 57).
+# Saturasi tajuk tetap di bawah prosedural; ColorScale seragam tidak bisa
+# memisahkan daun dari batang. Itu butuh bake ulang di Blender (pemilik).
+TINT_MODEL = {
+    'pohon_kelapa': (0.68, 0.85, 0.55),
+    'pohon_tropis': (0.55, 0.58, 0.55),
+    'pohon_mati':   (0.86, 0.67, 0.55),
+}
+
+
 def make_obj_entity(name, position, scale=1.0, rot_y=0.0, tint=None):
     """Entity prop dari model Blender .obj. None kalau modelnya tidak ada.
 
@@ -401,7 +417,8 @@ def make_obj_entity(name, position, scale=1.0, rot_y=0.0, tint=None):
 
     Warna: tekstur bake dari .mtl kalau ada; kalau tidak, `{nama}.png` di
     assets/models; kalau tidak juga, MODEL_COLORS supaya tidak putih polos.
-    `tint` (ColorScale) menang atas semuanya dan dikalikan ke tekstur.
+    `tint` (ColorScale) menang atas semuanya dan dikalikan ke tekstur;
+    tanpa `tint`, TINT_MODEL dipakai bila nama model ada di sana.
     """
     from panda3d.core import TransparencyAttrib
     mdl = load_model_file(name)
@@ -419,6 +436,8 @@ def make_obj_entity(name, position, scale=1.0, rot_y=0.0, tint=None):
         if tex is not None:
             e.texture = tex
             bertekstur = True
+    if tint is None and name in TINT_MODEL:
+        tint = color.Color(*TINT_MODEL[name], 1)
     if tint is not None:
         e.color = tint
     elif not bertekstur and name in MODEL_COLORS:

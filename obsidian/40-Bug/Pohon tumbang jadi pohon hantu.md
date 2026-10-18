@@ -3,7 +3,7 @@ judul: "Pohon tumbang jadi pohon hantu"
 tipe: bug
 status: selesai
 ditemukan: "2026-10-18"
-commit_perbaikan: (lihat commit "Pohon tumbang benar-benar rebah dan lenyap")
+commit_perbaikan: 83f3a8d
 dijaga_oleh: _bench/probes/probe_pohon_tumbang.py (belum disambung ke regress.py)
 tags: [bug, status/selesai, kapak, ditelan-except]
 ---

@@ -1275,7 +1275,7 @@ class UIManager:
         self._teks(self._en_val, f'{int(s.energy)}/{s.max_energy}')
 
         # Objective tracker — tutorial / quest aktif (modul game.tutorial)
-        if getattr(self, '_obj_title', None):
+        if getattr(self, '_obj_title', None) and getattr(self, '_hud_tampil', True):
             from .tutorial import tracker_lines
             title, step, hint = tracker_lines(s)
             self._teks(self._obj_title, title)
@@ -1903,6 +1903,8 @@ class UIManager:
         '_time_txt', '_date_txt', '_weather_txt', '_scene_txt', '_gold_txt',
         '_buff_txt', '_queue_txt', '_mood_bg', '_mood_fill', '_mood_lbl',
         '_mood_ikon', '_motive_panel_bg', '_control_hint',
+        # Pelacak tutorial dulu tertinggal di sini dan tampil di tengah sinema.
+        '_obj_bg', '_obj_rust', '_obj_title', '_obj_step', '_obj_hint',
     )
     # Yang ikut disembunyikan TAB: hanya ringkasan motif. Roda alat tidak —
     # ia jawaban atas "alat apa yang sedang kupegang", dan pertanyaan itu
@@ -1920,6 +1922,7 @@ class UIManager:
         Terlihat jelas di tangkapan pertama — panel SUASANA HATI menabrak
         baris narasinya sendiri.
         """
+        self._hud_tampil = v
         for nama in self._NAMA_HUD:
             e = getattr(self, nama, None)
             if e is not None:

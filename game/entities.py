@@ -371,6 +371,65 @@ def _baked_texture(name):
     _PROP_TEX_CACHE[name] = tex
     return tex
 
+
+def _punya_tekstur(np_) -> bool:
+    """Ada tekstur di model ini (map_Kd di .mtl)?
+
+    Assimp menaruh tekstur .mtl di state GeomNode, bukan di state per-geom.
+    Versi pertama fungsi ini hanya membaca state per-geom, menjawab "tidak",
+    dan sm_has_tex=0 membuat seluruh pohon Blender tampil PUTIH: diukur,
+    tajuk tropis (181,179,163) lawan (99,104,82) setelah tekstur dibaca.
+    findAllTextures membaca state di seluruh subtree.
+    """
+    return np_.findAllTextures().getNumTextures() > 0
+
+
+def make_obj_entity(name, position, scale=1.0, rot_y=0.0, tint=None):
+    """Entity prop dari model Blender .obj. None kalau modelnya tidak ada.
+
+    Hilang di merge 5683e79 sementara pemanggilnya (scatter_obj_props,
+    tools/view_model.py) tetap ada dan kegagalannya ditelan. Dipulihkan
+    dengan tiga beda dari versi ae03456:
+
+    - Orientasi tidak diputar di sini lagi: load_model_file sudah menegakkan
+      model (marker fix_obj_axes / _Z_ATAS), jadi rotasi entity cuma yaw.
+    - TIAP panggilan memakai salinan baru dari load_model_file. Satu model
+      tidak pernah dipasang ke dua entity (aturan #3).
+    - Transparansi dibuang: setter model Ursina memasang M_dual pada setiap
+      model, padahal atlas bake-nya RGB tanpa alpha. Dual hanya menambah
+      satu pass dan pengurutan per pohon.
+
+    Warna: tekstur bake dari .mtl kalau ada; kalau tidak, `{nama}.png` di
+    assets/models; kalau tidak juga, MODEL_COLORS supaya tidak putih polos.
+    `tint` (ColorScale) menang atas semuanya dan dikalikan ke tekstur.
+    """
+    from panda3d.core import TransparencyAttrib
+    mdl = load_model_file(name)
+    if mdl is None:
+        return None
+    e = Entity()
+    e.model = mdl
+    e.model.setTransparency(TransparencyAttrib.M_none)
+    e.position = position
+    e.scale = scale
+    e.rotation_y = rot_y
+    bertekstur = _punya_tekstur(e.model)
+    if not bertekstur:
+        tex = _baked_texture(name)
+        if tex is not None:
+            e.texture = tex
+            bertekstur = True
+    if tint is not None:
+        e.color = tint
+    elif not bertekstur and name in MODEL_COLORS:
+        e.color = color.rgb(*MODEL_COLORS[name])
+    else:
+        e.color = color.white
+    from .smooth_shader import apply_smooth
+    apply_smooth(e, has_texture=bertekstur)
+    return e
+
+
 def _setup_pose_swap(actor, base_name):
     """Aktifkan animasi mesh-swap 4-frame untuk model .obj."""
     try:

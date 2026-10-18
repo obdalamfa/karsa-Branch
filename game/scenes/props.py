@@ -585,6 +585,23 @@ def trough_pour_point(world):
     return t['pos'] if t else None
 
 
+# ─── MODEL BLENDER ──────────────────────────────────────────────────────────
+# Sebaran model Blender per scene, dipanggil dari default_prop_builder.
+# Dulu spesifikasi ini ada di cemetery_builder/lake_builder, dan keduanya
+# mati dua lapis: make_obj_entity hilang di merge 5683e79, lalu sejak Fase 3
+# (4a425d3) lake.json/cemetery.json memuat builder 'default' sehingga kedua
+# fungsi itu tidak pernah dipanggil lagi. Di sini ia ikut jalur data.
+# pohon_mati keluar dari sebaran cemetery: pohon mati sekarang lewat ubin DT
+# (tabel pohon per ubin), bukan ditabur acak di atas lantai.
+SEBARAN_OBJ = {
+    'cemetery': dict(specs=[('lantern', 2.0), ('pagar_bambu', 1.0)],
+                     count=7, seed=47, floor=D),
+    'lake':     dict(specs=[('lantern', 2.2), ('prop_peti_sayur', 1.0),
+                            ('prop_jerami', 1.0)],
+                     count=7, seed=33),
+}
+
+
 def default_prop_builder(world, scene):
     from game.world import OBJ_TEX
     from game.scenes.zone_paint import paint_zone
@@ -630,6 +647,10 @@ def default_prop_builder(world, scene):
     world.trough = None
     if getattr(scene, 'name', '') == 'farm':
         build_trough(world, *TROUGH_TILE)
+
+    sebaran = SEBARAN_OBJ.get(getattr(scene, 'name', ''))
+    if sebaran:
+        scatter_obj_props(world, scene, **sebaran)
 
 
 # ── scatter_obj_props(), dibawa dari feature/3d-mobs ───────────────────────

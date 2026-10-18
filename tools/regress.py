@@ -212,7 +212,10 @@ def cek_geom_nol(scene_mod):
 # supaya pemasangan ganda juga ketahuan.
 HARAPAN_MODEL = {
     # Fixture regress menyimpan lighthouse_fixed=False: yang tampil versi rusak.
-    'beach': {'prop_mercusuar_rusak': 1},
+    # Sebaran props.SEBARAN_OBJ dibagi bergiliran per spesifikasi.
+    'beach':    {'prop_mercusuar_rusak': 1},
+    'cemetery': {'lantern': 4, 'pagar_bambu': 3},
+    'lake':     {'lantern': 3, 'prop_peti_sayur': 2, 'prop_jerami': 2},
 }
 
 

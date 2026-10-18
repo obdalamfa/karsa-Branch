@@ -470,10 +470,20 @@ _FONT_NAME = 'Montserrat-Bold.ttf'
 _CHROME_PATH = _Path(__file__).resolve().parent.parent / 'assets' / 'ui' / 'panel_chrome.png'
 _chrome_tex = None
 def _chrome():
+    # Dipangkas ke bbox alfa-nya. panel_chrome.png 512x512, tapi bagian
+    # opaknya hanya (130,130)-(382,382): 49% tiap sumbu. Tanpa pangkasan,
+    # keempat pemakai _skin_chrome (majelis, modal batin, beli, jeda)
+    # menampilkan latar kira-kira separuh ukuran quad-nya, dan teks yang
+    # ditata untuk ukuran quad jatuh di luar latar yang tampak.
     global _chrome_tex
     if _chrome_tex is None:
         try:
-            _chrome_tex = Texture(_PILImg.open(_CHROME_PATH)) if _CHROME_PATH.exists() else False
+            if _CHROME_PATH.exists():
+                im = _PILImg.open(_CHROME_PATH).convert('RGBA')
+                kotak = im.getchannel('A').getbbox()
+                _chrome_tex = Texture(im.crop(kotak) if kotak else im)
+            else:
+                _chrome_tex = False
         except Exception:
             _chrome_tex = False
     return _chrome_tex or None
@@ -547,6 +557,11 @@ class UIManager:
             self._voice_sub_t -= dt
             if self._voice_sub_t <= 0 and getattr(self, '_voice_sub', None):
                 self._voice_sub.enabled = False
+        # Panel majelis hanya hidup di HUD. Ia duduk di kolom kanan bawah,
+        # tempat kotak dialog, modal pilihan, dan panel penuh juga digambar;
+        # dibiarkan terbuka, ia menimpa semuanya.
+        if getattr(self, '_batin_open', False) and self.mode != 'hud':
+            self.toggle_batin()
 
         # Flash message timer
         if self._flash_t > 0:
@@ -1422,25 +1437,51 @@ class UIManager:
     # Bangun/Beli (Sims S7), dan menu jeda — karena tidak satu pun menyentuh
     # tata letak HUD yang menang.
 
+    # ── Tata letak Majelis Batin ──
+    # Versi cd92b0d ditata untuk HUD lama dan bertumpuk dengan HUD yang
+    # menang: panel di kiri menimpa pelacak tutorial (z 0,9 di DEPAN latar
+    # z 1,0) dan roda alat; prompt modal di y 0,15 tepat di bawah flash;
+    # 'Tekan 1-N' dan subtitle sama-sama di y -0,30, dan subtitle itu jatuh di
+    # dalam kotak dialog (-0,48..-0,14 dengan papan nama). Sekarang:
+    #   panel   kanan, di bawah flash dan di atas petunjuk tombol; tertutup
+    #           sendiri begitu mode meninggalkan HUD (lihat update())
+    #   subtitle tengah-atas, di bawah baris HUD, di atas flash
+    #   modal   di bawah flash; tidak menutup subtitle maupun flash
+    # Dijaga cek tata letak di tools/probe_batin.py; fotonya diambil setelah
+    # sinema selesai lewat SPACE.
+    _BTN_POS, _BTN_SKALA = (0.58, -0.14), (0.60, 0.50)    # panel majelis
+    _BC_POS, _BC_SKALA = (0.0, -0.16), (1.20, 0.54)       # modal pilihan
+    _VSUB_Y = 0.31                                        # subtitle suara
+    _CHROME_TEPI = 0.104       # tebal bingkai chrome per sisi, pecahan skala
+
     def _build_batin(self):
         self.batin = None              # diisi app.py setelah Batin dibuat
         self._batin_open = False
         self._voice_sub_t = 0.0
-        bg = _skin_chrome(_ui(scale=(0.58, 0.96), position=(-0.60, 0.0), color=color.rgb(20, 18, 16, 237), z=1.0))
-        title = _txt('MAJELIS BATIN', pos=(-0.86, 0.43), scale=0.95, col=color.rgb(231, 178, 61))
-        sub = _txt('Empat sukma, satu tengkorak.', pos=(-0.86, 0.395), scale=0.58, col=color.rgb(150, 135, 100))
+        (cx, cy), (w, h) = self._BTN_POS, self._BTN_SKALA
+        kiri = cx - w / 2 + w * self._CHROME_TEPI + 0.012
+        atas = cy + h / 2 - h * self._CHROME_TEPI - 0.012
+        bg = _skin_chrome(_ui(scale=(w, h), position=(cx, cy), color=color.rgb(20, 18, 16, 237), z=1.0))
+        title = _txt('MAJELIS BATIN', pos=(kiri, atas - 0.012), scale=0.95,
+                     col=color.rgb(231, 178, 61), origin=(-0.5, 0))
+        sub = _txt('Empat sukma, satu tengkorak.', pos=(kiri, atas - 0.050), scale=0.58,
+                   col=color.rgb(150, 135, 100), origin=(-0.5, 0))
         self._batin_chips = []
         for i, k in enumerate(['bara', 'akar', 'sukma', 'lapar']):
             vd = BVOICES[k]
-            chip = _txt(f"{vd['name']} 1", pos=(-0.86 + i * 0.185, 0.35), scale=0.6,
-                        col=color.rgb(*vd['col']))
+            chip = _txt(f"{vd['name']} 1", pos=(kiri + i * 0.108, atas - 0.088), scale=0.55,
+                        col=color.rgb(*vd['col']), origin=(-0.5, 0))
             self._batin_chips.append((k, chip))
-        self._batin_log = _txt('', pos=(-0.875, 0.30), scale=0.62, col=color.rgb(224, 216, 188))
-        self._batin_ents = [bg, title, sub, self._batin_log] + [c for _, c in self._batin_chips]
+        self._batin_log = _txt('', pos=(kiri, atas - 0.115), scale=0.58,
+                               col=color.rgb(224, 216, 188), origin=(-0.5, 0.5))
+        bawah = cy - h / 2 + h * self._CHROME_TEPI + 0.012
+        tutup = _txt('[F7] tutup', pos=(kiri, bawah + 0.012), scale=0.5,
+                     col=color.rgb(150, 135, 100), origin=(-0.5, 0))
+        self._batin_ents = [bg, title, sub, self._batin_log, tutup] + [c for _, c in self._batin_chips]
         for e in self._batin_ents:
             e.enabled = False
-        # subtitle bawah (selalu ada, fade)
-        self._voice_sub = _txt('', pos=(0, -0.30), scale=0.78, col=color.white, origin=(0, 0))
+        # subtitle suara (selalu ada, memudar)
+        self._voice_sub = _txt('', pos=(0, self._VSUB_Y), scale=0.78, col=color.white, origin=(0, 0))
         self._voice_sub.enabled = False
 
     # ── Majelis Batin: suara, panel, modal ──────────────────────────────
@@ -1469,9 +1510,11 @@ class UIManager:
         for k, chip in self._batin_chips:
             chip.text = f"{BVOICES[k]['name']} {self.state.batin.get(k, 1)}"
         out = ''
-        for v, t in self.batin.lines[-8:]:
+        # Tiga ucapan terakhir, 44 huruf per baris: itu yang muat di dalam
+        # latar panel kanan (dijaga cek 'di dalam latar' probe_batin).
+        for v, t in self.batin.lines[-3:]:
             nm = BVOICES[v]['name'] if v in BVOICES else v.upper()
-            out += _tw.fill(f"[{nm}] {t}", 42) + "\n\n"
+            out += _tw.fill(f"[{nm}] {t}", 44) + "\n\n"
         self._batin_log.text = out
 
     # Suara batin tampil sebagai SUBTITLE `_voice_sub` yang memudar sendiri
@@ -1485,7 +1528,7 @@ class UIManager:
         vd = BVOICES.get(voice)
         if not vd:
             return
-        self._voice_sub.text = _tw.fill(f"{vd['name']} — {text}", 58)
+        self._voice_sub.text = _tw.fill(f"{vd['name']} — {text}", 54)
         self._voice_sub.color = color.rgb(*vd['col'])
         self._voice_sub.enabled = True
         self._voice_sub_t = 4.5
@@ -1503,15 +1546,21 @@ class UIManager:
         for e in getattr(self, '_bc_ents', []):
             try: destroy(e)
             except Exception: pass
-        bg = _skin_chrome(_ui(scale=(1.18, 0.74), position=(0, -0.02), color=color.rgb(18, 15, 12, 247), z=0.9))
+        (cx, cy), (w, h) = self._BC_POS, self._BC_SKALA
+        atas = cy + h / 2 - h * self._CHROME_TEPI
+        bawah = cy - h / 2 + h * self._CHROME_TEPI
+        kiri = cx - w / 2 + w * self._CHROME_TEPI + 0.03
+        bg = _skin_chrome(_ui(scale=(w, h), position=(cx, cy), color=color.rgb(18, 15, 12, 247), z=0.9))
         ents = [bg,
-                _txt(title, pos=(0, 0.26), scale=0.92, col=color.rgb(231, 178, 61), origin=(0, 0)),
-                _txt(_tw.fill(prompt, 64), pos=(0, 0.15), scale=0.7, col=color.rgb(224, 216, 188), origin=(0, 0))]
+                _txt(title, pos=(cx, atas - 0.035), scale=0.92, col=color.rgb(231, 178, 61), origin=(0, 0)),
+                _txt(_tw.fill(prompt, 64), pos=(cx, atas - 0.095), scale=0.7,
+                     col=color.rgb(224, 216, 188), origin=(0, 0))]
         for i, o in enumerate(opts):
             vd = BVOICES[o['voice']]
-            ents.append(_txt(_tw.fill(f"{i+1}. {o['label']}", 76), pos=(-0.52, 0.01 - i * 0.085),
-                             scale=0.64, col=color.rgb(*vd['col'])))
-        ents.append(_txt(f'Tekan 1-{len(opts)} untuk memilih.', pos=(0, -0.30), scale=0.58,
+            ents.append(_txt(_tw.fill(f"{i+1}. {o['label']}", 76),
+                             pos=(kiri, atas - 0.165 - i * 0.062),
+                             scale=0.64, col=color.rgb(*vd['col']), origin=(-0.5, 0)))
+        ents.append(_txt(f'Tekan 1-{len(opts)} untuk memilih.', pos=(cx, bawah + 0.03), scale=0.58,
                          col=color.rgb(150, 135, 100), origin=(0, 0)))
         self._bc_ents = ents
 

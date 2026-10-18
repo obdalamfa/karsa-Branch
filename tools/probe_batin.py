@@ -134,6 +134,15 @@ def cangkul(g, x, y):
     tekan(g, 'space', 2)
 
 
+def bukan_suara(teks):
+    """Flash tidak boleh berisi suara batin. Isi tepatnya tidak dicek: pesan
+    sambutan chargen ikut menulis flash dengan jeda waktu (invoke 4/8,5/13
+    dtk), jadi isi persisnya bergantung pada kecepatan mesin."""
+    from game.batin import VOICES
+    t = (teks or '').strip()
+    return not any(t.startswith(v['name'] + ' ') for v in VOICES.values())
+
+
 def batin_lines(g):
     b = getattr(g, 'batin', None)
     return list(getattr(b, 'lines', []) or [])
@@ -145,6 +154,104 @@ def bc_hidup(p):
 
 def modal_terbuka(p):
     return p.mode == 'batin' and bool(bc_hidup(p))
+
+
+# ─── tata letak ─────────────────────────────────────────────────────────────
+TEPI_CHROME = 0.10   # bingkai chrome yang dipangkas: ~10,4% tiap sisi
+
+
+def kotak(e):
+    """(x0, y0, x1, y1) entity di ruang camera.ui, dari geometri yang digambar."""
+    from ursina import camera
+    try:
+        b = e.get_tight_bounds(camera.ui)
+    except Exception:
+        b = None
+    if b:
+        lo, hi = b
+        return (lo.x, lo.y, hi.x, hi.y)
+    return (e.x - e.scale_x / 2, e.y - e.scale_y / 2,
+            e.x + e.scale_x / 2, e.y + e.scale_y / 2)
+
+
+def _irisan(a, b, sela=0.004):
+    return (min(a[2], b[2]) - max(a[0], b[0]) > sela
+            and min(a[3], b[3]) - max(a[1], b[1]) > sela)
+
+
+def _nama(p, e):
+    for k, v in vars(p).items():
+        if v is e:
+            return k
+    return type(e).__name__ + ':' + (getattr(e, 'text', '') or '')[:12]
+
+
+def di_luar_latar(latar, teks):
+    """Teks yang keluar dari bagian latar yang TAMPAK (di dalam bingkai)."""
+    x0, y0, x1, y1 = kotak(latar)
+    tx, ty = (x1 - x0) * TEPI_CHROME, (y1 - y0) * TEPI_CHROME
+    dalam = (x0 + tx, y0 + ty, x1 - tx, y1 - ty)
+    keluar = []
+    # Kotak quad belum tentu latar yang TAMPAK: panel_chrome.png hanya opak
+    # di 49% tengahnya. Tepat di dalam bingkai (12% dari tepi) teksturnya
+    # harus opak, kalau tidak teks yang 'di dalam quad' melayang di atas dunia.
+    try:
+        from panda3d.core import PNMImage
+        img = PNMImage()
+        if latar.texture is not None and latar.texture._texture.store(img):
+            for fx, fy in ((0.12, 0.5), (0.88, 0.5), (0.5, 0.12), (0.5, 0.88)):
+                a = img.get_alpha(int(img.get_x_size() * fx), int(img.get_y_size() * fy))
+                if a < 0.5:
+                    keluar.append(f'latar transparan di ({fx},{fy}) alfa={a:.2f}')
+                    break
+    except Exception as ex:
+        keluar.append(f'alfa latar tak terbaca: {ex}')
+    for e in teks:
+        if not (getattr(e, 'text', '') or '').strip():
+            continue
+        k = kotak(e)
+        if (k[0] < dalam[0] - 0.003 or k[2] > dalam[2] + 0.003
+                or k[1] < dalam[1] - 0.003 or k[3] > dalam[3] + 0.003):
+            keluar.append(f"'{e.text[:14]}' keluar latar {tuple(round(v, 3) for v in k)}")
+    return keluar
+
+
+def tumpang(milik, lain, label):
+    hasil_ = []
+    for e in lain:
+        if e is None or not getattr(e, 'enabled', False) or e.has_disabled_ancestor():
+            continue
+        if hasattr(e, 'text') and not (e.text or '').strip():
+            continue
+        kb = kotak(e)
+        for m in milik:
+            if _irisan(kotak(m), kb):
+                hasil_.append(f'{label} menimpa {getattr(e, "text", "")[:16] or type(e).__name__}'
+                              f' {tuple(round(v, 3) for v in kb)}')
+                break
+    return hasil_
+
+
+def hud_lain(p):
+    """Blok HUD yang tampak di samping panel: pelacak tutorial, roda alat,
+    jam, motif, petunjuk tombol, flash, subtitle."""
+    nama = ('_obj_bg', '_obj_title', '_obj_step', '_obj_hint', '_obj_janji',
+            '_scrim_kiri', '_scrim_kanan', '_scrim_bawah', '_motive_panel_bg',
+            '_control_hint', '_time_txt', '_date_txt', '_gold_txt', '_scene_txt',
+            '_flash_ent', '_voice_sub')
+    return [getattr(p, n) for n in nama if getattr(p, n, None) is not None]
+
+
+def subtitle_vs_dialog(p):
+    """Subtitle tidak boleh jatuh di kotak dialog (termasuk papan nama)."""
+    sub = getattr(p, '_voice_sub', None)
+    if sub is None:
+        return ['subtitle tidak ada']
+    ks = kotak(sub)
+    dlg = [kotak(getattr(p, n)) for n in ('_dlg_border', '_dlg_papan')
+           if getattr(p, n, None) is not None]
+    return [f'subtitle {tuple(round(v, 3) for v in ks)} di dalam kotak dialog'
+            for d in dlg if _irisan(ks, d)]
 
 
 # ─── boot ───────────────────────────────────────────────────────────────────
@@ -196,36 +303,23 @@ def fase_a(g):
     terbuka = modal_terbuka(p)
     flash = p._flash_ent.text if p._flash_ent else ''
     sub = getattr(p, '_voice_sub', None)
-    cek("A flash 'Tanah dicangkul!' tidak ditimpa suara batin",
-        flash == 'Tanah dicangkul!' and sub is not None and sub.enabled
+    cek('A suara cangkul di subtitle, flash tidak ditimpa',
+        bukan_suara(flash) and sub is not None and sub.enabled
         and 'AKAR' in (sub.text or ''),
         f'flash={flash!r} subtitle={getattr(sub, "text", None)!r} '
         f'nyala={getattr(sub, "enabled", None)}')
 
-    # Tata letak modal: dibaca dari entity yang benar-benar dibangun.
+    # Tata letak modal: dibaca dari kotak entity yang benar-benar digambar.
     if terbuka:
         ents = bc_hidup(p)
-        teks = [e for e in ents if hasattr(e, 'text')]
-        prompt = next((e for e in teks if 'lumpur' in (e.text or '')), None)
-        tekan_e = next((e for e in teks if (e.text or '').startswith('Tekan 1')), None)
-        bentrok = []
-        if prompt is not None and abs(prompt.y - p._flash_ent.y) < 0.04:
-            bentrok.append(f'prompt y={prompt.y:.3f} = flash y={p._flash_ent.y:.3f}')
-        if tekan_e is not None and sub is not None and abs(tekan_e.y - sub.y) < 0.04:
-            bentrok.append(f"'Tekan 1-N' y={tekan_e.y:.3f} = subtitle y={sub.y:.3f}")
-        dlg_atas = p._DLG_Y + p._DLG_H / 2
-        dlg_bawah = p._DLG_Y - p._DLG_H / 2
-        if sub is not None and dlg_bawah - 0.02 < sub.y < dlg_atas + 0.02:
-            bentrok.append(f'subtitle y={sub.y:.3f} di dalam kotak dialog')
-        bg = ents[0]
-        if sub is not None and abs(sub.y - bg.y) < bg.scale_y / 2:
-            bentrok.append(f'subtitle y={sub.y:.3f} di dalam modal')
-        cek('A tata letak modal: prompt/Tekan/subtitle tidak bertumpuk',
-            prompt is not None and tekan_e is not None and not bentrok,
-            '; '.join(bentrok) or f'prompt y={prompt.y if prompt else None}')
+        masalah = di_luar_latar(ents[0], ents[1:])
+        masalah += tumpang(ents, [p._flash_ent, sub], 'modal')
+        masalah += subtitle_vs_dialog(p)
+        cek('A tata letak modal: teks di dalam latar, tidak menimpa flash/subtitle',
+            not masalah, '; '.join(masalah[:3]) or 'bersih')
     else:
-        cek('A tata letak modal: prompt/Tekan/subtitle tidak bertumpuk', False,
-            'modal tidak terbuka')
+        cek('A tata letak modal: teks di dalam latar, tidak menimpa flash/subtitle',
+            False, 'modal tidak terbuka')
 
     langkah(2)
     cek("A mode 'batin' bertahan 2 frame (tidak dipulihkan yatim)",
@@ -250,7 +344,7 @@ def fase_a(g):
     tekan(g, 'space', 3)
     siram = [t for v, t in batin_lines(g) if 'Air itu jadwal' in t]
     cek("A siram pertama: suara AKAR 'siram', flash tetap",
-        siram and p._flash_ent.text == 'Tanaman disiram!',
+        siram and bukan_suara(p._flash_ent.text),
         f'siram={len(siram)} flash={p._flash_ent.text!r}')
     # Tanaman matang dipasang sebagai fixture keadaan; aksinya tetap tombol.
     s.soil['11,12,farm'] = {'tilled': True, 'crop': 'lobak', 'age': 99,
@@ -264,7 +358,7 @@ def fase_a(g):
         s.stats.get('lobak_harvested', 0) == h0 + 1
         and any('Panen pertama' in t for t in teks)
         and any('Peti Kirim' in t for t in teks)
-        and (p._flash_ent.text or '').startswith('+1 '),
+        and bukan_suara(p._flash_ent.text),
         f"panen {h0}->{s.stats.get('lobak_harvested', 0)} flash={p._flash_ent.text!r}")
 
     # Panel majelis: tombol tidak boleh disentuh mesin.
@@ -287,6 +381,15 @@ def fase_a(g):
         and getattr(getattr(window, 'editor_ui', None), 'enabled', None) == ed0,
         f'hotkeys={kena} render_mode {rm0}->{window.render_mode}'
         if panel_buka else 'panel tidak terbuka')
+    if panel_buka:
+        latar = p._batin_ents[0]
+        masalah = di_luar_latar(latar, [e for e in p._batin_ents[1:] if e.enabled])
+        masalah += tumpang([latar], hud_lain(p), 'panel')
+        cek('A tata letak panel majelis: teks di dalam latar, tidak menimpa HUD',
+            not masalah, '; '.join(masalah[:3]) or 'bersih')
+    else:
+        cek('A tata letak panel majelis: teks di dalam latar, tidak menimpa HUD',
+            False, 'panel tidak terbuka')
     tekan(g, TOMBOL_PANEL, 3)
     cek(f'A [{TOMBOL_PANEL.upper()}] lagi menutup panel',
         panel_buka and not getattr(p, '_batin_open', True),
@@ -398,12 +501,17 @@ def jalankan_fase(fase: str, save: Path):
     os._exit(0)
 
 
-def _sub(fase, save: Path, log):
+def _sub(fase, save: Path, log, ulang=1):
     r = subprocess.run([sys.executable, str(Path(__file__).resolve()),
                         '--fase', fase, '--save', str(save)],
                        cwd=ROOT, capture_output=True, text=True, timeout=600)
     log.write(f'===== {fase} (kode {r.returncode})\n{r.stdout}\n{r.stderr}\n')
     baris = [json.loads(b[4:]) for b in r.stdout.splitlines() if b.startswith('CEK ')]
+    if not baris and ulang and 'Could not open window' in r.stderr:
+        # Lingkungan, bukan game: Xvfb di mesin bersama sesekali menolak
+        # membuka jendela GL. Diulang SEKALI dan dicatat di log.
+        log.write(f'===== {fase}: jendela gagal dibuka, diulang sekali\n')
+        return _sub(fase, save, log, ulang - 1)
     if not baris:
         baris = [[f'{fase} subproses tanpa hasil', False,
                   (r.stderr.strip().splitlines() or ['?'])[-1][:120]]]

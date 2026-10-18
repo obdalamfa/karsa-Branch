@@ -20,6 +20,9 @@ bukan pada kemungkinan yang dikarang:
                  Dihitung per nama model dari entity yang enabled.
   palung         palung farm terkubur di ekor fungsi lain; "Beri Minum" hilang
                  dari pie ternak tanpa error apa pun.
+  model_tegak    heuristik orientasi merebahkan model Blender yang sudah Y-atas
+                 (mercusuar, kurofune, pohon). Tinggi di dunia diadu dengan
+                 tinggi di berkas .obj-nya.
   frame_kosong   "rumah ga muncul" — scene yang dirender jadi langit polos.
   pemain_valid   terjepit permanen di tile yang tidak bisa dijalani.
   motif_waras    mesin motif baru; nilai harus tetap di -100..+100.
@@ -251,6 +254,75 @@ def cek_model_blender(nama):
         return _fail('jumlah model salah (ada/harap): ' + ', '.join(salah))
     ring = ', '.join(f'{m}x{n}' for m, n in sorted(harap.items()))
     return _ok(ring or f'{sum(hitung.values())} model .obj, tanpa harapan')
+
+
+_SUMBU_BERKAS: dict = {}
+
+
+def _tinggi_berkas(nama):
+    """(tinggi, dasar) sumbu-atas model di BERKAS .obj-nya, atau None.
+
+    Sumbu-atas: z untuk berkas Z-atas (entities._Z_ATAS), y untuk sisanya --
+    berkas ber-marker fix_obj_axes.py dan OBJ biasa sama-sama Y-atas.
+    """
+    if nama not in _SUMBU_BERKAS:
+        from game.entities import _Z_ATAS
+        p = ROOT / 'assets' / 'models' / f'{nama}.obj'
+        k = 3 if nama in _Z_ATAS else 2
+        lo = hi = None
+        try:
+            with open(p, encoding='utf-8', errors='replace') as f:
+                for ln in f:
+                    if ln.startswith('v '):
+                        v = float(ln.split()[k])
+                        lo = v if lo is None else min(lo, v)
+                        hi = v if hi is None else max(hi, v)
+        except OSError:
+            pass
+        _SUMBU_BERKAS[nama] = None if lo is None else (hi - lo, lo)
+    return _SUMBU_BERKAS[nama]
+
+
+def cek_model_tegak(nama):
+    """Model pohon_/prop_/Z-atas yang tampil di scene berdiri tegak.
+
+    Heuristik `d.y > d.z -> setP(-90)` di load_model_file (f596e18) merebahkan
+    tepat model yang sudah dikonversi ke Y-atas (pohon, mercusuar, kurofune,
+    peti) dan membiarkan berkas Z-atas tetap rebah. Diukur dengan ShowBase,
+    bukan offscreen tanpa ShowBase -- di sana heuristiknya tidak aktif dan
+    model rebah terlihat tegak. Tinggi dan dasar di dunia harus sama dengan
+    tinggi dan dasar sumbu-atas di berkasnya, dikali skala entity.
+    """
+    from game.entities import _Z_ATAS
+    from ursina import scene as uscene
+    from direct.showbase.ShowBaseGlobal import base as _b
+    rebah, n = [], 0
+    for e in uscene.children:
+        m = getattr(e, 'model', None)
+        if m is None or not getattr(e, 'enabled', True):
+            continue
+        try:
+            nm = m.getName()
+        except Exception:
+            continue
+        if not nm.endswith('.obj'):
+            continue
+        nm = nm[:-4]
+        if not (nm.startswith(('pohon_', 'prop_')) or nm in _Z_ATAS):
+            continue
+        harap = _tinggi_berkas(nm)
+        if harap is None:
+            continue
+        n += 1
+        lo, hi = e.getTightBounds(_b.render)
+        s = e.getScale(_b.render).y
+        tinggi, dasar = harap[0] * s, e.getY(_b.render) + harap[1] * s
+        if abs((hi.y - lo.y) - tinggi) > 0.05 * max(1.0, s) or \
+                abs(lo.y - dasar) > 0.05 * max(1.0, s):
+            rebah.append(f'{nm} tinggi {hi.y - lo.y:.2f}/{tinggi:.2f}')
+    if rebah:
+        return _fail(f'{len(rebah)}/{n} model rebah: ' + ', '.join(rebah[:3]))
+    return _ok(f'{n} tegak' if n else '')
 
 
 def cek_palung(g, nama):
@@ -1436,6 +1508,7 @@ def main():
             hasil['geom_nol'] = cek_geom_nol(nama)
             hasil['model_blender'] = cek_model_blender(nama)
             hasil['palung'] = cek_palung(g, nama)
+            hasil['model_tegak'] = cek_model_tegak(nama)
             hasil['frame_kosong'] = hasil_frame
             if png.exists():
                 hasil['kanal_jenuh'], jenuh = cek_kanal_jenuh(png)

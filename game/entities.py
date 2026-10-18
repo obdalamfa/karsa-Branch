@@ -45,6 +45,25 @@ def _model_instance(cached):
         return cached
 
 
+# Model yang diekspor Blender TANPA konversi sumbu: tingginya di Z, dasarnya
+# di z=0, dan baris pertamanya "# Blender ...", bukan marker fix_obj_axes.py.
+# Diukur dari berkasnya: pohon_bambu z 0..5,71, lantern 0..2,26, sumur
+# 0..3,04, pagar_bambu 0..1,30. Ide yang sama dengan Z_UP_MODELS di ae03456
+# yang hilang bersama make_obj_entity di merge 5683e79.
+_Z_ATAS = frozenset({'pohon_bambu', 'lantern', 'sumur', 'pagar_bambu'})
+
+_MARKER_Y_ATAS = '# axis-converted-to-Y-up'
+
+
+def _y_atas_bermarker(path) -> bool:
+    """Baris pertama berkas = marker fix_obj_axes.py (sudah Y-atas)."""
+    try:
+        with open(path, encoding='utf-8', errors='replace') as f:
+            return f.readline().strip() == _MARKER_Y_ATAS
+    except OSError:
+        return False
+
+
 # Warna sRGB dari material utama .mtl (Kd linear -> sRGB) untuk model yang
 # diekspor tanpa `usemtl`. genderuwo: GW_Fur (0.0685, 0.0577, 0.0523).
 _WARNA_TANPA_MATERIAL = {
@@ -106,6 +125,18 @@ def load_model_file(name: str):
                     # Assimp memuatnya sudah tegak. Tebakan `d.y > d.z` di bawah
                     # memiringkan model yang lebih lebar daripada tingginya.
                     pass
+                elif name.startswith(('pohon_', 'prop_')) and _y_atas_bermarker(path):
+                    # Berkas ini SUDAH dikonversi ke Y-atas oleh fix_obj_axes.py,
+                    # dan baris pertamanya mengatakan begitu. Tebakan `d.y > d.z`
+                    # di bawah justru merebahkannya: diukur dengan ShowBase,
+                    # pohon_kelapa jadi dz=5,10 > dy=4,01, mercusuar dz=7,18,
+                    # kurofune terguling. Marker dipercaya, bounds tidak ditebak.
+                    pass
+                elif name in _Z_ATAS:
+                    # Diekspor Blender tanpa konversi sumbu (tinggi di Z, dasar
+                    # di z=0). +90 diukur: dasar tepat di 0,00; -90 menaruhnya
+                    # terbalik di bawah tanah. Lihat _Z_ATAS.
+                    mp.setP(90)
                 elif d.y > d.z and isinstance(m, NodePath):
                     mp.setP(-90)
             except Exception:

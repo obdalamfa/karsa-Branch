@@ -618,6 +618,19 @@ def default_prop_builder(world, scene):
                 ore_tex = OBJ_TEX.get(tid, 'crystal')
                 build_ore(world, wx, wz, ore_tex)
 
+    # Kandang kebun punya satu palung minum. Dibangun di sini, bukan dari ubin,
+    # supaya peta tidak berubah sama sekali — palung yang jadi tile akan
+    # menutup ubin dan bisa mengurung pemain di dalam kandang.
+    #
+    # Blok ini sempat terkubur di ekor scatter_obj_props (merge 60734dd
+    # menyisipkan fungsi itu di antara loop di atas dan blok ini, dengan
+    # indentasi yang sama). Akibatnya world.trough tidak pernah dibangun:
+    # "Beri Minum" hilang dari pie ternak dan tidak ada jalan lain mengisi
+    # air hewan kandang. Lihat obsidian/40-Bug.
+    world.trough = None
+    if getattr(scene, 'name', '') == 'farm':
+        build_trough(world, *TROUGH_TILE)
+
 
 # ── scatter_obj_props(), dibawa dari feature/3d-mobs ───────────────────────
 # Tiga scene yang ikut masuk dari sisi 3d-mobs (mountain, lake, cemetery)
@@ -672,12 +685,3 @@ def scatter_obj_props(world, scene, specs, count, seed=0, avoid=2, floor=None):
         if e is not None:
             world._obj_ents.append(e)
 
-
-# ─── OBJEK KECIL ─────────────────────────────────────────────────────────────
-
-    # Kandang kebun punya satu palung minum. Dibangun di sini, bukan dari ubin,
-    # supaya peta tidak berubah sama sekali — palung yang jadi tile akan
-    # menutup ubin dan bisa mengurung pemain di dalam kandang.
-    world.trough = None
-    if getattr(scene, 'name', '') == 'farm':
-        build_trough(world, *TROUGH_TILE)

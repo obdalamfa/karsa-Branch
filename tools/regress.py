@@ -18,6 +18,8 @@ bukan pada kemungkinan yang dikarang:
   model_blender  model Blender yang dipanggil builder scene tidak pernah tampil
                  karena fungsinya hilang dan kegagalannya ditelan (aturan #4).
                  Dihitung per nama model dari entity yang enabled.
+  palung         palung farm terkubur di ekor fungsi lain; "Beri Minum" hilang
+                 dari pie ternak tanpa error apa pun.
   frame_kosong   "rumah ga muncul" — scene yang dirender jadi langit polos.
   pemain_valid   terjepit permanen di tile yang tidak bisa dijalani.
   motif_waras    mesin motif baru; nilai harus tetap di -100..+100.
@@ -249,6 +251,29 @@ def cek_model_blender(nama):
         return _fail('jumlah model salah (ada/harap): ' + ', '.join(salah))
     ring = ', '.join(f'{m}x{n}' for m, n in sorted(harap.items()))
     return _ok(ring or f'{sum(hitung.values())} model .obj, tanpa harapan')
+
+
+def cek_palung(g, nama):
+    """Kandang farm punya palung, dan "Beri Minum" ditawarkan ke ternaknya.
+
+    Pernah nyata sejak merge 60734dd sampai Okt 2026: blok pembangun palung
+    terkubur di ekor `scatter_obj_props`, world.trough tidak pernah dibangun,
+    dan opsi Beri Minum tidak pernah muncul di pie ternak -- satu-satunya
+    jalan mengisi air hewan kandang. Tidak ada error, tidak ada log; yang
+    terlihat cuma hewan yang berhenti berproduksi. Opsi pie dibangun lewat
+    `_build_pie_options`, fungsi yang sama yang dipanggil app.input saat klik.
+    """
+    if nama != 'farm':
+        return _ok()
+    if getattr(g.world, 'trough', None) is None:
+        return _fail('world.trough tidak dibangun di farm')
+    kawanan = g.player.interaction_controller._pen_livestock()
+    if not kawanan:
+        return _fail('tidak ada ternak kandang di farm')
+    ids = [o[0] for o in g.player._build_pie_options(kawanan[0])]
+    if 'beri_minum' not in ids:
+        return _fail(f'Beri Minum tidak ditawarkan ke {kawanan[0]}')
+    return _ok(f'palung {g.world.trough["tile"]}, {len(kawanan)} ekor')
 
 
 def cek_frame_kosong(png: Path):
@@ -1410,6 +1435,7 @@ def main():
                 else _fail('tidak ada tangkapan layar')
             hasil['geom_nol'] = cek_geom_nol(nama)
             hasil['model_blender'] = cek_model_blender(nama)
+            hasil['palung'] = cek_palung(g, nama)
             hasil['frame_kosong'] = hasil_frame
             if png.exists():
                 hasil['kanal_jenuh'], jenuh = cek_kanal_jenuh(png)

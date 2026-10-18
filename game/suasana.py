@@ -9,6 +9,10 @@ Semua warna dalam skala 0-255, sama dengan color.rgb milik game.
 _PRESET = {
     # Gelap kebiruan: terang di gua datang dari kristal dan obor, bukan langit.
     'naga_cave': dict(sun=(70, 92, 126), amb=(52, 64, 90), sky=(5, 7, 12)),
+    # Gua bertingkat lebih dalam lagi dari gua naga: nyaris tanpa cahaya
+    # langit. Tanpa preset ini ia memakai lampu rumah, dan lantai batunya
+    # terbakar putih oleh bloom.
+    'dungeon': dict(sun=(70, 80, 104), amb=(58, 62, 82), sky=(3, 4, 7)),
     # Kahyangan: senja keemasan abadi, tidak ikut jam desa.
     'swarga': dict(sun=(255, 210, 150), amb=(126, 104, 116), sky=(232, 164, 120)),
 }

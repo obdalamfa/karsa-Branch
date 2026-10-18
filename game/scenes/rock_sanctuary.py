@@ -87,11 +87,15 @@ def _kristal_pijar_mesh(seed, rgb, sides=5):
     return Mesh(vertices=dasar.vertices, normals=dasar.normals, colors=cols, mode='triangle')
 
 
-def _rocks(world, scene, outdoor=False):
-    # Remove the default cuboid walls from the visibility/cutaway registry too.
+def _bersihkan_dinding_kubus(world):
+    """Matikan dinding kubus bawaan world.py dan keluarkan dari cutaway."""
     for entry in world._wall_ents:
         entry[0].enabled = False
     world._wall_ents.clear()
+
+
+def _rocks(world, scene, outdoor=False):
+    _bersihkan_dinding_kubus(world)
     covered = set()
     for y,row in enumerate(scene.tiles):
         for x,tid in enumerate(row):
@@ -129,24 +133,64 @@ def _rocks(world, scene, outdoor=False):
 _BARIS_TEBING = 10
 
 
-def _tebing_menerus(world, scene):
-    """Bahu lembah dan dinding belakang gua sebagai SATU permukaan.
+def _tebing_ubin(world, batu, tinggi, rgb, tanpa_dinding=lambda x, y: False):
+    """Tebing dari ubin penghalang sebagai SATU permukaan tanpa lapisan.
 
-    Dulu tiap 1-3 ubin CV_W dapat bongkah sendiri ditambah puncak kedua di
-    atasnya: puluhan gumpalan yang terbaca bertumpuk dan berlapis. Di sini
-    tinggi tebing ditentukan di SUDUT ubin dan dipakai bersama oleh ubin
-    tetangga, jadi permukaannya menyambung tanpa jahitan. Dinding tegak hanya
-    dibuat di tepi yang berbatasan dengan tanah bisa-jalan.
+    Dulu tiap 1-3 ubin dapat bongkah sendiri ditambah puncak kedua di atasnya:
+    puluhan gumpalan yang terbaca bertumpuk dan berlapis. Di sini tinggi
+    tebing ditentukan di SUDUT ubin (`tinggi(cx, cy)`) dan dipakai bersama oleh
+    ubin tetangga, jadi permukaannya menyambung tanpa jahitan. Dinding tegak
+    hanya dibuat di tepi yang berbatasan dengan ubin non-`batu`.
+
+    Tiap ubin tetap entity sendiri dan terdaftar di `world._wall_ents`, karena
+    cutaway kamera memendekkan dinding per entity. Satu mesh besar pernah
+    menutup seluruh layar saat kamera berada di baliknya.
     """
     from ursina import Mesh
-    t = scene.tiles
-    h_, w_ = len(t), len(t[0])
+    sel = []
+    for y, x in batu.ubin:
+        hs = {(i, j): tinggi(x + i, y + j) for i in (0, 1) for j in (0, 1)}
+        H = max(hs.values())
 
-    def batu(x, y):
-        return 0 <= x < w_ and 0 <= y <= _BARIS_TEBING and t[y][x] == CV_W
+        def P(i, j, atas=True):
+            ly = (hs[(i, j)] / H - 0.5) if atas else -0.5
+            return ((i - 0.5) * TS, ly, (j - 0.5) * TS)
+
+        a_, b_, c_, d_ = P(0, 0), P(1, 0), P(1, 1), P(0, 1)
+        v = list((a_, b_, c_, a_, c_, d_) if (x + y) % 2 else (a_, b_, d_, b_, c_, d_))
+
+        def quad(p, q, r, t):
+            v.extend((p, q, r, p, r, t))
+        if not tanpa_dinding(x, y):
+            if not batu(x, y + 1): quad(P(0, 1, False), P(1, 1, False), c_, d_)
+            if not batu(x, y - 1): quad(P(1, 0, False), P(0, 0, False), a_, b_)
+            if not batu(x - 1, y): quad(P(0, 0, False), P(0, 1, False), d_, a_)
+            if not batu(x + 1, y): quad(P(1, 1, False), P(1, 0, False), b_, c_)
+        warna = tuple(max(0, min(255, c + ((x * 7 + y * 13) % 9) - 4)) for c in rgb)
+        e = _part(world, Mesh(vertices=v, triangles=list(range(len(v)))),
+                  (x * TS, GROUND_H + H / 2, y * TS), (1, H, 1), warna, double_sided=True)
+        world._wall_ents.append([e, H, GROUND_H + H / 2, x, y])
+        sel.append(e)
+    return sel
+
+
+class _Batu:
+    """Predikat ubin-penghalang + daftar ubinnya, untuk `_tebing_ubin`."""
+
+    def __init__(self, tiles, cocok):
+        self.t, self.cocok = tiles, cocok
+        self.h, self.w = len(tiles), len(tiles[0])
+        self.ubin = [(y, x) for y in range(self.h) for x in range(self.w) if self(x, y)]
+
+    def __call__(self, x, y):
+        return 0 <= x < self.w and 0 <= y < self.h and self.cocok(x, y, self.t[y][x])
+
+
+def _tebing_menerus(world, scene):
+    """Bahu lembah dan dinding belakang gua di lereng gunung."""
+    batu = _Batu(scene.tiles, lambda x, y, tid: tid == CV_W and y <= _BARIS_TEBING)
 
     def tinggi(cx, cy):
-        # cx, cy = indeks sudut (sudut kiri-atas ubin x,y adalah (x,y)).
         naik = (_BARIS_TEBING + 1 - cy) * 0.75          # makin ke utara makin tinggi
         gel = 1.4 * math.sin(cx * 0.55 + 1.3) + 0.9 * math.sin(cx * 1.37 + cy * 0.8)
         h = max(3.0, 5.0 + naik + gel)
@@ -154,34 +198,20 @@ def _tebing_menerus(world, scene):
             h = min(h, 8.0)          # atap lorong, di bawah puncak mulut gua (8,5 m)
         return h
 
-    for y in range(0, _BARIS_TEBING + 1):
-        for x in range(w_):
-            if not batu(x, y):
-                continue
-            # Tiap ubin entity sendiri supaya cutaway kamera bisa memendekkannya
-            # (world._wall_ents menskala sumbu-y ke tinggi penuh `H`). Sudutnya
-            # tetap dihitung dari tinggi BERSAMA, jadi sambungan antar-ubin rata.
-            hs = {(i, j): tinggi(x + i, y + j) for i in (0, 1) for j in (0, 1)}
-            H = max(hs.values())
+    _tebing_ubin(world, batu, tinggi, (108, 124, 112),
+                 tanpa_dinding=lambda x, y: 13 <= x <= 16)   # lorong gua: atap saja
 
-            def P(i, j, atas=True):
-                ly = (hs[(i, j)] / H - 0.5) if atas else -0.5
-                return ((i - 0.5) * TS, ly, (j - 0.5) * TS)
 
-            a_, b_, c_, d_ = P(0, 0), P(1, 0), P(1, 1), P(0, 1)
-            v = list((a_, b_, c_, a_, c_, d_) if (x + y) % 2 else (a_, b_, d_, b_, c_, d_))
+def _dinding_gua(world, tiles, cocok, rgb=(64, 78, 94), dasar=1.9):
+    """Dinding gua sebagai tebing menerus, lebih rendah dari tebing luar."""
+    batu = _Batu(tiles, cocok)
 
-            def quad(p, q, r, t):
-                v.extend((p, q, r, p, r, t))
-            if not (13 <= x <= 16):          # lorong gua: atap saja
-                if not batu(x, y + 1): quad(P(0, 1, False), P(1, 1, False), c_, d_)
-                if not batu(x, y - 1): quad(P(1, 0, False), P(0, 0, False), a_, b_)
-                if not batu(x - 1, y): quad(P(0, 0, False), P(0, 1, False), d_, a_)
-                if not batu(x + 1, y): quad(P(1, 1, False), P(1, 0, False), b_, c_)
-            e = _part(world, Mesh(vertices=v, triangles=list(range(len(v)))),
-                      (x * TS, GROUND_H + H / 2, y * TS), (1, H, 1),
-                      (108, 124, 112), double_sided=True)
-            world._wall_ents.append([e, H, GROUND_H + H / 2, x, y])
+    def tinggi(cx, cy):
+        gel = 0.55 * math.sin(cx * 0.9 + cy * 0.4) + 0.35 * math.sin(cx * 2.1 - cy * 1.7)
+        belakang = 1.1 if cy <= 1 else 0.0            # dinding utara menjulang
+        return max(1.2, dasar + gel + belakang)
+
+    return _tebing_ubin(world, batu, tinggi, rgb)
 
 
 def _disc(world, x, z, radius, rgb, y=0.215, inner=0):
@@ -222,7 +252,8 @@ def build_cavern(world, scene):
         else:
             e.color = color.rgb(170,205,215)
     _part(world,'cube',((scene.w-1)*TS/2,.1,(scene.h-1)*TS/2),(scene.w*TS,.2,scene.h*TS),(70,84,98))
-    _rocks(world,scene)
+    _bersihkan_dinding_kubus(world)
+    _dinding_gua(world, scene.tiles, lambda x, y, tid: tid == CV_W)
     for x,z,rx,rz in ((6,8,3.6,5),(23,7,4,3),(5,18,4,3),(22,18,4,3),(14,3,3,2)):
         _ground_patch(world,x,z,rx,rz,(62,76,90),x+z)
     # Sparse strata seams, not an alternating checkerboard. Flush decoration.
@@ -573,3 +604,103 @@ def _lore_lama(world, scene):
     # vline/hline) ke bahu jalan di sebelahnya.
     for tx, ty in ((5, 21), (4, 22), (7, 22), (5, 23)):
         build_grave(world, tx * TS, ty * TS)
+
+
+# ═══ GUA BERTINGKAT (DUNGEON) ═══════════════════════════════════════════════
+# Warna urat bijih: harus terbaca dari jauh di lantai gelap, jadi dipijarkan.
+_WARNA_BIJIH = {
+    'ORE_TBG': (214, 128, 66),    # tembaga
+    'ORE_BSI': (176, 182, 206),   # besi
+    'ORE_EMS': (255, 214, 84),    # emas
+    'ORE_KRS': (196, 150, 255),   # kristal
+    'ORE_MTH': (130, 232, 255),   # mithril
+}
+
+
+def build_dungeon(world, scene):
+    """Gua bertingkat: lantai batu gelap menyatu, dinding tebing, bijih nyata.
+
+    Sebelumnya dungeon memakai builder bawaan, yang membaca peta PLACEHOLDER
+    (semua lantai) dan bukan `state.dungeon_tiles` hasil generator. Akibatnya:
+    bijih tambang tidak pernah digambar (world.py menyerahkannya ke builder),
+    lantai `cave_floor` terbakar putih oleh bloom, dan dinding hanya kubus
+    gelap. Menambang memuat ulang scene, jadi builder ini ikut terpanggil lagi
+    dan bijih yang sudah ditambang hilang dengan sendirinya.
+    """
+    import random
+    from game import config as K
+    from game.scenes.fx_suasana import kolam_cahaya, pijar, halo, Partikel
+    tiles = getattr(world.state, 'dungeon_tiles', None) or scene.tiles
+    lvl = max(1, int(getattr(world.state, 'dungeon_level', 1) or 1))
+    rng = random.Random(lvl * 101 + 7)
+    h_, w_ = len(tiles), len(tiles[0])
+    bijih = {getattr(K, n): rgb for n, rgb in _WARNA_BIJIH.items()}
+    tampak = {K.STAIRS_UP, K.STAIRS_DOWN, K.W, K.DCK, K.LLY}
+
+    for e in world._tile_ents:
+        tx, ty = int(round(e.x / TS)), int(round(e.z / TS))
+        if not (0 <= ty < h_ and 0 <= tx < w_) or tiles[ty][tx] not in tampak:
+            e.enabled = False
+    _bersihkan_dinding_kubus(world)
+
+    # Makin dalam makin dingin: coklat tanah di lantai atas, biru di bawah.
+    t = min(1.0, (lvl - 1) / 14)
+    def campur(a, b):
+        return tuple(int(x + (y - x) * t) for x, y in zip(a, b))
+    # Lantai lebih terang dari dinding: jalur harus terbaca sekilas, karena
+    # tinggi dinding saja tidak cukup dari kamera atas yang serong.
+    lantai, dinding = campur((104, 94, 82), (72, 84, 108)), campur((54, 50, 47), (38, 46, 64))
+
+    _part(world, 'cube', ((w_ - 1) * TS / 2, .1, (h_ - 1) * TS / 2), (w_ * TS, .2, h_ * TS), lantai)
+    for _ in range(6):
+        x, z = rng.uniform(2, w_ - 3) * TS, rng.uniform(2, h_ - 3) * TS
+        _ground_patch(world, x, z, rng.uniform(2, 4), rng.uniform(2, 3.5),
+                      tuple(c - 8 for c in lantai), int(x + z))
+    _dinding_gua(world, tiles, lambda x, y, tid: tid == K.CV_W, dinding, dasar=2.2)
+
+    lantai_bebas = []
+    for y in range(h_):
+        for x in range(w_):
+            tid = tiles[y][x]
+            wx, wz = x * TS, y * TS
+            if tid in bijih:
+                rgb = bijih[tid]
+                _part(world, _rock_mesh(x * 31 + y * 17), (wx, .2, wz), (1.55, 1.05, 1.55), dinding)
+                for k in range(3):
+                    seed = x * 13 + y * 7 + k
+                    pijar(world, _kristal_pijar_mesh(seed, rgb),
+                          (wx + (k - 1) * .32, .55 + .2 * (k % 2), wz + (k % 2 - .5) * .3),
+                          (.26, .42 + .12 * k, .26), (255, 255, 255),
+                          rotation=(15 * (k - 1), (seed * 53) % 360, 0))
+                if tid in (K.ORE_EMS, K.ORE_KRS, K.ORE_MTH):
+                    halo(world, (wx, .9, wz), 1.1, rgb, kuat=.22)
+            elif tid == K.CRYS:
+                for k in range(3):
+                    seed = x * 17 + y * 29 + k
+                    pijar(world, _kristal_pijar_mesh(seed, (70 + 18 * k, 196 + 14 * k, 206 + 10 * k)),
+                          (wx + (k - 1) * .36, .2, wz + (k % 2) * .3), (.48, .9 + k * .33, .48),
+                          (255, 255, 255), rotation=(0, (seed * 47) % 360, 0))
+                kolam_cahaya(world, wx, wz, 3.0, (70, 210, 220), kuat=.38)
+                halo(world, (wx, 1.0, wz), 1.7, (90, 220, 230), kuat=.28)
+            elif tid == K.STAIRS_DOWN:
+                kolam_cahaya(world, wx, wz, 2.6, (90, 150, 255), kuat=.40)
+            elif tid == K.STAIRS_UP:
+                kolam_cahaya(world, wx, wz, 2.6, (255, 190, 110), kuat=.40)
+            elif tid in (K.CV_F, K.MINED):
+                lantai_bebas.append((x, y))
+
+    # Obor di lantai yang menempel dinding: penerang yang terbaca dari mana saja.
+    tepi = [(x, y) for x, y in lantai_bebas
+            if sum(tiles[y + dy][x + dx] == K.CV_W
+                   for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+                   if 0 <= x + dx < w_ and 0 <= y + dy < h_) >= 2]
+    rng.shuffle(tepi)
+    for x, y in tepi[:5]:
+        wx, wz = x * TS, y * TS
+        _part(world, 'cube', (wx, .6, wz), (.12, 1.0, .12), (70, 52, 38))
+        pijar(world, 'sphere', (wx, 1.18, wz), (.22, .3, .22), (255, 178, 90))
+        halo(world, (wx, 1.2, wz), 1.3, (255, 160, 80), kuat=.45)
+        kolam_cahaya(world, wx, wz, 3.4, (255, 140, 60), kuat=.30)
+    Partikel(world, 1 * TS, (w_ - 2) * TS, 1 * TS, (h_ - 2) * TS, .4, 2.8, 26,
+             (150, 200, 240) if t > .4 else (230, 190, 140),
+             ukuran=.045, naik=.06, goyang=.25, seed=lvl)

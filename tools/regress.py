@@ -897,6 +897,103 @@ def cek_rumput_melambai(g, base, tmp: Path):
     return _ok(f'{frac:.1%} piksel bergeser')
 
 
+# Kotak dunia di luar HUD (kiri, atas, kanan, bawah sebagai pecahan layar),
+# sama dengan _bench/probes/probe_cahaya.py.
+_KOTAK_DUNIA = (0.22, 0.17, 0.92, 0.80)
+
+
+def _cahaya_lantai(a, c):
+    """Dengan sm_ambient DAN sm_sun_color nol, tiap piksel yang ikut berubah
+    harus jatuh ke lantai hitam. None kalau lulus, pesan kalau gagal.
+
+    Uji rata-rata `turun >= 30` buta terhadap suku cahaya yang TIDAK lewat
+    kedua uniform itu: diukur, menambah `+ vec3(0.30, 0.32, 0.36)` ke
+    pengali fragmen tetap memberi "gelap 172", sama persis dengan fragmen
+    yang benar, karena frame terang dan frame gelapnya naik bersama. Suku
+    seperti itu tidak ikut siang-malam -- malam hari ia menyala sendiri.
+
+    Piksel yang TIDAK berubah (langit, awan, HUD, benda tanpa smooth_shader)
+    tidak dinilai. Lantainya ~0,07 x 255 setelah post (angkat hitam
+    vhs_bloom) dan 0 tanpa post; ambang 28 memberi ruang untuk butiran.
+    """
+    w, h = a.size
+    kotak = tuple(int(v * (w if i % 2 == 0 else h)) for i, v in enumerate(_KOTAK_DUNIA))
+    pa = a.crop(kotak).resize((320, 180)).getdata()
+    pc = c.crop(kotak).resize((320, 180)).getdata()
+    berubah = lantai = 0
+    for x, y in zip(pa, pc):
+        if max(abs(x[i] - y[i]) for i in range(3)) <= 12:
+            continue
+        berubah += 1
+        if max(y) <= 28:
+            lantai += 1
+    if berubah < 0.02 * 320 * 180:
+        return None      # nyaris tidak ada permukaan ber-smooth_shader di layar
+    frac = lantai / berubah
+    if frac < 0.80:
+        return (f'cahaya tidak seluruhnya lewat sm_ambient/sm_sun_color — dengan '
+                f'keduanya nol cuma {frac:.0%} piksel dunia yang berubah jatuh ke '
+                f'hitam (ada suku cahaya lain yang tidak ikut siang-malam)')
+    return None
+
+
+def _cahaya_beku_di_ubin(g, uscene):
+    """Ubin lebur tidak boleh menyimpan salinan uniform yang dipasang di scene.
+
+    `world._satukan_ubin()` menyalin net state ubin ke satu node lebur, dan
+    net state itu membawa salinan SEMUA shader input yang sedang dipasang di
+    `scene`. Yang dicabut cuma nama di `_UNIFORM_GLOBAL_AWAL`. Uniform global
+    baru yang dibaca fragmen tapi lupa didaftarkan di situ akan beku di nilai
+    saat scene dimuat, hanya di tanah -- bug yang pernah nyata (lihat
+    obsidian/40-Bug/Ubin dilebur membekukan cahaya siang-malam.md). Uji
+    piksel tidak menangkapnya kalau uniform itu bukan yang dipaksa di sini,
+    jadi diperiksa dari strukturnya: tiap uniform yang dideklarasikan fragmen
+    dan dipasang di scene tidak boleh ikut tersalin di node lebur.
+    """
+    akar = getattr(getattr(g, 'world', None), '_ubin_statis', None)
+    if akar is None:
+        return None
+    try:
+        import re
+        from panda3d.core import ShaderAttrib, ShaderInput
+        from game.smooth_shader import _FRAG
+    except Exception:
+        return None
+    # flattenStrong() mendorong state akar turun ke tiap Geom, jadi
+    # ShaderAttrib-nya TIDAK lagi ada di akar.getState() -- versi pertama cek
+    # ini cuma membaca akar dan lulus pada mutasi yang membekukan uniform.
+    # Semua state di bawah akar dikumpulkan: node, dan tiap Geom di GeomNode.
+    daftar = []
+    for np_ in [akar] + list(akar.findAllMatches('**')):
+        sa = np_.getState().getAttrib(ShaderAttrib)
+        if sa is not None:
+            daftar.append(sa)
+        node = np_.node()
+        if node.isGeomNode():
+            for i in range(node.getNumGeoms()):
+                sa = node.getGeomState(i).getAttrib(ShaderAttrib)
+                if sa is not None:
+                    daftar.append(sa)
+    if not daftar:
+        return ('ubin lebur tidak membawa ShaderAttrib di mana pun -- cek '
+                'uniform beku jadi buta (struktur _satukan_ubin berubah?)')
+    kosong = ShaderInput.get_blank()
+    beku = []
+    for nama in re.findall(r'^\s*uniform\s+\w+\s+(\w+)\s*;', _FRAG, re.M):
+        if nama.startswith('p3d_'):
+            continue
+        try:
+            di_scene = uscene.getShaderInput(nama) != kosong
+        except Exception:
+            di_scene = False
+        if di_scene and any(sa.get_shader_input(nama) != kosong for sa in daftar):
+            beku.append(nama)
+    if beku:
+        return (f'ubin lebur menyimpan salinan beku uniform global {beku} — '
+                f'daftarkan di smooth_shader._UNIFORM_GLOBAL_AWAL')
+    return None
+
+
 def cek_cahaya_global(g, base, tmp: Path):
     """Uniform cahaya di `scene` harus benar-benar turun ke seluruh dunia.
 
@@ -950,6 +1047,10 @@ def cek_cahaya_global(g, base, tmp: Path):
             uscene.set_shader_input('sm_ambient', Vec3(0.02, 0.02, 0.03))
             uscene.set_shader_input('sm_sun_color', Vec3(0.05, 0.05, 0.10))
             b = tembak('_cahaya_b.png')
+            # Tembakan ketiga: NOL persis. Dipakai _cahaya_lantai() di bawah.
+            uscene.set_shader_input('sm_ambient', Vec3(0, 0, 0))
+            uscene.set_shader_input('sm_sun_color', Vec3(0, 0, 0))
+            c = tembak('_cahaya_c.png')
     finally:
         # Kembalikan seperti semula lewat jalur yang dipakai game sendiri,
         # supaya pemeriksaan berikutnya tidak menilai dunia yang kita gelapkan.
@@ -961,7 +1062,7 @@ def cek_cahaya_global(g, base, tmp: Path):
         for _ in range(2):
             base.taskMgr.step()
 
-    if a is None or b is None:
+    if a is None or b is None or c is None:
         return _fail('tidak ada tangkapan layar')
     ra, rb = rerata(a), rerata(b)
     turun = sum(ra) - sum(rb)
@@ -969,6 +1070,13 @@ def cek_cahaya_global(g, base, tmp: Path):
         return _fail(f'cahaya scene tidak sampai ke dunia — layar cuma turun '
                      f'{turun:.1f} saat ambient dipaksa gelap '
                      f'({tuple(round(v) for v in ra)} -> {tuple(round(v) for v in rb)})')
+
+    gagal_lantai = _cahaya_lantai(a, c)
+    if gagal_lantai:
+        return _fail(gagal_lantai)
+    gagal_beku = _cahaya_beku_di_ubin(g, uscene)
+    if gagal_beku:
+        return _fail(gagal_beku)
 
     # Separuh struktural, untuk permukaan yang terlalu kecil di layar untuk
     # menggeser rata-rata. Rumput pernah memakai fragmen satu baris —

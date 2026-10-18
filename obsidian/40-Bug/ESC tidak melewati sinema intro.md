@@ -26,6 +26,15 @@ pembanding lama Majelis Batin di scratchpad (dicapai lewat ESC).
 Sesudah: `sinema.aktif` False, 0 UI sinema, `'datang'` tercatat selesai,
 mode `'hud'`.
 
+Akibat ikutan yang lebih besar: karena `sinema.aktif` tertinggal True,
+`Sinema.mulai()` menolak SEMUA sinema berikutnya. Diukur di
+`tools/probe_lima_menit.py` (yang melewati intro dengan ESC): sampai panen
+pertama `sinema_selesai = []` dan `'datang'` masih aktif; sesudah perbaikan
+`['datang', 'panen_pertama']`. Pemain yang menekan ESC di intro tidak pernah
+melihat satu sinema pun lagi. Sinema `panen_pertama` (tahap quest 2) kini
+benar-benar main -- dan menelan [T] di probe lima menit, yang karena itu kini
+menonton sinema dengan SPACE sebelum menekan tombol tutorial (seperti pemain).
+
 ## Perbaikan
 
 ESC saat `mode == 'sinema'` dan `sinema.aktif` diserahkan ke

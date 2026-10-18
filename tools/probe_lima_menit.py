@@ -73,6 +73,20 @@ def jawab_modal_batin(g):
     return None
 
 
+def tonton_sinema(g):
+    """Sinema yang terpicu di tengah jalan (mis. 'panen_pertama' pada tahap
+    quest 2, tepat saat pemain berjalan ke kasur) menelan tombol berikutnya.
+    Pemain melihatnya dan menekan SPACE sampai selesai; probe juga. Dulu ini
+    tidak pernah terjadi di probe: ESC di sinema intro meninggalkan
+    `sinema.aktif` True selamanya, jadi sinema berikutnya tidak bisa mulai."""
+    for _ in range(200):
+        if not g.sinema.aktif:
+            return
+        if g.sinema._menunggu:
+            g.input('space')
+        langkah(2)
+
+
 def ke_hud(g):
     """Tutup apa pun yang terbuka (dialog, sinema) seperti pemain: escape."""
     for _ in range(6):
@@ -144,6 +158,7 @@ def uji(g):
         bd = next((x, y) for y, r in enumerate(SCENES['house'].tiles)
                   for x, v in enumerate(r) if v == BD)
         jalan(g, 'house', bd[0], bd[1], 'down')
+        tonton_sinema(g)
         t = tombol_petunjuk(s) or 't'
         d0 = s.day
         g.input(t)

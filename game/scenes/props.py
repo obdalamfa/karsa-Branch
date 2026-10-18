@@ -645,15 +645,22 @@ def scatter_obj_props(world, scene, specs, count, seed=0, avoid=2, floor=None):
     """Sebar model .obj di tile lantai kosong yang walkable & jauh dari portal.
 
     specs : list (model_name, scale). Penempatan deterministik (LCG) supaya
-            konsisten tiap boot & tak menimpa portal/jalur. Aman: kalau model
-            tak ada atau tak ada tile kosong, fungsi diam saja.
+            konsisten tiap boot & tak menimpa portal/jalur. Model yang tak
+            ada dilewati DENGAN log error; tak ada tile kosong = diam saja.
     floor : tile (atau tuple tile) yang dianggap lantai kosong; default G (rumput).
             Scene berlantai lain (mis. kuburan = D) cukup oper floor=D.
     """
     from game.config import TILE_SIZE as _TS, GROUND_H as _GH, G as _G
+    import logging
     try:
         from game.entities import make_obj_entity
-    except Exception:
+    except Exception as e:
+        # Dulu `except: return` diam-diam. `make_obj_entity` hilang di merge
+        # 5683e79 dan lake/cemetery tampil tanpa satu pun model sebaran
+        # selama sebulan, tanpa satu baris log. Kegagalan ini harus berisik.
+        logging.error('scatter_obj_props: make_obj_entity tidak bisa diimpor '
+                      '(%s); %d model sebaran %s di %s TIDAK dipasang',
+                      e, count, [n for n, _ in specs], getattr(scene, 'name', '?'))
         return
     allowed = (floor,) if (floor is not None and not isinstance(floor, (tuple, list, set))) \
         else (tuple(floor) if floor is not None else (_G,))
@@ -671,6 +678,7 @@ def scatter_obj_props(world, scene, specs, count, seed=0, avoid=2, floor=None):
     placed = 0
     i = seed * 7 + 3
     used = set()
+    hilang = set()
     guard = 0
     while placed < count and guard < count * 40:
         guard += 1
@@ -684,4 +692,8 @@ def scatter_obj_props(world, scene, specs, count, seed=0, avoid=2, floor=None):
         e = make_obj_entity(name, (tx * _TS, _GH, ty * _TS), scale=sc, rot_y=i % 360)
         if e is not None:
             world._obj_ents.append(e)
+        elif name not in hilang:
+            hilang.add(name)
+            logging.error('scatter_obj_props: model %r tidak ada; sebarannya di %s '
+                          'dilewati', name, getattr(scene, 'name', '?'))
 

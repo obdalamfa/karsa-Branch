@@ -36,6 +36,7 @@ from .panels import UIManager
 from .sky import SkyDome
 from .chargen import ChargenScreen
 from . import grass_shader as _grass
+from . import cahaya as _cahaya
 from .config import (SCREEN_W, SCREEN_H, CAM_LERP, TILE_SIZE,
                      CAM_TARGET_LIFT, CAM_DIST_MIN, CAM_DIST_MAX, INGAME_MINUTES_PER_REAL_SECOND, FORCE_SLEEP_HOUR,
                      NEED_MAX, NEED_CRITICAL, NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG)
@@ -172,7 +173,9 @@ class Game3D:
         
         # Pencahayaan — arah lebih datar agar detail karakter chibi terlihat
         self.sun = DirectionalLight(shadows=False)
-        self.sun.look_at(Vec3(-1, -1.5, -0.8))
+        # Arahnya SAMA dengan sm_sun_dir yang dulu dikode mati di
+        # _sync_smooth_lighting; sekarang fragmen membaca arah dari lampu ini.
+        self.sun.look_at(_cahaya.ARAH_AWAL)
         # Ambient hangat: cream kekuningan (Animal Crossing golden hour feel)
         self.ambient = AmbientLight(color=color.rgb(95, 90, 78, 255))
 
@@ -579,55 +582,19 @@ class Game3D:
             # is_indoor sudah dihitung di atas
             is_raining = (self.state.weather in ('Hujan', 'Badai')) and not is_indoor
 
-            if is_indoor:
-                # Indoor: lampu hangat yang cukup terang (cave/rumah tidak gelap total)
-                target_sun   = color.rgb(60, 55, 45, 255)
-                target_amb   = color.rgb(190, 180, 200, 255)
-                target_sky   = color.rgb(20, 15, 25)
-                target_cloud = color.rgb(0, 0, 0, 0)
-            else:
-                # ambient + sun ≤ 100% supaya warna tidak overflow jadi putih.
-                # ambient max 70, sun max 185 (70/255 + 185/255 = 1,00; di
-                # floor dot≈0.82 jadi ≈87%).
-                #
-                # Batas itu SUDAH tertulis di sini sejak lama, dan nilainya di
-                # bawah melanggarnya: siang memakai sun 255 dan ambient 95,
-                # jumlahnya 1,373. Akibatnya terukur — apa pun di atas 186 dari
-                # 255 pasti terpotong jadi putih. Kulit bawaan "Cerah"
-                # (255,225,180) jadi bidang putih rata tanpa satu pun detail
-                # wajah tersisa, dan dinding rumah krem (248,235,200) ikut.
-                # Nisbah warnanya dipertahankan persis, cuma skalanya diturunkan
-                # ke batas yang komentarnya sendiri sebutkan.
-                if 6 <= hour < 17:
-                    # Siang: sinar matahari hangat keemasan (Animal Crossing golden feel)
-                    target_sun = color.rgb(185, 180, 156) if not is_raining else color.rgb(145, 145, 158)
-                    target_amb = color.rgb(70, 66, 57, 255) if not is_raining else color.rgb(62, 62, 72, 255)
-                    target_sky = color.rgb(128, 205, 248) if not is_raining else color.rgb(88, 98, 115)
-                    target_cloud = color.rgb(248, 248, 255, 175) if not is_raining else color.rgb(145, 148, 162, 215)
-                elif 17 <= hour < 19:
-                    # Senja: oranye kemerahan lembut
-                    # Senja ikut diturunkan dengan alasan yang sama: 255+88 =
-                    # 343 di kanal merah, jauh di atas batas.
-                    target_sun = color.rgb(185, 118, 52) if not is_raining else color.rgb(148, 95, 72)
-                    target_amb = color.rgb(70, 44, 36, 255) if not is_raining else color.rgb(55, 38, 35, 255)
-                    target_sky = color.rgb(248, 138, 88) if not is_raining else color.rgb(115, 82, 82)
-                    target_cloud = color.rgb(255, 195, 148, 145) if not is_raining else color.rgb(135, 108, 102, 195)
-                else:
-                    # Malam: biru rembulan. Angka lamanya (35,48,92 / 28,28,52)
-                    # ditulis dengan komentar "bukan hitam total" — dan memang
-                    # tidak pernah terbukti salah, karena sampai sekarang
-                    # cahaya adegan TIDAK PERNAH sampai ke satu entitas pun.
-                    # Begitu jalurnya dibuka, terukur: rumput jatuh ke
-                    # 21,29,8 pada 22:00 dan hewannya nyaris tidak terlihat.
-                    # Malam harus redup, bukan buta.
-                    target_sun   = color.rgb(62, 82, 140)
-                    target_amb   = color.rgb(54, 58, 95, 255)
-                    target_sky   = color.rgb(18, 12, 42)
-                    target_cloud = color.rgb(45, 45, 72, 75)
-            
-            self.sun.color = lerp(self.sun.color, target_sun, dt)
-            self.ambient.color = lerp(self.ambient.color, target_amb, dt)
-            window.color = lerp(window.color, target_sky, dt)
+            # Tabelnya satu, di game/cahaya.py -- dipakai juga oleh _init_env(),
+            # supaya frame pertama sesudah ganti scene tidak memakai angka lain.
+            target_sun, target_amb, target_sky, target_cloud = _cahaya.target_cahaya(
+                hour, is_indoor, is_raining)
+
+            # Faktor lerp dijepit ke 1: frame pertama sesudah memuat scene
+            # membawa dt > 1 detik, dan lerp tanpa jepit MELEWATI targetnya
+            # (terukur: sun+amb merah 1,33 -> 0,91 padahal targetnya 1,00, lalu
+            # merangkak naik ~30 frame).
+            k_cahaya = min(1.0, dt)
+            self.sun.color = lerp(self.sun.color, target_sun, k_cahaya)
+            self.ambient.color = lerp(self.ambient.color, target_amb, k_cahaya)
+            window.color = lerp(window.color, target_sky, k_cahaya)
 
             # Dua baris di atas mengubah lampu Panda, dan smooth_shader sama
             # sekali tidak membacanya — ia membaca sm_sun_color/sm_ambient.
@@ -664,7 +631,7 @@ class Game3D:
 
             # Animasi awan melayang dan transisi warnanya
             for cloud in self.clouds:
-                cloud.color = lerp(cloud.color, target_cloud, dt)
+                cloud.color = lerp(cloud.color, target_cloud, k_cahaya)
                 cloud.x += 1.2 * dt
                 if cloud.x > 70:
                     cloud.x = -20
@@ -1066,28 +1033,12 @@ class Game3D:
         hour     = (s.time_minutes / 60.0) % 24.0
         is_indoor= self.world.scene_obj.indoor if self.world.scene_obj else False
 
-        if is_indoor:
-            # Indoor: lampu hangat yang cukup terang supaya scene tidak gelap total
-            sun_col   = color.rgb(60, 55, 45, 255)
-            amb_col   = color.rgb(190, 180, 200, 255)
-            sky_col   = color.rgb(20, 15, 25)
-            cloud_col = color.rgb(0, 0, 0, 0)
-        elif 6 <= hour < 17:
-            sun_col   = color.rgb(255, 248, 215)
-            amb_col   = color.rgb(95, 90, 78, 255)
-            sky_col   = color.rgb(128, 205, 248)
-            cloud_col = color.rgb(248, 248, 255, 175)
-        elif 17 <= hour < 19:
-            sun_col   = color.rgb(255, 162, 72)
-            amb_col   = color.rgb(88, 55, 45, 255)
-            sky_col   = color.rgb(248, 138, 88)
-            cloud_col = color.rgb(255, 195, 148, 145)
-        else:
-            # Sama dengan blok transisi di update() — dua tempat, satu angka.
-            sun_col   = color.rgb(62, 82, 140)
-            amb_col   = color.rgb(54, 58, 95, 255)
-            sky_col   = color.rgb(18, 12, 42)
-            cloud_col = color.rgb(45, 45, 72, 75)
+        is_raining = (s.weather in ('Hujan', 'Badai')) and not is_indoor
+        # Tabel yang SAMA dengan target lerp di update() (game/cahaya.py).
+        # Dulu di sini tertulis angka sendiri yang 33% lebih terang, jadi tiap
+        # ganti scene dunia melonjak lalu meredup selama beberapa detik.
+        sun_col, amb_col, sky_col, cloud_col = _cahaya.target_cahaya(
+            hour, is_indoor, is_raining)
 
         self.sun.color     = sun_col
         self.ambient.color = amb_col
@@ -1271,8 +1222,11 @@ class Game3D:
                                    Vec3(sun_c.x, sun_c.y, sun_c.z))
             scene.set_shader_input('sm_ambient',
                                    Vec3(amb_c.x, amb_c.y, amb_c.z))
-            # Sun direction mengikuti DirectionalLight (arah look_at)
-            scene.set_shader_input('sm_sun_dir', Vec3(-0.5, -0.8, -0.4))
+            # Arah dibaca dari node DirectionalLight itu sendiri. Dulu konstanta
+            # (-0.5,-0.8,-0.4) dikode mati di sini sementara lampunya menatap
+            # (-1,-1.5,-0.8): dua arah untuk satu matahari, dan kamera bayangan
+            # memakai arah lampu, bukan konstanta ini.
+            scene.set_shader_input('sm_sun_dir', _cahaya.arah_lampu(self.sun))
         except Exception:
             pass
 

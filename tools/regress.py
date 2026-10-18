@@ -23,6 +23,8 @@ bukan pada kemungkinan yang dikarang:
   model_tegak    heuristik orientasi merebahkan model Blender yang sudah Y-atas
                  (mercusuar, kurofune, pohon). Tinggi di dunia diadu dengan
                  tinggi di berkas .obj-nya.
+  model_tekstur  tekstur bake pohon Blender ada di model tapi sm_has_tex=0,
+                 jadi 37 kelapa tampil putih polos.
   frame_kosong   "rumah ga muncul" — scene yang dirender jadi langit polos.
   pemain_valid   terjepit permanen di tile yang tidak bisa dijalani.
   motif_waras    mesin motif baru; nilai harus tetap di -100..+100.
@@ -212,10 +214,16 @@ def cek_geom_nol(scene_mod):
 # supaya pemasangan ganda juga ketahuan.
 HARAPAN_MODEL = {
     # Fixture regress menyimpan lighthouse_fixed=False: yang tampil versi rusak.
-    # Sebaran props.SEBARAN_OBJ dibagi bergiliran per spesifikasi.
-    'beach':    {'prop_mercusuar_rusak': 1},
-    'cemetery': {'lantern': 4, 'pagar_bambu': 3},
+    # Pohon dari props.POHON_BLENDER (satu per ubin), sebaran dari
+    # props.SEBARAN_OBJ (dibagi bergiliran per spesifikasi).
+    'beach':    {'prop_mercusuar_rusak': 1, 'pohon_kelapa': 37},
+    'mountain': {'pohon_tropis': 17},
+    'town':     {'pohon_tropis': 5},
+    'cemetery': {'pohon_mati': 8, 'lantern': 4, 'pagar_bambu': 3},
     'lake':     {'lantern': 3, 'prop_peti_sayur': 2, 'prop_jerami': 2},
+    # Farm sengaja tanpa pohon Blender (layar lima menit pertama, patokan
+    # farm_wide); nol di sini menjaga keputusan itu dari perubahan diam-diam.
+    'farm':     {'pohon_tropis': 0, 'pohon_mati': 0},
 }
 
 
@@ -326,6 +334,39 @@ def cek_model_tegak(nama):
     if rebah:
         return _fail(f'{len(rebah)}/{n} model rebah: ' + ', '.join(rebah[:3]))
     return _ok(f'{n} tegak' if n else '')
+
+
+def cek_model_tekstur(nama):
+    """Model Blender yang membawa tekstur bake benar-benar dibaca shader-nya.
+
+    Pernah nyata saat pohon Blender pertama kali dipasang: tekstur .mtl ada di
+    state GeomNode, pemeriksa tekstur hanya membaca state per-geom, dan
+    smooth_shader menerima sm_has_tex=0 -- 37 kelapa di beach tampil PUTIH,
+    tajuk tropis (181,179,163) lawan (99,104,82) setelah tekstur dibaca.
+    """
+    from ursina import scene as uscene
+    salah, n = [], 0
+    for e in uscene.children:
+        m = getattr(e, 'model', None)
+        if m is None or not getattr(e, 'enabled', True):
+            continue
+        try:
+            nm = m.getName()
+            if not nm.endswith('.obj') or not m.findAllTextures().getNumTextures():
+                continue
+        except Exception:
+            continue
+        masukan = getattr(e, '_shader_inputs', {}) or {}
+        if 'sm_has_tex' not in masukan:
+            continue          # bukan smooth_shader (mis. mercusuar unlit): tekstur dibaca sendiri
+        n += 1
+        if masukan.get('sm_has_tex') != 1:
+            salah.append(nm[:-4])
+    if salah:
+        from collections import Counter
+        ring = ', '.join(f'{k}x{v}' for k, v in Counter(salah).most_common(3))
+        return _fail(f'{len(salah)}/{n} model bertekstur dengan sm_has_tex!=1 ({ring})')
+    return _ok(f'{n} bertekstur' if n else '')
 
 
 def cek_palung(g, nama):
@@ -1512,6 +1553,7 @@ def main():
             hasil['model_blender'] = cek_model_blender(nama)
             hasil['palung'] = cek_palung(g, nama)
             hasil['model_tegak'] = cek_model_tegak(nama)
+            hasil['model_tekstur'] = cek_model_tekstur(nama)
             hasil['frame_kosong'] = hasil_frame
             if png.exists():
                 hasil['kanal_jenuh'], jenuh = cek_kanal_jenuh(png)

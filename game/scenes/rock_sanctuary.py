@@ -205,6 +205,11 @@ def build_mountain_landscape(world, scene):
         if e.model and e.scale_x < scene.w*TS*2:
             e.enabled=False
     for e in world._obj_ents:
+        # Pohon Blender (props.pasang_model_prop) berdiri di GROUND_H=0,2 dan
+        # akan ikut dimatikan filter y<0,25 ini tanpa pesan apa pun -- terukur
+        # lewat Game3D: 17 dari 17 pohon_tropis enabled=False.
+        if getattr(e, 'is_pohon', False):
+            continue
         if e.model and (e.y < .25 or (abs(e.z-3*TS)<.01 and any(abs(e.x-x*TS)<.01 for x in (14,15)))):
             e.enabled=False
     _part(world,'cube',((scene.w-1)*TS/2,.1,(scene.h-1)*TS/2),(scene.w*TS,.2,scene.h*TS),(91,120,79))

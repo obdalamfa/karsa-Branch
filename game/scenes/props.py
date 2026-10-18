@@ -586,13 +586,72 @@ def trough_pour_point(world):
 
 
 # ─── MODEL BLENDER ──────────────────────────────────────────────────────────
+# Pohon Blender (build_trees_lighthouse.py) sudah ada di assets/models sejak
+# lama tanpa satu pemanggil pun di game -- aturan #4. Tabel ini yang
+# menyambungkannya: (scene, ubin) -> (model, skala, hanya_dalam).
+# `hanya_dalam` = ubin di tepi peta (baris/kolom pertama dan terakhir) tetap
+# primitif: di cemetery 74 DT keliling itu PAGAR, bukan pohon yang dilihat.
+#
+# Sengaja TIDAK di tabel:
+#   farm (TR 8, DT 6) -- layar lima menit pertama dan patokan farm_wide yang
+#       dinilai buta di gauntlet. Rupa tekstur bake sengaja kusam di sumbernya
+#       (build_trees_lighthouse.py "muted") dan belum lolos kalibrasi rupa
+#       terhadap pohon prosedural; layar pertama tidak dipakai untuk menguji.
+#   lake (TR 15, DT 14) -- pohon tepinya adalah batas peta, dan scene ini
+#       dibiarkan prosedural sebagai pembanding rupa di regresi yang sama
+#       sampai kalibrasi itu diputuskan pemilik.
+POHON_BLENDER = {
+    ('beach', PALM):  ('pohon_kelapa', 1.0, False),
+    ('mountain', TR): ('pohon_tropis', 1.2, False),
+    ('town', TR):     ('pohon_tropis', 1.2, False),
+    ('cemetery', DT): ('pohon_mati',   1.1, True),
+}
+
+
+def model_pohon(scene, tid, tx, ty):
+    """(model, skala, rot_y) pohon Blender untuk ubin ini, atau None (primitif).
+
+    Dipakai pembangun scene DAN replika pohon tumbang (player.py), supaya yang
+    tumbang selalu rupa -- dan arah hadap -- yang sama dengan yang berdiri.
+    rot_y dari posisi ubin supaya sebaris pohon tidak terlihat di-copy.
+    """
+    v = POHON_BLENDER.get((getattr(scene, 'name', ''), tid))
+    if v is None:
+        return None
+    nama, skala, hanya_dalam = v
+    if hanya_dalam and not (0 < tx < scene.w - 1 and 0 < ty < scene.h - 1):
+        return None
+    return nama, skala, (tx * 73 + ty * 151) % 360
+
+
+def pasang_model_prop(world, nama, wx, wz, skala=1.0, rot_y=0.0, tint=None):
+    """Satu model Blender berdiri di (wx, wz), terdaftar di world._obj_ents.
+
+    Pola mercusuar beach.py dan interior._pasang: entity baru dengan salinan
+    model baru (make_obj_entity), dibersihkan _clear() lewat _obj_ents.
+    None kalau modelnya tidak ada -- pemanggil jatuh ke primitif lama.
+    """
+    from game.entities import make_obj_entity
+    tx, ty = int(round(wx / TS)), int(round(wz / TS))
+    y = GROUND_H + world.get_surface_height(tx, ty)
+    e = make_obj_entity(nama, (wx, y, wz), scale=skala, rot_y=rot_y, tint=tint)
+    if e is None:
+        return None
+    # Penanda untuk filter rock_sanctuary yang mematikan semua _obj_ents
+    # ber-y < 0,25 (tambalan tanah lama). Dasar pohon Blender memang di
+    # GROUND_H = 0,2, jadi tanpa ini seluruh pohon mountain hilang diam-diam.
+    e.is_pohon = nama.startswith('pohon_')
+    world._obj_ents.append(e)
+    return e
+
+
 # Sebaran model Blender per scene, dipanggil dari default_prop_builder.
 # Dulu spesifikasi ini ada di cemetery_builder/lake_builder, dan keduanya
 # mati dua lapis: make_obj_entity hilang di merge 5683e79, lalu sejak Fase 3
 # (4a425d3) lake.json/cemetery.json memuat builder 'default' sehingga kedua
 # fungsi itu tidak pernah dipanggil lagi. Di sini ia ikut jalur data.
 # pohon_mati keluar dari sebaran cemetery: pohon mati sekarang lewat ubin DT
-# (tabel pohon per ubin), bukan ditabur acak di atas lantai.
+# (POHON_BLENDER), bukan ditabur acak di atas lantai.
 SEBARAN_OBJ = {
     'cemetery': dict(specs=[('lantern', 2.0), ('pagar_bambu', 1.0)],
                      count=7, seed=47, floor=D),
@@ -621,7 +680,11 @@ def default_prop_builder(world, scene):
             tid = scene.tiles[ty][tx]
             wx, wz = tx * TS, ty * TS
 
-            if tid == TR: build_tree(world, wx, wz)
+            pohon = model_pohon(scene, tid, tx, ty) if tid in (TR, PALM, DT) else None
+            if pohon and pasang_model_prop(world, pohon[0], wx, wz, pohon[1],
+                                           rot_y=pohon[2]) is not None:
+                pass      # model Blender; kalau modelnya hilang, jatuh ke primitif
+            elif tid == TR: build_tree(world, wx, wz)
             elif tid == PALM: build_palm(world, wx, wz)
             elif tid == DT: build_dead_tree(world, wx, wz)
             elif tid == LN: build_lantern(world, wx, wz)

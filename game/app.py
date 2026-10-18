@@ -93,9 +93,31 @@ class Game3D:
         logging.info("Inisialisasi Game Engine 3D (Ursina)...")
         
         # Inisialisasi Ursina Engine (ukuran pas jendela agar tidak offscreen di monitor 1080p)
+        # development_mode=False WAJIB eksplisit. Ursina menyalakannya sendiri
+        # kecuali folder induk aset punya `src` dan `python` (ursina/
+        # application.py), dan repo ini tidak punya keduanya. Dalam mode itu
+        # HotReloader duduk di depan GameHandler dan ikut menerima F5/F6/F9
+        # milik game. Terukur lewat jalur `python main.py` + app.input
+        # (_bench/probes/probe_tombol_f.py):
+        #
+        #   F5 (Simpan)  reload_code: scene.clear(), pemain hancur, main.py
+        #                di-exec ulang -> Game3D KEDUA, dan make_assets menulis
+        #                ulang 64 berkas assets/textures/*.png milik repo
+        #   F9 (Muat)    toggle_hotreloading: ModuleNotFoundError 'Xlib' di
+        #                Linux; save tidak pernah dimuat
+        #
+        # fullscreen=False ikut eksplisit: tanpa dev mode, fullscreen=None
+        # dipaksa jadi True (ursina/main.py). Di Ursina 8.3 itu belum terlihat
+        # karena `size` diberikan (mutasi fullscreen=None tetap 1280x720 di
+        # Xvfb), jadi ini penjaga untuk versi lain, bukan perbaikan terukur.
+        # editor_ui_enabled=True supaya F3 tetap bisa menyalakan fps_counter,
+        # yang anak editor_ui.
         self.app = Ursina(size=(1280, 720),
                           title='Lembah Karsa 3D — v0.10 [Cozy Edition]',
-                          borderless=False)
+                          borderless=False,
+                          development_mode=False,
+                          fullscreen=False,
+                          editor_ui_enabled=True)
         window.center_on_screen()
         window.color = color.rgb(30, 20, 40)
 

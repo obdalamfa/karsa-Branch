@@ -74,6 +74,8 @@ membungkus fungsi `cek_*`, `Player3D.tick`, dan `_check_portals`.
 |---|---|
 | regress.py LAMA, farm, `--lambat=50` | GAGAL 116,9 ms/frame, **689** entity, "yaw270: W menyimpang 157 deg"; log PORTAL farm(25,5)→greenhouse pada tick 225 di dalam `cek_arah_maju` |
 | regress.py BARU, farm, `--lambat=50` | LULUS 121,9 ms/frame, **1179** entity, "W 0:0d/3.0u 135:0d/3.0u 270:0d/3.0u", **0** PORTAL |
+| regress.py BARU, 14 scene, dibungkus probe tanpa perlambatan | 14/14 LULUS, **0** PORTAL (versi lama: 2 PORTAL tersembunyi di naga_cave) |
+| regress.py BARU, larian biasa 14 scene | 14/14 LULUS, 0 pemeriksaan gagal, lima menit 8/8; CI GitHub hijau pada 3cc9aba (2 larian) |
 | BARU + mutasi basis arah (komponen .y untuk .z, di memori) | GAGAL "yaw135: W menyimpang 179 deg (jarak 3.01u); yaw270: W menyimpang 146 deg (jarak 3.06u)" |
 
 ### Uji mutasi

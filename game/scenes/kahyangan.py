@@ -267,30 +267,37 @@ def _petirtaan(world, kolam, pilar):
         pijar(world, 'sphere', (x, GROUND_H + 3.25, z), (0.28, 0.36, 0.28), (255, 220, 140))
 
 
-def _kalpataru(world, x, z, rng):
+def _kalpataru(world, x, z, rng, S=0.75):
+    """Pohon kahyangan. `S` = skala keseluruhan.
+
+    Dulu seluruh tajuknya `pijar` (menyala sendiri, tanpa bayangan): dari
+    kamera ia terbaca sebagai satu gumpalan cahaya rata yang menutupi seperempat
+    layar. Sekarang pohonnya lebih kecil dan gradasi daunnya curam (puncak
+    terang, perut gelap), sehingga terbaca bervolume tanpa jadi gumpalan rata.
+    """
     from game.scenes.fx_suasana import pijar, halo, kolam_cahaya, Partikel
-    _part(world, 'cube', (x, GROUND_H + 0.25, z), (2.2, 0.5, 2.2), BATU)
-    _part(world, 'cube', (x, GROUND_H + 0.55, z), (1.7, 0.12, 1.7), EMAS)
-    _part(world, 'cylinder', (x, GROUND_H + 1.9, z), (0.42, 2.8, 0.42), (118, 86, 58))
+    _part(world, 'cube', (x, GROUND_H + 0.25, z), (2.2 * S, 0.5, 2.2 * S), BATU)
+    _part(world, 'cube', (x, GROUND_H + 0.55, z), (1.7 * S, 0.12, 1.7 * S), EMAS)
+    _part(world, 'cylinder', (x, GROUND_H + 1.9 * S, z), (0.42 * S, 2.8 * S, 0.42 * S), (118, 86, 58))
     for k in range(3):
         a = k * math.tau / 3
-        _part(world, 'cylinder', (x + math.cos(a) * 0.5, GROUND_H + 3.1, z + math.sin(a) * 0.5),
-              (0.16, 1.4, 0.16), (118, 86, 58), rotation=(math.cos(a) * 35, 0, math.sin(a) * 35))
+        _part(world, 'cylinder', (x + math.cos(a) * 0.5 * S, GROUND_H + 3.1 * S, z + math.sin(a) * 0.5 * S),
+              (0.16 * S, 1.4 * S, 0.16 * S), (118, 86, 58), rotation=(math.cos(a) * 35, 0, math.sin(a) * 35))
     # Tajuk bertingkat seperti gunungan wayang: lebar di bawah, runcing di atas.
-    # Gumpalan luarnya diberi cahaya scene supaya bervolume; inti di dalamnya
-    # menyala sendiri sehingga pohon tetap terbaca bercahaya.
     for k, (r, yy) in enumerate(((2.4, 3.6), (1.9, 4.5), (1.3, 5.3), (0.7, 5.95))):
+        r, yy = r * S, yy * S
         for j in range(5 - k):
             a = j * math.tau / max(1, 5 - k) + k
             ox, oz = math.cos(a) * r * 0.42, math.sin(a) * r * 0.42
-            pijar(world, _gumpal((255, 232 - k * 4, 140 + k * 14), (190, 118 + k * 8, 40)),
+            # Menyala sendiri (cahaya scene memberi pita toon bergaris), tapi
+            # gradasinya curam: puncak terang, perut gelap -> tetap bervolume.
+            pijar(world, _gumpal((246, 220 - k * 4, 128 + k * 12), (122, 82 + k * 6, 30)),
                   (x + ox, GROUND_H + yy, z + oz), (r, r * 0.62, r), (255, 255, 255))
-        pijar(world, 'sphere', (x, GROUND_H + yy, z), (r * 0.9, r * 0.5, r * 0.9),
-              (255, 226, 150))
-    halo(world, (x, GROUND_H + 4.4, z), 4.5, (255, 200, 110), kuat=.16)
-    kolam_cahaya(world, x, z, 5.0, (255, 186, 90), kuat=.26)
-    Partikel(world, x - 3, x + 3, z - 3, z + 3, GROUND_H + 1.0, GROUND_H + 6.5, 22,
-             (255, 214, 120), ukuran=.07, naik=-.25, goyang=.45, seed=int(x + z))
+    pijar(world, 'sphere', (x, GROUND_H + 4.6 * S, z), (1.0 * S, 1.3 * S, 1.0 * S), (255, 222, 140))
+    halo(world, (x, GROUND_H + 4.4 * S, z), 3.0 * S, (255, 200, 110), kuat=.12)
+    kolam_cahaya(world, x, z, 4.0 * S, (255, 186, 90), kuat=.20)
+    Partikel(world, x - 2, x + 2, z - 2, z + 2, GROUND_H + 1.0, GROUND_H + 5.0, 10,
+             (255, 214, 120), ukuran=.06, naik=-.25, goyang=.45, seed=int(x + z))
 
 
 def _pelita(world, x, z):
@@ -433,4 +440,4 @@ def build_kahyangan(world, scene):
             _pelita(world, x * TS, y * TS)
 
     Partikel(world, cx - r * TS, cx + r * TS, cz - r * TS, cz + r * TS, GROUND_H + 0.3,
-             GROUND_H + 7.0, 35, (255, 220, 150), ukuran=.06, naik=.22, goyang=.3, seed=7)
+             GROUND_H + 7.0, 18, (255, 220, 150), ukuran=.06, naik=.22, goyang=.3, seed=7)

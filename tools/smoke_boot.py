@@ -267,36 +267,15 @@ _icon_hits = sum(1 for _it in _icon_set if game.panels._item_icon_tex(_it) is no
 assert _icon_hits >= len(_icon_set) - 1, f"ikon item tak termuat ({_icon_hits}/{len(_icon_set)})"
 print(f"[OK] Ikon item: {_icon_hits}/{len(_icon_set)} PNG termuat sebagai tekstur inventory")
 
-# ── Dressing props obj scene baru (M2): mountain/lake/cemetery ──
-# scatter_obj_props menempatkan model di tile lantai kosong jauh dari portal.
-from game.scenes import props as _props
-import game.entities as _ent
-_orig_lmf = _ent.load_model_file
-_ent.load_model_file = lambda n: 'cube'          # stub: model selalu "ada"
-_props_default = _props.default_prop_builder
-_props.default_prop_builder = lambda world, scene: None  # isolasi scatter
-class _StubW:
-    def __init__(self, scn):
-        self._obj_ents = []; self._tile_ents = []; self._wall_ents = []
-        self.scene_obj = scn
-    def _create_entity(self, *a, **k): return object()
-# `mountain` tidak lagi punya fungsi builder berdiri sendiri sejak digabung
-# dengan rock_sanctuary.build_mountain_landscape (lihat scene.builder di
-# game/scenes/mountain.py) -- builder-nya kini lambda yang sudah menutup
-# `scene`, jadi dipanggil lewat `scene.builder(world)`, bukan diimpor nama.
-from game.scenes.mountain import build_mountain
-from game.scenes.lake import lake_builder, build_lake
-from game.scenes.cemetery import cemetery_builder, build_cemetery
-_mountain_scene = build_mountain()
-for _nm, _bld, _scn in (('mountain', _mountain_scene.builder, _mountain_scene),
-                         ('lake', lake_builder, build_lake()),
-                         ('cemetery', cemetery_builder, build_cemetery())):
-    _w = _StubW(_scn)
-    _bld(_w)
-    assert len(_w._obj_ents) >= 8, f"dressing {_nm} terlalu sedikit ({len(_w._obj_ents)})"
-    print(f"[OK] Dressing {_nm}: scatter menempatkan {len(_w._obj_ents)} props")
-_ent.load_model_file = _orig_lmf
-_props.default_prop_builder = _props_default
+# ── Dressing props obj scene baru (M2) ── dipindah ke tools/regress.py ──
+# Blok ini dulu menyetub load_model_file lalu memanggil builder mountain/lake/
+# cemetery langsung dan menuntut >= 8 props. Dua cacatnya: (1) smoke_boot
+# tidak dijalankan CI (.github/workflows/regresi.yml hanya regress.py), jadi
+# ketika `make_obj_entity` hilang di merge 5683e79 dan scatter jadi no-op,
+# penjaga ini tidak pernah bersuara; (2) mountain sudah tidak memanggil
+# scatter sama sekali dan lolos karena entity rock_sanctuary. Gantinya:
+# `cek_model_blender` di regress.py, yang menghitung model per nama lewat
+# jalur Game3D (scene diganti seperti pemain), bukan builder yang distub.
 
 # ── S1 Motif Sims: 5 motif + peluruhan + kecelakaan kandung + HUD 5 bar ──
 _s = game.state

@@ -13,6 +13,11 @@ bukan pada kemungkinan yang dikarang:
                  hanya boleh punya SATU parent; mesh cache yang diberikan ke
                  banyak Entity membuat semua kecuali yang TERAKHIR kehilangan
                  geometri. Terjadi DUA KALI: di meshes.py dan di entities.py.
+                 Model juga harus tergantung di bawah entity-nya sendiri:
+                 versi lama lolos saat satu hasil load_model_file dibagi dua.
+  model_blender  model Blender yang dipanggil builder scene tidak pernah tampil
+                 karena fungsinya hilang dan kegagalannya ditelan (aturan #4).
+                 Dihitung per nama model dari entity yang enabled.
   frame_kosong   "rumah ga muncul" — scene yang dirender jadi langit polos.
   pemain_valid   terjepit permanen di tile yang tidak bisa dijalani.
   motif_waras    mesin motif baru; nilai harus tetap di -100..+100.
@@ -164,7 +169,16 @@ def _ok(msg=''):
 # ─── PEMERIKSAAN ─────────────────────────────────────────
 
 def cek_geom_nol(scene_mod):
-    """Entity yang punya model tapi nol GeomNode = korban NodePath-bersama."""
+    """Entity yang punya model tapi nol GeomNode = korban NodePath-bersama.
+
+    Versi lama hanya menghitung GeomNode di `e.model`, dan itu buta terhadap
+    bentuk bug yang paling mungkin: satu hasil `load_model_file` dipasang ke
+    DUA entity. Setter Ursina me-reparent model ke entity kedua, jadi `A.model`
+    masih menunjuk ke NodePath yang utuh (1 GeomNode) sementara subtree A
+    sendiri kosong dan A tidak menggambar apa pun. Terukur lewat Game3D di
+    cemetery: korban 0, cek LOLOS. Sekarang model juga harus benar-benar
+    tergantung di bawah entity pemiliknya.
+    """
     from ursina import scene as uscene
     korban = []
     for e in uscene.children:
@@ -172,10 +186,11 @@ def cek_geom_nol(scene_mod):
         if m is None:
             continue
         try:
-            n = len(m.findAllMatches('**/+GeomNode'))
+            dicuri = m.isEmpty() or m.getParent() != e
+            n = 0 if m.isEmpty() else len(m.findAllMatches('**/+GeomNode'))
         except Exception:
             continue
-        if n == 0:
+        if n == 0 or dicuri:
             nama = getattr(e, 'name', None) or type(e).__name__
             korban.append(nama)
     if korban:
@@ -183,6 +198,57 @@ def cek_geom_nol(scene_mod):
         ring = ', '.join(f'{k}x{v}' for k, v in Counter(korban).most_common(4))
         return _fail(f'{len(korban)} entity tanpa geometri ({ring})')
     return _ok()
+
+
+# Model Blender (assets/models/<nama>.obj) yang HARUS tampil di tiap scene, dan
+# berapa banyak. Dihitung dari entity yang enabled dan modelnya benar-benar
+# tergantung di bawahnya -- yang dimatikan diam-diam (filter rock_sanctuary)
+# atau dicuri entity lain tidak dihitung. Angkanya persis, bukan "minimal",
+# supaya pemasangan ganda juga ketahuan.
+HARAPAN_MODEL = {
+    # Fixture regress menyimpan lighthouse_fixed=False: yang tampil versi rusak.
+    'beach': {'prop_mercusuar_rusak': 1},
+}
+
+
+def hitung_model_blender():
+    """Counter nama model .obj -> jumlah entity enabled yang menggambarnya."""
+    from collections import Counter
+    from ursina import scene as uscene
+    hitung = Counter()
+    for e in uscene.children:
+        m = getattr(e, 'model', None)
+        if m is None or not getattr(e, 'enabled', True):
+            continue
+        try:
+            if m.isEmpty() or m.getParent() != e:
+                continue
+            nm = m.getName()
+        except Exception:
+            continue
+        if nm.endswith('.obj'):
+            hitung[nm[:-4]] += 1
+    return hitung
+
+
+def cek_model_blender(nama):
+    """Model Blender yang dipanggil builder scene benar-benar sampai ke layar.
+
+    Aturan #4 menimpa alat ujinya sendiri: `scatter_obj_props` meng-import
+    `make_obj_entity` yang hilang di merge 5683e79, kegagalannya ditelan
+    `except: return`, dan penjaganya -- cek "dressing >= 8" di
+    tools/smoke_boot.py -- tidak pernah dijalankan CI. Lake dan cemetery tampil
+    tanpa satu pun model sebaran sejak itu, tanpa error apa pun. Cek ini lewat
+    jalur Game3D (scene diganti seperti pemain), bukan memanggil builder.
+    """
+    hitung = hitung_model_blender()
+    harap = HARAPAN_MODEL.get(nama, {})
+    salah = [f'{m} {hitung.get(m, 0)}/{n}' for m, n in sorted(harap.items())
+             if hitung.get(m, 0) != n]
+    if salah:
+        return _fail('jumlah model salah (ada/harap): ' + ', '.join(salah))
+    ring = ', '.join(f'{m}x{n}' for m, n in sorted(harap.items()))
+    return _ok(ring or f'{sum(hitung.values())} model .obj, tanpa harapan')
 
 
 def cek_frame_kosong(png: Path):
@@ -1343,6 +1409,7 @@ def main():
             hasil['hud_terbaca'] = cek_hud_terbaca(g, png) if png.exists() \
                 else _fail('tidak ada tangkapan layar')
             hasil['geom_nol'] = cek_geom_nol(nama)
+            hasil['model_blender'] = cek_model_blender(nama)
             hasil['frame_kosong'] = hasil_frame
             if png.exists():
                 hasil['kanal_jenuh'], jenuh = cek_kanal_jenuh(png)

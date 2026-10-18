@@ -117,6 +117,23 @@ def _entity_cakram(parent, verts, cols, tris, **kw):
     e = Entity(parent=parent, model=Mesh(vertices=verts, triangles=tris,
                                          colors=cols, static=True),
                color=color.white, shader=None, double_sided=True, **kw)
+    # JANGAN biarkan shader=None di pipeline GL. Tanpa shader, cakram
+    # digambar fixed-function tanpa TextureAttrib dan mencicip tekstur yang
+    # terakhir terikat: di tangkapan capture.py kaki pemain berdiri di lajur
+    # papan kayu dan pangkal pohon jadi kotak rumput hijau (terukur +14
+    # per kanal; _bench/probes/probe_cakram_capture.py). unlit_shader Ursina
+    # mengalikan warna vertex dengan tekstur putih bawaan Panda. D3D9 tidak
+    # punya GLSL: di sana teksturnya dimatikan eksplisit.
+    try:
+        from .smooth_shader import _is_opengl_pipeline
+        gl = _is_opengl_pipeline()
+    except Exception:
+        gl = False
+    if gl:
+        from ursina.shaders import unlit_shader
+        e.shader = unlit_shader
+    else:
+        e.setTextureOff(1)
     e.setTransparency(TransparencyAttrib.M_alpha)
     # Tidak menulis kedalaman: cakram yang bertumpuk (pohon berdempetan)
     # saling menggelapkan, bukan saling memotong dengan tepi tajam.

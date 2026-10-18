@@ -1044,6 +1044,13 @@ class Game3D:
             # frame — sinema tidak pernah bisa jalan satu beat pun. Penjaganya
             # benar; mode barunya yang lupa didaftarkan.
             yatim = not getattr(getattr(self, 'sinema', None), 'aktif', False)
+        elif mode == 'buy':
+            # Bangun/Beli ([L]) dimiliki entity-nya sendiri. Tanpa baris ini
+            # mode kembali ke HUD satu frame setelah [L] (diukur,
+            # _bench/probes/probe_buy_sinema.py), panelnya tertinggal di layar
+            # dan W/S menggerakkan pemain, bukan pilihan katalog.
+            yatim = not any(getattr(e, 'enabled', False)
+                            for e in getattr(p, '_buy_ents', None) or [])
         elif mode == 'batin':
             # Modal Majelis Batin dimiliki entity-nya sendiri (_bc_ents).
             # Tanpa baris ini modal PAGI PERTAMA dipulihkan ke HUD satu frame

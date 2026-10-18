@@ -2967,6 +2967,9 @@ class UIManager:
         # pernah tercapai. Tanpa baris ini entity modal tertinggal di layar.
         if getattr(self, '_bc_ents', None):
             self._close_batin_check()
+        # Bangun/Beli: sama, ESC milik buy_input tidak pernah tercapai.
+        for e in getattr(self, '_buy_ents', None) or []:
+            e.enabled = False
         self._set_dialog_visible(False)
         self._set_panel_visible(False)
         self.close_pie()

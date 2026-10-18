@@ -91,3 +91,11 @@ sendiri, bukan satu slot.
 > sudah termasuk baris "lima menit") **hijau, dua larian**. Kegagalan farm
 > hanya muncul di mesin sesi cloud yang lambat. Dugaan kuat: lingkungan,
 > tapi sebabnya tetap belum diukur.
+>
+> **Ditutup 18 Okt — sebab TERUKUR, bug alat ukur:** di ~115 ms/frame, W 40
+> frame dengan tabrakan mati membawa pemain farm ~11 u, menembus portal
+> greenhouse (25,5) yang berjarak 11,0 u; sisa pemeriksaan farm mengukur
+> greenhouse (689 entity; 26,00 u / 157° = lompatan ke tujuan portal).
+> Direproduksi dengan `_bench/probes/probe_regress_lambat.py --lambat=50`,
+> diperbaiki di 294f869 (berhenti di 3 u + jaring `scene_tetap`). Lihat
+> [[arah_maju terlempar portal di mesin lambat]].

@@ -110,3 +110,67 @@ def arah_lampu(sun) -> Vec3:
     except Exception:
         pass
     return ARAH_AWAL.normalized()
+
+
+# ─── Arah matahari per jam ───────────────────────────────────────────────
+# Azimut DIPILIH DENGAN PROBE (_bench/probes/probe_arah_matahari.py, farm jam
+# 10, kubus putih kalibrasi, kamera bawaan yaw 0 di -z menatap +z). Arah lama
+# (-0,5,-0,8,-0,4) membuat muka yang menghadap kamera -- wajah karakter --
+# jatuh di pita tergelap (L 138) DAN, di kanan layar, sisi yang tampak juga
+# di pita yang sama (beda L antar muka tampak 1,2: bentuk tidak terbaca).
+#
+#   arah (azimut rambat)      depan  beda_min kanan/kiri  bayangan tampak
+#   lama (~231)               138    1,2 / 4,2            7463 px
+#   180 (dari balik benda)    138    34,9 / 34,3          6672 px
+#   270 (dari samping +x)     187    36,1 / 4,2           5430 px (el 48)
+#
+# Dipilih ~265: wajah naik ke pita tengah (L 138 -> 187), bayangan jatuh ke
+# samping dan sedikit ke arah kamera sehingga tetap terlihat. KOMPROMINYA:
+# benda di KIRI layar menunjukkan sisi tersinar yang sepita dengan muka
+# atasnya (beda 4) -- pada cel tiga pita, cahaya samping mana pun memberi
+# itu di satu sisi layar. Arah 180 membaca bentuk di kedua sisi tapi
+# menahan wajah di pita gelap; wajah dimenangkan.
+AZIMUT_RAMBAT = 265.0
+
+# Elevasi (derajat) per jam, dirangkai linear. Senja 17-19 rendah supaya
+# bayangan memanjang seperti patokan evening_light; malam memakai "bulan"
+# setinggi 40.
+_ELEVASI = ((0.0, 40.0), (5.0, 40.0), (6.0, 16.0), (9.0, 46.0), (15.0, 48.0),
+            (17.0, 26.0), (18.5, 18.0), (19.0, 40.0), (24.0, 40.0))
+
+
+def elevasi_matahari(hour: float) -> float:
+    h = hour % 24.0
+    for (h0, e0), (h1, e1) in zip(_ELEVASI, _ELEVASI[1:]):
+        if h0 <= h <= h1:
+            t = 0.0 if h1 == h0 else (h - h0) / (h1 - h0)
+            return e0 + (e1 - e0) * t
+    return 40.0
+
+
+def arah_matahari(hour: float) -> Vec3:
+    """Arah RAMBAT sinar matahari (dunia, ternormalisasi) untuk jam ini."""
+    import math
+    a = math.radians(AZIMUT_RAMBAT)
+    e = math.radians(elevasi_matahari(hour))
+    return Vec3(math.sin(a) * math.cos(e), -math.sin(e),
+                math.cos(a) * math.cos(e)).normalized()
+
+
+def arahkan_matahari(sun, hour: float, paksa: bool = False) -> bool:
+    """Arahkan node DirectionalLight ke arah jam ini.
+
+    Cuma kalau bergeser > 1,5 derajat (atau `paksa`): arah yang berubah tiap
+    frame membuat bayangan jatuhan "berenang" dan memaksa shadow map digambar
+    ulang tanpa perlu. True kalau arah diubah.
+    """
+    baru = arah_matahari(hour)
+    if not paksa:
+        lama = arah_lampu(sun)
+        if lama.dot(baru) > 0.99966:          # cos 1,5 derajat
+            return False
+    try:
+        sun.look_at(sun.world_position + baru)
+    except Exception:
+        return False
+    return True

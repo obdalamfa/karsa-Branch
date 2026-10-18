@@ -592,6 +592,8 @@ class Game3D:
             # (terukur: sun+amb merah 1,33 -> 0,91 padahal targetnya 1,00, lalu
             # merangkak naik ~30 frame).
             k_cahaya = min(1.0, dt)
+            # Arah matahari ikut jam (senja rendah), diubah per >1,5 derajat.
+            _cahaya.arahkan_matahari(self.sun, hour)
             self.sun.color = lerp(self.sun.color, target_sun, k_cahaya)
             self.ambient.color = lerp(self.ambient.color, target_amb, k_cahaya)
             window.color = lerp(window.color, target_sky, k_cahaya)
@@ -1042,6 +1044,7 @@ class Game3D:
 
         self.sun.color     = sun_col
         self.ambient.color = amb_col
+        _cahaya.arahkan_matahari(self.sun, hour, paksa=True)
         self._sync_smooth_lighting()
         window.color       = sky_col
         if not getattr(self, '_use_unlit_sh', True):

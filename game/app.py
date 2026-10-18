@@ -756,6 +756,15 @@ class Game3D:
         # Itu sebab laporan pemilik "jalan saja tidak bisa".
         #
         # Chargen dikecualikan: ia memang layar wajib sebelum main.
+        # ESC saat sinema = '[ESC] lewati' yang tertulis di layarnya. Jaring di
+        # bawah dulu menangkapnya lebih dulu: mode jadi 'hud', tapi sinema.aktif
+        # tetap True dan UI sinema tertinggal di layar (diukur,
+        # _bench/probes/probe_buy_sinema.py). Serahkan ke runner sinema, yang
+        # juga memberi beat lore yang terlewat.
+        if (key == 'escape' and self.panels.mode == 'sinema'
+                and getattr(getattr(self, 'sinema', None), 'aktif', False)):
+            self.sinema.input(key)
+            return
         if key == 'escape' and self.panels.mode not in ('hud', 'chargen'):
             try:
                 self.panels.close_all()

@@ -320,12 +320,13 @@ class Player3D(Entity):
         # salah, dan ia sudah begitu sejak lama. Ketinggiannya sekarang
         # dikunci ke permukaan tiap frame di tick(), karena pemain berpindah
         # scene dan tidak selalu berdiri di ketinggian yang sama.
-        self._shadow = Entity(parent=p, model='quad',
-                              position=Vec3(0, 0.02, 0),
-                              rotation=(90, 0, 0),
-                              scale=(0.98, 0.98, 1),
-                              color=color.rgba(0, 0, 0, 120),
-                              shader=None)
+        #
+        # Bentuknya cakram berbulu (game/bayangan.py), bukan lagi quad persegi
+        # ber-alpha rata yang di layar terbaca sebagai ubin hitam bertepi
+        # keras di bawah kaki. Mesh dibuat baru untuk entity ini (aturan #3).
+        from .bayangan import cakram_kontak
+        self._shadow = cakram_kontak(p, 1.10, 1.00, alpha=0.55,
+                                     position=Vec3(0, 0.02, 0))
 
         self._is_vitaboy = True
         self._va = None

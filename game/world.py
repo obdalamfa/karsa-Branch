@@ -497,6 +497,7 @@ class World3D:
             self.scene_obj.builder(self)
         self._build_objects()
         self._pasang_penanda_pintu()
+        self._pasang_bayangan_statis()
         self._satukan_ubin()
         self._lepas_dari_loop_ursina()
 
@@ -549,6 +550,18 @@ class World3D:
                         e = _pasang(self, nama, tx * TS, ty * TS, rot)
                         if e is not None:
                             self._penanda.append((nama, e))
+
+    def _pasang_bayangan_statis(self):
+        """Cakram/rok bayangan kontak di kaki benda statis (game/bayangan.py)."""
+        try:
+            from .bayangan import bangun_bayangan_statis
+            e = bangun_bayangan_statis(self)
+        except Exception as ex:
+            print(f'[bayangan] statis gagal: {ex}')
+            e = None
+        self._bayangan_statis = e
+        if e is not None:
+            self._obj_ents.append(e)
 
     def _satukan_ubin(self):
         """Gabungkan ubin statis jadi satu mesh per keadaan render.

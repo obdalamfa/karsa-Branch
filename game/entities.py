@@ -271,12 +271,12 @@ def _dandani_manekin(actor, actor_id: str) -> float:
         # mendarat di y dunia 0,0137 — terkubur 23 cm di bawah tanah, jadi
         # yang terlihat cuma serpihan di tempat tanahnya kebetulan cekung
         # (terukur: 149 piksel dari frame 900x900).
-        actor._bayangan = Entity(parent=actor, model='quad',
-                                 position=Vec3(0, 0.0, 0),
-                                 rotation=(90, 0, 0),
-                                 scale=(1.05, 0.92, 1),
-                                 color=color.rgba(0, 0, 0, 120),
-                                 shader=None)
+        # Cakram berbulu, bukan quad persegi -- lihat game/bayangan.py.
+        # Ukurannya dalam satuan lokal actor (berskala 0,687), sama seperti
+        # quad lama; mesh baru per warga (aturan #3).
+        from .bayangan import cakram_kontak
+        actor._bayangan = cakram_kontak(actor, 1.15, 1.00, alpha=0.55,
+                                        position=Vec3(0, 0.0, 0))
 
         hw, ht = _MANEKIN_KEPALA_W, _MANEKIN_KEPALA_H
         kepala = Entity(parent=actor, position=Vec3(0, _MANEKIN_KEPALA_Y, 0))

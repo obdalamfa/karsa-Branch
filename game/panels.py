@@ -45,7 +45,7 @@ from .data import (HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS,
                    QUEST_STAGES, SWORD_RECIPES, PICKAXE_RECIPES, SHOP_ITEMS,
                    CRAFT_RECIPES)
 from .sound import play as sound_play
-from .batin import VOICES as BVOICES, DIFF_NAME, pct as batin_pct, roll as batin_roll, raise_voice
+from .batin import VOICES as BVOICES, raise_voice
 import textwrap as _tw
 
 _ALL_NPCS = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
@@ -539,6 +539,14 @@ class UIManager:
             self._refresh_hud()
             self._update_motive_panel()
             self._update_action_readout()
+
+        # Subtitle suara batin memudar. DI LUAR gerbang 'hud': suara pertama
+        # justru diucapkan tepat saat modal PAGI PERTAMA terbuka, dan di dalam
+        # gerbang ia akan menggantung di layar selama modal itu dibaca.
+        if getattr(self, '_voice_sub_t', 0) > 0:
+            self._voice_sub_t -= dt
+            if self._voice_sub_t <= 0 and getattr(self, '_voice_sub', None):
+                self._voice_sub.enabled = False
 
         # Flash message timer
         if self._flash_t > 0:
@@ -1435,31 +1443,99 @@ class UIManager:
         self._voice_sub = _txt('', pos=(0, -0.30), scale=0.78, col=color.white, origin=(0, 0))
         self._voice_sub.enabled = False
 
-    # Suara batin. Keduanya hilang bersama merge yang menelan _build_batin
-    # (lihat catatan di atas), sementara enam pemanggilnya di
-    # interaction_controller tetap tinggal -- jadi ayunan cangkul PERTAMA
-    # pemain baru melempar AttributeError. Ditemukan 16 Okt 2026 oleh
-    # tools/probe_lima_menit.py. Versi aslinya (ae03456) menulis ke subtitle
-    # `_voice_sub`, tapi pemudar subtitle itu ikut hilang dan Batin tidak
-    # pernah dibuat; jadi ucapannya lewat flash_msg yang memudar sendiri,
-    # dan bendera sekali-ucap disimpan di sini kalau Batin belum ada.
+    # ── Majelis Batin: suara, panel, modal ──────────────────────────────
+    # Dipulihkan dari 5683e79^2 (= cd92b0d), sisi feature/3d-mobs yang kalah
+    # di merge 5683e79: merge itu hanya membawa _build_batin, sementara
+    # pemanggilnya (enam say_batin_once + _batin_first_morning di
+    # interaction_controller) tetap tinggal. Dijaga tools/probe_batin.py.
+    #
+    # Yang SENGAJA tidak dipulihkan: cabang skill-check/merah di _pick_batin
+    # (roll 2d6, peluang %, opsi merah terkunci). Tidak satu pun pemanggil
+    # produksi -- di HEAD maupun di cd92b0d -- memberi opsi `check`/`red`;
+    # satu-satunya pemakainya tools/smoke_boot.py yang sudah basi. Kode yang
+    # tidak pernah dijalankan pemain efeknya nol (aturan #4).
+    def toggle_batin(self):
+        if not self._batin_open and self.mode not in ('hud',):
+            return                      # jangan buka di tengah dialog/pie/panel
+        self._batin_open = not self._batin_open
+        for e in self._batin_ents:
+            e.enabled = self._batin_open
+        if self._batin_open:
+            self._refresh_batin()
+
+    def _refresh_batin(self):
+        if not self.batin:
+            return
+        for k, chip in self._batin_chips:
+            chip.text = f"{BVOICES[k]['name']} {self.state.batin.get(k, 1)}"
+        out = ''
+        for v, t in self.batin.lines[-8:]:
+            nm = BVOICES[v]['name'] if v in BVOICES else v.upper()
+            out += _tw.fill(f"[{nm}] {t}", 42) + "\n\n"
+        self._batin_log.text = out
+
+    # Suara batin tampil sebagai SUBTITLE `_voice_sub` yang memudar sendiri
+    # (pemudarnya di update(), di luar gerbang 'hud'), bukan lewat flash.
+    # Versi sementara yang memakai flash_msg menimpa flash yang membawa
+    # informasi pada kejadian pertama di keenam titik panggil -- termasuk
+    # 'Dapat X dari Y! Kirim ke Peti untuk dijual.'.
     def say_batin(self, voice, text):
-        if getattr(self, 'batin', None):
+        if self.batin:
             self.batin.say(voice, text)
         vd = BVOICES.get(voice)
-        self.flash_msg(f"{vd['name']} — {text}" if vd else text, 3.0)
+        if not vd:
+            return
+        self._voice_sub.text = _tw.fill(f"{vd['name']} — {text}", 58)
+        self._voice_sub.color = color.rgb(*vd['col'])
+        self._voice_sub.enabled = True
+        self._voice_sub_t = 4.5
+        if self._batin_open:
+            self._refresh_batin()
 
     def say_batin_once(self, flag, voice, text):
-        b = getattr(self, 'batin', None)
-        if b is not None:
-            if not b.once('say_' + flag):
-                return
-        else:
-            sekali = self.__dict__.setdefault('_batin_sekali', set())
-            if flag in sekali:
-                return
-            sekali.add(flag)
-        self.say_batin(voice, text)
+        if self.batin and self.batin.once('say_' + flag):
+            self.say_batin(voice, text)
+
+    def open_batin_check(self, title, prompt, opts):
+        """opts: list of dict {voice, label, fn}. Angka 1-N memilih."""
+        self._batin_opts = opts
+        self.mode = 'batin'
+        for e in getattr(self, '_bc_ents', []):
+            try: destroy(e)
+            except Exception: pass
+        bg = _skin_chrome(_ui(scale=(1.18, 0.74), position=(0, -0.02), color=color.rgb(18, 15, 12, 247), z=0.9))
+        ents = [bg,
+                _txt(title, pos=(0, 0.26), scale=0.92, col=color.rgb(231, 178, 61), origin=(0, 0)),
+                _txt(_tw.fill(prompt, 64), pos=(0, 0.15), scale=0.7, col=color.rgb(224, 216, 188), origin=(0, 0))]
+        for i, o in enumerate(opts):
+            vd = BVOICES[o['voice']]
+            ents.append(_txt(_tw.fill(f"{i+1}. {o['label']}", 76), pos=(-0.52, 0.01 - i * 0.085),
+                             scale=0.64, col=color.rgb(*vd['col'])))
+        ents.append(_txt(f'Tekan 1-{len(opts)} untuk memilih.', pos=(0, -0.30), scale=0.58,
+                         col=color.rgb(150, 135, 100), origin=(0, 0)))
+        self._bc_ents = ents
+
+    def batin_check_input(self, key):
+        if key == 'escape':
+            self._close_batin_check(); return
+        if key.isdigit():
+            i = int(key) - 1
+            if 0 <= i < len(getattr(self, '_batin_opts', [])):
+                self._pick_batin(i)
+
+    def _pick_batin(self, i):
+        o = self._batin_opts[i]
+        raise_voice(self.state, o['voice'], 1)
+        if o.get('fn'):
+            o['fn']()
+        self._close_batin_check()
+
+    def _close_batin_check(self):
+        for e in getattr(self, '_bc_ents', []):
+            try: destroy(e)
+            except Exception: pass
+        self._bc_ents = []
+        self.mode = 'hud'
 
     def _build_buy(self):
         self._buy_sel = 0
@@ -2836,6 +2912,11 @@ class UIManager:
         return f"Berhasil membuat {r['name']}!"
 
     def close_all(self):
+        # Modal Majelis Batin: jaring ESC di app.py memanggil close_all()
+        # SEBELUM rute mode 'batin', jadi escape milik batin_check_input tidak
+        # pernah tercapai. Tanpa baris ini entity modal tertinggal di layar.
+        if getattr(self, '_bc_ents', None):
+            self._close_batin_check()
         self._set_dialog_visible(False)
         self._set_panel_visible(False)
         self.close_pie()

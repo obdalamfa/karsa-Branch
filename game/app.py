@@ -296,6 +296,13 @@ class Game3D:
         self._needs_warned: set = set()
 
         self.panels = UIManager(self.state)
+        # Majelis Batin. Pembuatan ini hilang di merge 5683e79 (sisi visual
+        # tidak pernah punya Batin), dan tanpa baris ini `panels.batin` tetap
+        # None: modal PAGI PERTAMA tidak pernah terbuka, log tidak pernah
+        # terisi. Wajib SETELAH UIManager, karena _build_batin mengisi None.
+        from .batin import Batin
+        self.batin = Batin(self.state)
+        self.panels.batin = self.batin
         self.world = World3D(self.state)
         self.entities = EntitiesManager(self.state)
         self.entities.world = self.world
@@ -782,6 +789,14 @@ class Game3D:
             self.panels.buy_input(key, self.player, self.world)
             return
 
+        # Modal Majelis Batin (PAGI PERTAMA): angka memilih opsi. Sengaja
+        # SETELAH jaring ESC di atas -- ESC di sini ditutup oleh close_all(),
+        # yang membersihkan entity modalnya. Tanpa rute ini angka jatuh ke
+        # pemain dan [2] mengganti alat, bukan memilih.
+        if self.panels.mode == 'batin':
+            self.panels.batin_check_input(key)
+            return
+
         # Sinema mengunci semuanya: cuma lanjut dan lewati yang diterima.
         if self.panels.mode == 'sinema':
             self.sinema.input(key)
@@ -933,6 +948,11 @@ class Game3D:
                 self.panels.flash_msg(
                     'Ringkasan kebutuhan: ON' if nyala else
                     'Ringkasan kebutuhan: OFF  [TAB]', 1.2)
+            elif key == 'f7':
+                # Majelis Batin. TAB sudah milik ringkasan motif, huruf habis,
+                # dan F7 baru bebas setelah development_mode Ursina dimatikan
+                # (sebelumnya HotReloader.reload_models menangkapnya).
+                self.panels.toggle_batin()
             elif key == 'f3':
                 self._debug_overlay = not getattr(self, '_debug_overlay', False)
                 _pasang_overlay_debug(self._debug_overlay)
@@ -1024,6 +1044,11 @@ class Game3D:
             # frame — sinema tidak pernah bisa jalan satu beat pun. Penjaganya
             # benar; mode barunya yang lupa didaftarkan.
             yatim = not getattr(getattr(self, 'sinema', None), 'aktif', False)
+        elif mode == 'batin':
+            # Modal Majelis Batin dimiliki entity-nya sendiri (_bc_ents).
+            # Tanpa baris ini modal PAGI PERTAMA dipulihkan ke HUD satu frame
+            # setelah terbuka, dan angka pilihannya jatuh ke pemain.
+            yatim = not getattr(p, '_bc_ents', None)
         else:
             yatim = True    # mode yang tidak dikenal sama sekali
         if yatim:

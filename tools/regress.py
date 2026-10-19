@@ -1135,7 +1135,8 @@ def cek_bayangan_matahari(g, base, tmp: Path):
     kamera bayangan, cuma penerima), jadi yang diuji muka atas kaster.
 
     Lewat jalur asli dalam `_TanpaUpdate`: kubus uji 0,8 x 1,6 m di samping
-    pemain, frame A dengan caster hidup, frame B caster mati.
+    pemain, frame A kubus ikut membayangi, frame C kubus disembunyikan dari
+    kamera bayangan (frame B caster mati hanya untuk menyaring titik uji).
     """
     try:
         import game.bayangan_matahari as bm
@@ -1180,11 +1181,12 @@ def cek_bayangan_matahari(g, base, tmp: Path):
     datar = datar.normalized() if datar.length() > 1e-4 else Vec3(1, 0, 0)
     samping = Vec3(-datar.z, 0, datar.x)
     H, L = 1.6, 0.8
-    pusat = Vec3(p[0], y0, p[2]) + samping * 2.4
-    # Titik tanah di tengah bayangan: sinar dari pertengahan tinggi kubus.
-    asal = pusat + Vec3(0, H * 0.5, 0)
-    tanah = asal + d * ((y0 + 0.02 - asal.y) / d.y)
-    atas = pusat + Vec3(0, H + 0.001, 0)
+
+    def titik(pusat):
+        # Titik tanah di tengah bayangan: sinar dari pertengahan tinggi kubus.
+        asal = pusat + Vec3(0, H * 0.5, 0)
+        return (asal + d * ((y0 + 0.02 - asal.y) / d.y),
+                pusat + Vec3(0, H + 0.001, 0))
 
     def proyeksi(w):
         lens = base.cam.node().getLens()
@@ -1218,47 +1220,119 @@ def cek_bayangan_matahari(g, base, tmp: Path):
                 n += 1
         return tot / n
 
-    from ursina import scene as uscene
-    kubus = Entity(parent=uscene, model=_kubus_uji(),
-                   position=pusat + Vec3(0, H / 2, 0), scale=(L, H, L))
-    apply_smooth(kubus)
+    from ursina import scene as uscene, Mesh, destroy
+    from ursina.shaders import unlit_shader
+
+    def penanda(w):
+        # Kotak magenta datar tanpa cahaya; mesh baru per entity (aturan #3).
+        # Digeser 0,35 m ke arah kamera di sepanjang sinar pandang: jatuh di
+        # piksel yang sama, tapi tidak terkubur permukaan ubin yang sedikit
+        # lebih tinggi dari kaki pemain (penanda di +0,03 m tak terlihat).
+        r = 0.18
+        m = Mesh(vertices=[Vec3(-r, 0, -r), Vec3(r, 0, -r), Vec3(r, 0, r), Vec3(-r, 0, r)],
+                 triangles=[(0, 2, 1), (0, 3, 2), (0, 1, 2), (0, 2, 3)],
+                 colors=[(1, 0, 1, 1)] * 4, static=True)
+        ke_kamera = Vec3(*base.cam.getPos(base.render)) - w
+        return Entity(parent=uscene, model=m, shader=unlit_shader,
+                      position=w + ke_kamera.normalized() * 0.35)
+
+    def magenta(im, xy):
+        c = im.getpixel(xy)
+        return c[0] - c[1] > 70 and c[2] - c[1] > 70
+
+    from panda3d.core import BitMask32
+    from game.bayangan import BIT_KAMERA_BAYANGAN
+    bit = BitMask32(BIT_KAMERA_BAYANGAN)
+
+    def nyalakan():
+        node.setShadowCaster(True, bm.RESOLUSI, bm.RESOLUSI)
+
+    # Tiga tangkapan per calon titik, caster hidup kecuali B:
+    #   A  kubus ikut digambar kamera bayangan
+    #   C  kubus disembunyikan dari kamera bayangan (tak membayangi apa pun)
+    #   B  caster mati
+    # Sumbangan kubus sendiri = A lawan C: bayangan tanahnya, dan jerawat di
+    # muka atasnya. Dulu A lawan B: di lake muka atas kubus jatuh ke bayangan
+    # tajuk pohon dan terbaca sebagai jerawat (115,3 -> 93,8), dan tanah yang
+    # sudah teduh pohon akan lulus tanpa bayangan kubus. B menyaring calon:
+    # kedua titik harus terbuka (C/B >= 0,93), dan harus TERLIHAT --
+    # penanda magenta tampak di pikselnya; di lake sisi pertama tenggelam di
+    # tajuk dan piksel "tanah"-nya ternyata daun (59,0 -> 59,0).
+    hasil = None
+    alasan = []
     try:
         with _TanpaUpdate(base):
-            bm.ikuti(g, fokus=pusat)
-            g._bayangan_snap = None
-            for _ in range(bm.SELANG + 1):
-                g._bayangan_snap = None
-                bm.ikuti(g, fokus=pusat)
-                base.taskMgr.step()
-            a = tembak('_bayangan_a.png')
-            node.setShadowCaster(False)
-            b = tembak('_bayangan_b.png')
+            # Samping dulu (bayangan kubus tidak ke pemain), lalu searah
+            # sinar: bayangannya menjauhi pemain.
+            calon = [(f's{j:+.1f}', samping * j) for j in (2.4, -2.4, 3.6, -3.6)]
+            calon += [(f'd{j:+.1f}', datar * j) for j in (2.4, 3.6)]
+            for jarak, geser in calon:
+                cp = Vec3(p[0], y0, p[2]) + geser
+                ct, ca = titik(cp)
+                xt, xa = proyeksi(ct), proyeksi(ca)
+                if xt is None or xa is None:
+                    alasan.append(f'{jarak}: di luar layar')
+                    continue
+                k = Entity(parent=uscene, model=_kubus_uji(),
+                           position=cp + Vec3(0, H / 2, 0), scale=(L, H, L))
+                apply_smooth(k)
+                try:
+                    for _ in range(bm.SELANG + 1):
+                        g._bayangan_snap = None
+                        bm.ikuti(g, fokus=cp)
+                        base.taskMgr.step()
+                    tanda = [penanda(ct), penanda(ca)]
+                    im = tembak('_bayangan_tanda.png')
+                    for t in tanda:
+                        destroy(t)
+                    if im is None or not (magenta(im, xt) and magenta(im, xa)):
+                        alasan.append(f'{jarak}: tertutup')
+                        continue
+                    a = tembak('_bayangan_a.png')
+                    k.hide(bit)
+                    c = tembak('_bayangan_c.png')
+                    node.setShadowCaster(False)
+                    b = tembak('_bayangan_b.png')
+                    nyalakan()
+                finally:
+                    destroy(k)
+                if a is None or b is None or c is None:
+                    return _fail('tidak ada tangkapan layar')
+                buka_t = lum(c, xt) / max(lum(b, xt), 1e-3)
+                buka_a = lum(c, xa) / max(lum(b, xa), 1e-3)
+                if min(buka_t, buka_a) < 0.93:
+                    alasan.append(f'{jarak}: teduh benda lain '
+                                  f'({buka_t:.2f}/{buka_a:.2f})')
+                    continue
+                hasil = (lum(a, xt), lum(c, xt), lum(a, xa), lum(c, xa))
+                break
     finally:
         try:
-            node.setShadowCaster(True, bm.RESOLUSI, bm.RESOLUSI)
+            nyalakan()
         except Exception:
             pass
-        from ursina import destroy
-        destroy(kubus)
         g._bayangan_snap = None
         for _ in range(2):
             base.taskMgr.step()
 
-    if a is None or b is None:
-        return _fail('tidak ada tangkapan layar')
-    xy_t, xy_a = proyeksi(tanah), proyeksi(atas)
-    if xy_t is None or xy_a is None:
-        return _ok('titik uji di luar layar (kamera scene ini)')
-    la, lb = lum(a, xy_t), lum(b, xy_t)
-    turun = 1.0 - la / max(lb, 1e-3)
+    if hasil is None:
+        # Titik tampak tapi semuanya teduh saat caster hidup = jerawat yang
+        # menyebar ke tanah terbuka, atau bayangan liar; tanpa normal offset
+        # dan bias farm/town jatuh ke sini (0,79-0,82), jadi ini MERAH, bukan
+        # dilewati. Cuma "tertutup/di luar layar" yang boleh dilewati.
+        if any('teduh' in a for a in alasan):
+            return _fail('semua titik uji yang tampak teduh saat caster hidup '
+                         '(jerawat atau bayangan liar): ' + '; '.join(alasan))
+        return _ok('tidak ada titik uji yang tampak: ' + '; '.join(alasan))
+    la, lc, ja, jc = hasil
+    turun = 1.0 - la / max(lc, 1e-3)
     if turun < 0.12:
         return _fail(f'bayangan kubus tidak sampai ke tanah: luminans '
-                     f'{lb:.1f} -> {la:.1f} (turun {turun:.0%}, minimal 12%)')
-    ja, jb = lum(a, xy_a), lum(b, xy_a)
-    if abs(ja - jb) > 3.0:
+                     f'{lc:.1f} -> {la:.1f} (turun {turun:.0%}, minimal 12%)')
+    if abs(ja - jc) > 3.0:
         return _fail(f'jerawat bayangan: muka atas kubus yang tersinar berubah '
-                     f'{jb:.1f} -> {ja:.1f} saat caster dinyalakan')
-    return _ok(f'tanah teduh -{turun:.0%}, muka atas {ja - jb:+.1f}')
+                     f'{jc:.1f} -> {ja:.1f} saat kubus ikut membayangi')
+    return _ok(f'tanah teduh -{turun:.0%}, muka atas {ja - jc:+.1f}')
 
 
 def cek_otonomi_hidup(g):

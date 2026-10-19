@@ -56,6 +56,15 @@ def tombol_petunjuk(s) -> str | None:
     return m.group(1).lower() if m else None
 
 
+def tekan_app(g, key):
+    """Lewat dispatcher Ursina (g.app.input), seperti tools/probe_batin.py:
+    tombol sampai ke SEMUA pendengar, jadi tabrakan dengan mesin ikut
+    terlihat. Dipakai untuk tombol yang baru disambung (modal batin, sinema);
+    aksi lama di probe ini tetap lewat Game3D.input."""
+    from ursina.main import keyboard_keys
+    g.app.input(key, key in keyboard_keys)
+
+
 def jawab_modal_batin(g):
     """Cangkul pertama membuka modal PAGI PERTAMA (Majelis Batin), yang
     menelan tombol sampai dijawab. Pemain baru membaca modalnya dan menekan
@@ -67,7 +76,7 @@ def jawab_modal_batin(g):
     for e in getattr(p, '_bc_ents', []) or []:
         m = re.search(r'Tekan (\d)-\d', getattr(e, 'text', '') or '')
         if m:
-            g.input(m.group(1))
+            tekan_app(g, m.group(1))
             langkah(4)
             return m.group(1)
     return None
@@ -83,7 +92,7 @@ def tonton_sinema(g):
         if not g.sinema.aktif:
             return
         if g.sinema._menunggu:
-            g.input('space')
+            tekan_app(g, 'space')
         langkah(2)
 
 

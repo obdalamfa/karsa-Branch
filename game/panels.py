@@ -1588,16 +1588,21 @@ class UIManager:
 
     def _build_buy(self):
         self._buy_sel = 0
-        bg = _skin_chrome(_ui(scale=(0.62, 0.66), position=(0, 0),
+        # Katalog 11 baris. Dulu baris dimulai 0,15 berjarak 0,052 di latar
+        # 0,66: baris ke-9 (Perapian) jatuh di bawah petunjuk tombol dan dua
+        # baris terakhir di luar bingkai. Latar digeser ke bawah supaya
+        # puncaknya (y 0,26) tetap di bawah subtitle suara batin.
+        # Dijaga cek tata letak di tools/probe_buy_sinema.py (fase L).
+        bg = _skin_chrome(_ui(scale=(0.64, 0.72), position=(0, -0.10),
                               color=color.rgb(16, 14, 12, 244), z=0.9))
-        title = _txt('BANGUN / BELI', pos=(0, 0.25), scale=1.25,
+        title = _txt('BANGUN / BELI', pos=(0, 0.155), scale=1.25,
                      col=color.rgb(231, 178, 61), origin=(0, 0))
-        self._buy_items = [_txt('', pos=(0, 0.15 - i * 0.052), scale=0.78,
+        self._buy_items = [_txt('', pos=(0, 0.07 - i * 0.036), scale=0.78,
                                 col=color.white, origin=(0, 0)) for i in range(12)]
         hint = _txt('[W/S] pilih  [Enter] beli & pasang di depanmu  '
-                    '[X] jual  [Esc] tutup', pos=(0, -0.26), scale=0.5,
+                    '[X] jual  [Esc] tutup', pos=(0, -0.355), scale=0.5,
                     col=color.rgb(150, 135, 100), origin=(0, 0))
-        self._buy_gold = _txt('', pos=(0, 0.205), scale=0.7,
+        self._buy_gold = _txt('', pos=(0, 0.115), scale=0.7,
                               col=color.rgb(231, 200, 120), origin=(0, 0))
         self._buy_ents = [bg, title, hint, self._buy_gold] + self._buy_items
         for e in self._buy_ents:

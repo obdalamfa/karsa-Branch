@@ -64,6 +64,22 @@ def fase(nama, save):
         hidup = [e for e in p._buy_ents if e.enabled]
         cek('L [L] membuka Bangun/Beli dan bertahan 3 frame',
             p.mode == 'buy' and hidup, f'mode={p.mode} ents_hidup={len(hidup)}')
+        # Tata letak: sejak [L] tidak lagi yatim panelnya benar-benar dibaca.
+        # Dulu baris katalog ke-10/11 jatuh di luar bingkai dan petunjuk
+        # tombol menimpa baris 'Perapian'. Kotak dibaca dari geometri yang
+        # digambar (pembantu tata letak probe_batin).
+        if hidup:
+            teks = [e for e in p._buy_ents[1:] if e.enabled and (e.text or '').strip()]
+            masalah = pb.di_luar_latar(p._buy_ents[0], teks)
+            for i, a in enumerate(teks):
+                for b in teks[i + 1:]:
+                    if pb._irisan(pb.kotak(a), pb.kotak(b)):
+                        masalah.append(f"'{a.text.strip()[:10]}' menimpa '{b.text.strip()[:10]}'")
+            cek('L tata letak: semua baris di dalam bingkai, tidak saling menimpa',
+                not masalah, '; '.join(masalah[:3]) or f'bersih ({len(teks)} teks)')
+        else:
+            cek('L tata letak: semua baris di dalam bingkai, tidak saling menimpa',
+                False, 'panel tidak terbuka')
         sel0 = p._buy_sel
         pb.tekan(g, 's', 2)
         cek('L [S] menggeser pilihan katalog', p.mode == 'buy' and p._buy_sel != sel0,

@@ -93,9 +93,31 @@ class Game3D:
         logging.info("Inisialisasi Game Engine 3D (Ursina)...")
         
         # Inisialisasi Ursina Engine (ukuran pas jendela agar tidak offscreen di monitor 1080p)
+        # development_mode=False WAJIB eksplisit. Ursina menyalakannya sendiri
+        # kecuali folder induk aset punya `src` dan `python` (ursina/
+        # application.py), dan repo ini tidak punya keduanya. Dalam mode itu
+        # HotReloader duduk di depan GameHandler dan ikut menerima F5/F6/F9
+        # milik game. Terukur lewat jalur `python main.py` + app.input
+        # (_bench/probes/probe_tombol_f.py):
+        #
+        #   F5 (Simpan)  reload_code: scene.clear(), pemain hancur, main.py
+        #                di-exec ulang -> Game3D KEDUA, dan make_assets menulis
+        #                ulang 64 berkas assets/textures/*.png milik repo
+        #   F9 (Muat)    toggle_hotreloading: ModuleNotFoundError 'Xlib' di
+        #                Linux; save tidak pernah dimuat
+        #
+        # fullscreen=False ikut eksplisit: tanpa dev mode, fullscreen=None
+        # dipaksa jadi True (ursina/main.py). Di Ursina 8.3 itu belum terlihat
+        # karena `size` diberikan (mutasi fullscreen=None tetap 1280x720 di
+        # Xvfb), jadi ini penjaga untuk versi lain, bukan perbaikan terukur.
+        # editor_ui_enabled=True supaya F3 tetap bisa menyalakan fps_counter,
+        # yang anak editor_ui.
         self.app = Ursina(size=(1280, 720),
                           title='Lembah Karsa 3D — v0.10 [Cozy Edition]',
-                          borderless=False)
+                          borderless=False,
+                          development_mode=False,
+                          fullscreen=False,
+                          editor_ui_enabled=True)
         window.center_on_screen()
         window.color = color.rgb(30, 20, 40)
 
@@ -274,6 +296,13 @@ class Game3D:
         self._needs_warned: set = set()
 
         self.panels = UIManager(self.state)
+        # Majelis Batin. Pembuatan ini hilang di merge 5683e79 (sisi visual
+        # tidak pernah punya Batin), dan tanpa baris ini `panels.batin` tetap
+        # None: modal PAGI PERTAMA tidak pernah terbuka, log tidak pernah
+        # terisi. Wajib SETELAH UIManager, karena _build_batin mengisi None.
+        from .batin import Batin
+        self.batin = Batin(self.state)
+        self.panels.batin = self.batin
         self.world = World3D(self.state)
         self.entities = EntitiesManager(self.state)
         self.entities.world = self.world
@@ -727,6 +756,15 @@ class Game3D:
         # Itu sebab laporan pemilik "jalan saja tidak bisa".
         #
         # Chargen dikecualikan: ia memang layar wajib sebelum main.
+        # ESC saat sinema = '[ESC] lewati' yang tertulis di layarnya. Jaring di
+        # bawah dulu menangkapnya lebih dulu: mode jadi 'hud', tapi sinema.aktif
+        # tetap True dan UI sinema tertinggal di layar (diukur,
+        # _bench/probes/probe_buy_sinema.py). Serahkan ke runner sinema, yang
+        # juga memberi beat lore yang terlewat.
+        if (key == 'escape' and self.panels.mode == 'sinema'
+                and getattr(getattr(self, 'sinema', None), 'aktif', False)):
+            self.sinema.input(key)
+            return
         if key == 'escape' and self.panels.mode not in ('hud', 'chargen'):
             try:
                 self.panels.close_all()
@@ -758,6 +796,14 @@ class Game3D:
         # bisa dinavigasi maupun ditutup.
         if self.panels.mode == 'buy':
             self.panels.buy_input(key, self.player, self.world)
+            return
+
+        # Modal Majelis Batin (PAGI PERTAMA): angka memilih opsi. Sengaja
+        # SETELAH jaring ESC di atas -- ESC di sini ditutup oleh close_all(),
+        # yang membersihkan entity modalnya. Tanpa rute ini angka jatuh ke
+        # pemain dan [2] mengganti alat, bukan memilih.
+        if self.panels.mode == 'batin':
+            self.panels.batin_check_input(key)
             return
 
         # Sinema mengunci semuanya: cuma lanjut dan lewati yang diterima.
@@ -911,6 +957,11 @@ class Game3D:
                 self.panels.flash_msg(
                     'Ringkasan kebutuhan: ON' if nyala else
                     'Ringkasan kebutuhan: OFF  [TAB]', 1.2)
+            elif key == 'f7':
+                # Majelis Batin. TAB sudah milik ringkasan motif, huruf habis,
+                # dan F7 baru bebas setelah development_mode Ursina dimatikan
+                # (sebelumnya HotReloader.reload_models menangkapnya).
+                self.panels.toggle_batin()
             elif key == 'f3':
                 self._debug_overlay = not getattr(self, '_debug_overlay', False)
                 _pasang_overlay_debug(self._debug_overlay)
@@ -1002,6 +1053,18 @@ class Game3D:
             # frame — sinema tidak pernah bisa jalan satu beat pun. Penjaganya
             # benar; mode barunya yang lupa didaftarkan.
             yatim = not getattr(getattr(self, 'sinema', None), 'aktif', False)
+        elif mode == 'buy':
+            # Bangun/Beli ([L]) dimiliki entity-nya sendiri. Tanpa baris ini
+            # mode kembali ke HUD satu frame setelah [L] (diukur,
+            # _bench/probes/probe_buy_sinema.py), panelnya tertinggal di layar
+            # dan W/S menggerakkan pemain, bukan pilihan katalog.
+            yatim = not any(getattr(e, 'enabled', False)
+                            for e in getattr(p, '_buy_ents', None) or [])
+        elif mode == 'batin':
+            # Modal Majelis Batin dimiliki entity-nya sendiri (_bc_ents).
+            # Tanpa baris ini modal PAGI PERTAMA dipulihkan ke HUD satu frame
+            # setelah terbuka, dan angka pilihannya jatuh ke pemain.
+            yatim = not getattr(p, '_bc_ents', None)
         else:
             yatim = True    # mode yang tidak dikenal sama sekali
         if yatim:

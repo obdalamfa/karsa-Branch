@@ -20,8 +20,10 @@ NPC ala *The Sims*, pertanian mendalam ala *Sakuna*.
 | **R** | Rawat petak / perah ternak |
 | **I** | Inventaris |
 | **J** | Jurnal misi |
-| **TAB** | Majelis Batin (4 suara batin + skill-check) |
-| **Esc** | Menu Jeda (Simpan / Muat / Pengaturan / Kontrol) |
+| **F7** | Majelis Batin (4 suara batin) |
+| **TAB** | Ringkasan kebutuhan on/off |
+| **F5 / F9** | Simpan / Muat |
+| **Esc** | Simpan (di HUD) / tutup panel |
 
 ## Loop Harian
 Cangkul → tanam → **siram tiap hari** (jadwal air ala Sakuna menentukan mutu ★) →
@@ -30,7 +32,7 @@ Rawat ternak [R] untuk susu/telur/wol. Jelajah gua untuk bijih & lawan mob
 (perhatikan **telegraph merah** sebelum mereka memukul — mengelaklah!).
 
 ## Tip
-- Volume & layar penuh diatur di **Esc → Pengaturan**.
-- 3 slot simpanan tersedia di **Esc → Simpan / Muat**.
+- Game tersimpan dengan **F5** atau **Esc** di HUD, dimuat dengan **F9**.
+  (Menu Jeda dengan slot simpanan dan pengaturan belum tersedia lagi.)
 
 Selamat bertani di Lembah Karsa. 🌾

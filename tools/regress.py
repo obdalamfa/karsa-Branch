@@ -119,6 +119,7 @@ from __future__ import annotations
 import atexit
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -1227,6 +1228,7 @@ def main():
     scenes = minta or [s for s in SCENES if s != 'dungeon']
 
     lima_baris = None
+    batin_baris = None
     _pasang_save_fixture(ROOT / cfg.SAVE_FILE)
     t0 = time.time()
     try:
@@ -1548,6 +1550,28 @@ def main():
         else:
             lima_baris = (r.returncode == 0, akhir[0].strip())
 
+    # ── Majelis Batin (subproses, tiga fase A/B/C di dalamnya) ──
+    # Majelis Batin hilang sebagian di merge 5683e79 dan tidak ada alat yang
+    # menyadarinya, karena tidak ada yang memainkannya. probe_batin memainkannya
+    # lewat g.app.input dari game baru. Save-nya di direktori sementara, jadi
+    # ia tidak perlu dilewati walau ada save pemain. Barisnya memuat n/n cek
+    # yang sungguh dijalankan; keluaran kosong dinilai GAGAL.
+    if not minta:
+        import subprocess
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'probe_batin.py')],
+                               cwd=ROOT, capture_output=True, text=True, timeout=1200)
+            akhir = [b for b in r.stdout.splitlines()
+                     if re.search(r'\d+/\d+ lulus', b)][-1:]
+            if akhir:
+                m = re.search(r'(\d+)/(\d+) lulus', akhir[0])
+                ok = r.returncode == 0 and m.group(1) == m.group(2) and int(m.group(2)) > 0
+                batin_baris = (ok, akhir[0].split('(')[0].strip())
+            else:
+                batin_baris = (False, f'tanpa keluaran (kode {r.returncode})')
+        except subprocess.TimeoutExpired:
+            batin_baris = (False, 'waktu habis')
+
     print('-' * 78)
     tanda_hud = 'LULUS' if not hud_baris else 'GAGAL'
     ring_hud = '; '.join(f'{k} {c}' for k, c in hud_baris) or 'semua di dalam layar'
@@ -1570,6 +1594,12 @@ def main():
         print(f'{"lima menit":14s} {"LULUS" if ok_lima else "GAGAL":>7s} '
               f'{"":>9s} {"":>7s}  {catatan_lima[:44]}')
         if not ok_lima:
+            gagal_total += 1
+    if batin_baris is not None:
+        ok_batin, catatan_batin = batin_baris
+        print(f'{"majelis batin":14s} {"LULUS" if ok_batin else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {catatan_batin[:44]}')
+        if not ok_batin:
             gagal_total += 1
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)

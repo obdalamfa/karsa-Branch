@@ -1,5 +1,9 @@
 """probe_lima_menit.py — lima menit pertama pemain baru, dari boot sampai panen.
 
+Modal PAGI PERTAMA (Majelis Batin) terbuka di cangkul pertama dan menelan
+tombol sampai dijawab; probe menjawabnya dengan tombol yang tertulis di modal
+itu sendiri (`jawab_modal_batin`), seperti pemain yang membacanya.
+
 DoD M1 ROADMAP: "orang baru bisa panen pertama tanpa bertanya". Tidak ada
 alat yang pernah mengukurnya. Probe ini memulai game TANPA save (layar Buat
 Karakter muncul, seperti pemain baru), lalu mengikuti petunjuk tutorial di
@@ -50,6 +54,37 @@ def tombol_petunjuk(s) -> str | None:
     _, _, hint = tracker_lines(s)
     m = re.search(r'\[([A-Z])\]', hint or '')
     return m.group(1).lower() if m else None
+
+
+def jawab_modal_batin(g):
+    """Cangkul pertama membuka modal PAGI PERTAMA (Majelis Batin), yang
+    menelan tombol sampai dijawab. Pemain baru membaca modalnya dan menekan
+    tombol yang TERTULIS di sana ('Tekan 1-3 untuk memilih.') -- jadi probe
+    juga membacanya, bukan menebak. Mengembalikan tombol yang ditekan."""
+    p = g.panels
+    if p.mode != 'batin':
+        return None
+    for e in getattr(p, '_bc_ents', []) or []:
+        m = re.search(r'Tekan (\d)-\d', getattr(e, 'text', '') or '')
+        if m:
+            g.input(m.group(1))
+            langkah(4)
+            return m.group(1)
+    return None
+
+
+def tonton_sinema(g):
+    """Sinema yang terpicu di tengah jalan (mis. 'panen_pertama' pada tahap
+    quest 2, tepat saat pemain berjalan ke kasur) menelan tombol berikutnya.
+    Pemain melihatnya dan menekan SPACE sampai selesai; probe juga. Dulu ini
+    tidak pernah terjadi di probe: ESC di sinema intro meninggalkan
+    `sinema.aktif` True selamanya, jadi sinema berikutnya tidak bisa mulai."""
+    for _ in range(200):
+        if not g.sinema.aktif:
+            return
+        if g.sinema._menunggu:
+            g.input('space')
+        langkah(2)
 
 
 def ke_hud(g):
@@ -111,6 +146,7 @@ def uji(g):
             jalan(g, 'farm', x, y - 1, 'up')
             g.input('space')
             langkah(8)
+            jawab_modal_batin(g)
         cek(f'{nama} 3 petak dengan [{alat}] + [SPACE]',
             s.stats.get(stat, 0) - awal >= 3, f'{stat}: {awal} -> {s.stats.get(stat, 0)}')
 
@@ -122,6 +158,7 @@ def uji(g):
         bd = next((x, y) for y, r in enumerate(SCENES['house'].tiles)
                   for x, v in enumerate(r) if v == BD)
         jalan(g, 'house', bd[0], bd[1], 'down')
+        tonton_sinema(g)
         t = tombol_petunjuk(s) or 't'
         d0 = s.day
         g.input(t)

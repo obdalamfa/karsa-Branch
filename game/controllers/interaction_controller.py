@@ -104,6 +104,10 @@ class InteractionController:
                 self.player._fx_burst(fx, fy + 0.2, fz, color.rgb(60, 150, 255, 200), n=6)
                 sound_play('water', 0.8)
                 panels.flash_msg("Tanaman disiram!", 0.8)
+                # Suara ini (dan dua di cabang Panen) hilang tanpa konflik di
+                # merge 5683e79: blok Siram/Panen diambil dari sisi visual.
+                panels.say_batin_once('siram', 'akar',
+                    "Genangi tunas muda, keringkan saat menua. Air itu jadwal, bukan suasana hati.")
                 self.check_quests()
             else:
                 sound_play('blocked', 0.6)
@@ -165,6 +169,13 @@ class InteractionController:
                     ekor = f" | {hint}" if hint else ""
                     panels.flash_msg(
                         f"+1 {CROPS[crop_name]['name']} (nilai {nilai}G){ekor}", 1.6)
+                    # Baris SUKMA "mutu >= 4" dari cd92b0d tidak ikut: panen di
+                    # sini tidak membaca mutu sama sekali, jadi syaratnya tidak
+                    # punya padanan.
+                    panels.say_batin_once('panen', 'akar',
+                        "Panen pertama. Mutu mengingat segalanya yang kau lakukan dan tidak. Sawah membukukan dengan jujur.")
+                    panels.say_batin_once('kirim_hint', 'lapar',
+                        "Hasil panen tak jadi emas sendiri. Taruh di Peti Kirim dekat rumah — fajar mengubahnya jadi uang.")
                     self.check_quests(panels)
                 else:
                     sound_play('blocked', 0.6)

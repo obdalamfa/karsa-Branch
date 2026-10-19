@@ -759,7 +759,7 @@ class Game3D:
         # ESC saat sinema = '[ESC] lewati' yang tertulis di layarnya. Jaring di
         # bawah dulu menangkapnya lebih dulu: mode jadi 'hud', tapi sinema.aktif
         # tetap True dan UI sinema tertinggal di layar (diukur,
-        # _bench/probes/probe_buy_sinema.py). Serahkan ke runner sinema, yang
+        # tools/probe_buy_sinema.py). Serahkan ke runner sinema, yang
         # juga memberi beat lore yang terlewat.
         if (key == 'escape' and self.panels.mode == 'sinema'
                 and getattr(getattr(self, 'sinema', None), 'aktif', False)):
@@ -1056,7 +1056,7 @@ class Game3D:
         elif mode == 'buy':
             # Bangun/Beli ([L]) dimiliki entity-nya sendiri. Tanpa baris ini
             # mode kembali ke HUD satu frame setelah [L] (diukur,
-            # _bench/probes/probe_buy_sinema.py), panelnya tertinggal di layar
+            # tools/probe_buy_sinema.py), panelnya tertinggal di layar
             # dan W/S menggerakkan pemain, bukan pilihan katalog.
             yatim = not any(getattr(e, 'enabled', False)
                             for e in getattr(p, '_buy_ents', None) or [])

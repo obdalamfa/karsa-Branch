@@ -365,6 +365,13 @@ def cek_model_tegak(nama, g=None):
     return _ok(f'{n} tegak, dasar di tanah' if n else '')
 
 
+# Model .obj bertekstur yang SENGAJA dipasang tanpa smooth_shader (Entity
+# polos di beach.py, tekstur .mtl dibaca pipeline bawaan). Selain ini, model
+# bertekstur tanpa sm_has_tex dianggap lupa apply_smooth.
+_TEKSTUR_TANPA_SMOOTH = frozenset({'prop_mercusuar', 'prop_mercusuar_rusak',
+                                   'prop_kurofune'})
+
+
 def cek_model_tekstur(nama):
     """Model Blender yang membawa tekstur bake benar-benar dibaca shader-nya.
 
@@ -374,7 +381,7 @@ def cek_model_tekstur(nama):
     tajuk tropis (181,179,163) lawan (99,104,82) setelah tekstur dibaca.
     """
     from ursina import scene as uscene
-    salah, n = [], 0
+    salah, tanpa, n = [], [], 0
     for e in uscene.children:
         m = getattr(e, 'model', None)
         if m is None or not getattr(e, 'enabled', True):
@@ -387,14 +394,26 @@ def cek_model_tekstur(nama):
             continue
         masukan = getattr(e, '_shader_inputs', {}) or {}
         if 'sm_has_tex' not in masukan:
-            continue          # bukan smooth_shader (mis. mercusuar unlit): tekstur dibaca sendiri
+            if nm[:-4] in _TEKSTUR_TANPA_SMOOTH:
+                continue      # sengaja tanpa smooth_shader: tekstur dibaca sendiri
+            # Dulu dilewati diam-diam: make_obj_entity yang lupa apply_smooth
+            # (37 kelapa pucat tembus pandang tanpa cahaya game) lulus.
+            n += 1
+            tanpa.append(nm[:-4])
+            continue
         n += 1
         if masukan.get('sm_has_tex') != 1:
             salah.append(nm[:-4])
-    if salah:
+    if salah or tanpa:
         from collections import Counter
-        ring = ', '.join(f'{k}x{v}' for k, v in Counter(salah).most_common(3))
-        return _fail(f'{len(salah)}/{n} model bertekstur dengan sm_has_tex!=1 ({ring})')
+        bagian = []
+        if salah:
+            ring = ', '.join(f'{k}x{v}' for k, v in Counter(salah).most_common(3))
+            bagian.append(f'{len(salah)}/{n} model bertekstur dengan sm_has_tex!=1 ({ring})')
+        if tanpa:
+            ring = ', '.join(f'{k}x{v}' for k, v in Counter(tanpa).most_common(3))
+            bagian.append(f'{len(tanpa)}/{n} model bertekstur tanpa smooth_shader ({ring})')
+        return _fail('; '.join(bagian))
     return _ok(f'{n} bertekstur' if n else '')
 
 

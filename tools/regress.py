@@ -417,6 +417,36 @@ def cek_model_tekstur(nama):
     return _ok(f'{n} bertekstur' if n else '')
 
 
+def cek_model_tint(nama):
+    """Pohon Blender tanpa tint pemanggil memakai tint bawaan TINT_MODEL.
+
+    Kalibrasi tint (luminans tajuk Blender ke tajuk prosedural) bisa lepas
+    diam-diam: mematikan cabang TINT_MODEL di make_obj_entity tetap lulus
+    semua cek lain, kelapa kembali ke L 94 lawan target 75.
+    """
+    from game.entities import TINT_MODEL
+    from ursina import scene as uscene
+    salah, n = [], 0
+    for e in uscene.children:
+        m = getattr(e, 'model', None)
+        if m is None or not getattr(e, 'enabled', True):
+            continue
+        try:
+            nm = m.getName()
+        except Exception:
+            continue
+        if not nm.endswith('.obj') or nm[:-4] not in TINT_MODEL:
+            continue
+        n += 1
+        harap = TINT_MODEL[nm[:-4]]
+        c = e.color
+        if max(abs(c[0] - harap[0]), abs(c[1] - harap[1]), abs(c[2] - harap[2])) > 0.01:
+            salah.append(f'{nm[:-4]} ({c[0]:.2f},{c[1]:.2f},{c[2]:.2f})')
+    if salah:
+        return _fail(f'{len(salah)}/{n} pohon tanpa tint bawaan: ' + ', '.join(salah[:3]))
+    return _ok(f'{n} ber-tint' if n else '')
+
+
 def cek_palung(g, nama):
     """Kandang farm punya palung, dan "Beri Minum" ditawarkan ke ternaknya.
 
@@ -1602,6 +1632,7 @@ def main():
             hasil['palung'] = cek_palung(g, nama)
             hasil['model_tegak'] = cek_model_tegak(nama, g)
             hasil['model_tekstur'] = cek_model_tekstur(nama)
+            hasil['model_tint'] = cek_model_tint(nama)
             hasil['frame_kosong'] = hasil_frame
             if png.exists():
                 hasil['kanal_jenuh'], jenuh = cek_kanal_jenuh(png)

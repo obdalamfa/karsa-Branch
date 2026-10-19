@@ -79,7 +79,8 @@ berpola `*` saat merge) dan memang tidak memuat `panels.py`.
 ## Bukti
 
 `tools/probe_batin.py`, tiga subproses lewat `g.app.input`, HUD dicapai
-dengan SPACE sampai `not g.sinema.aktif`: 0/21 (3132c89, sebelum pemulihan) → 22/22.
+dengan SPACE sampai `not g.sinema.aktif`: 0/21 (3132c89, sebelum pemulihan) → 22/22
+(26/26 setelah cek tutup-sendiri dan fase D F9 ditambahkan, lihat di bawah).
 Uji mutasi (bug dipasang kembali satu per satu; semuanya membuat probe merah):
 
 | mutasi | probe_batin |
@@ -97,6 +98,20 @@ Uji mutasi (bug dipasang kembali satu per satu; semuanya membuat probe merah):
 | chrome tidak dipangkas | 20/22 (alfa latar 0,00) |
 | rute input `'batin'` dibuang | 10/22 |
 | panel majelis kembali ke kiri | 21/22 (menimpa pelacak tutorial) |
+
+### Celah yang ditemukan verifikator (perbaikan-B)
+
+Dua mutasi lolos dari probe 22/22 di atas. Keduanya kini punya cek
+(probe_batin 26/26 di HEAD):
+
+| mutasi | sebelum cek baru | sesudah |
+|---|---|---|
+| tutup-sendiri panel majelis di `UIManager.update()` dimatikan | 22/22 (lolos) | 25/26: `[I]` dengan panel terbuka → mode=panel open=True, 9 entity majelis tetap tergambar di atas inventaris |
+| `Batin` menyimpan rujukan list `batin_sekali` pertama (basi setelah F9) | 22/22 (lolos) | 24/26: fase D, modal PAGI PERTAMA tidak terbuka lagi setelah F9 memuat save yang belum menjawabnya; F5 menyimpan `[]` |
+
+Fase D baru: F5 tanpa bendera → jawab modal → F9 → cangkul lagi → modal
+harus terbuka → jawab → F5 harus menyimpan `pagi_pertama`. Semua lewat
+`g.app.input`.
 
 ## Yang belum beres
 

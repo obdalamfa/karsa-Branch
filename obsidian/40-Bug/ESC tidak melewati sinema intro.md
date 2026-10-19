@@ -4,7 +4,7 @@ tipe: bug
 status: selesai
 ditemukan: "2026-10-18"
 commit_perbaikan: (cabang bangun-B, "ESC melewati sinema")
-dijaga_oleh: _bench/probes/probe_buy_sinema.py (fase S)
+dijaga_oleh: tools/probe_buy_sinema.py (fase S; baris 'buy/sinema' di tools/regress.py)
 tags: [bug, status/selesai, input, sinema]
 ---
 
@@ -44,6 +44,13 @@ dan `_pulihkan_mode_yatim` tetap menangani mode yang macet.
 ## Uji mutasi
 
 Rute ESC-sinema dimatikan → fase S 0/2 (aktif=True, 6 UI tersisa).
+
+## Penjaga di regresi
+
+Sampai perbaikan-B probe ini tinggal di `_bench/probes/` tanpa pemanggil:
+mutasi rute ESC-sinema dimatikan membuat probe_batin dan lima menit tetap hijau, dan
+`tools/regress.py` keluar 0 (diukur verifikator). Sekarang probe di `tools/`
+dan disambung ke regresi; mutasi yang sama di regresi penuh: buy/sinema 4/6, regresi keluar 1.
 
 ## Pelajaran
 

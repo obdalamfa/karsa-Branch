@@ -780,7 +780,10 @@ def scatter_obj_props(world, scene, specs, count, seed=0, avoid=2, floor=None):
         used.add((tx, ty))
         name, sc = specs[placed % len(specs)]
         placed += 1
-        e = make_obj_entity(name, (tx * _TS, _GH, ty * _TS), scale=sc, rot_y=i % 360)
+        # Berdiri di permukaan ubinnya, sama dengan pasang_model_prop; dulu _GH
+        # polos sehingga di ubin berketinggian benda melayang/terbenam.
+        y = _GH + world.get_surface_height(tx, ty)
+        e = make_obj_entity(name, (tx * _TS, y, ty * _TS), scale=sc, rot_y=i % 360)
         if e is not None:
             world._obj_ents.append(e)
         elif name not in hilang:

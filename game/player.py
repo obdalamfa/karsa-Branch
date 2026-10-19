@@ -1733,14 +1733,16 @@ class Player3D(Entity):
             from .scenes.props import model_pohon
             from .entities import make_obj_entity
             from .config import GROUND_H
-            pohon = model_pohon(self.world.scene_obj, tid,
-                                int(round(wx / TS)), int(round(wz / TS)))
+            ptx, pty = int(round(wx / TS)), int(round(wz / TS))
+            pohon = model_pohon(self.world.scene_obj, tid, ptx, pty)
             if pohon:
-                replika = make_obj_entity(pohon[0], (wx, GROUND_H, wz),
+                # Dasar sama dengan pohon yang berdiri (pasang_model_prop).
+                dasar = GROUND_H + self.world.get_surface_height(ptx, pty)
+                replika = make_obj_entity(pohon[0], (wx, dasar, wz),
                                           scale=pohon[1], rot_y=pohon[2])
                 if replika is not None:
                     replika.parent = falling_root
-                    replika.position = (0, GROUND_H, 0)
+                    replika.position = (0, dasar, 0)
         except Exception:
             import logging
             logging.error('replika pohon tumbang gagal', exc_info=True)

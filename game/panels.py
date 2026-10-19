@@ -1530,6 +1530,11 @@ class UIManager:
             return
         self._voice_sub.text = _tw.fill(f"{vd['name']} — {text}", 54)
         self._voice_sub.color = color.rgb(*vd['col'])
+        # Alas gelap di belakang teks: tanpa itu warna suara (mis. hijau AKAR)
+        # tenggelam di tanah yang dicangkul. Ukurannya mengikuti teks, jadi
+        # dibangun ulang tiap ucapan; ia anak _voice_sub dan ikut padam.
+        self._voice_sub.create_background(padding=0.02, radius=0.08,
+                                          color=color.rgba32(8, 6, 4, 170))
         self._voice_sub.enabled = True
         self._voice_sub_t = 4.5
         if self._batin_open:

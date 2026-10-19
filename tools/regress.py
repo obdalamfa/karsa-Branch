@@ -294,20 +294,33 @@ def _tinggi_berkas(nama):
     return _SUMBU_BERKAS[nama]
 
 
-def cek_model_tegak(nama):
+# Model yang SENGAJA tidak berdiri di permukaan ubinnya: nama -> selisih
+# dasar (unit dunia) yang diharapkan di atas GROUND_H + tinggi permukaan.
+# beach.py menaruh kurofune 0,1 di atas GROUND_H (lambung menyentuh air).
+_DASAR_SENGAJA = {'prop_kurofune': 0.1}
+
+
+def cek_model_tegak(nama, g=None):
     """Model pohon_/prop_/Z-atas yang tampil di scene berdiri tegak.
 
     Heuristik `d.y > d.z -> setP(-90)` di load_model_file (f596e18) merebahkan
     tepat model yang sudah dikonversi ke Y-atas (pohon, mercusuar, kurofune,
     peti) dan membiarkan berkas Z-atas tetap rebah. Diukur dengan ShowBase,
     bukan offscreen tanpa ShowBase -- di sana heuristiknya tidak aktif dan
-    model rebah terlihat tegak. Tinggi dan dasar di dunia harus sama dengan
-    tinggi dan dasar sumbu-atas di berkasnya, dikali skala entity.
+    model rebah terlihat tegak. Tinggi di dunia harus sama dengan tinggi
+    sumbu-atas di berkasnya, dikali skala entity.
+
+    Dasar diukur terhadap TANAH, bukan terhadap Y entity sendiri: versi awal
+    membandingkan dengan e.getY() sehingga pohon yang dipasang 2 unit di
+    bawah tanah (37 kelapa beach terkubur sampai tajuk) tetap lulus. Tanah =
+    GROUND_H + world.get_surface_height ubin tempat entity berdiri.
     """
+    from game.config import GROUND_H, TILE_SIZE as TS
+    world = getattr(g, 'world', None)
     from game.entities import _Z_ATAS
     from ursina import scene as uscene
     from direct.showbase.ShowBaseGlobal import base as _b
-    rebah, n = [], 0
+    rebah, salah_dasar, n = [], [], 0
     for e in uscene.children:
         m = getattr(e, 'model', None)
         if m is None or not getattr(e, 'enabled', True):
@@ -327,13 +340,29 @@ def cek_model_tegak(nama):
         n += 1
         lo, hi = e.getTightBounds(_b.render)
         s = e.getScale(_b.render).y
-        tinggi, dasar = harap[0] * s, e.getY(_b.render) + harap[1] * s
-        if abs((hi.y - lo.y) - tinggi) > 0.05 * max(1.0, s) or \
-                abs(lo.y - dasar) > 0.05 * max(1.0, s):
+        tinggi = harap[0] * s
+        if abs((hi.y - lo.y) - tinggi) > 0.05 * max(1.0, s):
             rebah.append(f'{nm} tinggi {hi.y - lo.y:.2f}/{tinggi:.2f}')
-    if rebah:
-        return _fail(f'{len(rebah)}/{n} model rebah: ' + ', '.join(rebah[:3]))
-    return _ok(f'{n} tegak' if n else '')
+            continue
+        if world is None:
+            continue
+        p = e.getPos(_b.render)
+        tanah = GROUND_H + world.get_surface_height(int(round(p.x / TS)),
+                                                    int(round(p.z / TS)))
+        dasar = tanah + _DASAR_SENGAJA.get(nm, 0.0) + harap[1] * s
+        if abs(lo.y - dasar) > 0.1:
+            salah_dasar.append(f'{nm} dasar {lo.y:.2f}/{dasar:.2f}')
+    if rebah or salah_dasar:
+        bagian = []
+        if rebah:
+            bagian.append(f'{len(rebah)}/{n} model rebah: ' + ', '.join(rebah[:3]))
+        if salah_dasar:
+            bagian.append(f'{len(salah_dasar)}/{n} terkubur/melayang: '
+                          + ', '.join(salah_dasar[:3]))
+        return _fail('; '.join(bagian))
+    if world is None:
+        return _ok(f'{n} tegak (dasar tak diperiksa: tanpa world)' if n else '')
+    return _ok(f'{n} tegak, dasar di tanah' if n else '')
 
 
 def cek_model_tekstur(nama):
@@ -1552,7 +1581,7 @@ def main():
             hasil['geom_nol'] = cek_geom_nol(nama)
             hasil['model_blender'] = cek_model_blender(nama)
             hasil['palung'] = cek_palung(g, nama)
-            hasil['model_tegak'] = cek_model_tegak(nama)
+            hasil['model_tegak'] = cek_model_tegak(nama, g)
             hasil['model_tekstur'] = cek_model_tekstur(nama)
             hasil['frame_kosong'] = hasil_frame
             if png.exists():

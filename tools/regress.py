@@ -57,6 +57,11 @@ bukan pada kemungkinan yang dikarang:
                  TIAP entity, dan input entity menimpa input scene. Diukur
                  sebelum perbaikan: mengubah sm_ambient di scene menggeser
                  0,00% piksel. Yang berubah malam hari cuma langit dan kabut.
+  bayangan_matahari  shadow map matahari (game/bayangan_matahari.py) harus
+                 menggelapkan tanah di bayangan kubus uji dan tidak mengubah
+                 muka atasnya yang tersinar (jerawat). Shadow map MATI
+                 bawaan karena ongkos ms/frame; cek ini cuma menguji sesuatu
+                 dengan KARSA_SHADOW=1 -- tanpa itu ia melapor "mati".
   otonomi_hidup  `choose_action()` dan `autonomy_candidates()` dibangun lengkap
                  lalu tidak pernah dipanggil siapa pun — seluruh katalog iklan
                  di objects.py (kasur, kompor, meja, TV, rak buku, cermin,
@@ -1098,6 +1103,164 @@ def cek_cahaya_global(g, base, tmp: Path):
     return _ok(f'gelap {turun:.0f}')
 
 
+def _kubus_uji(warna=(1, 1, 1, 1)):
+    """Mesh kubus satuan dengan normal per muka. Mesh BARU tiap panggilan
+    (aturan #3: Mesh Ursina tidak boleh dibagi antar-Entity)."""
+    from ursina import Mesh, Vec3
+    muka = [((1, 0, 0), (0, 1, 0), (0, 0, 1)), ((-1, 0, 0), (0, 1, 0), (0, 0, -1)),
+            ((0, 1, 0), (0, 0, 1), (1, 0, 0)), ((0, -1, 0), (0, 0, -1), (1, 0, 0)),
+            ((0, 0, 1), (0, 1, 0), (-1, 0, 0)), ((0, 0, -1), (0, 1, 0), (1, 0, 0))]
+    v, n, c, t = [], [], [], []
+    for nn, u, w in muka:
+        N, U, W = Vec3(*nn), Vec3(*u), Vec3(*w)
+        b = len(v)
+        for su, sw in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+            v.append(N * 0.5 + U * (0.5 * su) + W * (0.5 * sw))
+            n.append(N)
+            c.append(warna)
+        t += [(b, b + 1, b + 2), (b, b + 2, b + 3)]
+    return Mesh(vertices=v, triangles=t, normals=n, colors=c, static=True)
+
+
+def cek_bayangan_matahari(g, base, tmp: Path):
+    """Shadow map matahari harus menggelapkan tanah di bayangan sebuah kaster,
+    dan TIDAK mengubah muka kaster yang tersinar (jerawat bayangan).
+
+    Ini menjaga dua kegagalan shadow map yang tidak melempar error apa pun:
+    peta yang tidak sampai ke fragmen (caster mati, lensa meleset, atau
+    suku matahari tidak dikalikan) -- dunia kembali datar seperti sebelum
+    game/bayangan_matahari.py; dan jerawat -- bias/normal offset yang
+    kurang membuat muka yang menghadap matahari membayangi dirinya sendiri
+    jadi garis-garis. Tanah tidak bisa berjerawat (ubin disembunyikan dari
+    kamera bayangan, cuma penerima), jadi yang diuji muka atas kaster.
+
+    Lewat jalur asli dalam `_TanpaUpdate`: kubus uji 0,8 x 1,6 m di samping
+    pemain, frame A dengan caster hidup, frame B caster mati.
+    """
+    try:
+        import game.bayangan_matahari as bm
+    except Exception as e:
+        return _fail(f'bayangan_matahari tidak bisa diimpor: {e}')
+    indoor = bool(getattr(getattr(g.world, 'scene_obj', None), 'indoor', False))
+    try:
+        from game.cahaya import arah_lampu
+        from game.smooth_shader import apply_smooth, get_smooth_shader
+    except Exception as e:
+        return _fail(f'cahaya/smooth_shader tidak bisa diimpor: {e}')
+    if get_smooth_shader() is None:
+        return _ok('smooth shader tidak tersedia di pipeline ini')
+    if not bm.diminta():
+        return _ok('mati (bawaan; KARSA_SHADOW=1 menyalakan)')
+    lnp = bm._lampu_np(g)
+    if not getattr(g, '_bayangan_aktif', False) or lnp is None:
+        return _fail('shadow map tidak terpasang padahal pipeline GL dan '
+                     'tidak dimatikan saklar')
+    node = lnp.node()
+    if indoor:
+        if node.isShadowCaster():
+            return _fail('caster matahari hidup di dalam ruang')
+        return _ok('dalam ruang: caster mati')
+    if not node.isShadowCaster():
+        return _fail('caster matahari mati di luar ruang')
+    try:
+        from PIL import Image
+        from ursina import Entity, Vec3, camera
+        from panda3d.core import Point2, Point3
+    except Exception as e:
+        return _fail(f'butuh Pillow/ursina: {e}')
+
+    d = arah_lampu(g.sun)
+    if d.y > -0.15:
+        return _ok(f'matahari terlalu rendah untuk diuji (d.y={d.y:.2f})')
+    p = g.player.world_position
+    y0 = float(p[1])
+    # Kubus di samping pemain, tegak lurus arah sinar di bidang tanah, supaya
+    # bayangannya tidak jatuh ke pemain dan bayangan pemain tidak ke situ.
+    datar = Vec3(d.x, 0, d.z)
+    datar = datar.normalized() if datar.length() > 1e-4 else Vec3(1, 0, 0)
+    samping = Vec3(-datar.z, 0, datar.x)
+    H, L = 1.6, 0.8
+    pusat = Vec3(p[0], y0, p[2]) + samping * 2.4
+    # Titik tanah di tengah bayangan: sinar dari pertengahan tinggi kubus.
+    asal = pusat + Vec3(0, H * 0.5, 0)
+    tanah = asal + d * ((y0 + 0.02 - asal.y) / d.y)
+    atas = pusat + Vec3(0, H + 0.001, 0)
+
+    def proyeksi(w):
+        lens = base.cam.node().getLens()
+        pc = base.cam.getRelativePoint(base.render, Point3(w[0], w[1], w[2]))
+        s = Point2()
+        if not lens.project(pc, s):
+            return None
+        W, Hh = base.win.getXSize(), base.win.getYSize()
+        x, y = int((s[0] + 1) / 2 * W), int((1 - s[1]) / 2 * Hh)
+        if 3 <= x < W - 3 and 3 <= y < Hh - 3:
+            return x, y
+        return None
+
+    def tembak(nama):
+        for _ in range(max(2, bm.SELANG + 1)):
+            base.taskMgr.step()
+        f = tmp / nama
+        img = base.win.getScreenshot()
+        if img is None:
+            return None
+        img.write(Filename.fromOsSpecific(str(f)))
+        return Image.open(f).convert('RGB')
+
+    def lum(im, xy, r=2):
+        x, y = xy
+        tot, n = 0.0, 0
+        for yy in range(y - r, y + r + 1):
+            for xx in range(x - r, x + r + 1):
+                c = im.getpixel((xx, yy))
+                tot += 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+                n += 1
+        return tot / n
+
+    from ursina import scene as uscene
+    kubus = Entity(parent=uscene, model=_kubus_uji(),
+                   position=pusat + Vec3(0, H / 2, 0), scale=(L, H, L))
+    apply_smooth(kubus)
+    try:
+        with _TanpaUpdate(base):
+            bm.ikuti(g, fokus=pusat)
+            g._bayangan_snap = None
+            for _ in range(bm.SELANG + 1):
+                g._bayangan_snap = None
+                bm.ikuti(g, fokus=pusat)
+                base.taskMgr.step()
+            a = tembak('_bayangan_a.png')
+            node.setShadowCaster(False)
+            b = tembak('_bayangan_b.png')
+    finally:
+        try:
+            node.setShadowCaster(True, bm.RESOLUSI, bm.RESOLUSI)
+        except Exception:
+            pass
+        from ursina import destroy
+        destroy(kubus)
+        g._bayangan_snap = None
+        for _ in range(2):
+            base.taskMgr.step()
+
+    if a is None or b is None:
+        return _fail('tidak ada tangkapan layar')
+    xy_t, xy_a = proyeksi(tanah), proyeksi(atas)
+    if xy_t is None or xy_a is None:
+        return _ok('titik uji di luar layar (kamera scene ini)')
+    la, lb = lum(a, xy_t), lum(b, xy_t)
+    turun = 1.0 - la / max(lb, 1e-3)
+    if turun < 0.12:
+        return _fail(f'bayangan kubus tidak sampai ke tanah: luminans '
+                     f'{lb:.1f} -> {la:.1f} (turun {turun:.0%}, minimal 12%)')
+    ja, jb = lum(a, xy_a), lum(b, xy_a)
+    if abs(ja - jb) > 3.0:
+        return _fail(f'jerawat bayangan: muka atas kubus yang tersinar berubah '
+                     f'{jb:.1f} -> {ja:.1f} saat caster dinyalakan')
+    return _ok(f'tanah teduh -{turun:.0%}, muka atas {ja - jb:+.1f}')
+
+
 def cek_otonomi_hidup(g):
     """Warga desa harus memilih perabot NYATA di sekitarnya, bukan daftar mati.
 
@@ -1466,6 +1629,7 @@ def main():
             hasil['save_bolak'] = cek_save_bolak(g)
             hasil['rumput_lambai'] = cek_rumput_melambai(g, base, OUT)
             hasil['cahaya_global'] = cek_cahaya_global(g, base, OUT)
+            hasil['bayangan_matahari'] = cek_bayangan_matahari(g, base, OUT)
             hasil['otonomi_hidup'] = cek_otonomi_hidup(g)
             # Jaring umum: angka di baris ini tidak boleh diam-diam milik scene
             # lain. Pernah nyata 16 Okt 2026 -- arah_maju menembus portal farm

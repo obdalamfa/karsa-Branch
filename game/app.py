@@ -345,6 +345,11 @@ class Game3D:
         if not self.state.char_name:
             self._open_chargen()
 
+        # Shadow map matahari (game/bayangan_matahari.py). Sebelum _init_env,
+        # yang menyalakan/mematikan caster per scene.
+        from . import bayangan_matahari as _bm
+        _bm.pasang(self)
+
         # Inisialisasi lingkungan langsung sesuai waktu awal (bukan fade dari gelap)
         self._init_env()
 
@@ -594,6 +599,8 @@ class Game3D:
             k_cahaya = min(1.0, dt)
             # Arah matahari ikut jam (senja rendah), diubah per >1,5 derajat.
             _cahaya.arahkan_matahari(self.sun, hour)
+            from . import bayangan_matahari as _bm
+            _bm.ikuti(self)
             self.sun.color = lerp(self.sun.color, target_sun, k_cahaya)
             self.ambient.color = lerp(self.ambient.color, target_amb, k_cahaya)
             window.color = lerp(window.color, target_sky, k_cahaya)
@@ -1045,6 +1052,9 @@ class Game3D:
         self.sun.color     = sun_col
         self.ambient.color = amb_col
         _cahaya.arahkan_matahari(self.sun, hour, paksa=True)
+        from . import bayangan_matahari as _bm
+        _bm.atur_scene(self, is_indoor)
+        _bm.ikuti(self)
         self._sync_smooth_lighting()
         window.color       = sky_col
         if not getattr(self, '_use_unlit_sh', True):

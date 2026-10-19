@@ -67,6 +67,19 @@ uniform float sm_rim_strength;
 uniform float sm_ao_strength;
 uniform float sm_ao_height;
 uniform float sm_saturation;
+#ifdef BAYANGAN_MATAHARI
+// Matahari dari LightAttrib Panda: cuma peta bayangannya yang dibaca (warna
+// dan arah tetap lewat sm_sun_color / sm_sun_dir). Tanpa caster -- dalam
+// ruang atau node tanpa lampu -- Panda mengikat peta dummy dan texture()
+// memberi 1: terang penuh, tidak ada yang berubah. Seluruh blok ini hanya
+// dikompilasi dengan KARSA_SHADOW=1 (lihat _pasang_define di bawah): peta
+// dummy pun tetap dicicip tiap fragmen, terukur ~+7 ms/frame di llvmpipe.
+uniform struct {
+    sampler2DShadow shadowMap;
+    mat4 shadowViewMatrix;
+} p3d_LightSource[1];
+uniform mat4 p3d_ViewMatrix;
+#endif
 
 in vec3 v_world_pos;
 in vec3 v_world_normal;
@@ -106,6 +119,33 @@ const vec3 AMB_TANAH  = vec3(1.08, 1.00, 0.90);
 // rentang patokan 1,4-1,8.
 const float PITA_TENGAH = 0.70;
 const float PITA_GELAP  = 0.40;
+
+// Faktor terang matahari 0..1 dari shadow map.
+//
+// Satu panggilan texture() pada sampler2DShadow: peta bayangan Panda difilter
+// FT_shadow (GL_LINEAR + compare), jadi perangkat keras membandingkan EMPAT
+// texel tetangga dan memadukannya bilinear -- PCF 2x2 tanpa empat tap manual.
+// Empat tap manual terukur ~+6 ms/frame di llvmpipe tanpa beda yang terbaca
+// pada film 36 m.
+//
+// Koordinatnya dihitung DI FRAGMEN dari posisi dunia, bukan dioper dari
+// vertex: fragmen ini dipakai bersama grass_shader, dan varying baru akan
+// memutus rumput. Posisi digeser sepanjang normal (normal offset) sebelum
+// diproyeksikan -- bias kedalaman saja tidak cukup untuk bidang yang hampir
+// sejajar sinar (dinding samping, helai rumput) dan memberi jerawat.
+#ifdef BAYANGAN_MATAHARI
+float terang_matahari(vec3 N) {
+    vec3 p = v_world_pos + N * 0.06;
+    vec4 c = p3d_LightSource[0].shadowViewMatrix * (p3d_ViewMatrix * vec4(p, 1.0));
+    vec3 q = c.xyz / max(c.w, 1e-5);
+    // Di luar film: terang. Bayangan cuma ada di sekitar pemain.
+    if (q.x <= 0.0 || q.x >= 1.0 || q.y <= 0.0 || q.y >= 1.0 || q.z >= 1.0) {
+        return 1.0;
+    }
+    q.z -= 0.0015;
+    return texture(p3d_LightSource[0].shadowMap, q);
+}
+#endif
 
 vec3 lift_saturation(vec3 c, float s) {
     float luma = dot(c, vec3(0.299, 0.587, 0.114));
@@ -226,6 +266,15 @@ void main() {
                                 mix(vec3(1.0), AMB_LANGIT, hemi),
                                 N.y * 0.5 + 0.5);
 
+    // Bayangan jatuhan cuma menurunkan SUKU MATAHARI, dan paling dalam ke
+    // pita gelap -- tanah teduh jadi seterang sisi gelap benda, bukan cuma
+    // ambient. Ambient sendirian ~3x lebih gelap dari tersinar; patokan
+    // farm_wide memberi teduh/terbuka ~1,5, sama dengan rasio terang/gelap.
+#ifdef BAYANGAN_MATAHARI
+    float s_mat = terang_matahari(N);
+    diff = mix(min(diff, PITA_GELAP), diff, s_mat);
+#endif
+
     vec3 lit = base.rgb * (amb + sm_sun_color * diff) * ao;
 
     lit *= outline_darken; // Tepi sedikit gelap, tidak full hitam
@@ -258,6 +307,24 @@ void main() {
 _smooth_shader = None
 _shader_failed  = False
 _pipeline_checked = False
+
+def _pasang_define(frag: str) -> str:
+    """Nyalakan blok BAYANGAN_MATAHARI di fragmen kalau shadow map diminta.
+
+    Ditentukan SEKALI saat modul diimpor: grass_shader mengimpor `_FRAG`
+    yang sama, jadi dua shader itu tidak bisa berbeda pendapat."""
+    try:
+        from .bayangan_matahari import diminta
+        if not diminta():
+            return frag
+    except Exception:
+        return frag
+    kepala, _, sisa = frag.partition('\n#version 140\n')
+    return kepala + '\n#version 140\n#define BAYANGAN_MATAHARI\n' + sisa
+
+
+_FRAG = _pasang_define(_FRAG)
+
 
 def reset_shader_cache():
     """Paksa re-compile shader berikutnya (panggil setelah hot-reload)."""

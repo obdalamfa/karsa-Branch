@@ -168,8 +168,13 @@ def _tunggu_konvergen(g, base, hour, maks=900):
 def _tembak(base, path):
     from panda3d.core import Filename
     from PIL import Image
+    # taskMgr.step, bukan graphicsEngine.renderFrame: task 'bayangan_selang'
+    # (game/bayangan_matahari.py) yang menyalakan pass shadow map tiap
+    # SELANG frame cuma jalan lewat taskMgr. Dengan renderFrame, buffer
+    # terkunci di keadaan frame terakhir -- kalau MATI, kubus yang baru
+    # dipasang tidak pernah masuk peta dan "teduh" terukur 1,0.
     for _ in range(2):
-        base.graphicsEngine.renderFrame()
+        base.taskMgr.step()
     img = base.win.getScreenshot()
     img.write(Filename.fromOsSpecific(str(path)))
     return Image.open(path).convert('RGB')

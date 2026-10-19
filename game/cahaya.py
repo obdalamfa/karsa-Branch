@@ -170,7 +170,12 @@ def arahkan_matahari(sun, hour: float, paksa: bool = False) -> bool:
         if lama.dot(baru) > 0.99966:          # cos 1,5 derajat
             return False
     try:
-        sun.look_at(sun.world_position + baru)
+        # Entity.look_at, BUKAN DirectionalLight.look_at: versi lampu Ursina
+        # memanggil update_bounds(scene) tiap kali -- mengukur seluruh scene
+        # (kubah langit r=500 ikut) dan menimpa lensa shadow map yang disetel
+        # game/bayangan_matahari.py.
+        from ursina import Entity
+        Entity.look_at(sun, sun.world_position + baru)
     except Exception:
         return False
     return True

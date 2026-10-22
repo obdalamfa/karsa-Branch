@@ -844,7 +844,14 @@ def cek_rumput_melambai(g, base, tmp: Path):
         img.write(Filename.fromOsSpecific(str(p)))
         return Image.open(p).convert('RGB')
 
+    def frac_beda(a, b):
+        if a is None or b is None or a.size != b.size:
+            return None
+        n = sum(1 for pa, pb in zip(a.getdata(), b.getdata()) if pa != pb)
+        return n / (a.size[0] * a.size[1])
+
     semula = getattr(g, '_grass_time', 0.0)
+    dibidik = ''
     try:
         # Update dibekukan: kalau tidak, game memanggil update_time sendiri di
         # antara dua tangkapan layar dan pemeriksaan ini lulus karena waktu
@@ -852,6 +859,28 @@ def cek_rumput_melambai(g, base, tmp: Path):
         with _TanpaUpdate(base):
             a = tembak(0.0, '_lambai_a.png')
             b = tembak(3.7, '_lambai_b.png')
+            f = frac_beda(a, b)
+            # Sudut pemain bisa nyaris tanpa rumput: sejak gua dan hutan
+            # integrasi/satu, mountain dibuka di mulut gua yang dikepung tebing
+            # menerus, dan rumput tinggal 0,3% layar. Itu bukan rumput beku,
+            # itu rumput yang tidak tampak. Jadi ulangi SEKALI dengan kamera
+            # dibidikkan tegak ke rumput terdekat. Ambangnya tetap; rumput yang
+            # sungguh beku memberi dua frame identik dari sudut mana pun.
+            if f is not None and f < 0.005:
+                from ursina import camera, Vec3
+                px, _, pz = g.player.world_position
+                dekat = min(ge, key=lambda e: (e.world_x - px) ** 2 + (e.world_z - pz) ** 2)
+                pos0, rot0 = camera.world_position, camera.world_rotation
+                try:
+                    tgt = dekat.world_position
+                    camera.world_position = tgt + Vec3(0, 9, -2.5)
+                    camera.look_at(tgt)
+                    a = tembak(0.0, '_lambai_a2.png')
+                    b = tembak(3.7, '_lambai_b2.png')
+                    dibidik = (f' (sudut pemain {f:.2%} -> dibidik ke rumput '
+                               f'({tgt.x:.0f},{tgt.z:.0f}))')
+                finally:
+                    camera.world_position, camera.world_rotation = pos0, rot0
     finally:
         # Kembalikan waktu rumput seperti semula supaya pemeriksaan berikutnya
         # tidak menilai dunia yang sudah kita geser sendiri.
@@ -869,7 +898,7 @@ def cek_rumput_melambai(g, base, tmp: Path):
     frac = beda / total
     if frac < 0.005:
         return _fail(f'rumput beku — cuma {frac:.2%} piksel berubah antara '
-                     f'grs_time 0.0 dan 3.7')
+                     f'grs_time 0.0 dan 3.7{dibidik}')
 
     # Separuh struktural, dan ini bukan pengulangan yang di atas.
     #
@@ -896,7 +925,7 @@ def cek_rumput_melambai(g, base, tmp: Path):
     except Exception:
         pass        # versi Panda tanpa API ini: uji piksel di atas tetap jalan
 
-    return _ok(f'{frac:.1%} piksel bergeser')
+    return _ok(f'{frac:.1%} piksel bergeser{dibidik}')
 
 
 def cek_cahaya_global(g, base, tmp: Path):

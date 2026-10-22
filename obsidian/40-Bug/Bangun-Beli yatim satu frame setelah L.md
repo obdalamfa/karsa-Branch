@@ -4,7 +4,7 @@ tipe: bug
 status: selesai
 ditemukan: "2026-10-18"
 commit_perbaikan: (cabang bangun-B, "Bangun/Beli tidak lagi yatim")
-dijaga_oleh: _bench/probes/probe_buy_sinema.py (fase L)
+dijaga_oleh: tools/probe_buy_sinema.py (fase L; baris 'buy/sinema' di tools/regress.py)
 tags: [bug, status/selesai, input, mode]
 ---
 
@@ -37,6 +37,24 @@ melewati satu frame.
 
 - pendaftaran `'buy'` dibuang → fase L 0/3.
 - pembersihan di `close_all` dibuang → "ESC menutup panel" GAGAL (15 entity).
+
+## Penjaga di regresi
+
+Sampai perbaikan-B probe ini tinggal di `_bench/probes/` tanpa pemanggil:
+mutasi 'buy' dibuang dari `_pulihkan_mode_yatim` membuat probe_batin dan lima menit tetap hijau, dan
+`tools/regress.py` keluar 0 (diukur verifikator). Sekarang probe di `tools/`
+dan disambung ke regresi; mutasi yang sama di regresi penuh: buy/sinema 3/6, regresi keluar 1.
+
+## Tata letak yang ikut terbuka
+
+Begitu panel tidak lagi yatim, isinya benar-benar terbaca -- dan tidak muat:
+baris katalog mulai y 0,15 berjarak 0,052 di latar 0,66, sehingga petunjuk
+tombol menimpa baris Perapian, Kulkas dan Televisi di luar bingkai, judul
+menyentuh bingkai atas (foto verifikator). Latar kini 0,64 x 0,72 di y -0,10,
+baris berjarak 0,036. Cek tata letak fase L: sebelum GAGAL (judul, petunjuk,
+Perapian keluar latar), sesudah bersih (14 teks); mutasi jarak baris lama
+→ 5/6 ('BANGUN / BELI' menimpa '> Kursi'). Masih terbuka: flash dan popup
+tutorial HUD tergambar di atas panel tengah mana pun (bukan khusus panel ini).
 
 ## Pelajaran
 

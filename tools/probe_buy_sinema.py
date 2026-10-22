@@ -9,7 +9,12 @@
 Tiap fase subproses sendiri (Game3D sekali per proses, sinema intro sekali per
 pemain). Alat jalur asli dipinjam dari tools/probe_batin.py.
 
-    python _bench/probes/probe_buy_sinema.py      # keluar 1 kalau ada yang gagal
+Disambung ke tools/regress.py (baris 'buy/sinema'). Dulu ia tinggal di
+_bench/probes/ tanpa pemanggil: mematikan rute ESC-sinema atau cabang 'buy'
+di _pulihkan_mode_yatim tetap membuat regresi hijau (aturan #4 berlaku juga
+untuk penjaganya sendiri).
+
+    python tools/probe_buy_sinema.py      # keluar 1 kalau ada yang gagal
 """
 from __future__ import annotations
 
@@ -20,7 +25,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'tools'))
 sys.path.insert(0, str(ROOT))
 
@@ -59,6 +64,22 @@ def fase(nama, save):
         hidup = [e for e in p._buy_ents if e.enabled]
         cek('L [L] membuka Bangun/Beli dan bertahan 3 frame',
             p.mode == 'buy' and hidup, f'mode={p.mode} ents_hidup={len(hidup)}')
+        # Tata letak: sejak [L] tidak lagi yatim panelnya benar-benar dibaca.
+        # Dulu baris katalog ke-10/11 jatuh di luar bingkai dan petunjuk
+        # tombol menimpa baris 'Perapian'. Kotak dibaca dari geometri yang
+        # digambar (pembantu tata letak probe_batin).
+        if hidup:
+            teks = [e for e in p._buy_ents[1:] if e.enabled and (e.text or '').strip()]
+            masalah = pb.di_luar_latar(p._buy_ents[0], teks)
+            for i, a in enumerate(teks):
+                for b in teks[i + 1:]:
+                    if pb._irisan(pb.kotak(a), pb.kotak(b)):
+                        masalah.append(f"'{a.text.strip()[:10]}' menimpa '{b.text.strip()[:10]}'")
+            cek('L tata letak: semua baris di dalam bingkai, tidak saling menimpa',
+                not masalah, '; '.join(masalah[:3]) or f'bersih ({len(teks)} teks)')
+        else:
+            cek('L tata letak: semua baris di dalam bingkai, tidak saling menimpa',
+                False, 'panel tidak terbuka')
         sel0 = p._buy_sel
         pb.tekan(g, 's', 2)
         cek('L [S] menggeser pilihan katalog', p.mode == 'buy' and p._buy_sel != sel0,
@@ -81,11 +102,16 @@ def main():
     kerja = Path(tempfile.mkdtemp(prefix='probe_buy_sinema_'))
     semua = []
     for f in ('S', 'L'):
-        r = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--fase', f,
-                            str(kerja / f'{f}.json')], cwd=ROOT, capture_output=True,
-                           text=True, timeout=600)
-        (kerja / f'{f}.log').write_text(r.stdout + '\n' + r.stderr, encoding='utf-8')
-        baris = [json.loads(b[4:]) for b in r.stdout.splitlines() if b.startswith('CEK ')]
+        for ulang in (1, 0):
+            r = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--fase', f,
+                                str(kerja / f'{f}.json')], cwd=ROOT, capture_output=True,
+                               text=True, timeout=600)
+            (kerja / f'{f}.log').write_text(r.stdout + '\n' + r.stderr, encoding='utf-8')
+            baris = [json.loads(b[4:]) for b in r.stdout.splitlines() if b.startswith('CEK ')]
+            # Lingkungan, bukan game: Xvfb di mesin bersama sesekali menolak
+            # membuka jendela GL. Diulang SEKALI, sama dengan probe_batin.
+            if baris or not ulang or 'Could not open window' not in r.stderr:
+                break
         semua += baris or [[f'{f} subproses tanpa hasil', False,
                             (r.stderr.strip().splitlines() or ['?'])[-1][:100]]]
     print('\nBUY + ESC SINEMA — lewat app.input')

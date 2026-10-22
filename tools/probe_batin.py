@@ -20,6 +20,7 @@ Probe ini memainkannya. Tiga aturan, semuanya lahir dari probe lama yang salah:
      A  pilih opsi di modal, suara yang hilang, panel, TAB, tata letak
      B  ESC pada modal, subtitle memudar selama modal terbuka
      C  persistensi: C1 menjawab + F5, C2 boot dari save itu, C3 save lama
+     D  F9 di tengah sesi: bendera sekali-ucap ikut save yang dimuat
 
 Save ditulis ke direktori sementara (game.state.SAVE_FILE ditambal), jadi
 probe tidak pernah menyentuh save pemain dan tidak perlu dilewati kalau ada.
@@ -404,6 +405,20 @@ def fase_a(g):
         f"_batin_open={getattr(p, '_batin_open', None)}")
     tekan(g, 'tab', 3)
 
+    # Panel majelis menutup sendiri begitu mode meninggalkan HUD. Tanpa itu ia
+    # tetap tergambar di kolom kanan, di atas panel inventaris, kotak dialog
+    # dan modal pilihan (UIManager.update). Prasyaratnya panel benar-benar
+    # terbuka dulu; kalau tidak, 'tertutup' lulus kosong.
+    tekan(g, TOMBOL_PANEL, 3)
+    buka_lagi = bool(getattr(p, '_batin_open', False))
+    tekan(g, 'i', 4)
+    hidup = [e for e in getattr(p, '_batin_ents', []) or [] if e and e.enabled]
+    cek('A [I] dengan panel majelis terbuka: majelis tertutup sendiri',
+        buka_lagi and p.mode != 'hud' and not getattr(p, '_batin_open', True) and not hidup,
+        (f"mode={p.mode} open={getattr(p, '_batin_open', None)} hidup={len(hidup)}")
+        if buka_lagi else 'panel tidak terbuka sebelum [I]')
+    tekan(g, 'escape', 3)
+
 
 # ─── fase B ─────────────────────────────────────────────────────────────────
 def fase_b(g):
@@ -478,6 +493,42 @@ def fase_c3(g):
         f"batin_sekali={getattr(s, 'batin_sekali', None)!r}")
 
 
+# ─── fase D ─────────────────────────────────────────────────────────────────
+def fase_d(g, save: Path):
+    """F9 mengganti isi state; bendera sekali-ucap harus ikut save yang dimuat.
+    Batin yang menyimpan rujukan list lama (cache) akan tetap mengira
+    PAGI PERTAMA sudah dijawab, padahal save yang dimuat belum."""
+    p, s = g.panels, g.state
+    ke_hud(g)
+    baca_surat(g)
+    tekan(g, 'f5', 3)
+    awal = json.loads(save.read_text(encoding='utf-8')) if save.exists() else None
+    prasyarat('D F5 awal menyimpan save tanpa pagi_pertama',
+        awal is not None and 'pagi_pertama' not in (awal.get('batin_sekali') or []),
+        f'save={save.exists()}')
+    cangkul(g, 10, 12)
+    jawab1 = modal_terbuka(p)
+    tekan(g, '1', 3)
+    prasyarat('D modal pertama dijawab, bendera masuk state',
+        jawab1 and 'pagi_pertama' in (getattr(s, 'batin_sekali', None) or []),
+        f'modal={jawab1} batin_sekali={getattr(s, "batin_sekali", None)}')
+    tekan(g, 'f9', 10)
+    s = g.state
+    cek('D F9 mengembalikan batin_sekali ke isi save',
+        jawab1 and 'pagi_pertama' not in (getattr(s, 'batin_sekali', None) or ['?']),
+        f'batin_sekali={getattr(s, "batin_sekali", None)}')
+    cangkul(g, 12, 12)
+    lagi = modal_terbuka(p)
+    cek('D setelah F9 cangkul membuka PAGI PERTAMA lagi (save belum menjawab)',
+        jawab1 and lagi, f'mode={p.mode}')
+    tekan(g, '1', 3)
+    tekan(g, 'f5', 3)
+    akhir = json.loads(save.read_text(encoding='utf-8')) if save.exists() else {}
+    cek('D F5 setelah F9 menyimpan pagi_pertama',
+        jawab1 and lagi and 'pagi_pertama' in (akhir.get('batin_sekali') or []),
+        f"batin_sekali={akhir.get('batin_sekali')}")
+
+
 # ─── orkestrasi ─────────────────────────────────────────────────────────────
 def jalankan_fase(fase: str, save: Path):
     g = boot(save)
@@ -492,6 +543,8 @@ def jalankan_fase(fase: str, save: Path):
             fase_c2(g)
         elif fase == 'C3':
             fase_c3(g)
+        elif fase == 'D':
+            fase_d(g, save)
     except Exception as ex:
         traceback.print_exc()
         cek(f'{fase} probe meledak', False, f'{type(ex).__name__}: {ex}')
@@ -544,6 +597,7 @@ def main():
         else:
             semua.append(['C3 save lama tanpa batin_sekali dimuat apa adanya', False,
                           'C1 tidak menghasilkan save'])
+        semua += _sub('D', kerja / 'd.json', log)
 
     print('\nMAJELIS BATIN — dimainkan lewat app.input dari game baru')
     print('=' * 78)

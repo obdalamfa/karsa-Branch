@@ -1229,6 +1229,7 @@ def main():
 
     lima_baris = None
     batin_baris = None
+    buy_sinema_baris = None
     _pasang_save_fixture(ROOT / cfg.SAVE_FILE)
     t0 = time.time()
     try:
@@ -1572,6 +1573,27 @@ def main():
         except subprocess.TimeoutExpired:
             batin_baris = (False, 'waktu habis')
 
+    # ── Bangun/Beli + ESC sinema (subproses, fase S dan L) ──
+    # Dua mode yang ditelan jaring di app.py: [L] yang yatim satu frame
+    # kemudian, dan ESC sinema yang ditangkap jaring ESC global (sinema intro
+    # tak pernah selesai, semua sinema berikutnya ikut mati). Penjaganya dulu
+    # tinggal di _bench/ tanpa pemanggil, jadi kedua mutasi itu lolos hijau.
+    if not minta:
+        import subprocess
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'probe_buy_sinema.py')],
+                               cwd=ROOT, capture_output=True, text=True, timeout=900)
+            akhir = [b for b in r.stdout.splitlines()
+                     if re.search(r'\d+/\d+ lulus', b)][-1:]
+            if akhir:
+                m = re.search(r'(\d+)/(\d+) lulus', akhir[0])
+                ok = r.returncode == 0 and m.group(1) == m.group(2) and int(m.group(2)) > 0
+                buy_sinema_baris = (ok, akhir[0].split('(')[0].strip())
+            else:
+                buy_sinema_baris = (False, f'tanpa keluaran (kode {r.returncode})')
+        except subprocess.TimeoutExpired:
+            buy_sinema_baris = (False, 'waktu habis')
+
     print('-' * 78)
     tanda_hud = 'LULUS' if not hud_baris else 'GAGAL'
     ring_hud = '; '.join(f'{k} {c}' for k, c in hud_baris) or 'semua di dalam layar'
@@ -1600,6 +1622,12 @@ def main():
         print(f'{"majelis batin":14s} {"LULUS" if ok_batin else "GAGAL":>7s} '
               f'{"":>9s} {"":>7s}  {catatan_batin[:44]}')
         if not ok_batin:
+            gagal_total += 1
+    if buy_sinema_baris is not None:
+        ok_bs, catatan_bs = buy_sinema_baris
+        print(f'{"buy/sinema":14s} {"LULUS" if ok_bs else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {catatan_bs[:44]}')
+        if not ok_bs:
             gagal_total += 1
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)

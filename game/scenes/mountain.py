@@ -5,6 +5,42 @@ from game.scenes.layout import blank, rect, border, hline, vline, scatter
 from game.scenes.zone_paint import Zone, BATU_ALUN
 
 
+# Titik jadwal warga, makhluk, dan hewan di lereng (data.py). Hutan tidak
+# boleh tumbuh di sini atau tepat di sebelahnya, supaya mereka tetap bisa
+# berdiri dan didekati pemain.
+_TITIK_JADWAL = [(10, 20), (5, 20), (14, 12), (11, 4), (22, 18), (15, 18)]
+
+
+def _hutan(m):
+    """Hutan lebat di kaki lereng, seperti versi lama sebelum tata letak tangan.
+
+    Versi lama menanam pohon acak di 20% ubin rumput (benih 42) dan terasa
+    seperti hutan sungguhan sebelum gua. Versi tangan menyisakan 17 pohon
+    sehingga lereng terlihat gundul. Di sini kepadatan lama dikembalikan, tapi
+    hanya di rumput yang berjarak satu ubin dari jalur dan pelataran batu,
+    jadi jalan ke gua dan pemakaman tetap lapang.
+    """
+    import random
+    rng = random.Random(42)
+    h, w = len(m), len(m[0])
+
+    def dekat(x, y, jenis):
+        return any(0 <= y + dy < h and 0 <= x + dx < w and m[y + dy][x + dx] in jenis
+                   for dy in (-1, 0, 1) for dx in (-1, 0, 1))
+
+    for y in range(11, h - 1):
+        for x in range(1, w - 1):
+            if m[y][x] != G or dekat(x, y, (P, D, DR)):
+                continue
+            if any(abs(x - tx) <= 1 and abs(y - ty) <= 1 for tx, ty in _TITIK_JADWAL):
+                continue
+            r = rng.random()
+            if r < 0.30:
+                m[y][x] = TR
+            elif r < 0.33:
+                m[y][x] = DT
+
+
 def build_mountain():
     m = blank(30, 25, G)
 
@@ -33,6 +69,8 @@ def build_mountain():
     vline(m, 2, 19, 23, P, thick=2)
     m[24][2] = P
     m[3][14] = m[3][15] = DR
+
+    _hutan(m)
 
     from game.scenes.rock_sanctuary import build_mountain_landscape
     scene = Scene('mountain', 'Lereng Gunung', m, portals=[

@@ -585,8 +585,10 @@ def trough_pour_point(world):
     return t['pos'] if t else None
 
 
-def default_prop_builder(world, scene):
+def default_prop_builder(world, scene, pembangun_pohon=None):
+    """`pembangun_pohon` menggantikan build_tree untuk ubin TR (mis. pinus gunung)."""
     from game.world import OBJ_TEX
+    build_tree_ = pembangun_pohon or build_tree
     from game.scenes.zone_paint import paint_zone
 
     outdoor = not getattr(scene, 'indoor', False)
@@ -604,7 +606,7 @@ def default_prop_builder(world, scene):
             tid = scene.tiles[ty][tx]
             wx, wz = tx * TS, ty * TS
 
-            if tid == TR: build_tree(world, wx, wz)
+            if tid == TR: build_tree_(world, wx, wz)
             elif tid == PALM: build_palm(world, wx, wz)
             elif tid == DT: build_dead_tree(world, wx, wz)
             elif tid == LN: build_lantern(world, wx, wz)

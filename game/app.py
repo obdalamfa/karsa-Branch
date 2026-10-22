@@ -371,6 +371,7 @@ class Game3D:
         camera.clip_plane_near = 0.5
         camera.clip_plane_far  = 2000
         self.camera_yaw     = 0.0
+        self._yaw_tujuan    = None   # tujuan putaran [Q]/[E], lihat input()
         self.camera_pitch   = 34.0   # sudut baca ala life-sim isometrik
         self.camera_dist    = 19.0
 
@@ -570,6 +571,7 @@ class Game3D:
                         mouse.locked = True
                     else:
                         # Menggunakan kontrol normal (non-inverted) untuk kenyamanan standard game 3D
+                        self._yaw_tujuan = None   # seret mouse menang atas [Q]/[E]
                         self.camera_yaw -= mouse.velocity[0] * 200
                         self.camera_pitch += mouse.velocity[1] * 200
                 else:
@@ -586,6 +588,16 @@ class Game3D:
                 # 17 -> 40 ms) dan posisi mouse tidak pernah diperbarui.
                 if mouse.locked:
                     mouse.locked = False
+
+            # Putaran [Q]/[E] berjalan halus ke tujuannya (~0,25 dtk per 45
+            # derajat), dijepit supaya frame panjang tidak melewati tujuan.
+            if self._yaw_tujuan is not None:
+                sisa = self._yaw_tujuan - self.camera_yaw
+                if abs(sisa) < 0.5:
+                    self.camera_yaw = self._yaw_tujuan
+                    self._yaw_tujuan = None
+                else:
+                    self.camera_yaw += sisa * min(1.0, 12.0 * dt)
 
             # Kunci sudut kemiringan (pitch) agar tidak terbalik atau menembus tanah
             self.camera_pitch = max(5.0, min(80, self.camera_pitch))
@@ -801,6 +813,17 @@ class Game3D:
             langkah = -1.5 if key == 'scroll up' else 1.5
             self.camera_dist = max(CAM_DIST_MIN,
                                    min(CAM_DIST_MAX, self.camera_dist + langkah))
+            return
+
+        # Putar kamera 45 derajat per tekan: [Q] ke kiri, [E] ke kanan. Arah
+        # sama dengan seret mouse kanan (seret ke kanan = yaw turun = [E]).
+        # Yang diputar TUJUAN-nya; update() mendekatkan camera_yaw ke tujuan
+        # dengan halus, jadi tekan cepat dua kali = 90 derajat, bukan 45 yang
+        # tertimpa. Tujuan dibuang begitu sampai, supaya penulis camera_yaw
+        # lain (seret mouse, pemeriksaan regresi) tidak ditarik balik.
+        if self.panels.mode == 'hud' and key in ('q', 'e'):
+            awal = self._yaw_tujuan if self._yaw_tujuan is not None else self.camera_yaw
+            self._yaw_tujuan = awal + (45.0 if key == 'q' else -45.0)
             return
 
         # Chargen mode — semua input ke ChargenScreen

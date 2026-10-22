@@ -1543,16 +1543,21 @@ class Player3D(Entity):
             self.interaction_controller.use_tool(entities_mgr, panels)
             return True
 
-        if key == 'e':
-            self.interaction_controller.interact(entities_mgr, panels)
-            return True
 
         if key == 'z':
             self.interaction_controller.attack(entities_mgr, panels)
             return True
 
+        # [F] interaksi, [Shift]+[F] tangkap. [Q]/[E] dulu interaksi dan
+        # benih-sebelumnya; sejak 22 Okt 2026 keduanya memutar kamera (app.py).
+        # Ursina membuang awalan 'shift-' dari nama tombol, jadi Shift dibaca
+        # dari held_keys.
         if key == 'f':
-            self.interaction_controller.capture(entities_mgr, panels)
+            from ursina import held_keys
+            if held_keys['shift'] or held_keys['left shift'] or held_keys['right shift']:
+                self.interaction_controller.capture(entities_mgr, panels)
+            else:
+                self.interaction_controller.interact(entities_mgr, panels)
             return True
 
         if key == 't':
@@ -1581,13 +1586,6 @@ class Player3D(Entity):
                 s.tool_index = n - 1
                 sound_play('menu_move', 0.6)
                 return True
-
-        if key == 'q':
-            keys = list(CROPS.keys())
-            idx  = keys.index(s.seed_key) if s.seed_key in keys else 0
-            s.seed_key = keys[(idx - 1) % len(keys)]
-            sound_play('menu_move', 0.6)
-            return True
 
         if key == 'r':
             keys = list(CROPS.keys())

@@ -1247,12 +1247,18 @@ class EntitiesManager:
                     s.mobs.remove(mob)
         return killed
 
-    def try_capture_wild(self, tx: int, ty: int, state) -> tuple | None:
+    def try_capture_wild(self, tx: int, ty: int, state, kinds=None) -> tuple | None:
+        # `kinds` membatasi jenis yang boleh diambil. Interaksi [F] memanggilnya
+        # dengan herba/beri/jamur/mandrake saja (_try_harvest_wild). Parameter
+        # ini sempat hilang dari tanda tangan sementara pemanggilnya tetap ada,
+        # jadi interaksi di lapangan terbuka melempar TypeError -- lihat
+        # obsidian/40-Bug "Interaksi di lapangan terbuka melempar TypeError".
         import random as rng_mod
         sc = state.scene_name
         px, pz = tx * TS, ty * TS
         for w in list(state.wild_entities):
             if w['scene'] != sc: continue
+            if kinds is not None and w['kind'] not in kinds: continue
             wx, wz = w['x'] * TS, w['y'] * TS
             if math.sqrt((px-wx)**2 + (pz-wz)**2) > 3.0: continue
             kind = w['kind']

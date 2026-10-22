@@ -122,7 +122,7 @@ def baca_surat(g):
     mb = next((x, y) for y, r in enumerate(SCENES['farm'].tiles)
               for x, v in enumerate(r) if v == MB)
     jalan(g, mb[0], mb[1] - 1, 'up')
-    tekan(g, 'e', 6)
+    tekan(g, 'f', 6)
     if g.panels.mode != 'hud':
         tekan(g, 'escape', 4)
     return g.state.mail_read
@@ -291,7 +291,7 @@ def fase_a(g):
         isinstance(getattr(g, 'batin', None), Batin) and p.batin is getattr(g, 'batin', None),
         f'game.batin={getattr(g, "batin", None)!r} panels.batin={p.batin!r}')
 
-    prasyarat('A surat dibaca dengan [E]', baca_surat(g), f'mail_read={s.mail_read}')
+    prasyarat('A surat dibaca dengan [F]', baca_surat(g), f'mail_read={s.mail_read}')
 
     t0 = s.stats.get('tilled', 0)
     cangkul(g, 10, 12)

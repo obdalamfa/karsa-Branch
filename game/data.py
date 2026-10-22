@@ -396,7 +396,7 @@ ANIMAL_NPCS = {
     'kelinci_putih':   {'name':'Pinky','type':'kelinci','talks':[["(Hidung berkedut)"]],'product':None},
 }
 
-# ─── Hasil ternak harian (dikumpulkan [E] dari hewan, dijual via Peti Kirim) ───
+# ─── Hasil ternak harian (dikumpulkan [F] dari hewan, dijual via Peti Kirim) ───
 ANIMAL_PRODUCTS = {
     'susu':  {'name': 'Susu',  'sell': 90,  'description': 'Susu segar dari sapi'},
     'telur': {'name': 'Telur', 'sell': 55,  'description': 'Telur ayam pagi'},

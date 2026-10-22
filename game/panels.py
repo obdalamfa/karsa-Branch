@@ -579,7 +579,7 @@ class UIManager:
 
     # Tiga pintasan, bukan tujuh. Sisanya hidup di F1, dan roda alat di
     # kiri-atas sudah membawa nomornya sendiri di tiap petak.
-    _PINTASAN = (('SPACE', 'Pakai'), ('E', 'Aksi'), ('TAB', 'Motif'))
+    _PINTASAN = (('SPACE', 'Pakai'), ('F', 'Aksi'), ('Q/E', 'Putar'), ('TAB', 'Motif'))
     _HINT_PADAM = 30.0          # detik sebelum petunjuk memudar sendiri
 
     # ─── PUBLIC: HUD ─────────────────────────────────────
@@ -1363,7 +1363,7 @@ class UIManager:
         if s.tool_index in (2, 3):
             seed_name = CROPS.get(s.seed_key, {}).get('name', s.seed_key)
             seed_qty  = s.inventory.get(s.seed_key + '_seed', 0)
-            self._teks(self._seed_txt, f'Q/R: {seed_name} x{seed_qty}')
+            self._teks(self._seed_txt, f'R: {seed_name} x{seed_qty}')
         else:
             self._seed_txt.text = ''
 
@@ -2576,14 +2576,15 @@ class UIManager:
                 "  WASD / Arrow  : Jalan\n"
                 "  Shift+WASD    : Lari (pakai energi)\n\n"
                 "── KAMERA ──\n"
+                "  Q / E              : Putar 45 derajat kiri / kanan\n"
                 "  Klik kanan + geser : Putar bebas\n\n"
                 "── AKSI ──\n"
                 "  SPACE  : Pakai alat aktif\n"
-                "  E      : Pie Menu interaksi NPC\n"
+                "  F      : Interaksi (bicara, surat, peti, kuda)\n"
                 "  Z      : Serang (butuh pedang)\n"
                 "  X      : Tambah/hapus tile ke Antrian\n"
                 "  C      : Jalankan semua Antrian Aksi\n"
-                "  F      : Tangkap makhluk liar\n"
+                "  Shift+F: Tangkap makhluk liar\n"
                 "  G      : Beri hadiah ke NPC\n"
                 "  V      : Makan item (pulihkan HP/EN)\n"
                 "  B      : Terbang (Sapoe Terbang)\n"
@@ -2597,7 +2598,7 @@ class UIManager:
                 "  saat SPACE ditekan, lalu disimpan lagi sendiri.\n"
                 "  1 Cangkul  2 Siram  3 Tanam  4 Panen  5 Kapak\n"
                 "  6 Hadiah   7 Pickaxe 8 Pedang 9 Pancing\n"
-                "  Q/R    : Ganti bibit\n\n"
+                "  R      : Ganti bibit\n\n"
                 "── IKON KEBUTUHAN (kiri-bawah) ──\n"
                 "  Wajah  Suasana hati (jumlah semua di bawahnya)\n"
                 "  Garpu  Lapar        Kursi  Nyaman\n"

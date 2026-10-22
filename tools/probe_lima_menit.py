@@ -136,7 +136,7 @@ def uji(g):
               for x, v in enumerate(r) if v == MB)
     jalan(g, 'farm', mb[0], mb[1] - 1, 'up')
     t = tombol_petunjuk(s)
-    g.input(t or 'e')
+    g.input(t or 'f')
     langkah(6)
     cek(f'langkah 1 "{t}" sesuai petunjuk membaca surat', s.mail_read,
         f'tombol petunjuk={t!r} mail_read={s.mail_read}')

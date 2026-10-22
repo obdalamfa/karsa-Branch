@@ -1231,6 +1231,7 @@ def main():
     lima_baris = None
     batin_baris = None
     buy_sinema_baris = None
+    kamera_baris = None
     _pasang_save_fixture(ROOT / cfg.SAVE_FILE)
     t0 = time.time()
     try:
@@ -1595,6 +1596,27 @@ def main():
         except subprocess.TimeoutExpired:
             buy_sinema_baris = (False, 'waktu habis')
 
+    # ── Kamera [Q]/[E] + interaksi [F] (subproses) ──
+    # PANDUAN.md lama menjanjikan "Q/E Putar kamera" tanpa kode yang
+    # melakukannya. Probe ini memainkan tombolnya lewat g.app.input dari game
+    # baru, dan sekaligus menangkap interaksi [F] di lapangan terbuka yang dulu
+    # melempar TypeError (try_capture_wild kehilangan parameter `kinds`).
+    if not minta:
+        import subprocess
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'probe_kamera_qe.py')],
+                               cwd=ROOT, capture_output=True, text=True, timeout=600)
+            akhir = [b for b in r.stdout.splitlines()
+                     if re.search(r'\d+/\d+ lulus', b)][-1:]
+            if akhir:
+                m = re.search(r'(\d+)/(\d+) lulus', akhir[0])
+                ok = r.returncode == 0 and m.group(1) == m.group(2) and int(m.group(2)) > 0
+                kamera_baris = (ok, akhir[0].strip())
+            else:
+                kamera_baris = (False, f'tanpa keluaran (kode {r.returncode})')
+        except subprocess.TimeoutExpired:
+            kamera_baris = (False, 'waktu habis')
+
     print('-' * 78)
     tanda_hud = 'LULUS' if not hud_baris else 'GAGAL'
     ring_hud = '; '.join(f'{k} {c}' for k, c in hud_baris) or 'semua di dalam layar'
@@ -1629,6 +1651,12 @@ def main():
         print(f'{"buy/sinema":14s} {"LULUS" if ok_bs else "GAGAL":>7s} '
               f'{"":>9s} {"":>7s}  {catatan_bs[:44]}')
         if not ok_bs:
+            gagal_total += 1
+    if kamera_baris is not None:
+        ok_km, catatan_km = kamera_baris
+        print(f'{"kamera Q/E":14s} {"LULUS" if ok_km else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {catatan_km[:44]}')
+        if not ok_km:
             gagal_total += 1
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)

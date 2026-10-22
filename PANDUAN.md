@@ -82,26 +82,26 @@ menua=kering), nutrisi tanah, dan gulma. Mutu tinggi -> hasil lebih banyak.
 |---|---|---|---|
 | WASD | Jalan | I | Inventaris |
 | Shift | Lari | J | Jurnal quest |
-| Q/E | Putar kamera | M | Peta |
+| Q/E | Putar kamera 45° | M | Peta |
 | 1-9 | Pilih alat | F7 | Majelis Batin |
 | SPACE | Pakai alat | Esc | Simpan (di HUD) / tutup panel |
 | TAB | Ringkasan kebutuhan on/off | F5 / F9 | Simpan / Muat |
-| R | Interaksi (objek/NPC) | T | Tidur |
+| F | Interaksi (objek/NPC) | T | Tidur |
 | Z | Serang | V | Makan |
-| F | Tangkap makhluk halus | G | Beri hadiah |
-| O/P | Ganti benih | B | Sapu terbang |
+| Shift+F | Tangkap makhluk halus | G | Beri hadiah |
+| R | Ganti benih | B | Sapu terbang |
 | L | Bangun/Beli | | |
 
 Alat: 1 Cangkul, 2 Siram, 3 Tanam, 4 Panen, 5 Kapak, 7 Pickaxe, 8 Pedang.
 
 ## Tutorial 7 langkah
-1. **Baca surat** — kotak pos depan rumah, tekan **R**.
+1. **Baca surat** — kotak pos depan rumah, tekan **F**.
 2. **Cangkul** — tekan **1**, hadap tanah kosong, **SPACE**. Ulangi 3 petak.
 3. **Tanam** — tekan **3** di petak tercangkul, **SPACE**.
 4. **Siram** — tekan **2**, hadap tanaman, **SPACE**. Siram tiap hari!
-5. **Tidur** — masuk rumah, berdiri di kasur, tekan **R** (atau **T**).
+5. **Tidur** — masuk rumah, berdiri di kasur, tekan **T**.
 6. **Panen** — setelah beberapa hari, tekan **4**, **SPACE**.
-7. **Kirim** — bawa ke Peti Kirim (papan kuning), tekan **R**, lalu tidur.
+7. **Kirim** — bawa ke Peti Kirim (papan kuning), tekan **F**, lalu tidur.
 
 ## Tips
 - Jangan abaikan kandung kemih — paling cepat habis.

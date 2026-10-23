@@ -1,5 +1,11 @@
 """smoke_boot.py — Boot penuh game offscreen + simulasi alur menu M1.
 
+BASI (Okt 2026): skrip ini menegaskan mode boot 'menu', dan mode itu sudah
+tidak ada di app.py/panels.py/chargen.py (boot kini: chargen -> sinema -> hud).
+Ia gagal di assert pertama dan tidak dipanggil tools/regress.py. Uji batin di
+bawah juga memanggil Game3D.input langsung, melewati dispatcher Ursina. Penjaga
+Majelis Batin yang berlaku: tools/probe_batin.py (disambung ke regress.py).
+
 Memverifikasi tanpa membuka jendela:
   boot → layar judul tampil → navigasi menu → Mulai Baru → intro → tutup intro
   → 30 frame gameplay (tracker tutorial + context prompt jalan).

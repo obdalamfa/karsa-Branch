@@ -104,6 +104,10 @@ class InteractionController:
                 self.player._fx_burst(fx, fy + 0.2, fz, color.rgb(60, 150, 255, 200), n=6)
                 sound_play('water', 0.8)
                 panels.flash_msg("Tanaman disiram!", 0.8)
+                # Suara ini (dan dua di cabang Panen) hilang tanpa konflik di
+                # merge 5683e79: blok Siram/Panen diambil dari sisi visual.
+                panels.say_batin_once('siram', 'akar',
+                    "Genangi tunas muda, keringkan saat menua. Air itu jadwal, bukan suasana hati.")
                 self.check_quests()
             else:
                 sound_play('blocked', 0.6)
@@ -165,6 +169,13 @@ class InteractionController:
                     ekor = f" | {hint}" if hint else ""
                     panels.flash_msg(
                         f"+1 {CROPS[crop_name]['name']} (nilai {nilai}G){ekor}", 1.6)
+                    # Baris SUKMA "mutu >= 4" dari cd92b0d tidak ikut: panen di
+                    # sini tidak membaca mutu sama sekali, jadi syaratnya tidak
+                    # punya padanan.
+                    panels.say_batin_once('panen', 'akar',
+                        "Panen pertama. Mutu mengingat segalanya yang kau lakukan dan tidak. Sawah membukukan dengan jujur.")
+                    panels.say_batin_once('kirim_hint', 'lapar',
+                        "Hasil panen tak jadi emas sendiri. Taruh di Peti Kirim dekat rumah — fajar mengubahnya jadi uang.")
                     self.check_quests(panels)
                 else:
                     sound_play('blocked', 0.6)
@@ -242,7 +253,7 @@ class InteractionController:
         s = self.player.state
         tx, ty = self.player.get_tile_pos()
 
-        # Menunggang mengambil alih [E] seluruhnya. Tombol yang menaikkanmu
+        # Menunggang mengambil alih [F] seluruhnya. Tombol yang menaikkanmu
         # adalah tombol yang menurunkanmu — itu satu-satunya cara turun yang
         # tidak perlu diajarkan. Ia dicek PALING AWAL karena selagi menunggang
         # pemain berdiri di tile yang sama dengan kudanya: kalau menu radial
@@ -268,11 +279,11 @@ class InteractionController:
             return
 
         # Surat pertama menang atas perabot di sekitar. context_prompt() sudah
-        # menjanjikan "[E] Baca surat" kepada pemain yang menghadap kotak pos,
+        # menjanjikan "[F] Baca surat" kepada pemain yang menghadap kotak pos,
         # tapi menu perabot (radius 1) dicek lebih dulu dan peti di sebelah
         # kotak pos menelan tombolnya. Terukur 16 Okt 2026 lewat
         # tools/probe_lima_menit.py: pemain baru macet di langkah PERTAMA
-        # tutorial, karena [E] membuka menu peti, bukan surat.
+        # tutorial, karena [F] membuka menu peti, bukan surat.
         from ..config import MB
         if (not s.mail_read and
                 self.world.get_tile(*self.player._facing_tile()) == MB):
@@ -374,7 +385,7 @@ class InteractionController:
             ])
 
     def _try_collect_animal(self, npc_id, panels) -> bool:
-        """Ternak produktif: ambil hasil harian (susu/telur/wol) dgn [E].
+        """Ternak produktif: ambil hasil harian (susu/telur/wol) dgn [F].
         Return True jika hasil diambil; False (sudah/ bukan ternak) → lanjut pie menu."""
         from ..data import ANIMAL_NPCS, ANIMAL_PRODUCTS
         info = ANIMAL_NPCS.get(npc_id)
@@ -427,11 +438,11 @@ class InteractionController:
             if total:
                 panels.flash_msg(f"Peti Kirim — {total} barang menunggu fajar.", 1.4)
             else:
-                panels.flash_msg("Peti Kirim kosong. Panen dulu, lalu setor di sini [E].", 1.8)
+                panels.flash_msg("Peti Kirim kosong. Panen dulu, lalu setor di sini [F].", 1.8)
         return True
 
     def _try_plot_care(self, panels) -> bool:
-        """Sakuna: perawatan petak di kaki pemain via [E].
+        """Sakuna: perawatan petak di kaki pemain via [F].
         Prioritas: cabut gulma → pupuk (isi nutrisi). Return True jika menangani."""
         s = self.player.state
         tx, ty = self.player.get_tile_pos()
@@ -575,23 +586,23 @@ class InteractionController:
             npc = entities_mgr.get_nearest_npc(tx, ty, max_dist_tiles=1.8)
             if npc:
                 nama = npc.get('name') or npc['id'].replace('_', ' ').title()
-                return f"[E] Bicara dengan {nama}"
+                return f"[F] Bicara dengan {nama}"
 
             # 2) Objek dunia yang dihadap
             if tid_face == MB:
-                return "[E] Baca surat" if not s.mail_read else ""
+                return "[F] Baca surat" if not s.mail_read else ""
             if tid_face == LGH_B:
-                return "[E] Periksa mercusuar"
+                return "[F] Periksa mercusuar"
             if tid_here == DCK and tid_face == W and s.inventory.get('perahu', 0) > 0:
-                return "[E] Berlayar ke laut lepas"
+                return "[F] Berlayar ke laut lepas"
             if tid_face == W or tid_here == DCK:
-                return "[E] Memancing"
+                return "[F] Memancing"
             if tid_here == BD or tid_face == BD:
-                return "[E] Tidur sampai besok"
+                return "[F] Tidur sampai besok"
             if tid_face == ST:
-                return "[E] Masak (+20 Energi)"
+                return "[F] Masak (+20 Energi)"
             if tid_here == CHR:
-                return "[E] Duduk santai"
+                return "[F] Duduk santai"
 
             # 3) Pertanian — tergantung alat aktif & kondisi petak yang dihadap
             soil_key = f"{ftx},{fty},{s.scene_name}"
@@ -2049,7 +2060,7 @@ class InteractionController:
         s.npc_hearts[npc_id] = min(10.0, s.npc_hearts.get(npc_id, 0) + 0.2)
         sound_play('quest', 0.9)
         if panels:
-            panels.flash_msg("Naik kuda! [E] untuk turun.", 1.6)
+            panels.flash_msg("Naik kuda! [F] untuk turun.", 1.6)
 
     def toggle_broom_flying(self, panels=None):
         self.player._is_flying = not getattr(self.player, '_is_flying', False)

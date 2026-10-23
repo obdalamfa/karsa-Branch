@@ -9,6 +9,14 @@ tags: [moc, status]
 
 # Status Sekarang
 
+> [!success] Pembaruan 2026-10-18 — kegagalan farm di mesin lambat terjelaskan
+> Bug alat ukur, bukan bug game: `arah_maju` menahan W 40 frame, dan di
+> ~115 ms/frame pemain farm menembus portal greenhouse. Sisa cek farm lalu
+> mengukur greenhouse (689 entity). Kini cek berhenti di 3 u dan ada jaring
+> `scene_tetap` → [[arah_maju terlempar portal di mesin lambat]].
+> Sedang dikerjakan paralel (worktree terpisah, tiap hasil diverifikasi
+> adversarial): Majelis Batin, pohon Blender, cahaya hangat/sejuk + bayangan.
+
 > [!success] Pembaruan 2026-10-16 — gauntlet Okt selesai
 > Regresi 14/14 + baris baru **"lima menit"** (tutorial dimainkan dari game
 > baru sampai panen). Diperbaiki minggu ini: cahaya siang-malam di tanah,

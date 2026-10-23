@@ -45,7 +45,7 @@ from .data import (HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS,
                    QUEST_STAGES, SWORD_RECIPES, PICKAXE_RECIPES, SHOP_ITEMS,
                    CRAFT_RECIPES)
 from .sound import play as sound_play
-from .batin import VOICES as BVOICES, DIFF_NAME, pct as batin_pct, roll as batin_roll, raise_voice
+from .batin import VOICES as BVOICES, raise_voice
 import textwrap as _tw
 
 _ALL_NPCS = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
@@ -470,10 +470,20 @@ _FONT_NAME = 'Montserrat-Bold.ttf'
 _CHROME_PATH = _Path(__file__).resolve().parent.parent / 'assets' / 'ui' / 'panel_chrome.png'
 _chrome_tex = None
 def _chrome():
+    # Dipangkas ke bbox alfa-nya. panel_chrome.png 512x512, tapi bagian
+    # opaknya hanya (130,130)-(382,382): 49% tiap sumbu. Tanpa pangkasan,
+    # keempat pemakai _skin_chrome (majelis, modal batin, beli, jeda)
+    # menampilkan latar kira-kira separuh ukuran quad-nya, dan teks yang
+    # ditata untuk ukuran quad jatuh di luar latar yang tampak.
     global _chrome_tex
     if _chrome_tex is None:
         try:
-            _chrome_tex = Texture(_PILImg.open(_CHROME_PATH)) if _CHROME_PATH.exists() else False
+            if _CHROME_PATH.exists():
+                im = _PILImg.open(_CHROME_PATH).convert('RGBA')
+                kotak = im.getchannel('A').getbbox()
+                _chrome_tex = Texture(im.crop(kotak) if kotak else im)
+            else:
+                _chrome_tex = False
         except Exception:
             _chrome_tex = False
     return _chrome_tex or None
@@ -540,6 +550,19 @@ class UIManager:
             self._update_motive_panel()
             self._update_action_readout()
 
+        # Subtitle suara batin memudar. DI LUAR gerbang 'hud': suara pertama
+        # justru diucapkan tepat saat modal PAGI PERTAMA terbuka, dan di dalam
+        # gerbang ia akan menggantung di layar selama modal itu dibaca.
+        if getattr(self, '_voice_sub_t', 0) > 0:
+            self._voice_sub_t -= dt
+            if self._voice_sub_t <= 0 and getattr(self, '_voice_sub', None):
+                self._voice_sub.enabled = False
+        # Panel majelis hanya hidup di HUD. Ia duduk di kolom kanan bawah,
+        # tempat kotak dialog, modal pilihan, dan panel penuh juga digambar;
+        # dibiarkan terbuka, ia menimpa semuanya.
+        if getattr(self, '_batin_open', False) and self.mode != 'hud':
+            self.toggle_batin()
+
         # Flash message timer
         if self._flash_t > 0:
             self._flash_t -= dt
@@ -556,7 +579,7 @@ class UIManager:
 
     # Tiga pintasan, bukan tujuh. Sisanya hidup di F1, dan roda alat di
     # kiri-atas sudah membawa nomornya sendiri di tiap petak.
-    _PINTASAN = (('SPACE', 'Pakai'), ('E', 'Aksi'), ('TAB', 'Motif'))
+    _PINTASAN = (('SPACE', 'Pakai'), ('F', 'Aksi'), ('Q/E', 'Putar'), ('TAB', 'Motif'))
     _HINT_PADAM = 30.0          # detik sebelum petunjuk memudar sendiri
 
     # ─── PUBLIC: HUD ─────────────────────────────────────
@@ -1340,7 +1363,7 @@ class UIManager:
         if s.tool_index in (2, 3):
             seed_name = CROPS.get(s.seed_key, {}).get('name', s.seed_key)
             seed_qty  = s.inventory.get(s.seed_key + '_seed', 0)
-            self._teks(self._seed_txt, f'Q/R: {seed_name} x{seed_qty}')
+            self._teks(self._seed_txt, f'R: {seed_name} x{seed_qty}')
         else:
             self._seed_txt.text = ''
 
@@ -1414,65 +1437,177 @@ class UIManager:
     # Bangun/Beli (Sims S7), dan menu jeda — karena tidak satu pun menyentuh
     # tata letak HUD yang menang.
 
+    # ── Tata letak Majelis Batin ──
+    # Versi cd92b0d ditata untuk HUD lama dan bertumpuk dengan HUD yang
+    # menang: panel di kiri menimpa pelacak tutorial (z 0,9 di DEPAN latar
+    # z 1,0) dan roda alat; prompt modal di y 0,15 tepat di bawah flash;
+    # 'Tekan 1-N' dan subtitle sama-sama di y -0,30, dan subtitle itu jatuh di
+    # dalam kotak dialog (-0,48..-0,14 dengan papan nama). Sekarang:
+    #   panel   kanan, di bawah flash dan di atas petunjuk tombol; tertutup
+    #           sendiri begitu mode meninggalkan HUD (lihat update())
+    #   subtitle tengah-atas, di bawah baris HUD, di atas flash
+    #   modal   di bawah flash; tidak menutup subtitle maupun flash
+    # Dijaga cek tata letak di tools/probe_batin.py; fotonya diambil setelah
+    # sinema selesai lewat SPACE.
+    _BTN_POS, _BTN_SKALA = (0.58, -0.14), (0.60, 0.50)    # panel majelis
+    _BC_POS, _BC_SKALA = (0.0, -0.16), (1.20, 0.54)       # modal pilihan
+    _VSUB_Y = 0.31                                        # subtitle suara
+    _CHROME_TEPI = 0.104       # tebal bingkai chrome per sisi, pecahan skala
+
     def _build_batin(self):
         self.batin = None              # diisi app.py setelah Batin dibuat
         self._batin_open = False
         self._voice_sub_t = 0.0
-        bg = _skin_chrome(_ui(scale=(0.58, 0.96), position=(-0.60, 0.0), color=color.rgb(20, 18, 16, 237), z=1.0))
-        title = _txt('MAJELIS BATIN', pos=(-0.86, 0.43), scale=0.95, col=color.rgb(231, 178, 61))
-        sub = _txt('Empat sukma, satu tengkorak.', pos=(-0.86, 0.395), scale=0.58, col=color.rgb(150, 135, 100))
+        (cx, cy), (w, h) = self._BTN_POS, self._BTN_SKALA
+        kiri = cx - w / 2 + w * self._CHROME_TEPI + 0.012
+        atas = cy + h / 2 - h * self._CHROME_TEPI - 0.012
+        bg = _skin_chrome(_ui(scale=(w, h), position=(cx, cy), color=color.rgb(20, 18, 16, 237), z=1.0))
+        title = _txt('MAJELIS BATIN', pos=(kiri, atas - 0.012), scale=0.95,
+                     col=color.rgb(231, 178, 61), origin=(-0.5, 0))
+        sub = _txt('Empat sukma, satu tengkorak.', pos=(kiri, atas - 0.050), scale=0.58,
+                   col=color.rgb(150, 135, 100), origin=(-0.5, 0))
         self._batin_chips = []
         for i, k in enumerate(['bara', 'akar', 'sukma', 'lapar']):
             vd = BVOICES[k]
-            chip = _txt(f"{vd['name']} 1", pos=(-0.86 + i * 0.185, 0.35), scale=0.6,
-                        col=color.rgb(*vd['col']))
+            chip = _txt(f"{vd['name']} 1", pos=(kiri + i * 0.108, atas - 0.088), scale=0.55,
+                        col=color.rgb(*vd['col']), origin=(-0.5, 0))
             self._batin_chips.append((k, chip))
-        self._batin_log = _txt('', pos=(-0.875, 0.30), scale=0.62, col=color.rgb(224, 216, 188))
-        self._batin_ents = [bg, title, sub, self._batin_log] + [c for _, c in self._batin_chips]
+        self._batin_log = _txt('', pos=(kiri, atas - 0.115), scale=0.58,
+                               col=color.rgb(224, 216, 188), origin=(-0.5, 0.5))
+        bawah = cy - h / 2 + h * self._CHROME_TEPI + 0.012
+        tutup = _txt('[F7] tutup', pos=(kiri, bawah + 0.012), scale=0.5,
+                     col=color.rgb(150, 135, 100), origin=(-0.5, 0))
+        self._batin_ents = [bg, title, sub, self._batin_log, tutup] + [c for _, c in self._batin_chips]
         for e in self._batin_ents:
             e.enabled = False
-        # subtitle bawah (selalu ada, fade)
-        self._voice_sub = _txt('', pos=(0, -0.30), scale=0.78, col=color.white, origin=(0, 0))
+        # subtitle suara (selalu ada, memudar)
+        self._voice_sub = _txt('', pos=(0, self._VSUB_Y), scale=0.78, col=color.white, origin=(0, 0))
         self._voice_sub.enabled = False
 
-    # Suara batin. Keduanya hilang bersama merge yang menelan _build_batin
-    # (lihat catatan di atas), sementara enam pemanggilnya di
-    # interaction_controller tetap tinggal -- jadi ayunan cangkul PERTAMA
-    # pemain baru melempar AttributeError. Ditemukan 16 Okt 2026 oleh
-    # tools/probe_lima_menit.py. Versi aslinya (ae03456) menulis ke subtitle
-    # `_voice_sub`, tapi pemudar subtitle itu ikut hilang dan Batin tidak
-    # pernah dibuat; jadi ucapannya lewat flash_msg yang memudar sendiri,
-    # dan bendera sekali-ucap disimpan di sini kalau Batin belum ada.
+    # ── Majelis Batin: suara, panel, modal ──────────────────────────────
+    # Dipulihkan dari 5683e79^2 (= cd92b0d), sisi feature/3d-mobs yang kalah
+    # di merge 5683e79: merge itu hanya membawa _build_batin, sementara
+    # pemanggilnya (enam say_batin_once + _batin_first_morning di
+    # interaction_controller) tetap tinggal. Dijaga tools/probe_batin.py.
+    #
+    # Yang SENGAJA tidak dipulihkan: cabang skill-check/merah di _pick_batin
+    # (roll 2d6, peluang %, opsi merah terkunci). Tidak satu pun pemanggil
+    # produksi -- di HEAD maupun di cd92b0d -- memberi opsi `check`/`red`;
+    # satu-satunya pemakainya tools/smoke_boot.py yang sudah basi. Kode yang
+    # tidak pernah dijalankan pemain efeknya nol (aturan #4).
+    def toggle_batin(self):
+        if not self._batin_open and self.mode not in ('hud',):
+            return                      # jangan buka di tengah dialog/pie/panel
+        self._batin_open = not self._batin_open
+        for e in self._batin_ents:
+            e.enabled = self._batin_open
+        if self._batin_open:
+            self._refresh_batin()
+
+    def _refresh_batin(self):
+        if not self.batin:
+            return
+        for k, chip in self._batin_chips:
+            chip.text = f"{BVOICES[k]['name']} {self.state.batin.get(k, 1)}"
+        out = ''
+        # Tiga ucapan terakhir, 44 huruf per baris: itu yang muat di dalam
+        # latar panel kanan (dijaga cek 'di dalam latar' probe_batin).
+        for v, t in self.batin.lines[-3:]:
+            nm = BVOICES[v]['name'] if v in BVOICES else v.upper()
+            out += _tw.fill(f"[{nm}] {t}", 44) + "\n\n"
+        self._batin_log.text = out
+
+    # Suara batin tampil sebagai SUBTITLE `_voice_sub` yang memudar sendiri
+    # (pemudarnya di update(), di luar gerbang 'hud'), bukan lewat flash.
+    # Versi sementara yang memakai flash_msg menimpa flash yang membawa
+    # informasi pada kejadian pertama di keenam titik panggil -- termasuk
+    # 'Dapat X dari Y! Kirim ke Peti untuk dijual.'.
     def say_batin(self, voice, text):
-        if getattr(self, 'batin', None):
+        if self.batin:
             self.batin.say(voice, text)
         vd = BVOICES.get(voice)
-        self.flash_msg(f"{vd['name']} — {text}" if vd else text, 3.0)
+        if not vd:
+            return
+        self._voice_sub.text = _tw.fill(f"{vd['name']} — {text}", 54)
+        self._voice_sub.color = color.rgb(*vd['col'])
+        # Alas gelap di belakang teks: tanpa itu warna suara (mis. hijau AKAR)
+        # tenggelam di tanah yang dicangkul. Ukurannya mengikuti teks, jadi
+        # dibangun ulang tiap ucapan; ia anak _voice_sub dan ikut padam.
+        self._voice_sub.create_background(padding=0.02, radius=0.08,
+                                          color=color.rgba32(8, 6, 4, 170))
+        self._voice_sub.enabled = True
+        self._voice_sub_t = 4.5
+        if self._batin_open:
+            self._refresh_batin()
 
     def say_batin_once(self, flag, voice, text):
-        b = getattr(self, 'batin', None)
-        if b is not None:
-            if not b.once('say_' + flag):
-                return
-        else:
-            sekali = self.__dict__.setdefault('_batin_sekali', set())
-            if flag in sekali:
-                return
-            sekali.add(flag)
-        self.say_batin(voice, text)
+        if self.batin and self.batin.once('say_' + flag):
+            self.say_batin(voice, text)
+
+    def open_batin_check(self, title, prompt, opts):
+        """opts: list of dict {voice, label, fn}. Angka 1-N memilih."""
+        self._batin_opts = opts
+        self.mode = 'batin'
+        for e in getattr(self, '_bc_ents', []):
+            try: destroy(e)
+            except Exception: pass
+        (cx, cy), (w, h) = self._BC_POS, self._BC_SKALA
+        atas = cy + h / 2 - h * self._CHROME_TEPI
+        bawah = cy - h / 2 + h * self._CHROME_TEPI
+        kiri = cx - w / 2 + w * self._CHROME_TEPI + 0.03
+        bg = _skin_chrome(_ui(scale=(w, h), position=(cx, cy), color=color.rgb(18, 15, 12, 247), z=0.9))
+        ents = [bg,
+                _txt(title, pos=(cx, atas - 0.035), scale=0.92, col=color.rgb(231, 178, 61), origin=(0, 0)),
+                _txt(_tw.fill(prompt, 64), pos=(cx, atas - 0.095), scale=0.7,
+                     col=color.rgb(224, 216, 188), origin=(0, 0))]
+        for i, o in enumerate(opts):
+            vd = BVOICES[o['voice']]
+            ents.append(_txt(_tw.fill(f"{i+1}. {o['label']}", 76),
+                             pos=(kiri, atas - 0.165 - i * 0.062),
+                             scale=0.64, col=color.rgb(*vd['col']), origin=(-0.5, 0)))
+        ents.append(_txt(f'Tekan 1-{len(opts)} untuk memilih.', pos=(cx, bawah + 0.03), scale=0.58,
+                         col=color.rgb(150, 135, 100), origin=(0, 0)))
+        self._bc_ents = ents
+
+    def batin_check_input(self, key):
+        if key == 'escape':
+            self._close_batin_check(); return
+        if key.isdigit():
+            i = int(key) - 1
+            if 0 <= i < len(getattr(self, '_batin_opts', [])):
+                self._pick_batin(i)
+
+    def _pick_batin(self, i):
+        o = self._batin_opts[i]
+        raise_voice(self.state, o['voice'], 1)
+        if o.get('fn'):
+            o['fn']()
+        self._close_batin_check()
+
+    def _close_batin_check(self):
+        for e in getattr(self, '_bc_ents', []):
+            try: destroy(e)
+            except Exception: pass
+        self._bc_ents = []
+        self.mode = 'hud'
 
     def _build_buy(self):
         self._buy_sel = 0
-        bg = _skin_chrome(_ui(scale=(0.62, 0.66), position=(0, 0),
+        # Katalog 11 baris. Dulu baris dimulai 0,15 berjarak 0,052 di latar
+        # 0,66: baris ke-9 (Perapian) jatuh di bawah petunjuk tombol dan dua
+        # baris terakhir di luar bingkai. Latar digeser ke bawah supaya
+        # puncaknya (y 0,26) tetap di bawah subtitle suara batin.
+        # Dijaga cek tata letak di tools/probe_buy_sinema.py (fase L).
+        bg = _skin_chrome(_ui(scale=(0.64, 0.72), position=(0, -0.10),
                               color=color.rgb(16, 14, 12, 244), z=0.9))
-        title = _txt('BANGUN / BELI', pos=(0, 0.25), scale=1.25,
+        title = _txt('BANGUN / BELI', pos=(0, 0.155), scale=1.25,
                      col=color.rgb(231, 178, 61), origin=(0, 0))
-        self._buy_items = [_txt('', pos=(0, 0.15 - i * 0.052), scale=0.78,
+        self._buy_items = [_txt('', pos=(0, 0.07 - i * 0.036), scale=0.78,
                                 col=color.white, origin=(0, 0)) for i in range(12)]
         hint = _txt('[W/S] pilih  [Enter] beli & pasang di depanmu  '
-                    '[X] jual  [Esc] tutup', pos=(0, -0.26), scale=0.5,
+                    '[X] jual  [Esc] tutup', pos=(0, -0.355), scale=0.5,
                     col=color.rgb(150, 135, 100), origin=(0, 0))
-        self._buy_gold = _txt('', pos=(0, 0.205), scale=0.7,
+        self._buy_gold = _txt('', pos=(0, 0.115), scale=0.7,
                               col=color.rgb(231, 200, 120), origin=(0, 0))
         self._buy_ents = [bg, title, hint, self._buy_gold] + self._buy_items
         for e in self._buy_ents:
@@ -2441,19 +2576,21 @@ class UIManager:
                 "  WASD / Arrow  : Jalan\n"
                 "  Shift+WASD    : Lari (pakai energi)\n\n"
                 "── KAMERA ──\n"
+                "  Q / E              : Putar 45 derajat kiri / kanan\n"
                 "  Klik kanan + geser : Putar bebas\n\n"
                 "── AKSI ──\n"
                 "  SPACE  : Pakai alat aktif\n"
-                "  E      : Pie Menu interaksi NPC\n"
+                "  F      : Interaksi (bicara, surat, peti, kuda)\n"
                 "  Z      : Serang (butuh pedang)\n"
                 "  X      : Tambah/hapus tile ke Antrian\n"
                 "  C      : Jalankan semua Antrian Aksi\n"
-                "  F      : Tangkap makhluk liar\n"
+                "  Shift+F: Tangkap makhluk liar\n"
                 "  G      : Beri hadiah ke NPC\n"
                 "  V      : Makan item (pulihkan HP/EN)\n"
                 "  B      : Terbang (Sapoe Terbang)\n"
                 "  Y      : Meluncur / Dash Stunt (-15 EN)\n"
-                "  T      : Tidur (hanya di Rumah)\n\n"
+                "  T      : Tidur (hanya di Rumah)\n"
+                "  F7     : Majelis Batin (suara batin; pilihan 1-3)\n\n"
                 "── ALAT (angka 1-9) ──\n"
                 "  Roda ikon di kiri-atas. Nomornya tercetak di tiap petak;\n"
                 "  yang menyala adalah yang sedang dipilih, dan namanya\n"
@@ -2461,7 +2598,7 @@ class UIManager:
                 "  saat SPACE ditekan, lalu disimpan lagi sendiri.\n"
                 "  1 Cangkul  2 Siram  3 Tanam  4 Panen  5 Kapak\n"
                 "  6 Hadiah   7 Pickaxe 8 Pedang 9 Pancing\n"
-                "  Q/R    : Ganti bibit\n\n"
+                "  R      : Ganti bibit\n\n"
                 "── IKON KEBUTUHAN (kiri-bawah) ──\n"
                 "  Wajah  Suasana hati (jumlah semua di bawahnya)\n"
                 "  Garpu  Lapar        Kursi  Nyaman\n"
@@ -2836,6 +2973,14 @@ class UIManager:
         return f"Berhasil membuat {r['name']}!"
 
     def close_all(self):
+        # Modal Majelis Batin: jaring ESC di app.py memanggil close_all()
+        # SEBELUM rute mode 'batin', jadi escape milik batin_check_input tidak
+        # pernah tercapai. Tanpa baris ini entity modal tertinggal di layar.
+        if getattr(self, '_bc_ents', None):
+            self._close_batin_check()
+        # Bangun/Beli: sama, ESC milik buy_input tidak pernah tercapai.
+        for e in getattr(self, '_buy_ents', None) or []:
+            e.enabled = False
         self._set_dialog_visible(False)
         self._set_panel_visible(False)
         self.close_pie()

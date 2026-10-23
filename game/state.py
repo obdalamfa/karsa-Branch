@@ -163,6 +163,10 @@ class GameState:
     # ─── Majelis Batin (4 suara + skill-check ala Disco Elysium) ───
     batin: dict = field(default_factory=lambda: {'bara': 1, 'akar': 1, 'sukma': 1, 'lapar': 1})
     batin_red: list = field(default_factory=list)   # id red-check yang sudah gagal (terkunci)
+    # Bendera sekali-ucap Batin ('pagi_pertama', 'say_cangkul', ...). List,
+    # bukan set, supaya bisa ditulis ke JSON. Save lama tanpa kunci ini dimuat
+    # dengan list kosong: PAGI PERTAMA muncul sekali lagi, sekali itu saja.
+    batin_sekali: list = field(default_factory=list)
 
     # ─── Peti Kirim (shipping bin ala Stardew) — jual hasil panen saat tidur ───
     ship_bin: dict = field(default_factory=dict)     # item → jumlah menunggu dijual

@@ -593,6 +593,10 @@ def trough_pour_point(world):
 # primitif: di cemetery 74 DT keliling itu PAGAR, bukan pohon yang dilihat.
 #
 # Sengaja TIDAK di tabel:
+#   mountain (TR) -- hutan lebat pinus dari integrasi/satu (mountain.py
+#       memberi `pembangun_pohon` sendiri). Pemilik minta hutan yang sudah
+#       diperbaiki bentuknya itu yang dipakai, jadi ia menang atas
+#       pohon_tropis (22 Okt 2026).
 #   farm (TR 8, DT 6) -- layar lima menit pertama dan patokan farm_wide yang
 #       dinilai buta di gauntlet. Rupa tekstur bake sengaja kusam di sumbernya
 #       (build_trees_lighthouse.py "muted") dan belum lolos kalibrasi rupa
@@ -609,7 +613,6 @@ def trough_pour_point(world):
 #       teal yang lain gaya, dan mtllib-nya merujuk nama berkas yang salah.
 POHON_BLENDER = {
     ('beach', PALM):  ('pohon_kelapa', 1.0, False),
-    ('mountain', TR): ('pohon_tropis', 1.2, False),
     ('town', TR):     ('pohon_tropis', 1.2, False),
     ('cemetery', DT): ('pohon_mati',   1.1, True),
 }
@@ -668,8 +671,10 @@ SEBARAN_OBJ = {
 }
 
 
-def default_prop_builder(world, scene):
+def default_prop_builder(world, scene, pembangun_pohon=None):
+    """`pembangun_pohon` menggantikan build_tree untuk ubin TR (mis. pinus gunung)."""
     from game.world import OBJ_TEX
+    build_tree_ = pembangun_pohon or build_tree
     from game.scenes.zone_paint import paint_zone
 
     outdoor = not getattr(scene, 'indoor', False)
@@ -687,11 +692,14 @@ def default_prop_builder(world, scene):
             tid = scene.tiles[ty][tx]
             wx, wz = tx * TS, ty * TS
 
-            pohon = model_pohon(scene, tid, tx, ty) if tid in (TR, PALM, DT) else None
+            # Ubin TR yang punya pembangun khusus scene (hutan pinus mountain)
+            # tidak diganti model Blender.
+            pakai_blender = tid in (PALM, DT) or (tid == TR and pembangun_pohon is None)
+            pohon = model_pohon(scene, tid, tx, ty) if pakai_blender else None
             if pohon and pasang_model_prop(world, pohon[0], wx, wz, pohon[1],
                                            rot_y=pohon[2]) is not None:
                 pass      # model Blender; kalau modelnya hilang, jatuh ke primitif
-            elif tid == TR: build_tree(world, wx, wz)
+            elif tid == TR: build_tree_(world, wx, wz)
             elif tid == PALM: build_palm(world, wx, wz)
             elif tid == DT: build_dead_tree(world, wx, wz)
             elif tid == LN: build_lantern(world, wx, wz)

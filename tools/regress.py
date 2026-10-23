@@ -62,6 +62,12 @@ bukan pada kemungkinan yang dikarang:
                  muka atasnya yang tersinar (jerawat). Shadow map MATI
                  bawaan karena ongkos ms/frame; cek ini cuma menguji sesuatu
                  dengan KARSA_SHADOW=1 -- tanpa itu ia melapor "mati".
+  cahaya_sumber  sm_sun_dir harus arah DirectionalLight itu sendiri dan
+                 _init_env() harus memasang warna dari tabel target lerp.
+                 Dua-duanya pernah lain sendiri (konstanta arah; snap 33%
+                 lebih terang tiap ganti scene) tanpa cek lain jadi merah.
+  cakram_kontak  tiap cakram bayangan pemain/warga punya mesh sendiri yang
+                 benar-benar menjadi anaknya (aturan #3).
   otonomi_hidup  `choose_action()` dan `autonomy_candidates()` dibangun lengkap
                  lalu tidak pernah dipanggil siapa pun — seluruh katalog iklan
                  di objects.py (kasur, kompor, meja, TV, rak buku, cermin,
@@ -1103,6 +1109,112 @@ def cek_cahaya_global(g, base, tmp: Path):
     return _ok(f'gelap {turun:.0f}')
 
 
+def cek_cahaya_sumber(g):
+    """Satu matahari, satu tabel: arah fragmen = arah lampu, dan warna yang
+    dipasang saat ganti scene = target lerp `update()`.
+
+    Dua-duanya pernah salah dengan cara yang tidak terlihat dari kode di
+    tempatnya, dan cahaya_global tidak menangkapnya karena layar tetap
+    berubah saat ambient dipaksa gelap:
+
+      * `sm_sun_dir` dulu konstanta (-0,5,-0,8,-0,4) sementara lampunya
+        menatap arah lain. Diuji verifikator 19 Okt 2026: memasang konstanta
+        itu lagi membuat wajah jatuh ke pita gelap (probe_cahaya kiri_depan
+        L 138) dan `regress.py farm` tetap LULUS.
+      * `_init_env()` dulu punya angka sendiri 33% lebih terang, jadi tiap
+        ganti scene dunia melonjak lalu meredup. Cuma probe_lonjakan_scene
+        yang melihatnya.
+
+    Diuji lewat fungsi yang dipakai game sendiri: `_init_env()` dipanggil
+    seperti pada transisi scene, lalu satu frame dijalankan supaya
+    `_sync_smooth_lighting()` memasang arah dari lampu.
+    """
+    import math
+    try:
+        from ursina import Vec3, scene as uscene
+        import game.cahaya as cahaya
+    except Exception as e:
+        return _fail(f'cahaya tidak bisa diimpor: {e}')
+    s = g.state
+    jam = (s.time_minutes / 60.0) % 24.0
+    sc = g.world.scene_obj
+    dalam = bool(getattr(sc, 'indoor', False)) if sc is not None else False
+    hujan = (s.weather in ('Hujan', 'Badai')) and not dalam
+    try:
+        g._init_env()
+    except Exception as e:
+        return _fail(f'_init_env melempar: {e}')
+    t_sun, t_amb = cahaya.target_cahaya(jam, dalam, hujan)[:2]
+
+    def _beda(a, b):
+        return max(abs(a[i] - b[i]) for i in range(3))
+
+    d_sun, d_amb = _beda(g.sun.color, t_sun), _beda(g.ambient.color, t_amb)
+    if max(d_sun, d_amb) > 0.02:
+        return _fail(f'_init_env tidak memakai tabel target_cahaya: sun beda '
+                     f'{d_sun:.3f}, ambient {d_amb:.3f} -- dunia melonjak '
+                     f'tiap ganti scene')
+    try:
+        g._sync_smooth_lighting()
+        inp = uscene.getShaderInput('sm_sun_dir')
+        v = inp.getVector()
+        d_frag = Vec3(v[0], v[1], v[2]).normalized()
+    except Exception as e:
+        return _fail(f'sm_sun_dir tidak terbaca dari scene: {e}')
+    d_lampu = cahaya.arah_lampu(g.sun)
+    sudut = math.degrees(math.acos(max(-1.0, min(1.0, d_frag.dot(d_lampu)))))
+    if sudut > 1.0:
+        return _fail(f'sm_sun_dir menyimpang {sudut:.1f} derajat dari arah '
+                     f'DirectionalLight -- dua matahari')
+    if not dalam:
+        d_jam = cahaya.arah_matahari(jam)
+        sj = math.degrees(math.acos(max(-1.0, min(1.0, d_lampu.dot(d_jam)))))
+        if sj > 2.0:
+            return _fail(f'lampu matahari menyimpang {sj:.1f} derajat dari '
+                         f'arah_matahari({jam:.1f})')
+    return _ok(f'arah = lampu, warna = tabel (beda {max(d_sun, d_amb):.3f})')
+
+
+def cek_cakram_kontak(g):
+    """Cakram bayangan kontak pemain/warga: tiap cakram punya mesh SENDIRI.
+
+    Aturan #3 CLAUDE.md: Mesh Ursina adalah NodePath dan hanya boleh punya
+    satu parent. Satu mesh yang dibagi ke semua cakram diam-diam pindah ke
+    entity terakhir; cakram lain kehilangan geometrinya tanpa error apa pun.
+    Diuji verifikator 19 Okt 2026: mesh bersama untuk semua cakram dan
+    `regress.py town` tetap LULUS. Di sini diperiksa langsung: mesh tiap
+    cakram adalah anak cakram itu, berisi segitiga, dan tidak dipakai cakram
+    lain.
+    """
+    try:
+        from game.bayangan import cakram_hidup
+    except Exception as e:
+        return _fail(f'game.bayangan tidak bisa diimpor: {e}')
+    daftar = [e for e in cakram_hidup() if getattr(e, 'enabled', True)]
+    if not daftar:
+        return _fail('tidak ada cakram kontak sama sekali (pemain pun tidak)')
+    dilihat = set()
+    for e in daftar:
+        m = getattr(e, 'model', None)
+        if m is None or m.is_empty():
+            return _fail('cakram kontak tanpa model')
+        if id(m) in dilihat:
+            return _fail('dua cakram kontak memakai satu objek Mesh (aturan #3)')
+        dilihat.add(id(m))
+        if m.getParent() != e:
+            return _fail('mesh cakram kontak dipasang di entity lain -- mesh '
+                         'dibagi antar-Entity (aturan #3)')
+        n = sum(gn.node().getGeom(i).getNumPrimitives()
+                for gn in m.findAllMatches('**/+GeomNode')
+                for i in range(gn.node().getNumGeoms()))
+        if m.node().isGeomNode():
+            n += sum(m.node().getGeom(i).getNumPrimitives()
+                     for i in range(m.node().getNumGeoms()))
+        if n <= 0:
+            return _fail('cakram kontak tanpa segitiga')
+    return _ok(f'{len(daftar)} cakram, mesh masing-masing')
+
+
 def _kubus_uji(warna=(1, 1, 1, 1)):
     """Mesh kubus satuan dengan normal per muka. Mesh BARU tiap panggilan
     (aturan #3: Mesh Ursina tidak boleh dibagi antar-Entity)."""
@@ -1704,6 +1816,8 @@ def main():
             hasil['rumput_lambai'] = cek_rumput_melambai(g, base, OUT)
             hasil['cahaya_global'] = cek_cahaya_global(g, base, OUT)
             hasil['bayangan_matahari'] = cek_bayangan_matahari(g, base, OUT)
+            hasil['cahaya_sumber'] = cek_cahaya_sumber(g)
+            hasil['cakram_kontak'] = cek_cakram_kontak(g)
             hasil['otonomi_hidup'] = cek_otonomi_hidup(g)
             # Jaring umum: angka di baris ini tidak boleh diam-diam milik scene
             # lain. Pernah nyata 16 Okt 2026 -- arah_maju menembus portal farm

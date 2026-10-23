@@ -157,13 +157,30 @@ def sembunyikan_dari_kamera_bayangan(np_):
         pass
 
 
+# Semua cakram kontak yang masih hidup, untuk cek `cakram_kontak` di
+# tools/regress.py. WeakSet: daftar ini tidak boleh menahan entity yang
+# sudah dihancurkan scene-nya.
+import weakref as _weakref
+_CAKRAM_HIDUP = _weakref.WeakSet()
+
+
+def cakram_hidup():
+    """Cakram kontak (pemain/warga) yang belum dihancurkan."""
+    return [e for e in list(_CAKRAM_HIDUP) if not e.is_empty()]
+
+
 def cakram_kontak(parent, lebar, dalam, alpha=0.47, **kw):
     """Cakram bayangan kontak berbulu, bidang XZ lokal di y=0, jari-jari
     lebar/2 x dalam/2. Tetap dikunci ke tanah oleh pemanggil (pin_ke_tanah)."""
     v, cl, tri = [], [], []
     _tambah_cakram(v, cl, tri, 0.0, 0.0, 0.0, lebar / 2, dalam / 2, alpha,
                    (0.02, 0.03, 0.06))
-    return _entity_cakram(parent, v, cl, tri, **kw)
+    e = _entity_cakram(parent, v, cl, tri, **kw)
+    try:
+        _CAKRAM_HIDUP.add(e)
+    except TypeError:
+        pass
+    return e
 
 
 def bangun_bayangan_statis(world):
@@ -182,6 +199,14 @@ def bangun_bayangan_statis(world):
 
     Dipanggil SEBELUM `_satukan_ubin()` (yang menyembunyikan ubin), dan
     hasilnya masuk `_obj_ents` supaya `_clear()` menghancurkannya.
+
+    Yang dipindai HANYA `_obj_ents`. Memindai `_tile_ents` juga (versi awal)
+    tidak menyumbang satu cakram pun -- semua ubin <= 0,30 tinggi, farm tetap
+    159 cakram -- tapi memanggil getTightBounds pada ubin yang sebentar lagi
+    dilebur merusak tekstur leburannya: jalur papan kayu di bawah pemain dan
+    kotak rumput di kaki pohon (diisolasi verifikator 19 Okt 2026; mekanisme
+    Panda-nya belum diketahui). Kaki pohon farm: (77,89,51) hijau -> (86,72,54)
+    tanah, sama dengan larian tanpa pemindaian.
     """
     from direct.showbase.ShowBaseGlobal import base
     from ursina import scene
@@ -189,7 +214,7 @@ def bangun_bayangan_statis(world):
 
     dinding = {id(r[0]) for r in getattr(world, '_wall_ents', [])}
     kelompok = {}
-    for e in list(getattr(world, '_obj_ents', [])) + list(getattr(world, '_tile_ents', [])):
+    for e in list(getattr(world, '_obj_ents', [])):
         if id(e) in dinding or not getattr(e, 'enabled', True):
             continue
         if getattr(e, 'model', None) is None:

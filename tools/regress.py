@@ -273,24 +273,36 @@ _SUMBU_BERKAS: dict = {}
 def _tinggi_berkas(nama):
     """(tinggi, dasar) sumbu-atas model di BERKAS .obj-nya, atau None.
 
-    Sumbu-atas: z untuk berkas Z-atas (entities._Z_ATAS), y untuk sisanya --
-    berkas ber-marker fix_obj_axes.py dan OBJ biasa sama-sama Y-atas.
+    Sumbu-atas diputuskan dari BERKASNYA SENDIRI, bukan dari tabel kode yang
+    sedang diuji (entities._Z_ATAS). Versi sebelumnya membaca _Z_ATAS, jadi
+    mencabut lantern dari tabel itu ikut mencabut harapan cek ini -- lentera
+    rebah lolos hijau (temuan verifikator adversarial, 19 Okt 2026).
+
+      - baris pertama '# axis-converted-to-Y-up' (fix_obj_axes.py) -> y
+      - tanpa marker -> sumbu terpanjang antara y dan z. Benda yang dipasang
+        sebagai prop (lentera 2,26 z / 0,44 y, sumur, pagar, bambu) lebih
+        tinggi daripada tebalnya, jadi sumbu terpanjang = sumbu atas.
     """
     if nama not in _SUMBU_BERKAS:
-        from game.entities import _Z_ATAS
         p = ROOT / 'assets' / 'models' / f'{nama}.obj'
-        k = 3 if nama in _Z_ATAS else 2
-        lo = hi = None
+        lo, hi, marker = [None] * 3, [None] * 3, False
         try:
             with open(p, encoding='utf-8', errors='replace') as f:
+                marker = f.readline().startswith('# axis-converted-to-Y-up')
+                f.seek(0)
                 for ln in f:
                     if ln.startswith('v '):
-                        v = float(ln.split()[k])
-                        lo = v if lo is None else min(lo, v)
-                        hi = v if hi is None else max(hi, v)
+                        xyz = [float(t) for t in ln.split()[1:4]]
+                        for i, v in enumerate(xyz):
+                            lo[i] = v if lo[i] is None else min(lo[i], v)
+                            hi[i] = v if hi[i] is None else max(hi[i], v)
         except OSError:
             pass
-        _SUMBU_BERKAS[nama] = None if lo is None else (hi - lo, lo)
+        if lo[1] is None:
+            _SUMBU_BERKAS[nama] = None
+        else:
+            k = 1 if marker or (hi[1] - lo[1]) >= (hi[2] - lo[2]) else 2
+            _SUMBU_BERKAS[nama] = (hi[k] - lo[k], lo[k])
     return _SUMBU_BERKAS[nama]
 
 
@@ -298,6 +310,10 @@ def _tinggi_berkas(nama):
 # dasar (unit dunia) yang diharapkan di atas GROUND_H + tinggi permukaan.
 # beach.py menaruh kurofune 0,1 di atas GROUND_H (lambung menyentuh air).
 _DASAR_SENGAJA = {'prop_kurofune': 0.1}
+
+# Model makhluk: diputar dan dianimasikan oleh jalurnya sendiri (npc, mob,
+# naga, humanoid fallback, hantu). Bukan urusan cek tegak benda.
+_BUKAN_PROP = ('npc_', 'mob_', 'naga', 'humanoid', 'ghost', 'petapa', 'kenney_')
 
 
 def cek_model_tegak(nama, g=None):
@@ -317,7 +333,6 @@ def cek_model_tegak(nama, g=None):
     """
     from game.config import GROUND_H, TILE_SIZE as TS
     world = getattr(g, 'world', None)
-    from game.entities import _Z_ATAS
     from ursina import scene as uscene
     from direct.showbase.ShowBaseGlobal import base as _b
     rebah, salah_dasar, n = [], [], 0
@@ -332,7 +347,9 @@ def cek_model_tegak(nama, g=None):
         if not nm.endswith('.obj'):
             continue
         nm = nm[:-4]
-        if not (nm.startswith(('pohon_', 'prop_')) or nm in _Z_ATAS):
+        # SEMUA .obj yang tampil, kecuali makhluk yang orientasinya diurus
+        # jalur lain (rig/animasi). Daftar ini milik cek, bukan kode game.
+        if nm.startswith(_BUKAN_PROP):
             continue
         harap = _tinggi_berkas(nm)
         if harap is None:

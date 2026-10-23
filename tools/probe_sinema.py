@@ -204,6 +204,7 @@ def fase_baru(g):
             break
         tekan(g, 'escape', 4)
     nama = tunggu_sinema(g)
+    yaw_surat = g.sinema._kam_pemain[2] if g.sinema.aktif and g.sinema._kam_pemain else None
     cek('BARU membaca surat memicu adegan "surat"', nama == 'surat',
         f'{nama} mail_read={s.mail_read} mode={p.mode} tile={g.player.get_tile_pos()} '
         f'mb={mb} selesai={s.sinema_selesai}')
@@ -211,6 +212,11 @@ def fase_baru(g):
     tujuan = [t for _, j, t in jalan if j == 'tujuan']
     cek('BARU adegan surat ditutup tujuan berikutnya (cangkul)',
         bool(tujuan) and 'cangkul' in tujuan[-1].lower(), tujuan)
+    # Adegan surat mengorbit +20 derajat bersih (pembuka kebetulan 0 bersih:
+    # +140 -60 -80), jadi di sinilah pemulihan kamera benar-benar teruji.
+    cek('BARU sesudah adegan surat sudut kamera pemain dipulihkan',
+        yaw_surat is not None and abs(g.camera_yaw - yaw_surat) < 0.01,
+        f'{yaw_surat} -> {g.camera_yaw:.2f}')
     nama2 = tunggu_sinema(g, 1.5)
     cek('BARU adegan tidak diputar dua kali', nama2 is None, nama2)
 

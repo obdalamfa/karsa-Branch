@@ -109,6 +109,10 @@ def ke_hud(g):
 def jalan(g, scene, x, y, hadap):
     from direct.showbase.ShowBaseGlobal import base
     s = g.state
+    # Adegan interaksi pertama (cangkul pertama, tanam pertama, ...) muncul di
+    # tengah tutorial. Pemain menontonnya lalu lanjut; tanpa ini SPACE probe
+    # berikutnya memajukan adegan alih-alih mencangkul (CI 23 Okt 2026: 4/8).
+    tonton_sinema(g)
     if s.scene_name != scene:
         s.scene_name = scene
         for _ in range(30):
@@ -149,6 +153,7 @@ def uji(g):
     for alat, stat, nama in (('1', 'tilled', 'cangkul'),
                              ('3', 'lobak_planted', 'tanam'),
                              ('2', 'watered', 'siram')):
+        tonton_sinema(g)
         g.input(alat)
         awal = s.stats.get(stat, 0)
         for x, y in petak:
@@ -188,6 +193,7 @@ def uji(g):
             langkah(6)
 
     # 7. panen
+    tonton_sinema(g)
     g.input('4')
     awal = s.stats.get('lobak_harvested', 0)
     for x, y in petak:

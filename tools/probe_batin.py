@@ -98,8 +98,22 @@ def ke_hud(g):
                 tekan(g, 'space', 1)
             continue
         if g.panels.mode == 'hud':
+            _vinyet_sudah(g)
             return True
     return False
+
+
+def _vinyet_sudah(g):
+    """Adegan interaksi pertama (surat, cangkul, tiba di desa, ...) ditandai
+    sudah ditonton. Probe ini menguji Majelis Batin, bukan sinema; adegan itu
+    menelan tombol yang ditekan probe (CI 23 Okt 2026: 2/28) dan diuji
+    sendiri oleh tools/probe_sinema.py. Adegan pembuka dan belokan quest
+    (`tahap`) tetap ditonton lewat SPACE seperti sebelumnya."""
+    from game.cutscene import NASKAH
+    sudah = g.state.sinema_selesai
+    for nama, sk in NASKAH.items():
+        if sk.get('syarat') and nama not in sudah:
+            sudah.append(nama)
 
 
 def ui_sinema_hidup(g):

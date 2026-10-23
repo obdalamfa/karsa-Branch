@@ -605,7 +605,7 @@ class Game3D:
                         mouse.locked = True
                     else:
                         # Menggunakan kontrol normal (non-inverted) untuk kenyamanan standard game 3D
-                        self._yaw_tujuan = None   # seret mouse menang atas [Q]/[E]
+                        self._yaw_tujuan = self._yaw_awal = None   # seret mouse menang atas [Q]/[E]
                         self.camera_yaw -= mouse.velocity[0] * 200
                         self.camera_pitch += mouse.velocity[1] * 200
                 else:
@@ -625,13 +625,22 @@ class Game3D:
 
             # Putaran [Q]/[E] berjalan halus ke tujuannya (~0,25 dtk per 45
             # derajat), dijepit supaya frame panjang tidak melewati tujuan.
+            # Berbasis waktu, bukan lerp per frame: `sisa * 12 * dt` jenuh di
+            # dt >= 0,083 (mesin lambat, CI) dan putaran jadi lompatan satu
+            # frame (terukur oleh probe_kamera_qe). dt dijepit 0,05 supaya
+            # selalu ada beberapa langkah antara.
             if self._yaw_tujuan is not None:
-                sisa = self._yaw_tujuan - self.camera_yaw
-                if abs(sisa) < 0.5:
+                awal = getattr(self, '_yaw_awal', None)
+                if awal is None:
+                    awal = self._yaw_awal = self.camera_yaw
+                    self._yaw_t = 0.0
+                self._yaw_t += min(dt, 0.05)
+                k = min(1.0, self._yaw_t / 0.25)
+                k = k * k * (3.0 - 2.0 * k)
+                self.camera_yaw = awal + (self._yaw_tujuan - awal) * k
+                if k >= 1.0:
                     self.camera_yaw = self._yaw_tujuan
-                    self._yaw_tujuan = None
-                else:
-                    self.camera_yaw += sisa * min(1.0, 12.0 * dt)
+                    self._yaw_tujuan = self._yaw_awal = None
 
             # Kunci sudut kemiringan (pitch) agar tidak terbalik atau menembus tanah
             self.camera_pitch = max(5.0, min(80, self.camera_pitch))
@@ -832,6 +841,8 @@ class Game3D:
         if self.panels.mode == 'hud' and key in ('q', 'e'):
             awal = self._yaw_tujuan if self._yaw_tujuan is not None else self.camera_yaw
             self._yaw_tujuan = awal + (45.0 if key == 'q' else -45.0)
+            # Transisi mulai lagi dari sudut SEKARANG ke tujuan baru.
+            self._yaw_awal = None
             return
 
         # Chargen mode — semua input ke ChargenScreen

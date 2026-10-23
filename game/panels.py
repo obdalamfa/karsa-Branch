@@ -437,6 +437,38 @@ def tuts_tex(label: str, tinggi: int = 30):
     return hasil
 
 
+def bentuk_tex(jenis: str, rasio: float = 1.0, tinggi: int = 64):
+    """Tekstur PUTIH bersudut bulat ('kapsul') atau lingkaran ('cakram').
+
+    Putih supaya satu tekstur dipakai banyak warna lewat entity.color
+    (normal, terpilih, terkunci). Rasio lebar/tinggi dibulatkan ke 0,25
+    supaya cache tidak tumbuh tanpa batas, dan supaya sudutnya tetap bulat
+    -- kapsul yang ditarik dari tekstur persegi sudutnya jadi lonjong.
+    """
+    rasio = max(1.0, round(rasio * 4) / 4)
+    kunci = ('_bentuk', jenis, rasio, tinggi)
+    if kunci in _IKON_CACHE:
+        return _IKON_CACHE[kunci]
+    tex = None
+    try:
+        h = tinggi * _SS
+        w = int(h * rasio)
+        img = _PILImg.new('RGBA', (w, h), (255, 255, 255, 0))
+        d = _PILDraw.Draw(img)
+        if jenis == 'cakram':
+            d.ellipse([1, 1, w - 2, h - 2], fill=(255, 255, 255, 255))
+        else:
+            d.rounded_rectangle([1, 1, w - 2, h - 2], radius=int(h * 0.48),
+                                fill=(255, 255, 255, 255))
+        img = img.resize((max(1, w // _SS), tinggi), _PILImg.LANCZOS)
+        tex = Texture(img)
+        tex.filtering = 'bilinear'
+    except Exception:
+        tex = None
+    _IKON_CACHE[kunci] = tex
+    return tex
+
+
 def _ui(model='quad', **kw):
     # Tidak pakai shader agar color property bekerja di camera.ui space.
     # transparent=True wajib agar alpha channel diterapkan oleh renderer.
@@ -2131,6 +2163,18 @@ class UIManager:
                     e.enabled = v
                 except Exception:
                     pass
+        # Pelacak tutorial/quest ikut. Dulu ia tertinggal sendirian di atas
+        # adegan sinema dan layar judul ("TUTORIAL ..." di kiri-atas kartu
+        # judul) karena hanya panel dan chargen yang menyembunyikannya.
+        for nama in ('_obj_bg', '_obj_rust', '_obj_title', '_obj_step',
+                     '_obj_hint', '_obj_janji'):
+            e = getattr(self, nama, None)
+            if e is not None:
+                try:
+                    e.enabled = v and (nama not in ('_obj_hint', '_obj_janji')
+                                       or bool(str(e.text).strip()))
+                except Exception:
+                    pass
         # Pilihan pemain menang atas "tampilkan lagi": kalau ringkasan motif
         # sengaja disembunyikan lewat TAB, keluar dari sinema tidak boleh
         # diam-diam menyalakannya kembali.
@@ -2992,34 +3036,74 @@ class UIManager:
         self._queue_txt.text = f'[ANT:{n}] C=jalan' if n > 0 else ''
 
     # ─── PIE MENU (FreeSO VMThread.ActionStrings + MotiveAdChanges) ─
+    # ── MENU RADIAL (pie) ───────────────────────────────────────────
+    # Bentuk ala The Sims: nama yang diajak berinteraksi di cakram tengah,
+    # pilihan sebagai kapsul yang melingkar di sekelilingnya. Dulu ini kotak
+    # daftar ungu dengan penanda ASCII ('>' dan '[terkunci]') -- dibaca
+    # sebagai menu debug, bukan sebagai percakapan dengan seseorang.
+    _PIE_MAKS = 8     # lingkaran muat 8; kotak lama memotong pilihan ke-7 diam-diam
+    _PIE_PUSAT = (0.0, 0.03)
+    _PIE_RX, _PIE_RY = 0.30, 0.205
+
     def _build_pie_menu(self):
-        BG = color.rgb(12, 6, 28, 235)
-        BD = color.rgb(140, 80, 200, 220)
-        self._pie_bg     = _ui(scale=(0.45, 0.32), position=(-0.14, -0.10), color=BG)
-        self._pie_border = _ui(scale=(0.452, 0.322), position=(-0.14, -0.10), color=BD)
-        self._pie_title  = _txt('', pos=(-0.34, 0.040), scale=0.90,
-                                col=color.rgb(245, 215, 80))
-        self._pie_items  = [
-            _txt('', pos=(-0.34, 0.010 - i * 0.030), scale=0.80, col=color.white)
-            for i in range(6)
-        ]
-        self._pie_fx     = _txt('', pos=(-0.34, -0.200), scale=0.72,
-                                col=color.rgb(127, 220, 255))
-        self._pie_hint   = _txt('[</> ] Pilih  [SPACE] OK  [ESC] Batal',
-                                pos=(-0.34, -0.240), scale=0.65,
-                                col=color.rgb(160, 140, 200))
-        self._pie_hint.origin = (0, 0)
+        cx, cy = self._PIE_PUSAT
+        lebar = window.aspect_ratio
+        cakram = bentuk_tex('cakram')
+        # Redam dunia sedikit supaya menu jadi fokus, tanpa menutupinya.
+        self._pie_redup = _ui(scale=(lebar + 0.02, 1.02), z=0.5,
+                              color=color.rgba(6, 8, 14, 90))
+        self._pie_cincin = _ui(texture=cakram, scale=(0.205, 0.205),
+                               position=(cx, cy), z=0.3,
+                               color=color.rgba(232, 200, 120, 235))
+        self._pie_cakram = _ui(texture=cakram, scale=(0.195, 0.195),
+                               position=(cx, cy), z=0.29,
+                               color=color.rgba(16, 20, 30, 240))
+        self._pie_title = _txt('', pos=(cx, cy + 0.025), scale=0.82,
+                               col=color.rgb(246, 222, 150), origin=(0, 0))
+        self._pie_fx = _txt('', pos=(cx, cy - 0.022), scale=0.52,
+                            col=color.rgb(160, 225, 200), origin=(0, 0))
+        self._pie_tepi = []      # kapsul bingkai (emas saat terpilih)
+        self._pie_kapsul = []    # kapsul isi
+        self._pie_items = []     # teks pilihan
+        for i in range(self._PIE_MAKS):
+            self._pie_tepi.append(_ui(z=0.2, color=color.rgba(232, 200, 120, 200)))
+            self._pie_kapsul.append(_ui(z=0.19, color=color.rgba(20, 24, 36, 235)))
+            self._pie_items.append(_txt('', scale=0.70, col=color.white,
+                                        origin=(0, 0)))
+        self._pie_hint = _txt('[Q/E] pilih    [angka] langsung    [F/SPACE] lakukan    '
+                              '[ESC] batal', pos=(0, -0.40), scale=0.62,
+                              col=color.rgb(200, 196, 186), origin=(0, 0))
+        # Disimpan untuk cek tata letak dan klik mouse.
+        self._pie_kotak = []     # (x, y, w, h) tiap kapsul yang tampil
+        self._pie_options:  list = []
         self._set_pie_visible(False)
 
-        self._pie_options:  list = []
         self._pie_selected: int  = 0
         self._pie_npc_id:   str  = ''
         self._pie_callback       = None
 
     def _set_pie_visible(self, v: bool):
-        for e in [self._pie_bg, self._pie_border, self._pie_title,
-                  self._pie_fx, self._pie_hint] + self._pie_items:
+        for e in [self._pie_redup, self._pie_cincin, self._pie_cakram,
+                  self._pie_title, self._pie_fx, self._pie_hint]:
             e.enabled = v
+        n = len(getattr(self, '_pie_options', []) or []) if v else 0
+        for i in range(self._PIE_MAKS):
+            tampil = v and i < n
+            self._pie_tepi[i].enabled = tampil
+            self._pie_kapsul[i].enabled = tampil
+            self._pie_items[i].enabled = tampil
+
+    def pie_di_mouse(self):
+        """Indeks kapsul di bawah kursor mouse, atau None."""
+        try:
+            from ursina import mouse
+            mx, my = mouse.position[0], mouse.position[1]
+        except Exception:
+            return None
+        for i, (x, y, w, h) in enumerate(getattr(self, '_pie_kotak', [])):
+            if abs(mx - x) <= w / 2 and abs(my - y) <= h / 2:
+                return i
+        return None
 
     def open_pie_menu(self, npc_id: str, options: list, callback):
         """Open pie menu. options = [(action, label, available, effects_str), ...]"""
@@ -3083,30 +3167,72 @@ class UIManager:
     def _refresh_pie_ui(self):
         from .data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS
         all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
-        # Menu perabot mengirim id 'obj:<Nama>' — pakai nama itu apa adanya,
+        # Menu perabot mengirim id 'obj:<Nama>' -- pakai nama itu apa adanya,
         # jangan cari di daftar NPC (dulu judulnya tampil sebagai 'obj:12').
         if self._pie_npc_id.startswith('obj:'):
-            self._pie_title.text = f">> {self._pie_npc_id[4:]}"
+            judul = self._pie_npc_id[4:]
         else:
-            npc = all_d.get(self._pie_npc_id, {})
-            self._pie_title.text = f">> {npc.get('name', self._pie_npc_id)}"
+            judul = all_d.get(self._pie_npc_id, {}).get('name', self._pie_npc_id)
+        self._pie_title.text = judul
 
-        for i, item_ent in enumerate(self._pie_items):
-            if i < len(self._pie_options):
-                _, label, available, effects = self._pie_options[i]
-                prefix  = '>' if i == self._pie_selected else ' '
-                avail_s = '' if available else ' [terkunci]'
-                item_ent.text  = f'{prefix} [{i+1}] {label}{avail_s}'
-                if not available:
-                    item_ent.color = color.rgb(100, 80, 120)
-                elif i == self._pie_selected:
-                    item_ent.color = color.rgb(245, 215, 80)
-                else:
-                    item_ent.color = color.rgb(200, 185, 230)
+        cx, cy = self._PIE_PUSAT
+        opsi = self._pie_options[:self._PIE_MAKS]
+        n = len(opsi)
+        self._pie_kotak = []
+        import math as _m
+        for i in range(self._PIE_MAKS):
+            tepi, kap, teks = self._pie_tepi[i], self._pie_kapsul[i], self._pie_items[i]
+            if i >= n:
+                tepi.enabled = kap.enabled = teks.enabled = False
+                continue
+            _, label, available, _eff = opsi[i]
+            # Mulai dari atas, searah jarum jam.
+            sudut = _m.radians(90.0 - i * 360.0 / n)
+            cos_, sin_ = _m.cos(sudut), _m.sin(sudut)
+            ry = self._PIE_RY + (0.02 if n > 6 else 0.0)
+            x = cx + self._PIE_RX * 0.62 * cos_
+            y = cy + ry * sin_
+            teks.text = f'{i + 1}   {label}' + ('' if available else '   (terkunci)')
+            h = 0.052
+            w = max(0.16, min(0.46, teks.width + 0.06))
+            # Kapsul menjulur KE LUAR dari cakram: tepi dalamnya di titik
+            # lingkaran, bukan pusatnya. Kapsul lebar yang dipusatkan saling
+            # tempel di bawah dan menindih cakram (terukur, 7 pilihan warga).
+            if cos_ > 0.2:
+                x += w / 2
+            elif cos_ < -0.2:
+                x -= w / 2
+            pilih = i == self._pie_selected
+            k = 1.07 if pilih else 1.0
+            tex = bentuk_tex('kapsul', w / h)
+            for e, tambah in ((tepi, 0.006), (kap, 0.0)):
+                e.texture = tex
+                e.position = (x, y)
+                e.scale = ((w + tambah) * k, (h + tambah) * k)
+                e.enabled = True
+            if not available:
+                tepi.color = color.rgba(90, 90, 100, 150)
+                kap.color = color.rgba(26, 28, 34, 210)
+                teks.color = color.rgb(128, 126, 136)
+            elif pilih:
+                tepi.color = color.rgba(255, 228, 150, 255)
+                kap.color = color.rgba(232, 196, 108, 245)
+                teks.color = color.rgb(36, 26, 10)
             else:
-                item_ent.text = ''
+                tepi.color = color.rgba(232, 200, 120, 170)
+                kap.color = color.rgba(20, 24, 36, 235)
+                teks.color = color.rgb(236, 232, 220)
+            teks.position = (x, y)
+            teks.enabled = True
+            self._pie_kotak.append((x, y, w * k, h * k))
 
-        # Effects preview for selected option (FreeSO MotiveAdChanges)
-        if self._pie_options:
-            _, _, _, effects = self._pie_options[self._pie_selected]
-            self._pie_fx.text = f'Efek: {effects}' if effects else ''
+        # Efek pilihan terpilih (FreeSO MotiveAdChanges), di dalam cakram.
+        fx = ''
+        if opsi:
+            fx = opsi[min(self._pie_selected, n - 1)][3] or ''
+            if len(fx) > 30:
+                # Dua baris paling banyak, dipotong di spasi terdekat.
+                potong = fx.rfind(' ', 0, 30)
+                potong = potong if potong > 0 else 30
+                fx = fx[:potong] + '\n' + fx[potong:].strip()[:30]
+        self._pie_fx.text = fx

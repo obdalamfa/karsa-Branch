@@ -100,7 +100,7 @@ def _pasang_overlay_debug(nyala: bool) -> None:
 
 
 class Game3D:
-    def __init__(self):
+    def __init__(self, layar_judul=False):
         logging.info("Inisialisasi Game Engine 3D (Ursina)...")
         
         # Inisialisasi Ursina Engine (ukuran pas jendela agar tidak offscreen di monitor 1080p)
@@ -342,8 +342,11 @@ class Game3D:
 
         # Sinema. Dibuat sekali dan dipakai ulang; ia tidak menggambar apa pun
         # sampai `mulai()` dipanggil, jadi biayanya nol saat tidak ada adegan.
-        from .cutscene import Sinema
+        from .cutscene import Sinema, tandai_yang_sudah_lewat
         self.sinema = Sinema(self)
+        # Save lama: interaksi yang sudah pernah dilakukan sebelum adegannya
+        # ada tidak diputar susulan (lihat cutscene.tandai_yang_sudah_lewat).
+        tandai_yang_sudah_lewat(self.state)
 
         # Terapkan penampilan tersimpan (jika sudah pernah chargen)
         if self.state.char_name:
@@ -387,7 +390,17 @@ class Game3D:
 
         # Chargen — muncul jika first run (char_name kosong) atau tekan F2
         self._chargen: ChargenScreen = None
-        if not self.state.char_name:
+        # Layar judul hanya untuk pemain (run() / main.py). Alat ukur yang
+        # membangun Game3D() langsung melompatinya; layar itu diuji sendiri
+        # oleh tools/probe_sinema.py lewat Game3D(layar_judul=True).
+        self._judul = None
+        if layar_judul:
+            from .menu_judul import MenuJudul
+            self._kam_awal = (self.camera_dist, self.camera_pitch, self.camera_yaw)
+            self._judul = MenuJudul(self, ada_save=bool(self.state.char_name))
+            self.panels.mode = 'judul'
+            self.panels.set_hud_visible(False)
+        elif not self.state.char_name:
             self._open_chargen()
 
         # Shadow map matahari (game/bayangan_matahari.py). Sebelum _init_env,
@@ -427,6 +440,9 @@ class Game3D:
         self.panels.update(s, dt)
         self._pulihkan_mode_yatim()
 
+        if self.panels.mode == 'judul' and self._judul:
+            self._judul.tick(dt)
+
         if self.panels.mode == 'sinema':
             # Sengaja di luar gerbang 'hud' di bawah: dunia memang harus beku,
             # tapi kamera sinema justru satu-satunya yang masih harus bergerak.
@@ -453,6 +469,10 @@ class Game3D:
         # persis laporan "jalan saja tidak bisa". Di The Sims, bergerak
         # memang membatalkan menu; itu afordans yang sudah dikenal orang.
         if self.panels.mode == 'pie':
+            # Sorotan mengikuti mouse, seperti menu radial The Sims.
+            _i = self.panels.pie_di_mouse()
+            if _i is not None and _i != self.panels._pie_selected:
+                self.panels.navigate_pie(_i - self.panels._pie_selected)
             from ursina import held_keys as _hk
             if (_hk['w'] or _hk['a'] or _hk['s'] or _hk['d']
                     or _hk['up arrow'] or _hk['down arrow']
@@ -499,8 +519,14 @@ class Game3D:
             # satu pun, sementara memanggil pemicu di tiap tempat bisa.
             # `mulai()` sendiri menolak adegan yang sudah pernah ditonton,
             # jadi memanggilnya berulang aman.
-            from .cutscene import pemicu_tahap
+            from .cutscene import pemicu_tahap, pemicu_baru
             _adegan = pemicu_tahap(s.quest_stage)
+            if _adegan and _adegan in (s.sinema_selesai or []):
+                _adegan = None
+            # Interaksi pertama (surat, cangkul, tiba di desa, ...). Belokan
+            # quest menang kalau keduanya jatuh di frame yang sama; yang kalah
+            # menunggu frame HUD berikutnya.
+            _adegan = _adegan or pemicu_baru(s)
             if _adegan:
                 self.sinema.mulai(_adegan)
 
@@ -769,6 +795,11 @@ class Game3D:
         # tetap True dan UI sinema tertinggal di layar (diukur,
         # tools/probe_buy_sinema.py). Serahkan ke runner sinema, yang
         # juga memberi beat lore yang terlewat.
+        # Layar judul memiliki SEMUA tombol, termasuk ESC (yang di sana
+        # berarti "kembali", bukan "simpan").
+        if self.panels.mode == 'judul' and getattr(self, '_judul', None):
+            self._judul.input(key)
+            return
         if (key == 'escape' and self.panels.mode == 'sinema'
                 and getattr(getattr(self, 'sinema', None), 'aktif', False)):
             self.sinema.input(key)
@@ -852,15 +883,24 @@ class Game3D:
             return
 
         if self.panels.mode == 'pie':
-            if key in ('left arrow', 'q'):
+            # Q/E menggeser sorotan melingkar -- tombol yang sama yang memutar
+            # kamera di HUD. F/SPACE/ENTER melakukan; [E] dulu melakukan, tapi
+            # sejak interaksi pindah ke [F] (22 Okt 2026) [E] berarti "kanan".
+            if key in ('left arrow', 'q', 'up arrow'):
                 self.panels.navigate_pie(-1)
-            elif key in ('right arrow', 'r'):
+            elif key in ('right arrow', 'e', 'r', 'down arrow'):
                 self.panels.navigate_pie(1)
             elif key.isdigit() and int(key) >= 1:
-                self.panels.navigate_pie(int(key) - 1 - self.panels._pie_selected)
+                if int(key) <= len(self.panels._pie_options):
+                    self.panels.navigate_pie(int(key) - 1 - self.panels._pie_selected)
+                    self.panels.confirm_pie()
+            elif key in ('space', 'f', 'enter'):
                 self.panels.confirm_pie()
-            elif key in ('space', 'e', 'enter'):
-                self.panels.confirm_pie()
+            elif key == 'left mouse down':
+                i = self.panels.pie_di_mouse()
+                if i is not None:
+                    self.panels.navigate_pie(i - self.panels._pie_selected)
+                    self.panels.confirm_pie()
             elif key == 'escape':
                 self.panels.close_pie()
             return
@@ -1003,35 +1043,44 @@ class Game3D:
             elif key == 'f9':
                 loaded = GameState.load()
                 if loaded:
-                    # Muat data KE state yang sudah dipegang semua komponen,
-                    # bukan mengganti objeknya. Sebelumnya `self.state = loaded`
-                    # hanya me-rebind app + player, sementara panels/world/
-                    # entities/time_controller/quest_controller/queue tetap
-                    # menunjuk GameState lama -> HUD beku & split-state.
-                    self.state.__dict__.clear()
-                    self.state.__dict__.update(loaded.__dict__)
-                    self.state.__dict__.pop('_mv', None)
-                    self.player.queue.motives = self.state.mv
-                    self.player.queue.clear()
-                    self.world.load_scene(self.state.scene_name)
-                    self.entities.load_scene(self.state.scene_name)
-                    # Safety walkable snap check
-                    if not self.world.is_walkable(int(round(self.state.player_x)), int(round(self.state.player_y))):
-                        found = None
-                        for r in range(1, 6):
-                            for dx in range(-r, r+1):
-                                for dy in range(-r, r+1):
-                                    nx, ny = int(round(self.state.player_x)) + dx, int(round(self.state.player_y)) + dy
-                                    if self.world.is_walkable(nx, ny):
-                                        found = (nx, ny); break
-                                if found: break
-                            if found: break
-                        if found:
-                            self.state.player_x, self.state.player_y = float(found[0]), float(found[1])
-                    self.player.set_tile_pos(self.state.player_x, self.state.player_y)
-                    self.player._set_initial_rotation()
-                    self._init_env()
+                    self._ganti_state(loaded)
                     self.panels.flash_msg("[F9] Game Dimuat!")
+
+    def _ganti_state(self, baru):
+        """Isi state yang dipegang semua komponen diganti `baru`, lalu dunia
+        dimuat ulang. Dipakai F9 dan "Permainan Baru" di layar judul.
+
+        Data dimuat KE state yang sudah dipegang semua komponen, bukan
+        mengganti objeknya. Dulu `self.state = loaded` hanya me-rebind app +
+        player, sementara panels/world/entities/time_controller/
+        quest_controller/queue tetap menunjuk GameState lama -> HUD beku &
+        split-state.
+        """
+        self.state.__dict__.clear()
+        self.state.__dict__.update(baru.__dict__)
+        self.state.__dict__.pop('_mv', None)
+        from .cutscene import tandai_yang_sudah_lewat
+        tandai_yang_sudah_lewat(self.state)
+        self.player.queue.motives = self.state.mv
+        self.player.queue.clear()
+        self.world.load_scene(self.state.scene_name)
+        self.entities.load_scene(self.state.scene_name)
+        # Safety walkable snap check
+        if not self.world.is_walkable(int(round(self.state.player_x)), int(round(self.state.player_y))):
+            found = None
+            for r in range(1, 6):
+                for dx in range(-r, r+1):
+                    for dy in range(-r, r+1):
+                        nx, ny = int(round(self.state.player_x)) + dx, int(round(self.state.player_y)) + dy
+                        if self.world.is_walkable(nx, ny):
+                            found = (nx, ny); break
+                    if found: break
+                if found: break
+            if found:
+                self.state.player_x, self.state.player_y = float(found[0]), float(found[1])
+        self.player.set_tile_pos(self.state.player_x, self.state.player_y)
+        self.player._set_initial_rotation()
+        self._init_env()
 
     def _pulihkan_mode_yatim(self):
         """Kembalikan ke HUD kalau mode aktif kehilangan UI pemiliknya.
@@ -1079,6 +1128,8 @@ class Game3D:
             # dan W/S menggerakkan pemain, bukan pilihan katalog.
             yatim = not any(getattr(e, 'enabled', False)
                             for e in getattr(p, '_buy_ents', None) or [])
+        elif mode == 'judul':
+            yatim = not getattr(getattr(self, '_judul', None), 'aktif', False)
         elif mode == 'batin':
             # Modal Majelis Batin dimiliki entity-nya sendiri (_bc_ents).
             # Tanpa baris ini modal PAGI PERTAMA dipulihkan ke HUD satu frame
@@ -1091,6 +1142,22 @@ class Game3D:
             p.mode = 'hud'
 
     # ─── CHARACTER CREATION ─────────────────────────────────
+    def _tutup_judul(self, baru: bool):
+        """Keluar dari layar judul: lanjutkan save, atau mulai baru."""
+        if self._judul:
+            self._judul.bongkar()
+            self._judul = None
+        self.camera_dist, self.camera_pitch, self.camera_yaw = self._kam_awal
+        self._snap_camera_to_player()
+        self.panels.set_hud_visible(True)
+        self.panels.mode = 'hud'
+        if baru:
+            if self.state.char_name:
+                # Save lama tidak dihapus: ia baru tertimpa saat permainan
+                # baru disimpan (selesai Buat Karakter).
+                self._ganti_state(GameState())
+            self._open_chargen()
+
     def _open_chargen(self):
         if self._chargen:
             return
@@ -1123,12 +1190,10 @@ class Game3D:
             self.panels.flash_msg(
                 "Save lama tidak bisa dibaca dan sudah dipindahkan ke "
                 "*.corrupt-* -- tidak ditimpa.", 9.0)
-        # Tutorial intro untuk first-time player
-        from ursina import invoke
-        self.panels.flash_msg(f'Selamat datang, {state.char_name}! Petualanganmu dimulai.', 3.5)
-        invoke(self.panels.flash_msg, "Pakai WASD untuk jalan, SHIFT untuk lari.", 4.0, delay=4.0)
-        invoke(self.panels.flash_msg, "SPACE pakai alat, E bicara dgn NPC, F1 untuk help.", 4.0, delay=8.5)
-        invoke(self.panels.flash_msg, "Cek inventori (I), peta (M), quest (J). Selamat bermain!", 4.0, delay=13.0)
+        # Sambutan dan petunjuk kendali kini bagian dari adegan pembuka
+        # ('datang' di cutscene.py). Dulu tiga flash bertimer di sini muncul
+        # di TENGAH adegan itu, menimpa narasinya. Empat flash, bukan tiga:
+        # yang keempat (I/M/J) ikut pindah ke beat 'Kendali'.
 
     # ─── NEEDS WARNING ──────────────────────────────────────
     def _check_needs_warning(self):
@@ -1355,5 +1420,5 @@ class Game3D:
         self.app.run()
 
 def run():
-    game = Game3D()
+    game = Game3D(layar_judul=True)
     game.run()

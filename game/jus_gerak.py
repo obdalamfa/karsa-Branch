@@ -30,7 +30,8 @@ import math
 # Kemajuan saat alat "kena" per mode. Hoe 0,93 dtk dan swing 0,70 dtk: puncak
 # ayunan klipnya jatuh sedikit sebelum tengah.
 _HENTAK = {'hoe': 0.42, 'down': 0.42, 'mine': 0.45, 'swing': 0.40,
-           'water': 0.30, 'bend': 0.45, 'gosok': 0.5, 'bicara': 0.5}
+           'water': 0.30, 'bend': 0.45, 'gosok': 0.5, 'bicara': 0.5,
+           'kena': 0.0}
 
 
 def _mulus(x):
@@ -95,6 +96,15 @@ def kurva(mode: str, p: float):
     if mode == 'gosok':
         k = math.sin(math.pi * min(1.0, p))
         return (13 * k, 6 * math.sin(p * math.pi * 6) * k, 0.0, -0.06 * k, 1.0 - 0.04 * k)
+    if mode == 'kena':
+        # Dipukul mob: tersentak ke belakang dalam ~60 ms, badan memendek,
+        # lalu pulih dengan sedikit lewat. Tanpa ancang-ancang: pukulan
+        # datang dari luar, bukan dari niat tokoh.
+        if p < 0.15:
+            q = _mulus(p / 0.15)
+            return (-16 * q, 7 * q, 0.0, -0.05 * q, 1.0 - 0.10 * q)
+        b = 1.0 - _lentur((p - 0.15) / 0.85)
+        return (-16 * b, 7 * b, 0.0, -0.05 * b, 1.0 - 0.10 * b)
     if mode == 'bicara':
         k = math.sin(math.pi * min(1.0, p))
         return (4 * math.sin(p * math.pi * 4) * k, 2 * k, 0.0, 0.0, 1.0)
@@ -158,6 +168,8 @@ class JusGerak:
         if m in ('hoe', 'down', 'mine', 'swing'):
             self._punch = 0.10 if m == 'mine' else (0.07 if m == 'swing' else 0.06)
             self._debu(m)
+        elif m == 'kena':
+            self._punch = 0.12
 
     def _debu(self, m):
         try:

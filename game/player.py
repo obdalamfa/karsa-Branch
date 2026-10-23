@@ -773,6 +773,14 @@ class Player3D(Entity):
         # rumput — dan terbaca sebagai cakram gelap melayang setinggi lutut.
         # Dikunci per frame karena pemain berpindah scene.
         s = self.state
+        # Mob menulis kebal-sesudah-kena ke state (mob.py), bukan ke pemain.
+        # Dulu baris sinkron di bawah menimpanya dengan _invuln (selalu 0),
+        # jadi kebal 600 ms hilang di frame berikutnya dan pemain tidak
+        # pernah berkedip. Ambil dulu dari state; pukulan baru = kebal naik.
+        if s.invuln_timer_ms > self._invuln:
+            if self._invuln <= 0:
+                self._jus.mulai('kena', 0.42)
+            self._invuln = s.invuln_timer_ms
         if self._invuln > 0:
             self._invuln = max(0, self._invuln - dt * 1000)
         self._attack_anim= max(0.0, self._attack_anim- dt * 1000)
@@ -1354,6 +1362,14 @@ class Player3D(Entity):
         else:
             self.body.color = Vec4(self._shirt_col[0], self._shirt_col[1],
                                    self._shirt_col[2], 1.0)
+        # Pada rig CharActor, self.body adalah Entity kosong: kedip di atas
+        # tidak mewarnai apa pun. Kedipnya dipasang di poros rig.
+        _ch = getattr(self, '_char', None)
+        if _ch is not None:
+            if self._invuln > 0 and int(self._invuln / 80) % 2 == 0:
+                _ch.poros.setColorScale(1.7, 0.55, 0.55, 1)
+            else:
+                _ch.poros.setColorScale(1, 1, 1, 1)
 
         # Sync state
         s.player_x = self.x / TS

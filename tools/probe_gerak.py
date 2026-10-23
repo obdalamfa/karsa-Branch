@@ -11,6 +11,8 @@ supaya semua itu tidak kembali:
           condong ke belakang LALU ke depan, bobot klip dibaur (ada nilai
           antara), pose kembali tegak sesudahnya; bend tanpa klip tetap
           menggerakkan pinggang dan memendekkan tubuh
+  kena    pemain dipukul mob sungguhan: kebal 600 ms bertahan, tubuh
+          tersentak, rig berkedip merah
   mob     napas saat diam, kemerahan saat ancang-ancang, kilat saat HP
           turun, mati = berputar/menyusut lalu dihapus ~0,6 dtk kemudian,
           sementara s.mobs sudah diperbarui di frame kematian
@@ -167,6 +169,41 @@ def uji_mob(g):
         m2 not in g.entities.actors.values(), 'masih di actors')
 
 
+def uji_kena_pemain(g):
+    """Mob memukul pemain sungguhan (AI mob, bukan hp diubah tangan).
+
+    Dulu Player.tick menimpa s.invuln_timer_ms dengan _invuln (selalu 0),
+    jadi kebal 600 ms yang ditulis mob.py hilang di frame berikutnya, dan
+    kedip merahnya mewarnai self.body yang pada rig adalah Entity kosong."""
+    s = g.state
+    px, py = int(round(s.player_x)), int(round(s.player_y))
+    g.entities.spawn_mobs([dict(kind='genderuwo', x=px + 1, y=py, hp=40, max_hp=40,
+                                damage=5, speed=0.0)])
+    hp0 = s.hp
+    t0 = time.time()
+    while time.time() - t0 < 6.0 and s.hp >= hp0:
+        langkah(1)
+    if s.hp >= hp0:
+        cek('mob sempat memukul pemain', False, f'hp {hp0} tetap')
+        return
+    char = g.player._char
+    kebal, mode, pitch, merah = [], set(), [], False
+    t1 = time.time()
+    while time.time() - t1 < 0.45:
+        langkah(1)
+        kebal.append(s.invuln_timer_ms)
+        mode.add(g.player._jus.mode)
+        if char is not None:
+            pitch.append(char.pinggang.getHpr()[1])
+            merah = merah or char.poros.getColorScale()[1] < 0.8
+    cek('kebal sesudah dipukul bertahan (tidak hilang 1 frame)',
+        len(kebal) >= 2 and kebal[1] > 100,
+        f'invuln ms {[round(k) for k in kebal[:4]]}')
+    cek('pemain tersentak saat dipukul', 'kena' in mode and max(pitch or [0]) > 5.0,
+        f'mode {sorted(m for m in mode if m)}, P maks {max(pitch or [0]):.1f}')
+    cek('pemain berkedip merah saat kebal', merah, 'colorScale poros tak pernah merah')
+
+
 def main():
     kerja = Path(tempfile.mkdtemp(prefix='probe_gerak_'))
     try:
@@ -179,6 +216,7 @@ def main():
             g.state.batin_sekali = b + ['pagi_pertama']
             uji_pemain(g)
             uji_mob(g)
+            uji_kena_pemain(g)
     except Exception:
         traceback.print_exc()
         cek('probe berjalan tanpa pengecualian', False, 'lihat traceback')

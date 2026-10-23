@@ -2039,6 +2039,7 @@ def main():
     buy_sinema_baris = None
     kamera_baris = None
     sinema_baris = None
+    gerak_baris = None
     _pasang_save_fixture(ROOT / cfg.SAVE_FILE)
     t0 = time.time()
     try:
@@ -2453,6 +2454,26 @@ def main():
         except subprocess.TimeoutExpired:
             sinema_baris = (False, 'waktu habis')
 
+    # ── Animasi kerja pemain + mob dungeon (subproses) ──
+    # Baur klip kerja, lapisan condong/gepeng (jus_gerak), dan gerak mob
+    # (mob_gerak): napas, ancang-ancang, kilat kena, mati bertahap. Tanpa
+    # penjaga, lapisan prosedural seperti ini diam-diam jadi modul yatim.
+    if not minta:
+        import subprocess
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'probe_gerak.py')],
+                               cwd=ROOT, capture_output=True, text=True, timeout=600)
+            akhir = [b for b in r.stdout.splitlines()
+                     if re.search(r'\d+/\d+ lulus', b)][-1:]
+            if akhir:
+                m = re.search(r'(\d+)/(\d+) lulus', akhir[0])
+                ok = r.returncode == 0 and m.group(1) == m.group(2) and int(m.group(2)) > 0
+                gerak_baris = (ok, akhir[0].strip())
+            else:
+                gerak_baris = (False, f'tanpa keluaran (kode {r.returncode})')
+        except subprocess.TimeoutExpired:
+            gerak_baris = (False, 'waktu habis')
+
     print('-' * 78)
     tanda_hud = 'LULUS' if not hud_baris else 'GAGAL'
     ring_hud = '; '.join(f'{k} {c}' for k, c in hud_baris) or 'semua di dalam layar'
@@ -2499,6 +2520,12 @@ def main():
         print(f'{"sinema/judul":14s} {"LULUS" if ok_sn else "GAGAL":>7s} '
               f'{"":>9s} {"":>7s}  {catatan_sn[:44]}')
         if not ok_sn:
+            gagal_total += 1
+    if gerak_baris is not None:
+        ok_gr, catatan_gr = gerak_baris
+        print(f'{"animasi gerak":14s} {"LULUS" if ok_gr else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {catatan_gr[:44]}')
+        if not ok_gr:
             gagal_total += 1
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)

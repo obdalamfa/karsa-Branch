@@ -208,6 +208,8 @@ class Player3D(Entity):
         self._invuln           = 0.0    # ms
         self._anim_t           = 0.0
         self._attack_anim      = 0.0
+        from .jus_gerak import JusGerak
+        self._jus = JusGerak(self)    # ancang-ancang / hentakan / ikut-gerak
         self._anim_mode        = 'swing' # swing|down|water|bend
         # Alat di tangan: dibangun sekali, tapi baru TERLIHAT saat dipakai.
         self._held_tool        = None
@@ -983,6 +985,16 @@ class Player3D(Entity):
                     # Terkurung sepenuhnya: dorong ke tile terdekat yang bisa
                     # dijalani, bukan biarkan pemain kehilangan kendali.
                     self._escape_to_walkable(tx_cur, tz_cur)
+                # `return` ini melewati SEMUA animasi di bawah, termasuk
+                # char.update(): selama pemain bergerak di tile terblokir rig
+                # membeku di pose apa pun selama frame-frame itu (dibaca dari
+                # kode; pembekuan yang sempat terlihat di tangkapan 23 Okt
+                # ternyata salah alat ukur, bukan cabang ini). Rig dan lapisan
+                # gerak tetap dijalankan; gerak/tabrakan tidak disentuh.
+                _ch = getattr(self, '_char', None)
+                if _ch is not None:
+                    _ch.update(dt, 0.0)
+                    self._jus.tick(dt)
                 return
 
             # Diagonal check: prevent clipping inside diagonal corner obstacles
@@ -1225,6 +1237,7 @@ class Player3D(Entity):
         char = getattr(self, '_char', None)
         if char is not None:
             char.update(dt, v_mag if moving_now else 0.0)
+            self._jus.tick(dt)
 
         # ── Mesh-swap animation (jika model player memakai mesh swap) ──
         if getattr(self, '_use_mesh_swap', False):
@@ -1687,8 +1700,12 @@ class Player3D(Entity):
         char = getattr(self, '_char', None)
         if char is not None:
             klip = _KLIP_RIG.get(mode)
-            if klip:
-                char.mainkan_sekali(klip)
+            detik = float(ms) / 1000.0
+            if klip and char.mainkan_sekali(klip):
+                detik = char._sekali_dur
+            # Lapisan gerak juga untuk aksi TANPA klip (bend, gosok, bicara):
+            # dulu tokohnya berdiri diam saat memanen.
+            self._jus.mulai(mode, max(detik, 0.45 if klip is None else detik))
             return
 
         # Avatar TSO tidak digerakkan oleh pivot di bawah — pivot itu milik

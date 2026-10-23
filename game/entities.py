@@ -1129,11 +1129,25 @@ class EntitiesManager:
                 _w.tick(dt)
             if isinstance(actor, Monster):
                 if actor.hp <= 0:
-                    if actor.is_boss: s.naga_defeated = True
-                    if actor.mob_spec in s.mobs:
-                        s.mobs.remove(actor.mob_spec)
-                    destroy(actor)
-                    del self.actors[actor_id]
+                    # Logika kematian tetap di frame ini (boss, s.mobs); yang
+                    # ditunda hanya HILANGNYA model: 0,6 dtk berputar, menyusut
+                    # dan tenggelam (mob_gerak). Dulu mob lenyap dalam satu
+                    # frame walau mob.py sudah menyiapkan dying/death_ms.
+                    if not actor.dying:
+                        actor.dying = True
+                        actor.death_ms = 0.0
+                        if actor.is_boss: s.naga_defeated = True
+                        if actor.mob_spec in s.mobs:
+                            s.mobs.remove(actor.mob_spec)
+                        for _bar in (getattr(actor, '_hp_bar', None), getattr(actor, '_bg_bar', None)):
+                            if _bar is not None:
+                                _bar.enabled = False
+                    actor.death_ms += dt * 1000.0
+                    from .mob_gerak import animasikan, DURASI_MATI
+                    animasikan(actor, dt)
+                    if actor.death_ms >= DURASI_MATI * 1000.0:
+                        destroy(actor)
+                        del self.actors[actor_id]
                     continue
                 actor.update_ai(dt, s.player_x, s.player_y, can_walk_fn)
                 
@@ -1147,10 +1161,8 @@ class EntitiesManager:
                 sc = 1.4 if actor.is_boss else 1.0
                 actor._hp_bar.scale_x = 0.9 * sc * ratio
 
-                if actor.dmg_flash_ms > 0:
-                    actor.color = color.white
-                else:
-                    actor.color = color.white # Revert to normal
+                # Kilat kena pukul kini dikerjakan mob_gerak (dulu kedua cabang
+                # di sini menyetel putih, jadi kilatnya tidak pernah terlihat).
                 
             elif isinstance(actor, NPC):
                 actor.update_ai(dt, self.brains, can_walk_fn, self.world)
@@ -1259,6 +1271,9 @@ class EntitiesManager:
 
             # Let the actor smoothly move visually
             actor.sync_visuals(dt, TS, GH)
+            if isinstance(actor, Monster):
+                from .mob_gerak import animasikan
+                animasikan(actor, dt, (s.player_x * TS, s.player_y * TS))
             # Penunggu gua: SATU panggilan per frame. Blok ini sempat
             # tergandakan, sehingga `_guardian_time` maju 2x dt dan napas naga
             # serta ayunan api banaspati berjalan dua kali kecepatan rancangan.

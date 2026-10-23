@@ -13,6 +13,18 @@ bukan pada kemungkinan yang dikarang:
                  hanya boleh punya SATU parent; mesh cache yang diberikan ke
                  banyak Entity membuat semua kecuali yang TERAKHIR kehilangan
                  geometri. Terjadi DUA KALI: di meshes.py dan di entities.py.
+                 Model juga harus tergantung di bawah entity-nya sendiri:
+                 versi lama lolos saat satu hasil load_model_file dibagi dua.
+  model_blender  model Blender yang dipanggil builder scene tidak pernah tampil
+                 karena fungsinya hilang dan kegagalannya ditelan (aturan #4).
+                 Dihitung per nama model dari entity yang enabled.
+  palung         palung farm terkubur di ekor fungsi lain; "Beri Minum" hilang
+                 dari pie ternak tanpa error apa pun.
+  model_tegak    heuristik orientasi merebahkan model Blender yang sudah Y-atas
+                 (mercusuar, kurofune, pohon). Tinggi di dunia diadu dengan
+                 tinggi di berkas .obj-nya.
+  model_tekstur  tekstur bake pohon Blender ada di model tapi sm_has_tex=0,
+                 jadi 37 kelapa tampil putih polos.
   frame_kosong   "rumah ga muncul" — scene yang dirender jadi langit polos.
   pemain_valid   terjepit permanen di tile yang tidak bisa dijalani.
   motif_waras    mesin motif baru; nilai harus tetap di -100..+100.
@@ -130,6 +142,7 @@ from __future__ import annotations
 import atexit
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -145,6 +158,7 @@ loadPrcFileData('', 'load-display pandagl')
 loadPrcFileData('', 'aux-display pandadx9')
 loadPrcFileData('', 'audio-library-name null')
 loadPrcFileData('', 'sync-video false')
+loadPrcFileData('', 'depth-bits 24')
 
 # `--offscreen` melepas ketergantungan pada jendela sungguhan. Dipakai saat
 # lingkungan menolak memfokuskan jendela: di situ tiap tangkapan layar kembali
@@ -175,7 +189,16 @@ def _ok(msg=''):
 # ─── PEMERIKSAAN ─────────────────────────────────────────
 
 def cek_geom_nol(scene_mod):
-    """Entity yang punya model tapi nol GeomNode = korban NodePath-bersama."""
+    """Entity yang punya model tapi nol GeomNode = korban NodePath-bersama.
+
+    Versi lama hanya menghitung GeomNode di `e.model`, dan itu buta terhadap
+    bentuk bug yang paling mungkin: satu hasil `load_model_file` dipasang ke
+    DUA entity. Setter Ursina me-reparent model ke entity kedua, jadi `A.model`
+    masih menunjuk ke NodePath yang utuh (1 GeomNode) sementara subtree A
+    sendiri kosong dan A tidak menggambar apa pun. Terukur lewat Game3D di
+    cemetery: korban 0, cek LOLOS. Sekarang model juga harus benar-benar
+    tergantung di bawah entity pemiliknya.
+    """
     from ursina import scene as uscene
     korban = []
     for e in uscene.children:
@@ -183,10 +206,11 @@ def cek_geom_nol(scene_mod):
         if m is None:
             continue
         try:
-            n = len(m.findAllMatches('**/+GeomNode'))
+            dicuri = m.isEmpty() or m.getParent() != e
+            n = 0 if m.isEmpty() else len(m.findAllMatches('**/+GeomNode'))
         except Exception:
             continue
-        if n == 0:
+        if n == 0 or dicuri:
             nama = getattr(e, 'name', None) or type(e).__name__
             korban.append(nama)
     if korban:
@@ -194,6 +218,288 @@ def cek_geom_nol(scene_mod):
         ring = ', '.join(f'{k}x{v}' for k, v in Counter(korban).most_common(4))
         return _fail(f'{len(korban)} entity tanpa geometri ({ring})')
     return _ok()
+
+
+# Model Blender (assets/models/<nama>.obj) yang HARUS tampil di tiap scene, dan
+# berapa banyak. Dihitung dari entity yang enabled dan modelnya benar-benar
+# tergantung di bawahnya -- yang dimatikan diam-diam (filter rock_sanctuary)
+# atau dicuri entity lain tidak dihitung. Angkanya persis, bukan "minimal",
+# supaya pemasangan ganda juga ketahuan.
+HARAPAN_MODEL = {
+    # Fixture regress menyimpan lighthouse_fixed=False: yang tampil versi rusak.
+    # Pohon dari props.POHON_BLENDER (satu per ubin), sebaran dari
+    # props.SEBARAN_OBJ (dibagi bergiliran per spesifikasi).
+    'beach':    {'prop_mercusuar_rusak': 1, 'pohon_kelapa': 37},
+    # Mountain memakai hutan pinus integrasi/satu (pembangun_pohon), bukan
+    # pohon_tropis -- keputusan pemilik 22 Okt 2026.
+    'mountain': {'pohon_tropis': 0},
+    'town':     {'pohon_tropis': 5},
+    'cemetery': {'pohon_mati': 8, 'lantern': 4, 'pagar_bambu': 3},
+    'lake':     {'lantern': 3, 'prop_peti_sayur': 2, 'prop_jerami': 2},
+    # Farm sengaja tanpa pohon Blender (layar lima menit pertama, patokan
+    # farm_wide); nol di sini menjaga keputusan itu dari perubahan diam-diam.
+    'farm':     {'pohon_tropis': 0, 'pohon_mati': 0},
+}
+
+
+def hitung_model_blender():
+    """Counter nama model .obj -> jumlah entity enabled yang menggambarnya."""
+    from collections import Counter
+    from ursina import scene as uscene
+    hitung = Counter()
+    for e in uscene.children:
+        m = getattr(e, 'model', None)
+        if m is None or not getattr(e, 'enabled', True):
+            continue
+        try:
+            if m.isEmpty() or m.getParent() != e:
+                continue
+            nm = m.getName()
+        except Exception:
+            continue
+        if nm.endswith('.obj'):
+            hitung[nm[:-4]] += 1
+    return hitung
+
+
+def cek_model_blender(nama):
+    """Model Blender yang dipanggil builder scene benar-benar sampai ke layar.
+
+    Aturan #4 menimpa alat ujinya sendiri: `scatter_obj_props` meng-import
+    `make_obj_entity` yang hilang di merge 5683e79, kegagalannya ditelan
+    `except: return`, dan penjaganya -- cek "dressing >= 8" di
+    tools/smoke_boot.py -- tidak pernah dijalankan CI. Lake dan cemetery tampil
+    tanpa satu pun model sebaran sejak itu, tanpa error apa pun. Cek ini lewat
+    jalur Game3D (scene diganti seperti pemain), bukan memanggil builder.
+    """
+    hitung = hitung_model_blender()
+    harap = HARAPAN_MODEL.get(nama, {})
+    salah = [f'{m} {hitung.get(m, 0)}/{n}' for m, n in sorted(harap.items())
+             if hitung.get(m, 0) != n]
+    if salah:
+        return _fail('jumlah model salah (ada/harap): ' + ', '.join(salah))
+    ring = ', '.join(f'{m}x{n}' for m, n in sorted(harap.items()))
+    return _ok(ring or f'{sum(hitung.values())} model .obj, tanpa harapan')
+
+
+_SUMBU_BERKAS: dict = {}
+
+
+def _tinggi_berkas(nama):
+    """(tinggi, dasar) sumbu-atas model di BERKAS .obj-nya, atau None.
+
+    Sumbu-atas diputuskan dari BERKASNYA SENDIRI, bukan dari tabel kode yang
+    sedang diuji (entities._Z_ATAS). Versi sebelumnya membaca _Z_ATAS, jadi
+    mencabut lantern dari tabel itu ikut mencabut harapan cek ini -- lentera
+    rebah lolos hijau (temuan verifikator adversarial, 19 Okt 2026).
+
+      - baris pertama '# axis-converted-to-Y-up' (fix_obj_axes.py) -> y
+      - tanpa marker -> sumbu terpanjang antara y dan z. Benda yang dipasang
+        sebagai prop (lentera 2,26 z / 0,44 y, sumur, pagar, bambu) lebih
+        tinggi daripada tebalnya, jadi sumbu terpanjang = sumbu atas.
+    """
+    if nama not in _SUMBU_BERKAS:
+        p = ROOT / 'assets' / 'models' / f'{nama}.obj'
+        lo, hi, marker = [None] * 3, [None] * 3, False
+        try:
+            with open(p, encoding='utf-8', errors='replace') as f:
+                marker = f.readline().startswith('# axis-converted-to-Y-up')
+                f.seek(0)
+                for ln in f:
+                    if ln.startswith('v '):
+                        xyz = [float(t) for t in ln.split()[1:4]]
+                        for i, v in enumerate(xyz):
+                            lo[i] = v if lo[i] is None else min(lo[i], v)
+                            hi[i] = v if hi[i] is None else max(hi[i], v)
+        except OSError:
+            pass
+        if lo[1] is None:
+            _SUMBU_BERKAS[nama] = None
+        else:
+            k = 1 if marker or (hi[1] - lo[1]) >= (hi[2] - lo[2]) else 2
+            _SUMBU_BERKAS[nama] = (hi[k] - lo[k], lo[k])
+    return _SUMBU_BERKAS[nama]
+
+
+# Model yang SENGAJA tidak berdiri di permukaan ubinnya: nama -> selisih
+# dasar (unit dunia) yang diharapkan di atas GROUND_H + tinggi permukaan.
+# beach.py menaruh kurofune 0,1 di atas GROUND_H (lambung menyentuh air).
+_DASAR_SENGAJA = {'prop_kurofune': 0.1}
+
+# Model makhluk: diputar dan dianimasikan oleh jalurnya sendiri (npc, mob,
+# naga, humanoid fallback, hantu). Bukan urusan cek tegak benda.
+_BUKAN_PROP = ('npc_', 'mob_', 'naga', 'humanoid', 'ghost', 'petapa', 'kenney_')
+
+
+def cek_model_tegak(nama, g=None):
+    """Model pohon_/prop_/Z-atas yang tampil di scene berdiri tegak.
+
+    Heuristik `d.y > d.z -> setP(-90)` di load_model_file (f596e18) merebahkan
+    tepat model yang sudah dikonversi ke Y-atas (pohon, mercusuar, kurofune,
+    peti) dan membiarkan berkas Z-atas tetap rebah. Diukur dengan ShowBase,
+    bukan offscreen tanpa ShowBase -- di sana heuristiknya tidak aktif dan
+    model rebah terlihat tegak. Tinggi di dunia harus sama dengan tinggi
+    sumbu-atas di berkasnya, dikali skala entity.
+
+    Dasar diukur terhadap TANAH, bukan terhadap Y entity sendiri: versi awal
+    membandingkan dengan e.getY() sehingga pohon yang dipasang 2 unit di
+    bawah tanah (37 kelapa beach terkubur sampai tajuk) tetap lulus. Tanah =
+    GROUND_H + world.get_surface_height ubin tempat entity berdiri.
+    """
+    from game.config import GROUND_H, TILE_SIZE as TS
+    world = getattr(g, 'world', None)
+    from ursina import scene as uscene
+    from direct.showbase.ShowBaseGlobal import base as _b
+    rebah, salah_dasar, n = [], [], 0
+    for e in uscene.children:
+        m = getattr(e, 'model', None)
+        if m is None or not getattr(e, 'enabled', True):
+            continue
+        try:
+            nm = m.getName()
+        except Exception:
+            continue
+        if not nm.endswith('.obj'):
+            continue
+        nm = nm[:-4]
+        # SEMUA .obj yang tampil, kecuali makhluk yang orientasinya diurus
+        # jalur lain (rig/animasi). Daftar ini milik cek, bukan kode game.
+        if nm.startswith(_BUKAN_PROP):
+            continue
+        harap = _tinggi_berkas(nm)
+        if harap is None:
+            continue
+        n += 1
+        lo, hi = e.getTightBounds(_b.render)
+        s = e.getScale(_b.render).y
+        tinggi = harap[0] * s
+        if abs((hi.y - lo.y) - tinggi) > 0.05 * max(1.0, s):
+            rebah.append(f'{nm} tinggi {hi.y - lo.y:.2f}/{tinggi:.2f}')
+            continue
+        if world is None:
+            continue
+        p = e.getPos(_b.render)
+        tanah = GROUND_H + world.get_surface_height(int(round(p.x / TS)),
+                                                    int(round(p.z / TS)))
+        dasar = tanah + _DASAR_SENGAJA.get(nm, 0.0) + harap[1] * s
+        if abs(lo.y - dasar) > 0.1:
+            salah_dasar.append(f'{nm} dasar {lo.y:.2f}/{dasar:.2f}')
+    if rebah or salah_dasar:
+        bagian = []
+        if rebah:
+            bagian.append(f'{len(rebah)}/{n} model rebah: ' + ', '.join(rebah[:3]))
+        if salah_dasar:
+            bagian.append(f'{len(salah_dasar)}/{n} terkubur/melayang: '
+                          + ', '.join(salah_dasar[:3]))
+        return _fail('; '.join(bagian))
+    if world is None:
+        return _ok(f'{n} tegak (dasar tak diperiksa: tanpa world)' if n else '')
+    return _ok(f'{n} tegak, dasar di tanah' if n else '')
+
+
+# Model .obj bertekstur yang SENGAJA dipasang tanpa smooth_shader (Entity
+# polos di beach.py, tekstur .mtl dibaca pipeline bawaan). Selain ini, model
+# bertekstur tanpa sm_has_tex dianggap lupa apply_smooth.
+_TEKSTUR_TANPA_SMOOTH = frozenset({'prop_mercusuar', 'prop_mercusuar_rusak',
+                                   'prop_kurofune'})
+
+
+def cek_model_tekstur(nama):
+    """Model Blender yang membawa tekstur bake benar-benar dibaca shader-nya.
+
+    Pernah nyata saat pohon Blender pertama kali dipasang: tekstur .mtl ada di
+    state GeomNode, pemeriksa tekstur hanya membaca state per-geom, dan
+    smooth_shader menerima sm_has_tex=0 -- 37 kelapa di beach tampil PUTIH,
+    tajuk tropis (181,179,163) lawan (99,104,82) setelah tekstur dibaca.
+    """
+    from ursina import scene as uscene
+    salah, tanpa, n = [], [], 0
+    for e in uscene.children:
+        m = getattr(e, 'model', None)
+        if m is None or not getattr(e, 'enabled', True):
+            continue
+        try:
+            nm = m.getName()
+            if not nm.endswith('.obj') or not m.findAllTextures().getNumTextures():
+                continue
+        except Exception:
+            continue
+        masukan = getattr(e, '_shader_inputs', {}) or {}
+        if 'sm_has_tex' not in masukan:
+            if nm[:-4] in _TEKSTUR_TANPA_SMOOTH:
+                continue      # sengaja tanpa smooth_shader: tekstur dibaca sendiri
+            # Dulu dilewati diam-diam: make_obj_entity yang lupa apply_smooth
+            # (37 kelapa pucat tembus pandang tanpa cahaya game) lulus.
+            n += 1
+            tanpa.append(nm[:-4])
+            continue
+        n += 1
+        if masukan.get('sm_has_tex') != 1:
+            salah.append(nm[:-4])
+    if salah or tanpa:
+        from collections import Counter
+        bagian = []
+        if salah:
+            ring = ', '.join(f'{k}x{v}' for k, v in Counter(salah).most_common(3))
+            bagian.append(f'{len(salah)}/{n} model bertekstur dengan sm_has_tex!=1 ({ring})')
+        if tanpa:
+            ring = ', '.join(f'{k}x{v}' for k, v in Counter(tanpa).most_common(3))
+            bagian.append(f'{len(tanpa)}/{n} model bertekstur tanpa smooth_shader ({ring})')
+        return _fail('; '.join(bagian))
+    return _ok(f'{n} bertekstur' if n else '')
+
+
+def cek_model_tint(nama):
+    """Pohon Blender tanpa tint pemanggil memakai tint bawaan TINT_MODEL.
+
+    Kalibrasi tint (luminans tajuk Blender ke tajuk prosedural) bisa lepas
+    diam-diam: mematikan cabang TINT_MODEL di make_obj_entity tetap lulus
+    semua cek lain, kelapa kembali ke L 94 lawan target 75.
+    """
+    from game.entities import TINT_MODEL
+    from ursina import scene as uscene
+    salah, n = [], 0
+    for e in uscene.children:
+        m = getattr(e, 'model', None)
+        if m is None or not getattr(e, 'enabled', True):
+            continue
+        try:
+            nm = m.getName()
+        except Exception:
+            continue
+        if not nm.endswith('.obj') or nm[:-4] not in TINT_MODEL:
+            continue
+        n += 1
+        harap = TINT_MODEL[nm[:-4]]
+        c = e.color
+        if max(abs(c[0] - harap[0]), abs(c[1] - harap[1]), abs(c[2] - harap[2])) > 0.01:
+            salah.append(f'{nm[:-4]} ({c[0]:.2f},{c[1]:.2f},{c[2]:.2f})')
+    if salah:
+        return _fail(f'{len(salah)}/{n} pohon tanpa tint bawaan: ' + ', '.join(salah[:3]))
+    return _ok(f'{n} ber-tint' if n else '')
+
+
+def cek_palung(g, nama):
+    """Kandang farm punya palung, dan "Beri Minum" ditawarkan ke ternaknya.
+
+    Pernah nyata sejak merge 60734dd sampai Okt 2026: blok pembangun palung
+    terkubur di ekor `scatter_obj_props`, world.trough tidak pernah dibangun,
+    dan opsi Beri Minum tidak pernah muncul di pie ternak -- satu-satunya
+    jalan mengisi air hewan kandang. Tidak ada error, tidak ada log; yang
+    terlihat cuma hewan yang berhenti berproduksi. Opsi pie dibangun lewat
+    `_build_pie_options`, fungsi yang sama yang dipanggil app.input saat klik.
+    """
+    if nama != 'farm':
+        return _ok()
+    if getattr(g.world, 'trough', None) is None:
+        return _fail('world.trough tidak dibangun di farm')
+    kawanan = g.player.interaction_controller._pen_livestock()
+    if not kawanan:
+        return _fail('tidak ada ternak kandang di farm')
+    ids = [o[0] for o in g.player._build_pie_options(kawanan[0])]
+    if 'beri_minum' not in ids:
+        return _fail(f'Beri Minum tidak ditawarkan ke {kawanan[0]}')
+    return _ok(f'palung {g.world.trough["tile"]}, {len(kawanan)} ekor')
 
 
 def cek_frame_kosong(png: Path):
@@ -853,7 +1159,14 @@ def cek_rumput_melambai(g, base, tmp: Path):
         img.write(Filename.fromOsSpecific(str(p)))
         return Image.open(p).convert('RGB')
 
+    def frac_beda(a, b):
+        if a is None or b is None or a.size != b.size:
+            return None
+        n = sum(1 for pa, pb in zip(a.getdata(), b.getdata()) if pa != pb)
+        return n / (a.size[0] * a.size[1])
+
     semula = getattr(g, '_grass_time', 0.0)
+    dibidik = ''
     try:
         # Update dibekukan: kalau tidak, game memanggil update_time sendiri di
         # antara dua tangkapan layar dan pemeriksaan ini lulus karena waktu
@@ -861,6 +1174,28 @@ def cek_rumput_melambai(g, base, tmp: Path):
         with _TanpaUpdate(base):
             a = tembak(0.0, '_lambai_a.png')
             b = tembak(3.7, '_lambai_b.png')
+            f = frac_beda(a, b)
+            # Sudut pemain bisa nyaris tanpa rumput: sejak gua dan hutan
+            # integrasi/satu, mountain dibuka di mulut gua yang dikepung tebing
+            # menerus, dan rumput tinggal 0,3% layar. Itu bukan rumput beku,
+            # itu rumput yang tidak tampak. Jadi ulangi SEKALI dengan kamera
+            # dibidikkan tegak ke rumput terdekat. Ambangnya tetap; rumput yang
+            # sungguh beku memberi dua frame identik dari sudut mana pun.
+            if f is not None and f < 0.005:
+                from ursina import camera, Vec3
+                px, _, pz = g.player.world_position
+                dekat = min(ge, key=lambda e: (e.world_x - px) ** 2 + (e.world_z - pz) ** 2)
+                pos0, rot0 = camera.world_position, camera.world_rotation
+                try:
+                    tgt = dekat.world_position
+                    camera.world_position = tgt + Vec3(0, 9, -2.5)
+                    camera.look_at(tgt)
+                    a = tembak(0.0, '_lambai_a2.png')
+                    b = tembak(3.7, '_lambai_b2.png')
+                    dibidik = (f' (sudut pemain {f:.2%} -> dibidik ke rumput '
+                               f'({tgt.x:.0f},{tgt.z:.0f}))')
+                finally:
+                    camera.world_position, camera.world_rotation = pos0, rot0
     finally:
         # Kembalikan waktu rumput seperti semula supaya pemeriksaan berikutnya
         # tidak menilai dunia yang sudah kita geser sendiri.
@@ -878,7 +1213,7 @@ def cek_rumput_melambai(g, base, tmp: Path):
     frac = beda / total
     if frac < 0.005:
         return _fail(f'rumput beku — cuma {frac:.2%} piksel berubah antara '
-                     f'grs_time 0.0 dan 3.7')
+                     f'grs_time 0.0 dan 3.7{dibidik}')
 
     # Separuh struktural, dan ini bukan pengulangan yang di atas.
     #
@@ -905,7 +1240,7 @@ def cek_rumput_melambai(g, base, tmp: Path):
     except Exception:
         pass        # versi Panda tanpa API ini: uji piksel di atas tetap jalan
 
-    return _ok(f'{frac:.1%} piksel bergeser')
+    return _ok(f'{frac:.1%} piksel bergeser{dibidik}')
 
 
 # Kotak dunia di luar HUD (kiri, atas, kanan, bawah sebagai pecahan layar),
@@ -1144,7 +1479,11 @@ def cek_cahaya_sumber(g):
         g._init_env()
     except Exception as e:
         return _fail(f'_init_env melempar: {e}')
-    t_sun, t_amb = cahaya.target_cahaya(jam, dalam, hujan)[:2]
+    t_sun, t_amb, t_sky = cahaya.target_cahaya(jam, dalam, hujan)[:3]
+    # Warna per tempat (integrasi/satu) dipasang di atas tabel jam, di
+    # _init_env() dan di update() sama-sama.
+    from game.app import _warna_suasana
+    t_sun, t_amb, _ = _warna_suasana(s.scene_name, t_sun, t_amb, t_sky)
 
     def _beda(a, b):
         return max(abs(a[i] - b[i]) for i in range(3))
@@ -1684,6 +2023,9 @@ def main():
     scenes = minta or [s for s in SCENES if s != 'dungeon']
 
     lima_baris = None
+    batin_baris = None
+    buy_sinema_baris = None
+    kamera_baris = None
     _pasang_save_fixture(ROOT / cfg.SAVE_FILE)
     t0 = time.time()
     try:
@@ -1800,6 +2142,11 @@ def main():
             hasil['hud_terbaca'] = cek_hud_terbaca(g, png) if png.exists() \
                 else _fail('tidak ada tangkapan layar')
             hasil['geom_nol'] = cek_geom_nol(nama)
+            hasil['model_blender'] = cek_model_blender(nama)
+            hasil['palung'] = cek_palung(g, nama)
+            hasil['model_tegak'] = cek_model_tegak(nama, g)
+            hasil['model_tekstur'] = cek_model_tekstur(nama)
+            hasil['model_tint'] = cek_model_tint(nama)
             hasil['frame_kosong'] = hasil_frame
             if png.exists():
                 hasil['kanal_jenuh'], jenuh = cek_kanal_jenuh(png)
@@ -2008,6 +2355,70 @@ def main():
         else:
             lima_baris = (r.returncode == 0, akhir[0].strip())
 
+    # ── Majelis Batin (subproses, tiga fase A/B/C di dalamnya) ──
+    # Majelis Batin hilang sebagian di merge 5683e79 dan tidak ada alat yang
+    # menyadarinya, karena tidak ada yang memainkannya. probe_batin memainkannya
+    # lewat g.app.input dari game baru. Save-nya di direktori sementara, jadi
+    # ia tidak perlu dilewati walau ada save pemain. Barisnya memuat n/n cek
+    # yang sungguh dijalankan; keluaran kosong dinilai GAGAL.
+    if not minta:
+        import subprocess
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'probe_batin.py')],
+                               cwd=ROOT, capture_output=True, text=True, timeout=1200)
+            akhir = [b for b in r.stdout.splitlines()
+                     if re.search(r'\d+/\d+ lulus', b)][-1:]
+            if akhir:
+                m = re.search(r'(\d+)/(\d+) lulus', akhir[0])
+                ok = r.returncode == 0 and m.group(1) == m.group(2) and int(m.group(2)) > 0
+                batin_baris = (ok, akhir[0].split('(')[0].strip())
+            else:
+                batin_baris = (False, f'tanpa keluaran (kode {r.returncode})')
+        except subprocess.TimeoutExpired:
+            batin_baris = (False, 'waktu habis')
+
+    # ── Bangun/Beli + ESC sinema (subproses, fase S dan L) ──
+    # Dua mode yang ditelan jaring di app.py: [L] yang yatim satu frame
+    # kemudian, dan ESC sinema yang ditangkap jaring ESC global (sinema intro
+    # tak pernah selesai, semua sinema berikutnya ikut mati). Penjaganya dulu
+    # tinggal di _bench/ tanpa pemanggil, jadi kedua mutasi itu lolos hijau.
+    if not minta:
+        import subprocess
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'probe_buy_sinema.py')],
+                               cwd=ROOT, capture_output=True, text=True, timeout=900)
+            akhir = [b for b in r.stdout.splitlines()
+                     if re.search(r'\d+/\d+ lulus', b)][-1:]
+            if akhir:
+                m = re.search(r'(\d+)/(\d+) lulus', akhir[0])
+                ok = r.returncode == 0 and m.group(1) == m.group(2) and int(m.group(2)) > 0
+                buy_sinema_baris = (ok, akhir[0].split('(')[0].strip())
+            else:
+                buy_sinema_baris = (False, f'tanpa keluaran (kode {r.returncode})')
+        except subprocess.TimeoutExpired:
+            buy_sinema_baris = (False, 'waktu habis')
+
+    # ── Kamera [Q]/[E] + interaksi [F] (subproses) ──
+    # PANDUAN.md lama menjanjikan "Q/E Putar kamera" tanpa kode yang
+    # melakukannya. Probe ini memainkan tombolnya lewat g.app.input dari game
+    # baru, dan sekaligus menangkap interaksi [F] di lapangan terbuka yang dulu
+    # melempar TypeError (try_capture_wild kehilangan parameter `kinds`).
+    if not minta:
+        import subprocess
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'probe_kamera_qe.py')],
+                               cwd=ROOT, capture_output=True, text=True, timeout=600)
+            akhir = [b for b in r.stdout.splitlines()
+                     if re.search(r'\d+/\d+ lulus', b)][-1:]
+            if akhir:
+                m = re.search(r'(\d+)/(\d+) lulus', akhir[0])
+                ok = r.returncode == 0 and m.group(1) == m.group(2) and int(m.group(2)) > 0
+                kamera_baris = (ok, akhir[0].strip())
+            else:
+                kamera_baris = (False, f'tanpa keluaran (kode {r.returncode})')
+        except subprocess.TimeoutExpired:
+            kamera_baris = (False, 'waktu habis')
+
     print('-' * 78)
     tanda_hud = 'LULUS' if not hud_baris else 'GAGAL'
     ring_hud = '; '.join(f'{k} {c}' for k, c in hud_baris) or 'semua di dalam layar'
@@ -2030,6 +2441,24 @@ def main():
         print(f'{"lima menit":14s} {"LULUS" if ok_lima else "GAGAL":>7s} '
               f'{"":>9s} {"":>7s}  {catatan_lima[:44]}')
         if not ok_lima:
+            gagal_total += 1
+    if batin_baris is not None:
+        ok_batin, catatan_batin = batin_baris
+        print(f'{"majelis batin":14s} {"LULUS" if ok_batin else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {catatan_batin[:44]}')
+        if not ok_batin:
+            gagal_total += 1
+    if buy_sinema_baris is not None:
+        ok_bs, catatan_bs = buy_sinema_baris
+        print(f'{"buy/sinema":14s} {"LULUS" if ok_bs else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {catatan_bs[:44]}')
+        if not ok_bs:
+            gagal_total += 1
+    if kamera_baris is not None:
+        ok_km, catatan_km = kamera_baris
+        print(f'{"kamera Q/E":14s} {"LULUS" if ok_km else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {catatan_km[:44]}')
+        if not ok_km:
             gagal_total += 1
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)

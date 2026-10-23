@@ -1544,16 +1544,21 @@ class Player3D(Entity):
             self.interaction_controller.use_tool(entities_mgr, panels)
             return True
 
-        if key == 'e':
-            self.interaction_controller.interact(entities_mgr, panels)
-            return True
 
         if key == 'z':
             self.interaction_controller.attack(entities_mgr, panels)
             return True
 
+        # [F] interaksi, [Shift]+[F] tangkap. [Q]/[E] dulu interaksi dan
+        # benih-sebelumnya; sejak 22 Okt 2026 keduanya memutar kamera (app.py).
+        # Ursina membuang awalan 'shift-' dari nama tombol, jadi Shift dibaca
+        # dari held_keys.
         if key == 'f':
-            self.interaction_controller.capture(entities_mgr, panels)
+            from ursina import held_keys
+            if held_keys['shift'] or held_keys['left shift'] or held_keys['right shift']:
+                self.interaction_controller.capture(entities_mgr, panels)
+            else:
+                self.interaction_controller.interact(entities_mgr, panels)
             return True
 
         if key == 't':
@@ -1582,13 +1587,6 @@ class Player3D(Entity):
                 s.tool_index = n - 1
                 sound_play('menu_move', 0.6)
                 return True
-
-        if key == 'q':
-            keys = list(CROPS.keys())
-            idx  = keys.index(s.seed_key) if s.seed_key in keys else 0
-            s.seed_key = keys[(idx - 1) % len(keys)]
-            sound_play('menu_move', 0.6)
-            return True
 
         if key == 'r':
             keys = list(CROPS.keys())
@@ -1724,11 +1722,41 @@ class Player3D(Entity):
         
         # Create a falling tree pivot entity at ground level
         falling_root = Entity(position=(wx, 0, wz))
-        
+
+        # Ubin yang berdiri sebagai pohon Blender (props.POHON_BLENDER) tumbang
+        # sebagai pohon Blender juga, dengan SALINAN model baru. Model entity
+        # yang berdiri tidak dipinjam: load_scene menghancurkannya sesaat
+        # sesudah ini, dan satu model tidak boleh punya dua induk (aturan #3).
+        replika = None
+        try:
+            from .scenes.props import model_pohon
+            from .entities import make_obj_entity
+            from .config import GROUND_H
+            ptx, pty = int(round(wx / TS)), int(round(wz / TS))
+            pohon = model_pohon(self.world.scene_obj, tid, ptx, pty)
+            if pohon:
+                # Dasar sama dengan pohon yang berdiri (pasang_model_prop).
+                dasar = GROUND_H + self.world.get_surface_height(ptx, pty)
+                replika = make_obj_entity(pohon[0], (wx, dasar, wz),
+                                          scale=pohon[1], rot_y=pohon[2])
+                if replika is not None:
+                    replika.parent = falling_root
+                    replika.position = (0, dasar, 0)
+        except Exception:
+            import logging
+            logging.error('replika pohon tumbang gagal', exc_info=True)
+            replika = None
+
         # Build matching visual replica components
-        if tid == TR:
-            # Trunk
-            Entity(model='cylinder', parent=falling_root, position=(0, TREE_H * 0.40, 0),
+        if replika is not None:
+            pass
+        elif tid == TR:
+            # Trunk. Ursina 8.3 tidak punya model bawaan 'cylinder' ("missing
+            # model"): batang replika dulu tak tergambar. Pakai mesh yang sama
+            # dengan batang yang berdiri (world._e: soft_capsule_mesh, salinan
+            # baru per panggilan).
+            from .meshes import soft_capsule_mesh
+            Entity(model=soft_capsule_mesh(), parent=falling_root, position=(0, TREE_H * 0.40, 0),
                    scale=(TS * 0.35, TREE_H * 0.80, TS * 0.35), color=color.rgb(100, 70, 40))
             # Foliage
             Entity(model='sphere', parent=falling_root, position=(0, TREE_H * 1.0, 0),
@@ -1739,7 +1767,8 @@ class Player3D(Entity):
                    scale=(TS * 1.2, TS * 1.1, TS * 1.2), color=color.rgb(115, 240, 85))
         elif tid == DT:
             # Trunk only for dead tree
-            Entity(model='cylinder', parent=falling_root, position=(0, TREE_H * 0.40, 0),
+            from .meshes import soft_capsule_mesh
+            Entity(model=soft_capsule_mesh(), parent=falling_root, position=(0, TREE_H * 0.40, 0),
                    scale=(TS * 0.22, TREE_H * 0.80, TS * 0.22), color=color.rgb(68, 50, 30))
 
         # Calculate fall target rotation away from player based on facing direction
@@ -1753,10 +1782,15 @@ class Player3D(Entity):
         elif self.facing == 'right':
             rot_target = Vec3(0, 0, 75)
         
-        # Smooth ease-in-out rotation tilt
-        falling_root.animate_rotation(rot_target, duration=0.8, curve='ease_in_out')
+        # Smooth ease-in-out rotation tilt.
+        # Kurva harus FUNGSI ursina.curve. String 'ease_in_out' melempar
+        # TypeError yang ditelan use_tool_at, sehingga replika tidak pernah
+        # rebah, destroy di bawah tak pernah dijadwalkan, dan tiap tebangan
+        # meninggalkan pohon hantu berinduk scene (ikut ke scene lain).
+        from ursina import curve
+        falling_root.animate_rotation(rot_target, duration=0.8, curve=curve.in_out_sine)
         # Sinks slowly into the ground after hitting the floor
-        falling_root.animate_y(-2.5, duration=1.2, delay=0.6, curve='ease_in')
+        falling_root.animate_y(-2.5, duration=1.2, delay=0.6, curve=curve.in_sine)
         
         # Destroy visual dummy once animation completes
         invoke(destroy, falling_root, delay=1.8)

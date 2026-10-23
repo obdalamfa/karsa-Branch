@@ -396,7 +396,7 @@ ANIMAL_NPCS = {
     'kelinci_putih':   {'name':'Pinky','type':'kelinci','talks':[["(Hidung berkedut)"]],'product':None},
 }
 
-# ─── Hasil ternak harian (dikumpulkan [E] dari hewan, dijual via Peti Kirim) ───
+# ─── Hasil ternak harian (dikumpulkan [F] dari hewan, dijual via Peti Kirim) ───
 ANIMAL_PRODUCTS = {
     'susu':  {'name': 'Susu',  'sell': 90,  'description': 'Susu segar dari sapi'},
     'telur': {'name': 'Telur', 'sell': 55,  'description': 'Telur ayam pagi'},
@@ -460,7 +460,7 @@ SCHEDULES = {
     'leak_bali':     [(0, 1, 2, 'cemetery', 'hovering'), (5, -1, -1, 'hidden', 'dormant'),
                       (19, 1, 2, 'cemetery', 'hovering')],
     'bidadari':      [(0, 10, 15, 'swarga', 'meditating')],
-    'dewa_angin':    [(0, 15, 5, 'swarga', 'hovering')],
+    'dewa_angin':    [(0, 15, 6, 'swarga', 'hovering')],
     'petapa_srimana':[(0, 20, 15, 'swarga', 'meditating')],
     'sapi_betsy':      [(0, 18, 5, 'farm', 'grazing')],
     'ayam_kuning':     [(0, 16, 5, 'farm', 'pecking')],

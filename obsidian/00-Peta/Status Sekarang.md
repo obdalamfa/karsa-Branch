@@ -15,7 +15,9 @@ tags: [moc, status]
 > dulu diam. Mob dungeon bernapas, melangkah sesuai wataknya, memerah saat
 > ancang-ancang, berkilat saat dipukul, dan mati bertahap 0,6 dtk
 > → [[Kilat kena pukul mob tidak pernah terlihat]]. Regresi 14/14 dengan
-> baris "animasi gerak" 12/12. Mutasi a–d tertangkap.
+> baris "animasi gerak" 15/15. Mutasi a–d tertangkap. Pemain kini tersentak
+> dan berkedip saat dipukul mob, dan kebal 600 ms tidak lagi hilang dalam
+> satu frame → [[Kebal sesudah dipukul mob hilang dalam satu frame]].
 
 > [!success] Pembaruan 2026-10-23 (sore) — layar judul, cerita, menu radial
 > `python main.py` kini dibuka layar judul (Lanjutkan / Permainan Baru /

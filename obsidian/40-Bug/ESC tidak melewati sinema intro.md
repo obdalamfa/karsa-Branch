@@ -1,0 +1,58 @@
+---
+judul: "ESC tidak melewati sinema intro"
+tipe: bug
+status: selesai
+ditemukan: "2026-10-18"
+commit_perbaikan: (cabang bangun-B, "ESC melewati sinema")
+dijaga_oleh: tools/probe_buy_sinema.py (fase S; baris 'buy/sinema' di tools/regress.py)
+tags: [bug, status/selesai, input, sinema]
+---
+
+# 🐞 ESC tidak melewati sinema intro
+
+Sinema intro menulis "[SPACE] lanjut   [ESC] lewati", dan `Sinema.input`
+memang menangani ESC (memberi beat lore yang terlewat, lalu `selesai()`).
+Tapi ESC tidak pernah sampai ke sana: jaring ESC global di `game/app.py`
+(`mode not in ('hud', 'chargen')` → `close_all()` + `mode = 'hud'`) duduk di
+depan rute `'sinema'`.
+
+## Gejala (diukur lewat `g.app.input`)
+
+Sebelum: setelah ESC mode = `'hud'`, tetapi `sinema.aktif` tetap True,
+**6 entity UI sinema tetap di layar** (letterbox, judul, narasi, petunjuk),
+dan `'datang'` tidak masuk `sinema_selesai`. Ini juga yang mencemari foto
+pembanding lama Majelis Batin di scratchpad (dicapai lewat ESC).
+
+Sesudah: `sinema.aktif` False, 0 UI sinema, `'datang'` tercatat selesai,
+mode `'hud'`.
+
+Akibat ikutan yang lebih besar: karena `sinema.aktif` tertinggal True,
+`Sinema.mulai()` menolak SEMUA sinema berikutnya. Diukur di
+`tools/probe_lima_menit.py` (yang melewati intro dengan ESC): sampai panen
+pertama `sinema_selesai = []` dan `'datang'` masih aktif; sesudah perbaikan
+`['datang', 'panen_pertama']`. Pemain yang menekan ESC di intro tidak pernah
+melihat satu sinema pun lagi. Sinema `panen_pertama` (tahap quest 2) kini
+benar-benar main -- dan menelan [T] di probe lima menit, yang karena itu kini
+menonton sinema dengan SPACE sebelum menekan tombol tutorial (seperti pemain).
+
+## Perbaikan
+
+ESC saat `mode == 'sinema'` dan `sinema.aktif` diserahkan ke
+`sinema.input` SEBELUM jaring ESC. Kalau runner sudah tidak aktif, jaring
+dan `_pulihkan_mode_yatim` tetap menangani mode yang macet.
+
+## Uji mutasi
+
+Rute ESC-sinema dimatikan → fase S 0/2 (aktif=True, 6 UI tersisa).
+
+## Penjaga di regresi
+
+Sampai perbaikan-B probe ini tinggal di `_bench/probes/` tanpa pemanggil:
+mutasi rute ESC-sinema dimatikan membuat probe_batin dan lima menit tetap hijau, dan
+`tools/regress.py` keluar 0 (diukur verifikator). Sekarang probe di `tools/`
+dan disambung ke regresi; mutasi yang sama di regresi penuh: buy/sinema 4/6, regresi keluar 1.
+
+## Pelajaran
+
+Jaring pengaman yang menangkap semua mode juga menangkap mode yang punya
+ESC-nya sendiri. Lihat juga [[Bangun-Beli yatim satu frame setelah L]].

@@ -15,6 +15,8 @@ SKALA = 1.3
 _LAJU_ACUAN = 3.0
 # Detik yang dibutuhkan baur bobot untuk berpindah penuh antar animasi.
 _BAUR = 0.18
+# Tinggi pinggang (unit dunia) untuk poros condong lapisan gerak.
+TINGGI_PINGGANG = 1.05
 
 
 # Gaya per tokoh yang tidak dipanggang ke rig: skala dan tinggi melayang
@@ -61,7 +63,20 @@ class CharActor:
         from direct.actor.Actor import Actor
         from panda3d.core import Filename
         self.actor = Actor(Filename.fromOsSpecific(str(actor_path(name))).getFullpath())
-        self.actor.reparentTo(parent)
+        # Poros: satu simpul di antara entity dan rig, tempat lapisan gerak
+        # prosedural (jus_gerak.py: condong, gepeng, putar) dipasang tanpa
+        # menyentuh tulang maupun klip. Di titik telapak, jadi gepeng dan
+        # condong berporos di tanah.
+        self.poros = parent.attachNewNode('poros_gerak')
+        # Pinggang: condong dan putar badan berporos di sini, bukan di
+        # telapak. Berporos di telapak, condong 30 derajat membuat seluruh
+        # tokoh miring kaku seperti papan yang mau tumbang (tangkapan pertama
+        # jongkok memanen).
+        self.pinggang = self.poros.attachNewNode('poros_pinggang')
+        self.pinggang.setPos(0, TINGGI_PINGGANG, 0)
+        self._tubuh = self.pinggang.attachNewNode('poros_tubuh')
+        self._tubuh.setPos(0, -TINGGI_PINGGANG, 0)
+        self.actor.reparentTo(self._tubuh)
         # Model menghadap -Z; entity game menganggap rotation_y 0 = menghadap +Z.
         self.actor.setH(180)
         gaya = _GAYA.get(name, {})
@@ -79,6 +94,8 @@ class CharActor:
                 self.actor.loop(a)
                 self.actor.setControlEffect(a, self._bobot[a])
         self._sekali = None
+        self._sekali_t = 0.0
+        self._sekali_dur = 1.0
 
     def _ke_tengah(self, parent):
         """Tarik model ke titik asal entity-nya, di bidang mendatar.
@@ -108,33 +125,55 @@ class CharActor:
             self._t_ayun += dt
             self.actor.setY(self._y_dasar + self._melayang
                             + math.sin(self._t_ayun * 1.6) * 0.08)
-        if self._sekali is not None:
-            ctrl = self.actor.getAnimControl(self._sekali)
-            if ctrl is not None and ctrl.isPlaying():
-                return
-            self.actor.setControlEffect(self._sekali, 0.0)
-            self._sekali = None
         jalan = 1.0 if laju > 0.05 else 0.0
         langkah = min(1.0, dt / _BAUR)
         w = self._bobot['walk'] + (jalan - self._bobot['walk']) * langkah
         self._bobot['walk'], self._bobot['idle'] = w, 1.0 - w
-        for a, b in self._bobot.items():
-            if a in self.anims:
-                self.actor.setControlEffect(a, b)
+        if self._sekali is not None:
+            self._sekali_t += dt
+            if self._sekali_t >= self._sekali_dur:
+                self.actor.setControlEffect(self._sekali, 0.0)
+                self._sekali = None
+        self._terapkan_baur(self.bobot_kerja())
         if 'walk' in self.anims and laju > 0.05:
             self.actor.setPlayRate(max(0.6, min(2.8, laju / _LAJU_ACUAN)), 'walk')
 
-    def mainkan_sekali(self, nama):
-        """Animasi kerja (hoe/swing/water) diputar penuh sekali di atas baur jalan."""
+    # Baur klip kerja: masuk cepat (supaya ayunan tidak telat dari tombol),
+    # keluar lebih lambat (supaya pulihnya terbaca sebagai gerak, bukan
+    # potongan). Dulu bobot dibanting 0 -> 1 -> 0 dalam satu frame.
+    _BAUR_MASUK = 0.07
+    _BAUR_KELUAR = 0.22
+
+    def mainkan_sekali(self, nama, laju=1.0):
+        """Animasi kerja (hoe/swing/water) diputar sekali, dibaur masuk-keluar
+        di atas baur diam/jalan."""
         if nama not in self.anims:
             return False
-        for a in self._bobot:
-            if a in self.anims:
-                self.actor.setControlEffect(a, 0.0)
-        self.actor.setControlEffect(nama, 1.0)
+        if self._sekali and self._sekali != nama:
+            self.actor.setControlEffect(self._sekali, 0.0)
+        self.actor.setPlayRate(laju, nama)
         self.actor.play(nama)
         self._sekali = nama
+        self._sekali_t = 0.0
+        self._sekali_dur = max(0.1, self.actor.getDuration(nama) / max(0.1, laju))
+        self._terapkan_baur(0.0)
         return True
+
+    def bobot_kerja(self) -> float:
+        """Bobot klip kerja sekarang (0..1), untuk probe dan lapisan gerak."""
+        if self._sekali is None:
+            return 0.0
+        t, d = self._sekali_t, self._sekali_dur
+        masuk = min(1.0, t / self._BAUR_MASUK)
+        keluar = min(1.0, max(0.0, (d - t) / self._BAUR_KELUAR))
+        return max(0.0, min(masuk, keluar))
+
+    def _terapkan_baur(self, w):
+        if self._sekali is not None:
+            self.actor.setControlEffect(self._sekali, w)
+        for a, b in self._bobot.items():
+            if a in self.anims:
+                self.actor.setControlEffect(a, b * (1.0 - w))
 
     def pegangan(self):
         """Entity Ursina yang mengikuti tulang tangan kanan (untuk alat)."""
@@ -153,6 +192,7 @@ class CharActor:
         try:
             self.actor.cleanup()
             self.actor.removeNode()
+            self.poros.removeNode()
         except Exception:
             pass
 

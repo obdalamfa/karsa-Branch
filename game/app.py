@@ -28,6 +28,16 @@ _FONTS_DIR = _Path(__file__).resolve().parent.parent / 'assets' / 'fonts'
 if _FONTS_DIR.is_dir():
     _getModelPath().append_path(str(_FONTS_DIR))
 
+from . import suasana as _suasana
+
+
+def _warna_suasana(scene_name, sun, amb, sky):
+    """Preset suasana per scene di atas warna jam (Vec4 0-1 masuk, Vec4 keluar)."""
+    ke255 = lambda v: (v[0] * 255.0, v[1] * 255.0, v[2] * 255.0)
+    s, a, k = _suasana.atur(scene_name, ke255(sun), ke255(amb), ke255(sky))
+    return color.rgb(*s), color.rgb(*a, 255), color.rgb(*k)
+
+
 from .state import GameState
 from .world import World3D
 from .player import Player3D
@@ -36,8 +46,9 @@ from .panels import UIManager
 from .sky import SkyDome
 from .chargen import ChargenScreen
 from . import grass_shader as _grass
+from . import cahaya as _cahaya
 from .config import (SCREEN_W, SCREEN_H, CAM_LERP, TILE_SIZE,
-                     CAM_TARGET_LIFT, INGAME_MINUTES_PER_REAL_SECOND, FORCE_SLEEP_HOUR,
+                     CAM_TARGET_LIFT, CAM_DIST_MIN, CAM_DIST_MAX, INGAME_MINUTES_PER_REAL_SECOND, FORCE_SLEEP_HOUR,
                      NEED_MAX, NEED_CRITICAL, NEED_DECAY_LAPAR, NEED_DECAY_SOSIAL, NEED_DECAY_SENANG)
 
 # Font: Ursina 5 mencari file font dengan glob rekursif di asset_folder,
@@ -89,13 +100,35 @@ def _pasang_overlay_debug(nyala: bool) -> None:
 
 
 class Game3D:
-    def __init__(self):
+    def __init__(self, layar_judul=False):
         logging.info("Inisialisasi Game Engine 3D (Ursina)...")
         
         # Inisialisasi Ursina Engine (ukuran pas jendela agar tidak offscreen di monitor 1080p)
+        # development_mode=False WAJIB eksplisit. Ursina menyalakannya sendiri
+        # kecuali folder induk aset punya `src` dan `python` (ursina/
+        # application.py), dan repo ini tidak punya keduanya. Dalam mode itu
+        # HotReloader duduk di depan GameHandler dan ikut menerima F5/F6/F9
+        # milik game. Terukur lewat jalur `python main.py` + app.input
+        # (_bench/probes/probe_tombol_f.py):
+        #
+        #   F5 (Simpan)  reload_code: scene.clear(), pemain hancur, main.py
+        #                di-exec ulang -> Game3D KEDUA, dan make_assets menulis
+        #                ulang 64 berkas assets/textures/*.png milik repo
+        #   F9 (Muat)    toggle_hotreloading: ModuleNotFoundError 'Xlib' di
+        #                Linux; save tidak pernah dimuat
+        #
+        # fullscreen=False ikut eksplisit: tanpa dev mode, fullscreen=None
+        # dipaksa jadi True (ursina/main.py). Di Ursina 8.3 itu belum terlihat
+        # karena `size` diberikan (mutasi fullscreen=None tetap 1280x720 di
+        # Xvfb), jadi ini penjaga untuk versi lain, bukan perbaikan terukur.
+        # editor_ui_enabled=True supaya F3 tetap bisa menyalakan fps_counter,
+        # yang anak editor_ui.
         self.app = Ursina(size=(1280, 720),
                           title='Lembah Karsa 3D — v0.10 [Cozy Edition]',
-                          borderless=False)
+                          borderless=False,
+                          development_mode=False,
+                          fullscreen=False,
+                          editor_ui_enabled=True)
         window.center_on_screen()
         window.color = color.rgb(30, 20, 40)
 
@@ -172,7 +205,9 @@ class Game3D:
         
         # Pencahayaan — arah lebih datar agar detail karakter chibi terlihat
         self.sun = DirectionalLight(shadows=False)
-        self.sun.look_at(Vec3(-1, -1.5, -0.8))
+        # Arahnya SAMA dengan sm_sun_dir yang dulu dikode mati di
+        # _sync_smooth_lighting; sekarang fragmen membaca arah dari lampu ini.
+        self.sun.look_at(_cahaya.ARAH_AWAL)
         # Ambient hangat: cream kekuningan (Animal Crossing golden hour feel)
         self.ambient = AmbientLight(color=color.rgb(95, 90, 78, 255))
 
@@ -274,6 +309,13 @@ class Game3D:
         self._needs_warned: set = set()
 
         self.panels = UIManager(self.state)
+        # Majelis Batin. Pembuatan ini hilang di merge 5683e79 (sisi visual
+        # tidak pernah punya Batin), dan tanpa baris ini `panels.batin` tetap
+        # None: modal PAGI PERTAMA tidak pernah terbuka, log tidak pernah
+        # terisi. Wajib SETELAH UIManager, karena _build_batin mengisi None.
+        from .batin import Batin
+        self.batin = Batin(self.state)
+        self.panels.batin = self.batin
         self.world = World3D(self.state)
         self.entities = EntitiesManager(self.state)
         self.entities.world = self.world
@@ -300,8 +342,11 @@ class Game3D:
 
         # Sinema. Dibuat sekali dan dipakai ulang; ia tidak menggambar apa pun
         # sampai `mulai()` dipanggil, jadi biayanya nol saat tidak ada adegan.
-        from .cutscene import Sinema
+        from .cutscene import Sinema, tandai_yang_sudah_lewat
         self.sinema = Sinema(self)
+        # Save lama: interaksi yang sudah pernah dilakukan sebelum adegannya
+        # ada tidak diputar susulan (lihat cutscene.tandai_yang_sudah_lewat).
+        tandai_yang_sudah_lewat(self.state)
 
         # Terapkan penampilan tersimpan (jika sudah pernah chargen)
         if self.state.char_name:
@@ -326,7 +371,13 @@ class Game3D:
         # Setup Kamera (Harvest Moon AWL / Third-person 3D)
         camera.orthographic = False
         camera.fov          = 60
+        # Bawaan Ursina 0,1/10000 menghabiskan presisi kedalaman di depan lensa;
+        # pada jarak main (~25 unit) dekorasi lantai yang terpisah 0,01 saling
+        # berebut dan tanah berkedip saat kamera bergerak.
+        camera.clip_plane_near = 0.5
+        camera.clip_plane_far  = 2000
         self.camera_yaw     = 0.0
+        self._yaw_tujuan    = None   # tujuan putaran [Q]/[E], lihat input()
         self.camera_pitch   = 34.0   # sudut baca ala life-sim isometrik
         self.camera_dist    = 19.0
 
@@ -339,8 +390,23 @@ class Game3D:
 
         # Chargen — muncul jika first run (char_name kosong) atau tekan F2
         self._chargen: ChargenScreen = None
-        if not self.state.char_name:
+        # Layar judul hanya untuk pemain (run() / main.py). Alat ukur yang
+        # membangun Game3D() langsung melompatinya; layar itu diuji sendiri
+        # oleh tools/probe_sinema.py lewat Game3D(layar_judul=True).
+        self._judul = None
+        if layar_judul:
+            from .menu_judul import MenuJudul
+            self._kam_awal = (self.camera_dist, self.camera_pitch, self.camera_yaw)
+            self._judul = MenuJudul(self, ada_save=bool(self.state.char_name))
+            self.panels.mode = 'judul'
+            self.panels.set_hud_visible(False)
+        elif not self.state.char_name:
             self._open_chargen()
+
+        # Shadow map matahari (game/bayangan_matahari.py). Sebelum _init_env,
+        # yang menyalakan/mematikan caster per scene.
+        from . import bayangan_matahari as _bm
+        _bm.pasang(self)
 
         # Inisialisasi lingkungan langsung sesuai waktu awal (bukan fade dari gelap)
         self._init_env()
@@ -374,6 +440,9 @@ class Game3D:
         self.panels.update(s, dt)
         self._pulihkan_mode_yatim()
 
+        if self.panels.mode == 'judul' and self._judul:
+            self._judul.tick(dt)
+
         if self.panels.mode == 'sinema':
             # Sengaja di luar gerbang 'hud' di bawah: dunia memang harus beku,
             # tapi kamera sinema justru satu-satunya yang masih harus bergerak.
@@ -400,6 +469,10 @@ class Game3D:
         # persis laporan "jalan saja tidak bisa". Di The Sims, bergerak
         # memang membatalkan menu; itu afordans yang sudah dikenal orang.
         if self.panels.mode == 'pie':
+            # Sorotan mengikuti mouse, seperti menu radial The Sims.
+            _i = self.panels.pie_di_mouse()
+            if _i is not None and _i != self.panels._pie_selected:
+                self.panels.navigate_pie(_i - self.panels._pie_selected)
             from ursina import held_keys as _hk
             if (_hk['w'] or _hk['a'] or _hk['s'] or _hk['d']
                     or _hk['up arrow'] or _hk['down arrow']
@@ -446,8 +519,14 @@ class Game3D:
             # satu pun, sementara memanggil pemicu di tiap tempat bisa.
             # `mulai()` sendiri menolak adegan yang sudah pernah ditonton,
             # jadi memanggilnya berulang aman.
-            from .cutscene import pemicu_tahap
+            from .cutscene import pemicu_tahap, pemicu_baru
             _adegan = pemicu_tahap(s.quest_stage)
+            if _adegan and _adegan in (s.sinema_selesai or []):
+                _adegan = None
+            # Interaksi pertama (surat, cangkul, tiba di desa, ...). Belokan
+            # quest menang kalau keduanya jatuh di frame yang sama; yang kalah
+            # menunggu frame HUD berikutnya.
+            _adegan = _adegan or pemicu_baru(s)
             if _adegan:
                 self.sinema.mulai(_adegan)
 
@@ -526,6 +605,7 @@ class Game3D:
                         mouse.locked = True
                     else:
                         # Menggunakan kontrol normal (non-inverted) untuk kenyamanan standard game 3D
+                        self._yaw_tujuan = self._yaw_awal = None   # seret mouse menang atas [Q]/[E]
                         self.camera_yaw -= mouse.velocity[0] * 200
                         self.camera_pitch += mouse.velocity[1] * 200
                 else:
@@ -542,6 +622,25 @@ class Game3D:
                 # 17 -> 40 ms) dan posisi mouse tidak pernah diperbarui.
                 if mouse.locked:
                     mouse.locked = False
+
+            # Putaran [Q]/[E] berjalan halus ke tujuannya (~0,25 dtk per 45
+            # derajat), dijepit supaya frame panjang tidak melewati tujuan.
+            # Berbasis waktu, bukan lerp per frame: `sisa * 12 * dt` jenuh di
+            # dt >= 0,083 (mesin lambat, CI) dan putaran jadi lompatan satu
+            # frame (terukur oleh probe_kamera_qe). dt dijepit 0,05 supaya
+            # selalu ada beberapa langkah antara.
+            if self._yaw_tujuan is not None:
+                awal = getattr(self, '_yaw_awal', None)
+                if awal is None:
+                    awal = self._yaw_awal = self.camera_yaw
+                    self._yaw_t = 0.0
+                self._yaw_t += min(dt, 0.05)
+                k = min(1.0, self._yaw_t / 0.25)
+                k = k * k * (3.0 - 2.0 * k)
+                self.camera_yaw = awal + (self._yaw_tujuan - awal) * k
+                if k >= 1.0:
+                    self.camera_yaw = self._yaw_tujuan
+                    self._yaw_tujuan = self._yaw_awal = None
 
             # Kunci sudut kemiringan (pitch) agar tidak terbalik atau menembus tanah
             self.camera_pitch = max(5.0, min(80, self.camera_pitch))
@@ -567,7 +666,8 @@ class Game3D:
             # ── Sky Dome + Grass Shader update ──────────────
             is_indoor = self.world.scene_obj.indoor if self.world.scene_obj else False
             hour = (s.time_minutes / 60.0) % 24.0
-            self.sky.update(hour, s.weather, is_indoor)
+            self.sky.update(hour, s.weather, is_indoor,
+                            palet=_suasana.palet_langit(s.scene_name))
 
             # FreeSO GrassShader.fx: update uniform time + wind per frame
             self._grass_time += dt
@@ -579,55 +679,27 @@ class Game3D:
             # is_indoor sudah dihitung di atas
             is_raining = (self.state.weather in ('Hujan', 'Badai')) and not is_indoor
 
-            if is_indoor:
-                # Indoor: lampu hangat yang cukup terang (cave/rumah tidak gelap total)
-                target_sun   = color.rgb(60, 55, 45, 255)
-                target_amb   = color.rgb(190, 180, 200, 255)
-                target_sky   = color.rgb(20, 15, 25)
-                target_cloud = color.rgb(0, 0, 0, 0)
-            else:
-                # ambient + sun ≤ 100% supaya warna tidak overflow jadi putih.
-                # ambient max 70, sun max 185 (70/255 + 185/255 = 1,00; di
-                # floor dot≈0.82 jadi ≈87%).
-                #
-                # Batas itu SUDAH tertulis di sini sejak lama, dan nilainya di
-                # bawah melanggarnya: siang memakai sun 255 dan ambient 95,
-                # jumlahnya 1,373. Akibatnya terukur — apa pun di atas 186 dari
-                # 255 pasti terpotong jadi putih. Kulit bawaan "Cerah"
-                # (255,225,180) jadi bidang putih rata tanpa satu pun detail
-                # wajah tersisa, dan dinding rumah krem (248,235,200) ikut.
-                # Nisbah warnanya dipertahankan persis, cuma skalanya diturunkan
-                # ke batas yang komentarnya sendiri sebutkan.
-                if 6 <= hour < 17:
-                    # Siang: sinar matahari hangat keemasan (Animal Crossing golden feel)
-                    target_sun = color.rgb(185, 180, 156) if not is_raining else color.rgb(145, 145, 158)
-                    target_amb = color.rgb(70, 66, 57, 255) if not is_raining else color.rgb(62, 62, 72, 255)
-                    target_sky = color.rgb(128, 205, 248) if not is_raining else color.rgb(88, 98, 115)
-                    target_cloud = color.rgb(248, 248, 255, 175) if not is_raining else color.rgb(145, 148, 162, 215)
-                elif 17 <= hour < 19:
-                    # Senja: oranye kemerahan lembut
-                    # Senja ikut diturunkan dengan alasan yang sama: 255+88 =
-                    # 343 di kanal merah, jauh di atas batas.
-                    target_sun = color.rgb(185, 118, 52) if not is_raining else color.rgb(148, 95, 72)
-                    target_amb = color.rgb(70, 44, 36, 255) if not is_raining else color.rgb(55, 38, 35, 255)
-                    target_sky = color.rgb(248, 138, 88) if not is_raining else color.rgb(115, 82, 82)
-                    target_cloud = color.rgb(255, 195, 148, 145) if not is_raining else color.rgb(135, 108, 102, 195)
-                else:
-                    # Malam: biru rembulan. Angka lamanya (35,48,92 / 28,28,52)
-                    # ditulis dengan komentar "bukan hitam total" — dan memang
-                    # tidak pernah terbukti salah, karena sampai sekarang
-                    # cahaya adegan TIDAK PERNAH sampai ke satu entitas pun.
-                    # Begitu jalurnya dibuka, terukur: rumput jatuh ke
-                    # 21,29,8 pada 22:00 dan hewannya nyaris tidak terlihat.
-                    # Malam harus redup, bukan buta.
-                    target_sun   = color.rgb(62, 82, 140)
-                    target_amb   = color.rgb(54, 58, 95, 255)
-                    target_sky   = color.rgb(18, 12, 42)
-                    target_cloud = color.rgb(45, 45, 72, 75)
-            
-            self.sun.color = lerp(self.sun.color, target_sun, dt)
-            self.ambient.color = lerp(self.ambient.color, target_amb, dt)
-            window.color = lerp(window.color, target_sky, dt)
+            # Tabelnya satu, di game/cahaya.py -- dipakai juga oleh _init_env(),
+            # supaya frame pertama sesudah ganti scene tidak memakai angka lain.
+            target_sun, target_amb, target_sky, target_cloud = _cahaya.target_cahaya(
+                hour, is_indoor, is_raining)
+            # Warna per tempat (gua, Swarga, ...) di atas tabel jam -- sama
+            # dengan _init_env(), supaya keduanya tetap satu angka.
+            target_sun, target_amb, target_sky = _warna_suasana(
+                s.scene_name, target_sun, target_amb, target_sky)
+
+            # Faktor lerp dijepit ke 1: frame pertama sesudah memuat scene
+            # membawa dt > 1 detik, dan lerp tanpa jepit MELEWATI targetnya
+            # (terukur: sun+amb merah 1,33 -> 0,91 padahal targetnya 1,00, lalu
+            # merangkak naik ~30 frame).
+            k_cahaya = min(1.0, dt)
+            # Arah matahari ikut jam (senja rendah), diubah per >1,5 derajat.
+            _cahaya.arahkan_matahari(self.sun, hour)
+            from . import bayangan_matahari as _bm
+            _bm.ikuti(self)
+            self.sun.color = lerp(self.sun.color, target_sun, k_cahaya)
+            self.ambient.color = lerp(self.ambient.color, target_amb, k_cahaya)
+            window.color = lerp(window.color, target_sky, k_cahaya)
 
             # Dua baris di atas mengubah lampu Panda, dan smooth_shader sama
             # sekali tidak membacanya — ia membaca sm_sun_color/sm_ambient.
@@ -664,7 +736,7 @@ class Game3D:
 
             # Animasi awan melayang dan transisi warnanya
             for cloud in self.clouds:
-                cloud.color = lerp(cloud.color, target_cloud, dt)
+                cloud.color = lerp(cloud.color, target_cloud, k_cahaya)
                 cloud.x += 1.2 * dt
                 if cloud.x > 70:
                     cloud.x = -20
@@ -727,12 +799,50 @@ class Game3D:
         # Itu sebab laporan pemilik "jalan saja tidak bisa".
         #
         # Chargen dikecualikan: ia memang layar wajib sebelum main.
+        # ESC saat sinema = '[ESC] lewati' yang tertulis di layarnya. Jaring di
+        # bawah dulu menangkapnya lebih dulu: mode jadi 'hud', tapi sinema.aktif
+        # tetap True dan UI sinema tertinggal di layar (diukur,
+        # tools/probe_buy_sinema.py). Serahkan ke runner sinema, yang
+        # juga memberi beat lore yang terlewat.
+        # Layar judul memiliki SEMUA tombol, termasuk ESC (yang di sana
+        # berarti "kembali", bukan "simpan").
+        if self.panels.mode == 'judul' and getattr(self, '_judul', None):
+            self._judul.input(key)
+            return
+        if (key == 'escape' and self.panels.mode == 'sinema'
+                and getattr(getattr(self, 'sinema', None), 'aktif', False)):
+            self.sinema.input(key)
+            return
         if key == 'escape' and self.panels.mode not in ('hud', 'chargen'):
             try:
                 self.panels.close_all()
             except Exception:
                 pass
             self.panels.mode = 'hud'    # jaring terakhir kalau close_all lupa
+            return
+
+        # Zoom kamera dengan roda mouse, hanya di mode hud (panel memakai
+        # roda untuk menggulir). Dulu jarak kamera terkunci di 19: dari sana
+        # ladang dan pemain terbaca sebagai papan catur kecil, dan kritikus
+        # buta gauntlet M4 menyebutnya celah terbesar. Bawaan tetap 19;
+        # pemain yang mau dekat bisa mendekat.
+        if self.panels.mode == 'hud' and key in ('scroll up', 'scroll down'):
+            langkah = -1.5 if key == 'scroll up' else 1.5
+            self.camera_dist = max(CAM_DIST_MIN,
+                                   min(CAM_DIST_MAX, self.camera_dist + langkah))
+            return
+
+        # Putar kamera 45 derajat per tekan: [Q] ke kiri, [E] ke kanan. Arah
+        # sama dengan seret mouse kanan (seret ke kanan = yaw turun = [E]).
+        # Yang diputar TUJUAN-nya; update() mendekatkan camera_yaw ke tujuan
+        # dengan halus, jadi tekan cepat dua kali = 90 derajat, bukan 45 yang
+        # tertimpa. Tujuan dibuang begitu sampai, supaya penulis camera_yaw
+        # lain (seret mouse, pemeriksaan regresi) tidak ditarik balik.
+        if self.panels.mode == 'hud' and key in ('q', 'e'):
+            awal = self._yaw_tujuan if self._yaw_tujuan is not None else self.camera_yaw
+            self._yaw_tujuan = awal + (45.0 if key == 'q' else -45.0)
+            # Transisi mulai lagi dari sudut SEKARANG ke tujuan baru.
+            self._yaw_awal = None
             return
 
         # Chargen mode — semua input ke ChargenScreen
@@ -747,6 +857,14 @@ class Game3D:
         # bisa dinavigasi maupun ditutup.
         if self.panels.mode == 'buy':
             self.panels.buy_input(key, self.player, self.world)
+            return
+
+        # Modal Majelis Batin (PAGI PERTAMA): angka memilih opsi. Sengaja
+        # SETELAH jaring ESC di atas -- ESC di sini ditutup oleh close_all(),
+        # yang membersihkan entity modalnya. Tanpa rute ini angka jatuh ke
+        # pemain dan [2] mengganti alat, bukan memilih.
+        if self.panels.mode == 'batin':
+            self.panels.batin_check_input(key)
             return
 
         # Sinema mengunci semuanya: cuma lanjut dan lewati yang diterima.
@@ -776,15 +894,24 @@ class Game3D:
             return
 
         if self.panels.mode == 'pie':
-            if key in ('left arrow', 'q'):
+            # Q/E menggeser sorotan melingkar -- tombol yang sama yang memutar
+            # kamera di HUD. F/SPACE/ENTER melakukan; [E] dulu melakukan, tapi
+            # sejak interaksi pindah ke [F] (22 Okt 2026) [E] berarti "kanan".
+            if key in ('left arrow', 'q', 'up arrow'):
                 self.panels.navigate_pie(-1)
-            elif key in ('right arrow', 'r'):
+            elif key in ('right arrow', 'e', 'r', 'down arrow'):
                 self.panels.navigate_pie(1)
             elif key.isdigit() and int(key) >= 1:
-                self.panels.navigate_pie(int(key) - 1 - self.panels._pie_selected)
+                if int(key) <= len(self.panels._pie_options):
+                    self.panels.navigate_pie(int(key) - 1 - self.panels._pie_selected)
+                    self.panels.confirm_pie()
+            elif key in ('space', 'f', 'enter'):
                 self.panels.confirm_pie()
-            elif key in ('space', 'e', 'enter'):
-                self.panels.confirm_pie()
+            elif key == 'left mouse down':
+                i = self.panels.pie_di_mouse()
+                if i is not None:
+                    self.panels.navigate_pie(i - self.panels._pie_selected)
+                    self.panels.confirm_pie()
             elif key == 'escape':
                 self.panels.close_pie()
             return
@@ -900,6 +1027,11 @@ class Game3D:
                 self.panels.flash_msg(
                     'Ringkasan kebutuhan: ON' if nyala else
                     'Ringkasan kebutuhan: OFF  [TAB]', 1.2)
+            elif key == 'f7':
+                # Majelis Batin. TAB sudah milik ringkasan motif, huruf habis,
+                # dan F7 baru bebas setelah development_mode Ursina dimatikan
+                # (sebelumnya HotReloader.reload_models menangkapnya).
+                self.panels.toggle_batin()
             elif key == 'f3':
                 self._debug_overlay = not getattr(self, '_debug_overlay', False)
                 _pasang_overlay_debug(self._debug_overlay)
@@ -922,35 +1054,44 @@ class Game3D:
             elif key == 'f9':
                 loaded = GameState.load()
                 if loaded:
-                    # Muat data KE state yang sudah dipegang semua komponen,
-                    # bukan mengganti objeknya. Sebelumnya `self.state = loaded`
-                    # hanya me-rebind app + player, sementara panels/world/
-                    # entities/time_controller/quest_controller/queue tetap
-                    # menunjuk GameState lama -> HUD beku & split-state.
-                    self.state.__dict__.clear()
-                    self.state.__dict__.update(loaded.__dict__)
-                    self.state.__dict__.pop('_mv', None)
-                    self.player.queue.motives = self.state.mv
-                    self.player.queue.clear()
-                    self.world.load_scene(self.state.scene_name)
-                    self.entities.load_scene(self.state.scene_name)
-                    # Safety walkable snap check
-                    if not self.world.is_walkable(int(round(self.state.player_x)), int(round(self.state.player_y))):
-                        found = None
-                        for r in range(1, 6):
-                            for dx in range(-r, r+1):
-                                for dy in range(-r, r+1):
-                                    nx, ny = int(round(self.state.player_x)) + dx, int(round(self.state.player_y)) + dy
-                                    if self.world.is_walkable(nx, ny):
-                                        found = (nx, ny); break
-                                if found: break
-                            if found: break
-                        if found:
-                            self.state.player_x, self.state.player_y = float(found[0]), float(found[1])
-                    self.player.set_tile_pos(self.state.player_x, self.state.player_y)
-                    self.player._set_initial_rotation()
-                    self._init_env()
+                    self._ganti_state(loaded)
                     self.panels.flash_msg("[F9] Game Dimuat!")
+
+    def _ganti_state(self, baru):
+        """Isi state yang dipegang semua komponen diganti `baru`, lalu dunia
+        dimuat ulang. Dipakai F9 dan "Permainan Baru" di layar judul.
+
+        Data dimuat KE state yang sudah dipegang semua komponen, bukan
+        mengganti objeknya. Dulu `self.state = loaded` hanya me-rebind app +
+        player, sementara panels/world/entities/time_controller/
+        quest_controller/queue tetap menunjuk GameState lama -> HUD beku &
+        split-state.
+        """
+        self.state.__dict__.clear()
+        self.state.__dict__.update(baru.__dict__)
+        self.state.__dict__.pop('_mv', None)
+        from .cutscene import tandai_yang_sudah_lewat
+        tandai_yang_sudah_lewat(self.state)
+        self.player.queue.motives = self.state.mv
+        self.player.queue.clear()
+        self.world.load_scene(self.state.scene_name)
+        self.entities.load_scene(self.state.scene_name)
+        # Safety walkable snap check
+        if not self.world.is_walkable(int(round(self.state.player_x)), int(round(self.state.player_y))):
+            found = None
+            for r in range(1, 6):
+                for dx in range(-r, r+1):
+                    for dy in range(-r, r+1):
+                        nx, ny = int(round(self.state.player_x)) + dx, int(round(self.state.player_y)) + dy
+                        if self.world.is_walkable(nx, ny):
+                            found = (nx, ny); break
+                    if found: break
+                if found: break
+            if found:
+                self.state.player_x, self.state.player_y = float(found[0]), float(found[1])
+        self.player.set_tile_pos(self.state.player_x, self.state.player_y)
+        self.player._set_initial_rotation()
+        self._init_env()
 
     def _pulihkan_mode_yatim(self):
         """Kembalikan ke HUD kalau mode aktif kehilangan UI pemiliknya.
@@ -991,6 +1132,20 @@ class Game3D:
             # frame — sinema tidak pernah bisa jalan satu beat pun. Penjaganya
             # benar; mode barunya yang lupa didaftarkan.
             yatim = not getattr(getattr(self, 'sinema', None), 'aktif', False)
+        elif mode == 'buy':
+            # Bangun/Beli ([L]) dimiliki entity-nya sendiri. Tanpa baris ini
+            # mode kembali ke HUD satu frame setelah [L] (diukur,
+            # tools/probe_buy_sinema.py), panelnya tertinggal di layar
+            # dan W/S menggerakkan pemain, bukan pilihan katalog.
+            yatim = not any(getattr(e, 'enabled', False)
+                            for e in getattr(p, '_buy_ents', None) or [])
+        elif mode == 'judul':
+            yatim = not getattr(getattr(self, '_judul', None), 'aktif', False)
+        elif mode == 'batin':
+            # Modal Majelis Batin dimiliki entity-nya sendiri (_bc_ents).
+            # Tanpa baris ini modal PAGI PERTAMA dipulihkan ke HUD satu frame
+            # setelah terbuka, dan angka pilihannya jatuh ke pemain.
+            yatim = not getattr(p, '_bc_ents', None)
         else:
             yatim = True    # mode yang tidak dikenal sama sekali
         if yatim:
@@ -998,6 +1153,22 @@ class Game3D:
             p.mode = 'hud'
 
     # ─── CHARACTER CREATION ─────────────────────────────────
+    def _tutup_judul(self, baru: bool):
+        """Keluar dari layar judul: lanjutkan save, atau mulai baru."""
+        if self._judul:
+            self._judul.bongkar()
+            self._judul = None
+        self.camera_dist, self.camera_pitch, self.camera_yaw = self._kam_awal
+        self._snap_camera_to_player()
+        self.panels.set_hud_visible(True)
+        self.panels.mode = 'hud'
+        if baru:
+            if self.state.char_name:
+                # Save lama tidak dihapus: ia baru tertimpa saat permainan
+                # baru disimpan (selesai Buat Karakter).
+                self._ganti_state(GameState())
+            self._open_chargen()
+
     def _open_chargen(self):
         if self._chargen:
             return
@@ -1030,12 +1201,10 @@ class Game3D:
             self.panels.flash_msg(
                 "Save lama tidak bisa dibaca dan sudah dipindahkan ke "
                 "*.corrupt-* -- tidak ditimpa.", 9.0)
-        # Tutorial intro untuk first-time player
-        from ursina import invoke
-        self.panels.flash_msg(f'Selamat datang, {state.char_name}! Petualanganmu dimulai.', 3.5)
-        invoke(self.panels.flash_msg, "Pakai WASD untuk jalan, SHIFT untuk lari.", 4.0, delay=4.0)
-        invoke(self.panels.flash_msg, "SPACE pakai alat, E bicara dgn NPC, F1 untuk help.", 4.0, delay=8.5)
-        invoke(self.panels.flash_msg, "Cek inventori (I), peta (M), quest (J). Selamat bermain!", 4.0, delay=13.0)
+        # Sambutan dan petunjuk kendali kini bagian dari adegan pembuka
+        # ('datang' di cutscene.py). Dulu tiga flash bertimer di sini muncul
+        # di TENGAH adegan itu, menimpa narasinya. Empat flash, bukan tiga:
+        # yang keempat (I/M/J) ikut pindah ke beat 'Kendali'.
 
     # ─── NEEDS WARNING ──────────────────────────────────────
     def _check_needs_warning(self):
@@ -1055,31 +1224,20 @@ class Game3D:
         hour     = (s.time_minutes / 60.0) % 24.0
         is_indoor= self.world.scene_obj.indoor if self.world.scene_obj else False
 
-        if is_indoor:
-            # Indoor: lampu hangat yang cukup terang supaya scene tidak gelap total
-            sun_col   = color.rgb(60, 55, 45, 255)
-            amb_col   = color.rgb(190, 180, 200, 255)
-            sky_col   = color.rgb(20, 15, 25)
-            cloud_col = color.rgb(0, 0, 0, 0)
-        elif 6 <= hour < 17:
-            sun_col   = color.rgb(255, 248, 215)
-            amb_col   = color.rgb(95, 90, 78, 255)
-            sky_col   = color.rgb(128, 205, 248)
-            cloud_col = color.rgb(248, 248, 255, 175)
-        elif 17 <= hour < 19:
-            sun_col   = color.rgb(255, 162, 72)
-            amb_col   = color.rgb(88, 55, 45, 255)
-            sky_col   = color.rgb(248, 138, 88)
-            cloud_col = color.rgb(255, 195, 148, 145)
-        else:
-            # Sama dengan blok transisi di update() — dua tempat, satu angka.
-            sun_col   = color.rgb(62, 82, 140)
-            amb_col   = color.rgb(54, 58, 95, 255)
-            sky_col   = color.rgb(18, 12, 42)
-            cloud_col = color.rgb(45, 45, 72, 75)
+        is_raining = (s.weather in ('Hujan', 'Badai')) and not is_indoor
+        # Tabel yang SAMA dengan target lerp di update() (game/cahaya.py).
+        # Dulu di sini tertulis angka sendiri yang 33% lebih terang, jadi tiap
+        # ganti scene dunia melonjak lalu meredup selama beberapa detik.
+        sun_col, amb_col, sky_col, cloud_col = _cahaya.target_cahaya(
+            hour, is_indoor, is_raining)
 
+        sun_col, amb_col, sky_col = _warna_suasana(s.scene_name, sun_col, amb_col, sky_col)
         self.sun.color     = sun_col
         self.ambient.color = amb_col
+        _cahaya.arahkan_matahari(self.sun, hour, paksa=True)
+        from . import bayangan_matahari as _bm
+        _bm.atur_scene(self, is_indoor)
+        _bm.ikuti(self)
         self._sync_smooth_lighting()
         window.color       = sky_col
         if not getattr(self, '_use_unlit_sh', True):
@@ -1260,8 +1418,11 @@ class Game3D:
                                    Vec3(sun_c.x, sun_c.y, sun_c.z))
             scene.set_shader_input('sm_ambient',
                                    Vec3(amb_c.x, amb_c.y, amb_c.z))
-            # Sun direction mengikuti DirectionalLight (arah look_at)
-            scene.set_shader_input('sm_sun_dir', Vec3(-0.5, -0.8, -0.4))
+            # Arah dibaca dari node DirectionalLight itu sendiri. Dulu konstanta
+            # (-0.5,-0.8,-0.4) dikode mati di sini sementara lampunya menatap
+            # (-1,-1.5,-0.8): dua arah untuk satu matahari, dan kamera bayangan
+            # memakai arah lampu, bukan konstanta ini.
+            scene.set_shader_input('sm_sun_dir', _cahaya.arah_lampu(self.sun))
         except Exception:
             pass
 
@@ -1270,5 +1431,5 @@ class Game3D:
         self.app.run()
 
 def run():
-    game = Game3D()
+    game = Game3D(layar_judul=True)
     game.run()

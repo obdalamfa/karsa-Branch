@@ -190,6 +190,107 @@ def uji_panel_hidup(g):
             f'{beda}/{total} piksel berubah ({beda/total:.1%})')
 
 
+def uji_janji_terpenuhi(g):
+    """Satu keinginan dari janji sampai dibayar, lewat jalur pemain.
+
+    uji_wishes.py membuktikan `periksa()` membayar; uji_panel_hidup()
+    membuktikan tombolnya bekerja. Yang belum pernah dibuktikan: keinginan
+    benar-benar TERPENUHI oleh perbuatan di dunia, dan dibayar oleh loop
+    `Game3D.update` tanpa pemain membuka panel. Dua sambungan itu yang
+    menentukan apakah Tahap 4 terasa hidup atau cuma daftar.
+
+    Yang disiapkan langsung di state hanya bahannya: lima lobak siap panen.
+    Menjanjikan (tombol p + angka), memilih alat (tombol 4), memanen
+    (space), dan membayar (loop update) semuanya lewat jalur pemain.
+    """
+    import game.wishes as w
+    from game.crops import plant_payload, spec
+    from direct.showbase.ShowBaseGlobal import base
+
+    s = g.state
+    if s.scene_name != 'farm':
+        s.scene_name = 'farm'
+        for _ in range(30):
+            base.taskMgr.step()
+    s.janji = []
+    s.kebahagiaan = 0
+    hari = spec('lobak').get('days', 2)
+    petak = [(x, 12) for x in range(10, 15)]
+    for x, y in petak:
+        d = plant_payload('lobak')
+        d['age'] = hari
+        k = f'{x},{y},farm'
+        s.soil[k] = d
+        g.world.refresh_tile(x, y, k)
+
+    # 1. janjikan "panen N hasil kebun apa pun" lewat panel
+    tw = w.tawaran(s)
+    idx = next((i for i, t in enumerate(tw)
+                if t.get('id', '').startswith('panen') and 'apa pun' in t['teks']), None)
+    cek('tawaran hari ini memuat keinginan panen', idx is not None,
+        '; '.join(t['teks'] for t in tw))
+    if idx is None:
+        return
+    g.input('p')
+    for _ in range(3):
+        base.taskMgr.step()
+    g.input(str(idx + 1))
+    g.input('escape')
+    for _ in range(3):
+        base.taskMgr.step()
+    janji = list(s.janji)
+    cek('janji panen tercatat dari tombol', len(janji) == 1,
+        janji[0]['teks'] if janji else 'kosong')
+    if not janji:
+        return
+    butuh = w.kemajuan(s, janji[0])[1]
+
+    # HUD: janji yang baru dibuat harus terlihat setelah panel ditutup.
+    for _ in range(6):
+        base.taskMgr.step()
+    jn = getattr(g.panels, '_obj_janji', None)
+    teks = str(jn.text) if jn is not None else ''
+    cek('HUD memajang janji setelah panel ditutup',
+        jn is not None and jn.enabled and janji[0]['teks'] in teks
+        and f'0/{butuh}' in teks, repr(teks))
+    _tangkap('wishes_hud_janji')     # untuk mata: kotak pelacak ikut memanjang
+    if jn is not None:
+        from ursina import camera
+        ex, ey = _batas_ui()
+        lo, hi = jn.getTightBounds(camera.ui)
+        cek('baris janji HUD di dalam layar',
+            -ex <= lo.x and hi.x <= ex and -ey <= lo.y and hi.y <= ey,
+            f'x {lo.x:.3f}..{hi.x:.3f}  y {lo.y:.3f}..{hi.y:.3f}')
+
+    # 2. pilih alat Panen dengan tombol angka, seperti pemain
+    g.input('4')
+    cek('tombol 4 memilih alat Panen', s.tool_index == 3, f'tool_index={s.tool_index}')
+
+    # 3. panen dengan space, berdiri di depan tiap petak
+    dipanen = 0
+    for x, y in petak[:butuh]:
+        g.player.set_tile_pos(x, y - 1)
+        g.player.facing = 'up'
+        sebelum = s.stats.get('harvested', 0)
+        g.input('space')
+        for _ in range(4):
+            base.taskMgr.step()
+        dipanen += s.stats.get('harvested', 0) - sebelum
+    cek(f'space memanen {butuh} lobak', dipanen == butuh, f'{dipanen}/{butuh}')
+
+    # 4. dibayar oleh loop update, panel TETAP tertutup
+    for _ in range(90):
+        base.taskMgr.step()
+    cek('loop update membayar tanpa panel dibuka',
+        not s.janji and s.kebahagiaan == int(janji[0].get('bayar', 0)) > 0
+        and g.panels.mode == 'hud',
+        f"janji tersisa={len(s.janji)} kebahagiaan={s.kebahagiaan} "
+        f"mode={g.panels.mode}")
+    if jn is not None:
+        cek('baris janji HUD hilang setelah dibayar',
+            not jn.enabled and not str(jn.text).strip(), repr(str(jn.text)))
+
+
 def main():
     from ursina import application
     application.asset_folder = ROOT
@@ -206,6 +307,18 @@ def main():
         traceback.print_exc()
         sys.exit(1)
 
+    # Adegan pembuka memicu dirinya sendiri pada quest_stage 0 dan menyetel
+    # mode 'sinema' beberapa frame SETELAH boot, jadi menyetel mode 'hud' di
+    # bawah saja tidak cukup: tombol 'p' lalu ditelan sinema. Terukur 15 Okt
+    # 2026: enam pemeriksaan gagal dengan mode=sinema. Mekanismenya sama
+    # dengan tools/regress.py -- menandai adegan sudah ditonton, bukan
+    # bendera pintas baru.
+    try:
+        from game.cutscene import NASKAH as _NASKAH
+        g.state.sinema_selesai = list(_NASKAH)
+    except Exception:
+        pass
+
     if g.panels.mode != 'hud':
         if getattr(g, '_chargen', None):
             g._chargen.destroy_all()
@@ -214,6 +327,7 @@ def main():
 
     try:
         uji_panel_hidup(g)
+        uji_janji_terpenuhi(g)
     except Exception as ex:
         traceback.print_exc()
         cek('probe meledak', False, f'{type(ex).__name__}: {ex}')

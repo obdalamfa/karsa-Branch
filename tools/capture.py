@@ -61,6 +61,16 @@ def _build_toolrack(g, base):
     g._snap_camera_to_player()
 
 
+# Save fixture yang dipasang main(), atau None kalau pemain sudah punya save.
+_FIXTURE = None
+
+
+def _buang_fixture():
+    # Dipanggil eksplisit sebelum os._exit, yang melewati atexit.
+    if _FIXTURE is not None:
+        _FIXTURE.unlink(missing_ok=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', default='shot.png')
@@ -79,6 +89,10 @@ def main():
                          'Sekaligus bukti bug NodePath-ganda: kalau mesh '
                          'di-cache tanpa salinan, hanya alat TERAKHIR yang '
                          'punya geometri.')
+    ap.add_argument('--save', default=None,
+                    help='fixture save yang dipakai, mis. '
+                         'tools/fixtures/ladang_hari10_save.json. Ditolak '
+                         'kalau save pemain sungguhan sudah ada.')
     ap.add_argument('--width', type=int, default=1280)
     ap.add_argument('--height', type=int, default=720)
     # --- mode STRIP: gerak tidak bisa dinilai dari gambar diam ---------------
@@ -122,6 +136,26 @@ def main():
 
     import game.config as cfg
     cfg.SCREEN_W, cfg.SCREEN_H = args.width, args.height
+
+    # Tanpa save, layar Buat Karakter terbuka dan menutupi dunia. Terukur
+    # 14 Okt 2026: kesembilan tangkapan gauntlet memotret panel itu, bukan
+    # scene yang diminta. Fixture yang sama dengan tools/regress.py dipasang
+    # kalau pemain belum punya save, lalu dibuang lagi saat keluar. Save
+    # sungguhan tidak pernah disentuh.
+    global _FIXTURE
+    _save = ROOT / cfg.SAVE_FILE
+    if args.save and _save.exists():
+        # Menimpa save pemain demi tangkapan layar tidak pernah sepadan.
+        print(f'CAPTURE_ERR: {_save.name} sudah ada; --save tidak menimpanya',
+              file=sys.stderr)
+        sys.exit(2)
+    if not _save.exists():
+        import shutil
+        shutil.copyfile(Path(args.save) if args.save else
+                        ROOT / 'tools' / 'fixtures' / 'regress_save.json', _save)
+        _FIXTURE = _save
+        import atexit
+        atexit.register(_buang_fixture)    # jalur sys.exit(2)
 
     from game.app import Game3D
     g = Game3D()
@@ -317,7 +351,7 @@ def main():
 
         print(f'CAPTURE_OK {out.resolve()} strip={len(ims)} tile={tw}x{th}')
         sys.stdout.flush()
-        os._exit(0)
+        _buang_fixture(); os._exit(0)
 
     img = base.win.getScreenshot()
     if img is None:
@@ -347,7 +381,7 @@ def main():
 
     print(f'CAPTURE_OK {out.resolve()}')
     sys.stdout.flush()
-    os._exit(0)
+    _buang_fixture(); os._exit(0)
 
 
 if __name__ == '__main__':

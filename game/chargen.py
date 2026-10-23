@@ -158,10 +158,12 @@ class ChargenScreen:
             p.set_hud_visible(not ya)
         except Exception:
             pass
-        for nama in ('_obj_bg', '_obj_rust', '_obj_title', '_obj_step', '_obj_hint'):
+        for nama in ('_obj_bg', '_obj_rust', '_obj_title', '_obj_step',
+                     '_obj_hint', '_obj_janji'):
             e = getattr(p, nama, None)
             if e is not None:
-                e.enabled = not ya
+                e.enabled = (not ya) and (nama not in ('_obj_hint', '_obj_janji')
+                                          or bool(str(e.text).strip()))
 
     def _pulihkan_kamera(self):
         a = self.app

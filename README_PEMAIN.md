@@ -15,22 +15,26 @@ NPC ala *The Sims*, pertanian mendalam ala *Sakuna*.
 | Tombol | Aksi |
 |---|---|
 | **WASD** | Jalan |
-| **Q / E** | Putar kamera |
-| **Spasi / E** | Interaksi (cangkul, tanam, panen, bicara) |
-| **R** | Rawat petak / perah ternak |
+| **Q / E** | Putar kamera 45° kiri / kanan |
+| **Spasi** | Pakai alat (cangkul, tanam, siram, panen) |
+| **F** | Interaksi (bicara, surat, Peti Kirim, ternak) |
+| **Shift+F** | Tangkap makhluk halus |
+| **R** | Ganti benih |
 | **I** | Inventaris |
 | **J** | Jurnal misi |
-| **TAB** | Majelis Batin (4 suara batin + skill-check) |
-| **Esc** | Menu Jeda (Simpan / Muat / Pengaturan / Kontrol) |
+| **F7** | Majelis Batin (4 suara batin) |
+| **TAB** | Ringkasan kebutuhan on/off |
+| **F5 / F9** | Simpan / Muat |
+| **Esc** | Simpan (di HUD) / tutup panel |
 
 ## Loop Harian
 Cangkul → tanam → **siram tiap hari** (jadwal air ala Sakuna menentukan mutu ★) →
 panen → masukkan ke **Peti Kirim** → **tidur** → emas masuk saat fajar.
-Rawat ternak [R] untuk susu/telur/wol. Jelajah gua untuk bijih & lawan mob
+Rawat ternak [F] untuk susu/telur/wol. Jelajah gua untuk bijih & lawan mob
 (perhatikan **telegraph merah** sebelum mereka memukul — mengelaklah!).
 
 ## Tip
-- Volume & layar penuh diatur di **Esc → Pengaturan**.
-- 3 slot simpanan tersedia di **Esc → Simpan / Muat**.
+- Game tersimpan dengan **F5** atau **Esc** di HUD, dimuat dengan **F9**.
+  (Menu Jeda dengan slot simpanan dan pengaturan belum tersedia lagi.)
 
 Selamat bertani di Lembah Karsa. 🌾

@@ -45,7 +45,7 @@ from .data import (HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS,
                    QUEST_STAGES, SWORD_RECIPES, PICKAXE_RECIPES, SHOP_ITEMS,
                    CRAFT_RECIPES)
 from .sound import play as sound_play
-from .batin import VOICES as BVOICES, DIFF_NAME, pct as batin_pct, roll as batin_roll, raise_voice
+from .batin import VOICES as BVOICES, raise_voice
 import textwrap as _tw
 
 _ALL_NPCS = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
@@ -437,6 +437,38 @@ def tuts_tex(label: str, tinggi: int = 30):
     return hasil
 
 
+def bentuk_tex(jenis: str, rasio: float = 1.0, tinggi: int = 64):
+    """Tekstur PUTIH bersudut bulat ('kapsul') atau lingkaran ('cakram').
+
+    Putih supaya satu tekstur dipakai banyak warna lewat entity.color
+    (normal, terpilih, terkunci). Rasio lebar/tinggi dibulatkan ke 0,25
+    supaya cache tidak tumbuh tanpa batas, dan supaya sudutnya tetap bulat
+    -- kapsul yang ditarik dari tekstur persegi sudutnya jadi lonjong.
+    """
+    rasio = max(1.0, round(rasio * 4) / 4)
+    kunci = ('_bentuk', jenis, rasio, tinggi)
+    if kunci in _IKON_CACHE:
+        return _IKON_CACHE[kunci]
+    tex = None
+    try:
+        h = tinggi * _SS
+        w = int(h * rasio)
+        img = _PILImg.new('RGBA', (w, h), (255, 255, 255, 0))
+        d = _PILDraw.Draw(img)
+        if jenis == 'cakram':
+            d.ellipse([1, 1, w - 2, h - 2], fill=(255, 255, 255, 255))
+        else:
+            d.rounded_rectangle([1, 1, w - 2, h - 2], radius=int(h * 0.48),
+                                fill=(255, 255, 255, 255))
+        img = img.resize((max(1, w // _SS), tinggi), _PILImg.LANCZOS)
+        tex = Texture(img)
+        tex.filtering = 'bilinear'
+    except Exception:
+        tex = None
+    _IKON_CACHE[kunci] = tex
+    return tex
+
+
 def _ui(model='quad', **kw):
     # Tidak pakai shader agar color property bekerja di camera.ui space.
     # transparent=True wajib agar alpha channel diterapkan oleh renderer.
@@ -470,10 +502,20 @@ _FONT_NAME = 'Montserrat-Bold.ttf'
 _CHROME_PATH = _Path(__file__).resolve().parent.parent / 'assets' / 'ui' / 'panel_chrome.png'
 _chrome_tex = None
 def _chrome():
+    # Dipangkas ke bbox alfa-nya. panel_chrome.png 512x512, tapi bagian
+    # opaknya hanya (130,130)-(382,382): 49% tiap sumbu. Tanpa pangkasan,
+    # keempat pemakai _skin_chrome (majelis, modal batin, beli, jeda)
+    # menampilkan latar kira-kira separuh ukuran quad-nya, dan teks yang
+    # ditata untuk ukuran quad jatuh di luar latar yang tampak.
     global _chrome_tex
     if _chrome_tex is None:
         try:
-            _chrome_tex = Texture(_PILImg.open(_CHROME_PATH)) if _CHROME_PATH.exists() else False
+            if _CHROME_PATH.exists():
+                im = _PILImg.open(_CHROME_PATH).convert('RGBA')
+                kotak = im.getchannel('A').getbbox()
+                _chrome_tex = Texture(im.crop(kotak) if kotak else im)
+            else:
+                _chrome_tex = False
         except Exception:
             _chrome_tex = False
     return _chrome_tex or None
@@ -540,6 +582,19 @@ class UIManager:
             self._update_motive_panel()
             self._update_action_readout()
 
+        # Subtitle suara batin memudar. DI LUAR gerbang 'hud': suara pertama
+        # justru diucapkan tepat saat modal PAGI PERTAMA terbuka, dan di dalam
+        # gerbang ia akan menggantung di layar selama modal itu dibaca.
+        if getattr(self, '_voice_sub_t', 0) > 0:
+            self._voice_sub_t -= dt
+            if self._voice_sub_t <= 0 and getattr(self, '_voice_sub', None):
+                self._voice_sub.enabled = False
+        # Panel majelis hanya hidup di HUD. Ia duduk di kolom kanan bawah,
+        # tempat kotak dialog, modal pilihan, dan panel penuh juga digambar;
+        # dibiarkan terbuka, ia menimpa semuanya.
+        if getattr(self, '_batin_open', False) and self.mode != 'hud':
+            self.toggle_batin()
+
         # Flash message timer
         if self._flash_t > 0:
             self._flash_t -= dt
@@ -556,7 +611,7 @@ class UIManager:
 
     # Tiga pintasan, bukan tujuh. Sisanya hidup di F1, dan roda alat di
     # kiri-atas sudah membawa nomornya sendiri di tiap petak.
-    _PINTASAN = (('SPACE', 'Pakai'), ('E', 'Aksi'), ('TAB', 'Motif'))
+    _PINTASAN = (('SPACE', 'Pakai'), ('F', 'Aksi'), ('Q/E', 'Putar'), ('TAB', 'Motif'))
     _HINT_PADAM = 30.0          # detik sebelum petunjuk memudar sendiri
 
     # ─── PUBLIC: HUD ─────────────────────────────────────
@@ -852,6 +907,12 @@ class UIManager:
                               col=color.rgb(228, 222, 198))
         self._obj_hint = _txt('', pos=(-0.868, 0.380), scale=0.58,
                               col=color.rgb(150, 158, 168))
+        # Keinginan yang sedang dikejar (Tahap 4). Tanpa baris ini janji cuma
+        # terlihat di panel `p`, jadi pemain yang menutup panel lupa apa yang
+        # ia janjikan -- dan keinginan yang terlupa tidak memberi arah apa pun.
+        self._obj_janji = _txt('', pos=(-0.868, 0.354), scale=0.58,
+                               col=color.rgb(236, 190, 120))
+        self._obj_janji_last = None
         self._obj_last = None   # cache: deteksi pergantian langkah → emote
 
         # ── Flash message tengah ──
@@ -1089,15 +1150,18 @@ class UIManager:
         if getattr(self, '_obj_bg', None) is not None:
             atas = bawah - 0.008 - 0.012
             ada_hint = bool(str(self._obj_hint.text).strip())
-            h = 0.092 if ada_hint else 0.066
+            jn = getattr(self, '_obj_janji', None)
+            ada_janji = jn is not None and bool(str(jn.text).strip())
+            h = (0.092 if ada_hint else 0.066) + (0.026 if ada_janji else 0.0)
             # Lebar mengikuti baris terpanjang: petunjuk tutorial sering lebih
             # panjang dari kotak 0,385 dan menjulur keluar alasnya.
             w = max(0.385, 0.019 + max(
                 self._lebar(t) for t in (self._obj_title, self._obj_step,
-                                         self._obj_hint)
-                if str(t.text).strip()) if any(
-                str(t.text).strip() for t in (self._obj_title, self._obj_step,
-                                              self._obj_hint)) else 0.385)
+                                         self._obj_hint, jn)
+                if t is not None and str(t.text).strip()) if any(
+                t is not None and str(t.text).strip()
+                for t in (self._obj_title, self._obj_step,
+                          self._obj_hint, jn)) else 0.385)
             self._obj_bg.scale_x = self._obj_rust.scale_x = w
             self._obj_rust.position = (X_L + w / 2, atas - 0.003)
             self._obj_bg.position = (X_L + w / 2, atas - h / 2)
@@ -1106,6 +1170,8 @@ class UIManager:
             self._obj_title.position = (tx, atas - 0.010)
             self._obj_step.position = (tx, atas - 0.036)
             self._obj_hint.position = (tx, atas - 0.064)
+            if jn is not None:
+                jn.position = (tx, atas - (0.090 if ada_hint else 0.064))
 
         # Kanan bawah: alas dipas ke petunjuk tombol, bukan selebar layar.
         ch = self._control_hint
@@ -1289,6 +1355,14 @@ class UIManager:
                 sound_play('menu_select', 0.7)
             self._obj_last = step
 
+            from .wishes import baris_hud
+            janji = baris_hud(s)
+            if janji != self._obj_janji_last:
+                self._obj_janji_last = janji
+                self._teks(self._obj_janji, janji)
+                self._obj_janji.enabled = bool(janji)
+                self._tata_ulang_hud()
+
         # Needs sim-life (Lapar/Sosial/Senang) — redup saat kritis
         if getattr(self, '_need_fills', None):
             from .config import NEED_MAX
@@ -1321,7 +1395,7 @@ class UIManager:
         if s.tool_index in (2, 3):
             seed_name = CROPS.get(s.seed_key, {}).get('name', s.seed_key)
             seed_qty  = s.inventory.get(s.seed_key + '_seed', 0)
-            self._teks(self._seed_txt, f'Q/R: {seed_name} x{seed_qty}')
+            self._teks(self._seed_txt, f'R: {seed_name} x{seed_qty}')
         else:
             self._seed_txt.text = ''
 
@@ -1395,39 +1469,177 @@ class UIManager:
     # Bangun/Beli (Sims S7), dan menu jeda — karena tidak satu pun menyentuh
     # tata letak HUD yang menang.
 
+    # ── Tata letak Majelis Batin ──
+    # Versi cd92b0d ditata untuk HUD lama dan bertumpuk dengan HUD yang
+    # menang: panel di kiri menimpa pelacak tutorial (z 0,9 di DEPAN latar
+    # z 1,0) dan roda alat; prompt modal di y 0,15 tepat di bawah flash;
+    # 'Tekan 1-N' dan subtitle sama-sama di y -0,30, dan subtitle itu jatuh di
+    # dalam kotak dialog (-0,48..-0,14 dengan papan nama). Sekarang:
+    #   panel   kanan, di bawah flash dan di atas petunjuk tombol; tertutup
+    #           sendiri begitu mode meninggalkan HUD (lihat update())
+    #   subtitle tengah-atas, di bawah baris HUD, di atas flash
+    #   modal   di bawah flash; tidak menutup subtitle maupun flash
+    # Dijaga cek tata letak di tools/probe_batin.py; fotonya diambil setelah
+    # sinema selesai lewat SPACE.
+    _BTN_POS, _BTN_SKALA = (0.58, -0.14), (0.60, 0.50)    # panel majelis
+    _BC_POS, _BC_SKALA = (0.0, -0.16), (1.20, 0.54)       # modal pilihan
+    _VSUB_Y = 0.31                                        # subtitle suara
+    _CHROME_TEPI = 0.104       # tebal bingkai chrome per sisi, pecahan skala
+
     def _build_batin(self):
         self.batin = None              # diisi app.py setelah Batin dibuat
         self._batin_open = False
         self._voice_sub_t = 0.0
-        bg = _skin_chrome(_ui(scale=(0.58, 0.96), position=(-0.60, 0.0), color=color.rgb(20, 18, 16, 237), z=1.0))
-        title = _txt('MAJELIS BATIN', pos=(-0.86, 0.43), scale=0.95, col=color.rgb(231, 178, 61))
-        sub = _txt('Empat sukma, satu tengkorak.', pos=(-0.86, 0.395), scale=0.58, col=color.rgb(150, 135, 100))
+        (cx, cy), (w, h) = self._BTN_POS, self._BTN_SKALA
+        kiri = cx - w / 2 + w * self._CHROME_TEPI + 0.012
+        atas = cy + h / 2 - h * self._CHROME_TEPI - 0.012
+        bg = _skin_chrome(_ui(scale=(w, h), position=(cx, cy), color=color.rgb(20, 18, 16, 237), z=1.0))
+        title = _txt('MAJELIS BATIN', pos=(kiri, atas - 0.012), scale=0.95,
+                     col=color.rgb(231, 178, 61), origin=(-0.5, 0))
+        sub = _txt('Empat sukma, satu tengkorak.', pos=(kiri, atas - 0.050), scale=0.58,
+                   col=color.rgb(150, 135, 100), origin=(-0.5, 0))
         self._batin_chips = []
         for i, k in enumerate(['bara', 'akar', 'sukma', 'lapar']):
             vd = BVOICES[k]
-            chip = _txt(f"{vd['name']} 1", pos=(-0.86 + i * 0.185, 0.35), scale=0.6,
-                        col=color.rgb(*vd['col']))
+            chip = _txt(f"{vd['name']} 1", pos=(kiri + i * 0.108, atas - 0.088), scale=0.55,
+                        col=color.rgb(*vd['col']), origin=(-0.5, 0))
             self._batin_chips.append((k, chip))
-        self._batin_log = _txt('', pos=(-0.875, 0.30), scale=0.62, col=color.rgb(224, 216, 188))
-        self._batin_ents = [bg, title, sub, self._batin_log] + [c for _, c in self._batin_chips]
+        self._batin_log = _txt('', pos=(kiri, atas - 0.115), scale=0.58,
+                               col=color.rgb(224, 216, 188), origin=(-0.5, 0.5))
+        bawah = cy - h / 2 + h * self._CHROME_TEPI + 0.012
+        tutup = _txt('[F7] tutup', pos=(kiri, bawah + 0.012), scale=0.5,
+                     col=color.rgb(150, 135, 100), origin=(-0.5, 0))
+        self._batin_ents = [bg, title, sub, self._batin_log, tutup] + [c for _, c in self._batin_chips]
         for e in self._batin_ents:
             e.enabled = False
-        # subtitle bawah (selalu ada, fade)
-        self._voice_sub = _txt('', pos=(0, -0.30), scale=0.78, col=color.white, origin=(0, 0))
+        # subtitle suara (selalu ada, memudar)
+        self._voice_sub = _txt('', pos=(0, self._VSUB_Y), scale=0.78, col=color.white, origin=(0, 0))
         self._voice_sub.enabled = False
+
+    # ── Majelis Batin: suara, panel, modal ──────────────────────────────
+    # Dipulihkan dari 5683e79^2 (= cd92b0d), sisi feature/3d-mobs yang kalah
+    # di merge 5683e79: merge itu hanya membawa _build_batin, sementara
+    # pemanggilnya (enam say_batin_once + _batin_first_morning di
+    # interaction_controller) tetap tinggal. Dijaga tools/probe_batin.py.
+    #
+    # Yang SENGAJA tidak dipulihkan: cabang skill-check/merah di _pick_batin
+    # (roll 2d6, peluang %, opsi merah terkunci). Tidak satu pun pemanggil
+    # produksi -- di HEAD maupun di cd92b0d -- memberi opsi `check`/`red`;
+    # satu-satunya pemakainya tools/smoke_boot.py yang sudah basi. Kode yang
+    # tidak pernah dijalankan pemain efeknya nol (aturan #4).
+    def toggle_batin(self):
+        if not self._batin_open and self.mode not in ('hud',):
+            return                      # jangan buka di tengah dialog/pie/panel
+        self._batin_open = not self._batin_open
+        for e in self._batin_ents:
+            e.enabled = self._batin_open
+        if self._batin_open:
+            self._refresh_batin()
+
+    def _refresh_batin(self):
+        if not self.batin:
+            return
+        for k, chip in self._batin_chips:
+            chip.text = f"{BVOICES[k]['name']} {self.state.batin.get(k, 1)}"
+        out = ''
+        # Tiga ucapan terakhir, 44 huruf per baris: itu yang muat di dalam
+        # latar panel kanan (dijaga cek 'di dalam latar' probe_batin).
+        for v, t in self.batin.lines[-3:]:
+            nm = BVOICES[v]['name'] if v in BVOICES else v.upper()
+            out += _tw.fill(f"[{nm}] {t}", 44) + "\n\n"
+        self._batin_log.text = out
+
+    # Suara batin tampil sebagai SUBTITLE `_voice_sub` yang memudar sendiri
+    # (pemudarnya di update(), di luar gerbang 'hud'), bukan lewat flash.
+    # Versi sementara yang memakai flash_msg menimpa flash yang membawa
+    # informasi pada kejadian pertama di keenam titik panggil -- termasuk
+    # 'Dapat X dari Y! Kirim ke Peti untuk dijual.'.
+    def say_batin(self, voice, text):
+        if self.batin:
+            self.batin.say(voice, text)
+        vd = BVOICES.get(voice)
+        if not vd:
+            return
+        self._voice_sub.text = _tw.fill(f"{vd['name']} — {text}", 54)
+        self._voice_sub.color = color.rgb(*vd['col'])
+        # Alas gelap di belakang teks: tanpa itu warna suara (mis. hijau AKAR)
+        # tenggelam di tanah yang dicangkul. Ukurannya mengikuti teks, jadi
+        # dibangun ulang tiap ucapan; ia anak _voice_sub dan ikut padam.
+        self._voice_sub.create_background(padding=0.02, radius=0.08,
+                                          color=color.rgba32(8, 6, 4, 170))
+        self._voice_sub.enabled = True
+        self._voice_sub_t = 4.5
+        if self._batin_open:
+            self._refresh_batin()
+
+    def say_batin_once(self, flag, voice, text):
+        if self.batin and self.batin.once('say_' + flag):
+            self.say_batin(voice, text)
+
+    def open_batin_check(self, title, prompt, opts):
+        """opts: list of dict {voice, label, fn}. Angka 1-N memilih."""
+        self._batin_opts = opts
+        self.mode = 'batin'
+        for e in getattr(self, '_bc_ents', []):
+            try: destroy(e)
+            except Exception: pass
+        (cx, cy), (w, h) = self._BC_POS, self._BC_SKALA
+        atas = cy + h / 2 - h * self._CHROME_TEPI
+        bawah = cy - h / 2 + h * self._CHROME_TEPI
+        kiri = cx - w / 2 + w * self._CHROME_TEPI + 0.03
+        bg = _skin_chrome(_ui(scale=(w, h), position=(cx, cy), color=color.rgb(18, 15, 12, 247), z=0.9))
+        ents = [bg,
+                _txt(title, pos=(cx, atas - 0.035), scale=0.92, col=color.rgb(231, 178, 61), origin=(0, 0)),
+                _txt(_tw.fill(prompt, 64), pos=(cx, atas - 0.095), scale=0.7,
+                     col=color.rgb(224, 216, 188), origin=(0, 0))]
+        for i, o in enumerate(opts):
+            vd = BVOICES[o['voice']]
+            ents.append(_txt(_tw.fill(f"{i+1}. {o['label']}", 76),
+                             pos=(kiri, atas - 0.165 - i * 0.062),
+                             scale=0.64, col=color.rgb(*vd['col']), origin=(-0.5, 0)))
+        ents.append(_txt(f'Tekan 1-{len(opts)} untuk memilih.', pos=(cx, bawah + 0.03), scale=0.58,
+                         col=color.rgb(150, 135, 100), origin=(0, 0)))
+        self._bc_ents = ents
+
+    def batin_check_input(self, key):
+        if key == 'escape':
+            self._close_batin_check(); return
+        if key.isdigit():
+            i = int(key) - 1
+            if 0 <= i < len(getattr(self, '_batin_opts', [])):
+                self._pick_batin(i)
+
+    def _pick_batin(self, i):
+        o = self._batin_opts[i]
+        raise_voice(self.state, o['voice'], 1)
+        if o.get('fn'):
+            o['fn']()
+        self._close_batin_check()
+
+    def _close_batin_check(self):
+        for e in getattr(self, '_bc_ents', []):
+            try: destroy(e)
+            except Exception: pass
+        self._bc_ents = []
+        self.mode = 'hud'
 
     def _build_buy(self):
         self._buy_sel = 0
-        bg = _skin_chrome(_ui(scale=(0.62, 0.66), position=(0, 0),
+        # Katalog 11 baris. Dulu baris dimulai 0,15 berjarak 0,052 di latar
+        # 0,66: baris ke-9 (Perapian) jatuh di bawah petunjuk tombol dan dua
+        # baris terakhir di luar bingkai. Latar digeser ke bawah supaya
+        # puncaknya (y 0,26) tetap di bawah subtitle suara batin.
+        # Dijaga cek tata letak di tools/probe_buy_sinema.py (fase L).
+        bg = _skin_chrome(_ui(scale=(0.64, 0.72), position=(0, -0.10),
                               color=color.rgb(16, 14, 12, 244), z=0.9))
-        title = _txt('BANGUN / BELI', pos=(0, 0.25), scale=1.25,
+        title = _txt('BANGUN / BELI', pos=(0, 0.155), scale=1.25,
                      col=color.rgb(231, 178, 61), origin=(0, 0))
-        self._buy_items = [_txt('', pos=(0, 0.15 - i * 0.052), scale=0.78,
+        self._buy_items = [_txt('', pos=(0, 0.07 - i * 0.036), scale=0.78,
                                 col=color.white, origin=(0, 0)) for i in range(12)]
         hint = _txt('[W/S] pilih  [Enter] beli & pasang di depanmu  '
-                    '[X] jual  [Esc] tutup', pos=(0, -0.26), scale=0.5,
+                    '[X] jual  [Esc] tutup', pos=(0, -0.355), scale=0.5,
                     col=color.rgb(150, 135, 100), origin=(0, 0))
-        self._buy_gold = _txt('', pos=(0, 0.205), scale=0.7,
+        self._buy_gold = _txt('', pos=(0, 0.115), scale=0.7,
                               col=color.rgb(231, 200, 120), origin=(0, 0))
         self._buy_ents = [bg, title, hint, self._buy_gold] + self._buy_items
         for e in self._buy_ents:
@@ -1951,6 +2163,18 @@ class UIManager:
                     e.enabled = v
                 except Exception:
                     pass
+        # Pelacak tutorial/quest ikut. Dulu ia tertinggal sendirian di atas
+        # adegan sinema dan layar judul ("TUTORIAL ..." di kiri-atas kartu
+        # judul) karena hanya panel dan chargen yang menyembunyikannya.
+        for nama in ('_obj_bg', '_obj_rust', '_obj_title', '_obj_step',
+                     '_obj_hint', '_obj_janji'):
+            e = getattr(self, nama, None)
+            if e is not None:
+                try:
+                    e.enabled = v and (nama not in ('_obj_hint', '_obj_janji')
+                                       or bool(str(e.text).strip()))
+                except Exception:
+                    pass
         # Pilihan pemain menang atas "tampilkan lagi": kalau ringkasan motif
         # sengaja disembunyikan lewat TAB, keluar dari sinema tidak boleh
         # diam-diam menyalakannya kembali.
@@ -1969,10 +2193,11 @@ class UIManager:
         # tulisannya saling tindih.
         if hasattr(self, '_time_txt'):
             self.set_hud_visible(not v)
-        for nama in ('_obj_bg', '_obj_rust', '_obj_title', '_obj_step', '_obj_hint'):
+        for nama in ('_obj_bg', '_obj_rust', '_obj_title', '_obj_step',
+                     '_obj_hint', '_obj_janji'):
             e = getattr(self, nama, None)
             if e is not None:
-                e.enabled = (not v) and (nama != '_obj_hint'
+                e.enabled = (not v) and (nama not in ('_obj_hint', '_obj_janji')
                                          or bool(str(e.text).strip()))
         if not v:
             self._hide_inventory_grid()
@@ -2395,19 +2620,21 @@ class UIManager:
                 "  WASD / Arrow  : Jalan\n"
                 "  Shift+WASD    : Lari (pakai energi)\n\n"
                 "── KAMERA ──\n"
+                "  Q / E              : Putar 45 derajat kiri / kanan\n"
                 "  Klik kanan + geser : Putar bebas\n\n"
                 "── AKSI ──\n"
                 "  SPACE  : Pakai alat aktif\n"
-                "  E      : Pie Menu interaksi NPC\n"
+                "  F      : Interaksi (bicara, surat, peti, kuda)\n"
                 "  Z      : Serang (butuh pedang)\n"
                 "  X      : Tambah/hapus tile ke Antrian\n"
                 "  C      : Jalankan semua Antrian Aksi\n"
-                "  F      : Tangkap makhluk liar\n"
+                "  Shift+F: Tangkap makhluk liar\n"
                 "  G      : Beri hadiah ke NPC\n"
                 "  V      : Makan item (pulihkan HP/EN)\n"
                 "  B      : Terbang (Sapoe Terbang)\n"
                 "  Y      : Meluncur / Dash Stunt (-15 EN)\n"
-                "  T      : Tidur (hanya di Rumah)\n\n"
+                "  T      : Tidur (hanya di Rumah)\n"
+                "  F7     : Majelis Batin (suara batin; pilihan 1-3)\n\n"
                 "── ALAT (angka 1-9) ──\n"
                 "  Roda ikon di kiri-atas. Nomornya tercetak di tiap petak;\n"
                 "  yang menyala adalah yang sedang dipilih, dan namanya\n"
@@ -2415,7 +2642,7 @@ class UIManager:
                 "  saat SPACE ditekan, lalu disimpan lagi sendiri.\n"
                 "  1 Cangkul  2 Siram  3 Tanam  4 Panen  5 Kapak\n"
                 "  6 Hadiah   7 Pickaxe 8 Pedang 9 Pancing\n"
-                "  Q/R    : Ganti bibit\n\n"
+                "  R      : Ganti bibit\n\n"
                 "── IKON KEBUTUHAN (kiri-bawah) ──\n"
                 "  Wajah  Suasana hati (jumlah semua di bawahnya)\n"
                 "  Garpu  Lapar        Kursi  Nyaman\n"
@@ -2790,6 +3017,14 @@ class UIManager:
         return f"Berhasil membuat {r['name']}!"
 
     def close_all(self):
+        # Modal Majelis Batin: jaring ESC di app.py memanggil close_all()
+        # SEBELUM rute mode 'batin', jadi escape milik batin_check_input tidak
+        # pernah tercapai. Tanpa baris ini entity modal tertinggal di layar.
+        if getattr(self, '_bc_ents', None):
+            self._close_batin_check()
+        # Bangun/Beli: sama, ESC milik buy_input tidak pernah tercapai.
+        for e in getattr(self, '_buy_ents', None) or []:
+            e.enabled = False
         self._set_dialog_visible(False)
         self._set_panel_visible(False)
         self.close_pie()
@@ -2801,34 +3036,74 @@ class UIManager:
         self._queue_txt.text = f'[ANT:{n}] C=jalan' if n > 0 else ''
 
     # ─── PIE MENU (FreeSO VMThread.ActionStrings + MotiveAdChanges) ─
+    # ── MENU RADIAL (pie) ───────────────────────────────────────────
+    # Bentuk ala The Sims: nama yang diajak berinteraksi di cakram tengah,
+    # pilihan sebagai kapsul yang melingkar di sekelilingnya. Dulu ini kotak
+    # daftar ungu dengan penanda ASCII ('>' dan '[terkunci]') -- dibaca
+    # sebagai menu debug, bukan sebagai percakapan dengan seseorang.
+    _PIE_MAKS = 8     # lingkaran muat 8; kotak lama memotong pilihan ke-7 diam-diam
+    _PIE_PUSAT = (0.0, 0.03)
+    _PIE_RX, _PIE_RY = 0.30, 0.205
+
     def _build_pie_menu(self):
-        BG = color.rgb(12, 6, 28, 235)
-        BD = color.rgb(140, 80, 200, 220)
-        self._pie_bg     = _ui(scale=(0.45, 0.32), position=(-0.14, -0.10), color=BG)
-        self._pie_border = _ui(scale=(0.452, 0.322), position=(-0.14, -0.10), color=BD)
-        self._pie_title  = _txt('', pos=(-0.34, 0.040), scale=0.90,
-                                col=color.rgb(245, 215, 80))
-        self._pie_items  = [
-            _txt('', pos=(-0.34, 0.010 - i * 0.030), scale=0.80, col=color.white)
-            for i in range(6)
-        ]
-        self._pie_fx     = _txt('', pos=(-0.34, -0.200), scale=0.72,
-                                col=color.rgb(127, 220, 255))
-        self._pie_hint   = _txt('[</> ] Pilih  [SPACE] OK  [ESC] Batal',
-                                pos=(-0.34, -0.240), scale=0.65,
-                                col=color.rgb(160, 140, 200))
-        self._pie_hint.origin = (0, 0)
+        cx, cy = self._PIE_PUSAT
+        lebar = window.aspect_ratio
+        cakram = bentuk_tex('cakram')
+        # Redam dunia sedikit supaya menu jadi fokus, tanpa menutupinya.
+        self._pie_redup = _ui(scale=(lebar + 0.02, 1.02), z=0.5,
+                              color=color.rgba(6, 8, 14, 90))
+        self._pie_cincin = _ui(texture=cakram, scale=(0.205, 0.205),
+                               position=(cx, cy), z=0.3,
+                               color=color.rgba(232, 200, 120, 235))
+        self._pie_cakram = _ui(texture=cakram, scale=(0.195, 0.195),
+                               position=(cx, cy), z=0.29,
+                               color=color.rgba(16, 20, 30, 240))
+        self._pie_title = _txt('', pos=(cx, cy + 0.025), scale=0.82,
+                               col=color.rgb(246, 222, 150), origin=(0, 0))
+        self._pie_fx = _txt('', pos=(cx, cy - 0.022), scale=0.52,
+                            col=color.rgb(160, 225, 200), origin=(0, 0))
+        self._pie_tepi = []      # kapsul bingkai (emas saat terpilih)
+        self._pie_kapsul = []    # kapsul isi
+        self._pie_items = []     # teks pilihan
+        for i in range(self._PIE_MAKS):
+            self._pie_tepi.append(_ui(z=0.2, color=color.rgba(232, 200, 120, 200)))
+            self._pie_kapsul.append(_ui(z=0.19, color=color.rgba(20, 24, 36, 235)))
+            self._pie_items.append(_txt('', scale=0.70, col=color.white,
+                                        origin=(0, 0)))
+        self._pie_hint = _txt('[Q/E] pilih    [angka] langsung    [F/SPACE] lakukan    '
+                              '[ESC] batal', pos=(0, -0.40), scale=0.62,
+                              col=color.rgb(200, 196, 186), origin=(0, 0))
+        # Disimpan untuk cek tata letak dan klik mouse.
+        self._pie_kotak = []     # (x, y, w, h) tiap kapsul yang tampil
+        self._pie_options:  list = []
         self._set_pie_visible(False)
 
-        self._pie_options:  list = []
         self._pie_selected: int  = 0
         self._pie_npc_id:   str  = ''
         self._pie_callback       = None
 
     def _set_pie_visible(self, v: bool):
-        for e in [self._pie_bg, self._pie_border, self._pie_title,
-                  self._pie_fx, self._pie_hint] + self._pie_items:
+        for e in [self._pie_redup, self._pie_cincin, self._pie_cakram,
+                  self._pie_title, self._pie_fx, self._pie_hint]:
             e.enabled = v
+        n = len(getattr(self, '_pie_options', []) or []) if v else 0
+        for i in range(self._PIE_MAKS):
+            tampil = v and i < n
+            self._pie_tepi[i].enabled = tampil
+            self._pie_kapsul[i].enabled = tampil
+            self._pie_items[i].enabled = tampil
+
+    def pie_di_mouse(self):
+        """Indeks kapsul di bawah kursor mouse, atau None."""
+        try:
+            from ursina import mouse
+            mx, my = mouse.position[0], mouse.position[1]
+        except Exception:
+            return None
+        for i, (x, y, w, h) in enumerate(getattr(self, '_pie_kotak', [])):
+            if abs(mx - x) <= w / 2 and abs(my - y) <= h / 2:
+                return i
+        return None
 
     def open_pie_menu(self, npc_id: str, options: list, callback):
         """Open pie menu. options = [(action, label, available, effects_str), ...]"""
@@ -2892,30 +3167,72 @@ class UIManager:
     def _refresh_pie_ui(self):
         from .data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS
         all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
-        # Menu perabot mengirim id 'obj:<Nama>' — pakai nama itu apa adanya,
+        # Menu perabot mengirim id 'obj:<Nama>' -- pakai nama itu apa adanya,
         # jangan cari di daftar NPC (dulu judulnya tampil sebagai 'obj:12').
         if self._pie_npc_id.startswith('obj:'):
-            self._pie_title.text = f">> {self._pie_npc_id[4:]}"
+            judul = self._pie_npc_id[4:]
         else:
-            npc = all_d.get(self._pie_npc_id, {})
-            self._pie_title.text = f">> {npc.get('name', self._pie_npc_id)}"
+            judul = all_d.get(self._pie_npc_id, {}).get('name', self._pie_npc_id)
+        self._pie_title.text = judul
 
-        for i, item_ent in enumerate(self._pie_items):
-            if i < len(self._pie_options):
-                _, label, available, effects = self._pie_options[i]
-                prefix  = '>' if i == self._pie_selected else ' '
-                avail_s = '' if available else ' [terkunci]'
-                item_ent.text  = f'{prefix} [{i+1}] {label}{avail_s}'
-                if not available:
-                    item_ent.color = color.rgb(100, 80, 120)
-                elif i == self._pie_selected:
-                    item_ent.color = color.rgb(245, 215, 80)
-                else:
-                    item_ent.color = color.rgb(200, 185, 230)
+        cx, cy = self._PIE_PUSAT
+        opsi = self._pie_options[:self._PIE_MAKS]
+        n = len(opsi)
+        self._pie_kotak = []
+        import math as _m
+        for i in range(self._PIE_MAKS):
+            tepi, kap, teks = self._pie_tepi[i], self._pie_kapsul[i], self._pie_items[i]
+            if i >= n:
+                tepi.enabled = kap.enabled = teks.enabled = False
+                continue
+            _, label, available, _eff = opsi[i]
+            # Mulai dari atas, searah jarum jam.
+            sudut = _m.radians(90.0 - i * 360.0 / n)
+            cos_, sin_ = _m.cos(sudut), _m.sin(sudut)
+            ry = self._PIE_RY + (0.02 if n > 6 else 0.0)
+            x = cx + self._PIE_RX * 0.62 * cos_
+            y = cy + ry * sin_
+            teks.text = f'{i + 1}   {label}' + ('' if available else '   (terkunci)')
+            h = 0.052
+            w = max(0.16, min(0.46, teks.width + 0.06))
+            # Kapsul menjulur KE LUAR dari cakram: tepi dalamnya di titik
+            # lingkaran, bukan pusatnya. Kapsul lebar yang dipusatkan saling
+            # tempel di bawah dan menindih cakram (terukur, 7 pilihan warga).
+            if cos_ > 0.2:
+                x += w / 2
+            elif cos_ < -0.2:
+                x -= w / 2
+            pilih = i == self._pie_selected
+            k = 1.07 if pilih else 1.0
+            tex = bentuk_tex('kapsul', w / h)
+            for e, tambah in ((tepi, 0.006), (kap, 0.0)):
+                e.texture = tex
+                e.position = (x, y)
+                e.scale = ((w + tambah) * k, (h + tambah) * k)
+                e.enabled = True
+            if not available:
+                tepi.color = color.rgba(90, 90, 100, 150)
+                kap.color = color.rgba(26, 28, 34, 210)
+                teks.color = color.rgb(128, 126, 136)
+            elif pilih:
+                tepi.color = color.rgba(255, 228, 150, 255)
+                kap.color = color.rgba(232, 196, 108, 245)
+                teks.color = color.rgb(36, 26, 10)
             else:
-                item_ent.text = ''
+                tepi.color = color.rgba(232, 200, 120, 170)
+                kap.color = color.rgba(20, 24, 36, 235)
+                teks.color = color.rgb(236, 232, 220)
+            teks.position = (x, y)
+            teks.enabled = True
+            self._pie_kotak.append((x, y, w * k, h * k))
 
-        # Effects preview for selected option (FreeSO MotiveAdChanges)
-        if self._pie_options:
-            _, _, _, effects = self._pie_options[self._pie_selected]
-            self._pie_fx.text = f'Efek: {effects}' if effects else ''
+        # Efek pilihan terpilih (FreeSO MotiveAdChanges), di dalam cakram.
+        fx = ''
+        if opsi:
+            fx = opsi[min(self._pie_selected, n - 1)][3] or ''
+            if len(fx) > 30:
+                # Dua baris paling banyak, dipotong di spasi terdekat.
+                potong = fx.rfind(' ', 0, 30)
+                potong = potong if potong > 0 else 30
+                fx = fx[:potong] + '\n' + fx[potong:].strip()[:30]
+        self._pie_fx.text = fx

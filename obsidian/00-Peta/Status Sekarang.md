@@ -1,13 +1,29 @@
 ---
 judul: Status Sekarang
 tipe: peta
-diperbarui: 2026-10-05
-commit_acuan: 342facf (merge base + kerja sesi 2026-09-22)
-regresi: 14/14 lulus — lokal DAN di CI GitHub (2026-09-22)
+diperbarui: 2026-10-23
+commit_acuan: f7e5650 (branch ccr-ae8cd761-mj4kbu, PR #15)
+regresi: 14/14 lulus + 8 baris global (lima menit, majelis batin, buy/sinema, kamera Q/E, ...)
 tags: [moc, status]
 ---
 
 # Status Sekarang
+
+> [!success] Pembaruan 2026-10-23 — empat jalur kerja masuk PR #15
+> - **Majelis Batin** pulih (F7), F5/F9 tidak lagi dibajak HotReloader, ESC
+>   melewati sinema, Bangun/Beli tidak yatim → [[Majelis Batin hilang di merge 5683e79]].
+> - **Gua naga dan hutan lebat** dari `integrasi/satu` (permintaan pemilik).
+> - **[Q]/[E] putar kamera 45°**, interaksi [F], tangkap [Shift]+[F]
+>   (permintaan pemilik) → [[Interaksi di lapangan terbuka melempar TypeError]].
+> - **Pohon Blender** (kelapa, tropis, mati) di beach, town, cemetery; mountain
+>   memakai hutan pinus; farm & lake tetap prosedural. Palung farm kembali.
+> - **Cahaya**: matahari hangat lawan ambient sejuk, ambient hemisfer, bayangan
+>   kontak berbulu, arah matahari per jam. Shadow map ada tapi MATI bawaan
+>   (`KARSA_SHADOW=1`; ongkos +22..84% ms/frame).
+> Tiap jalur lulus verifikator adversarial (atau temuannya ditutup dengan
+> mutasi). Regresi penuh gabungan: 14/14, lima menit 8/8.
+> Terbuka: tebing mulut gua menutupi ~85% layar saat tiba di mountain
+> (keputusan rupa pemilik); gauntlet buta cahaya baru belum dijalankan.
 
 > [!success] Pembaruan 2026-10-18 — kegagalan farm di mesin lambat terjelaskan
 > Bug alat ukur, bukan bug game: `arah_maju` menahan W 40 frame, dan di

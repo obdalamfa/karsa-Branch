@@ -3,11 +3,19 @@ judul: Status Sekarang
 tipe: peta
 diperbarui: 2026-10-23
 commit_acuan: f7e5650 (branch ccr-ae8cd761-mj4kbu, PR #15)
-regresi: 14/14 lulus + 8 baris global (lima menit, majelis batin, buy/sinema, kamera Q/E, ...)
+regresi: 14/14 lulus + 9 baris global (animasi gerak baru) (lima menit, majelis batin, buy/sinema, kamera Q/E, ...)
 tags: [moc, status]
 ---
 
 # Status Sekarang
+
+> [!success] Pembaruan 2026-10-23 (malam) — animasi kerja dan mob
+> Klip kerja pemain kini dibaur, bukan dibanting. Ada lapisan ancang-ancang,
+> hentakan dan ikut-gerak dari pinggang, termasuk untuk panen (bend) yang
+> dulu diam. Mob dungeon bernapas, melangkah sesuai wataknya, memerah saat
+> ancang-ancang, berkilat saat dipukul, dan mati bertahap 0,6 dtk
+> → [[Kilat kena pukul mob tidak pernah terlihat]]. Regresi 14/14 dengan
+> baris "animasi gerak" 12/12. Mutasi a–d tertangkap.
 
 > [!success] Pembaruan 2026-10-23 (sore) — layar judul, cerita, menu radial
 > `python main.py` kini dibuka layar judul (Lanjutkan / Permainan Baru /

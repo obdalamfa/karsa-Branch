@@ -48,8 +48,9 @@ tags: [sesi]
   - jus dimatikan → 9/12
   - `animasikan` no-op → 8/12
   - destroy seketika → 11/12
-- Regresi lokal: 14/14 scene lulus, juga baris otonomi dan sims. Baris
-  global sisanya sedang berjalan saat nota ini ditulis.
+- Regresi penuh lokal (`python tools/regress.py`, kode 0): 14/14 scene
+  lulus, 0 pemeriksaan gagal. Semua baris global lulus, termasuk baris
+  baru "animasi gerak" 12/12.
 - CI di b2a9151 tidak melaporkan suite yang gagal.
 - Tangkapan visual sudah dilihat: cangkul (badan condong ke belakang
   dengan alat terangkat), jongkok, dan mob (pocong, genderuwo, kelelawar)

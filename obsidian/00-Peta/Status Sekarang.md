@@ -9,6 +9,15 @@ tags: [moc, status]
 
 # Status Sekarang
 
+> [!success] Pembaruan 2026-10-23 (sore) — layar judul, cerita, menu radial
+> `python main.py` kini dibuka layar judul (Lanjutkan / Permainan Baru /
+> Panduan / Keluar) dengan kamera mengorbit kebun. Sesudah Buat Karakter
+> ada adegan pembuka sinematik. Tiap interaksi pertama punya adegan cerita
+> pendek yang ditutup tujuan tutorial berikutnya: surat, cangkul, tanam,
+> siram, pagi kedua, peti kirim, warga, ternak, dan tiba di desa, pantai,
+> danau, gunung, kuburan. Menu interaksi warga dan barang kini radial ala
+> Sims. Regresi 14/14 + baris "sinema/judul" 36/36, CI hijau.
+
 > [!success] Pembaruan 2026-10-23 — empat jalur kerja masuk PR #15
 > - **Majelis Batin** pulih (F7), F5/F9 tidak lagi dibajak HotReloader, ESC
 >   melewati sinema, Bangun/Beli tidak yatim → [[Majelis Batin hilang di merge 5683e79]].

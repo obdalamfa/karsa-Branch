@@ -2038,6 +2038,7 @@ def main():
     batin_baris = None
     buy_sinema_baris = None
     kamera_baris = None
+    sinema_baris = None
     _pasang_save_fixture(ROOT / cfg.SAVE_FILE)
     t0 = time.time()
     try:
@@ -2431,6 +2432,27 @@ def main():
         except subprocess.TimeoutExpired:
             kamera_baris = (False, 'waktu habis')
 
+    # ── Layar judul, adegan pembuka, cerita interaksi pertama, menu radial ──
+    # Alat ukur lain menandai semua adegan sudah ditonton dan membangun
+    # Game3D() tanpa layar judul, jadi tidak satu pun dari mereka melihat
+    # bagian ini. probe_sinema memainkannya dari Game3D(layar_judul=True),
+    # jalur run() di main.py.
+    if not minta:
+        import subprocess
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'probe_sinema.py')],
+                               cwd=ROOT, capture_output=True, text=True, timeout=1500)
+            akhir = [b for b in r.stdout.splitlines()
+                     if re.search(r'\d+/\d+ lulus', b)][-1:]
+            if akhir:
+                m = re.search(r'(\d+)/(\d+) lulus', akhir[0])
+                ok = r.returncode == 0 and m.group(1) == m.group(2) and int(m.group(2)) > 0
+                sinema_baris = (ok, akhir[0].split('(')[0].strip())
+            else:
+                sinema_baris = (False, f'tanpa keluaran (kode {r.returncode})')
+        except subprocess.TimeoutExpired:
+            sinema_baris = (False, 'waktu habis')
+
     print('-' * 78)
     tanda_hud = 'LULUS' if not hud_baris else 'GAGAL'
     ring_hud = '; '.join(f'{k} {c}' for k, c in hud_baris) or 'semua di dalam layar'
@@ -2471,6 +2493,12 @@ def main():
         print(f'{"kamera Q/E":14s} {"LULUS" if ok_km else "GAGAL":>7s} '
               f'{"":>9s} {"":>7s}  {catatan_km[:44]}')
         if not ok_km:
+            gagal_total += 1
+    if sinema_baris is not None:
+        ok_sn, catatan_sn = sinema_baris
+        print(f'{"sinema/judul":14s} {"LULUS" if ok_sn else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {catatan_sn[:44]}')
+        if not ok_sn:
             gagal_total += 1
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)

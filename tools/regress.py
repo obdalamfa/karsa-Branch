@@ -1388,6 +1388,16 @@ def cek_cahaya_global(g, base, tmp: Path):
         # Sama seperti rumput: game memanggil _sync_smooth_lighting() tiap
         # frame, jadi tanpa membekukan update, nilai gelap yang kita paksa
         # sudah ditimpa sebelum sempat dirender.
+        # Efek suasana (kolam cahaya, pijar, partikel -- fx_suasana.py) sengaja
+        # tidak memakai cahaya scene dan digambar aditif di atas lantai. Yang
+        # diuji di sini dunia yang DISINARI, jadi efek itu disembunyikan di
+        # ketiga tembakan. Tanpa ini naga_cave gagal "cuma 77% jatuh ke hitam"
+        # karena kolam cahaya di lantai gua (integrasi/satu), bukan karena ada
+        # suku cahaya liar di smooth_shader.
+        fx = [e for e in uscene.children
+              if getattr(e, 'fx_suasana', False) and getattr(e, 'enabled', False)]
+        for e in fx:
+            e.enabled = False
         with _TanpaUpdate(base):
             a = tembak('_cahaya_a.png')
             uscene.set_shader_input('sm_ambient', Vec3(0.02, 0.02, 0.03))
@@ -1398,6 +1408,8 @@ def cek_cahaya_global(g, base, tmp: Path):
             uscene.set_shader_input('sm_sun_color', Vec3(0, 0, 0))
             c = tembak('_cahaya_c.png')
     finally:
+        for e in locals().get('fx', []):
+            e.enabled = True
         # Kembalikan seperti semula lewat jalur yang dipakai game sendiri,
         # supaya pemeriksaan berikutnya tidak menilai dunia yang kita gelapkan.
         try:

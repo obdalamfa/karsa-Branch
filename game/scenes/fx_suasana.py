@@ -10,6 +10,9 @@ import random
 
 def _daftar(world, e):
     world._obj_ents.append(e)
+    # Penanda untuk tools/regress.py (cahaya_global): efek ini SENGAJA tidak
+    # ikut cahaya scene, jadi disembunyikan selama dunia yang disinari diukur.
+    e.fx_suasana = True
     return e
 
 

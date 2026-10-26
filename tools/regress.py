@@ -2040,6 +2040,7 @@ def main():
     kamera_baris = None
     sinema_baris = None
     gerak_baris = None
+    tampilan_baris = None
     _pasang_save_fixture(ROOT / cfg.SAVE_FILE)
     t0 = time.time()
     try:
@@ -2454,6 +2455,23 @@ def main():
         except subprocess.TimeoutExpired:
             sinema_baris = (False, 'waktu habis')
 
+    # ── Tampilan: panel kartu, menu jeda, HUD, dunia tanpa kotak polos ──
+    if not minta:
+        import subprocess
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'probe_tampilan.py')],
+                               cwd=ROOT, capture_output=True, text=True, timeout=900)
+            akhir = [b for b in r.stdout.splitlines()
+                     if re.search(r'\d+/\d+ lulus', b)][-1:]
+            if akhir:
+                m = re.search(r'(\d+)/(\d+) lulus', akhir[0])
+                ok = r.returncode == 0 and m.group(1) == m.group(2) and int(m.group(2)) > 0
+                tampilan_baris = (ok, akhir[0].strip())
+            else:
+                tampilan_baris = (False, f'tanpa keluaran (kode {r.returncode})')
+        except subprocess.TimeoutExpired:
+            tampilan_baris = (False, 'waktu habis')
+
     # ── Animasi kerja pemain + mob dungeon (subproses) ──
     # Baur klip kerja, lapisan condong/gepeng (jus_gerak), dan gerak mob
     # (mob_gerak): napas, ancang-ancang, kilat kena, mati bertahap. Tanpa
@@ -2520,6 +2538,12 @@ def main():
         print(f'{"sinema/judul":14s} {"LULUS" if ok_sn else "GAGAL":>7s} '
               f'{"":>9s} {"":>7s}  {catatan_sn[:44]}')
         if not ok_sn:
+            gagal_total += 1
+    if tampilan_baris is not None:
+        ok_tp, catatan_tp = tampilan_baris
+        print(f'{"tampilan":14s} {"LULUS" if ok_tp else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {catatan_tp[:44]}')
+        if not ok_tp:
             gagal_total += 1
     if gerak_baris is not None:
         ok_gr, catatan_gr = gerak_baris

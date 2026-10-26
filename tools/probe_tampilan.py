@@ -72,7 +72,11 @@ def uji_dunia(g):
                 m = getattr(e, 'model', None)
                 if m is None or 'quad' not in str(getattr(m, 'name', '')):
                     continue
-                if getattr(e, 'billboard', False) and e.texture is None:
+                # Tekstur kosong = None ATAU objek Texture tanpa nama (quad
+                # Ursina polos mencetak tekstur '' -- versi pertama probe ini
+                # hanya memeriksa None dan meloloskan mutasi kotak polos).
+                tex = e.texture
+                if getattr(e, 'billboard', False) and (tex is None or not str(tex).strip()):
                     polos.append(tuple(round(v, 1) for v in e.world_position))
             except Exception:
                 continue
@@ -182,7 +186,7 @@ def uji_hud(g):
     p, s = g.panels, g.state
     langkah(3)
     hp, en = p._hp_bar.color, p._en_bar.color
-    beda = sum(abs(a - b) for a, b in zip(hp[:3], en[:3]))
+    beda = sum(abs(hp[i] - en[i]) for i in range(3))
     cek('HUD: bilah HP dan energi berbeda warna', beda > 0.3, f'selisih {beda:.2f}')
     asli = s.weather
     t0 = p._weather_ikon.texture

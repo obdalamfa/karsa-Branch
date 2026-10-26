@@ -794,7 +794,14 @@ class EntitiesManager:
                 from .wild_models import build_wild
                 e = build_wild(w['kind'], (px, GH, py))
             else:
-                e = Entity(model='quad', position=(px, GH + 0.25, py), scale=0.5, billboard=True)
+                # Dulu: Entity(model='quad', billboard=True) tanpa tekstur --
+                # kotak putih melayang di kebun/desa/danau. Model chibi untuk
+                # tiap jenis sudah lama ada di animal_models.build_wild_entity,
+                # tapi tidak pernah dipanggil (aturan #4 CLAUDE.md).
+                from .animal_models import build_wild_entity
+                e = Entity(position=(px, GH, py))
+                build_wild_entity(e, w['kind'])
+                e.model = None          # wadah saja; isinya bagian-bagian chibi
             self.wild_ents[i] = e
             
         # Spawn Mobs

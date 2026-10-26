@@ -630,6 +630,24 @@ def _soft_cube():
     from .meshes import soft_cube_mesh
     return soft_cube_mesh()
 
+# Dipulihkan: dihapus di ae03456 bersama blok lain, padahal
+# build_wild_entity dan builder jamur/kunang di bawah masih memakainya.
+# Tidak ketahuan karena build_wild_entity tidak punya pemanggil sampai
+# 26 Okt 2026 (kotak putih melayang di kebun).
+_BLUSH = _c(248, 158, 165)
+_EYE_W = _c(252, 252, 252)
+_EYE_PU = _c(22, 18, 22)
+_WILD_SCALES = {
+    'running_mushroom': 0.58,
+    'firefly':          0.32,
+    'mandrake':         0.52,
+    'wild_herb':        0.50,
+    'wild_berry':       0.46,
+}
+
+_SC = object()          # penanda: 'buat soft cube baru untuk bagian ini'
+
+
 def build_wild_entity(actor, kind: str):
     """Rakit entitas liar cute sebagai child-parts pada `actor`."""
     from .smooth_shader import apply_smooth
@@ -639,12 +657,17 @@ def build_wild_entity(actor, kind: str):
     actor.scale  = _WILD_SCALES.get(kind, 0.50)
 
     def part(model, pos, scale, c, **kw):
+        # Satu mesh per bagian: Mesh Ursina adalah NodePath dan hanya boleh
+        # punya satu parent (aturan #3). Dulu satu `sc` dibagi ke semua
+        # bagian sehingga hanya bagian terakhir yang kebagian geometri.
+        if model is _SC:
+            model = _soft_cube()
         e = Entity(parent=actor, model=model, position=pos, scale=scale, color=c, **kw)
         apply_smooth(e, has_texture=False)
         parts.append(e)
         return e
 
-    sc = _soft_cube()
+    sc = _SC
 
     if   kind == 'running_mushroom': _build_mushroom(part, sc)
     elif kind == 'firefly':          _build_firefly(part, sc)

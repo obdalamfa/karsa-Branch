@@ -526,9 +526,9 @@ def _skin_chrome(ent):
     Dulu bingkai krem chrome TSO (assets/ui/panel_chrome.png). Sejak 26 Okt
     2026 kartu gelap berbingkai emas dari panel_kartu, supaya semua panel
     berbicara dengan bahasa yang sama dengan panel menu dan layar judul.
-    Tekstur dibuat seukuran rasio quad-nya (sudut tetap bulat, tidak lonjong),
-    dan quad diperbesar setebal bantalan bayangannya supaya KARTU yang tampak
-    tetap seukuran quad aslinya."""
+    Tekstur dibuat seukuran rasio quad-nya (sudut tetap bulat, tidak lonjong).
+    Quad TIDAK diperbesar untuk bantalan bayangannya: versi pertama begitu,
+    dan panel majelis lalu menimpa kepingan tombol HUD (probe_batin)."""
     try:
         from . import panel_kartu as PK
         sx, sy = float(ent.scale_x), float(ent.scale_y)
@@ -536,7 +536,6 @@ def _skin_chrome(ent):
         if tex is not None:
             ent.texture = tex
             ent.color = color.white
-            ent.scale = (sx * fx, sy * fy)
             return ent
     except Exception:
         pass

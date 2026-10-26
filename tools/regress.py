@@ -552,7 +552,7 @@ def cek_bisa_keluar(g):
     """
     asal = g.panels.mode
     macet = []
-    for mode in ('dialog', 'panel', 'pie'):
+    for mode in ('dialog', 'panel', 'pie', 'jeda'):
         g.panels.mode = mode
         try:
             g.input('escape')

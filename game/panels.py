@@ -521,7 +521,25 @@ def _chrome():
     return _chrome_tex or None
 
 def _skin_chrome(ent):
-    """Pasang bingkai chrome TSO sbg tekstur latar panel (tahan-stretch)."""
+    """Latar panel kecil (Majelis Batin, modal batin, Bangun/Beli, jeda).
+
+    Dulu bingkai krem chrome TSO (assets/ui/panel_chrome.png). Sejak 26 Okt
+    2026 kartu gelap berbingkai emas dari panel_kartu, supaya semua panel
+    berbicara dengan bahasa yang sama dengan panel menu dan layar judul.
+    Tekstur dibuat seukuran rasio quad-nya (sudut tetap bulat, tidak lonjong),
+    dan quad diperbesar setebal bantalan bayangannya supaya KARTU yang tampak
+    tetap seukuran quad aslinya."""
+    try:
+        from . import panel_kartu as PK
+        sx, sy = float(ent.scale_x), float(ent.scale_y)
+        tex, fx, fy = PK.kartu_tex(int(900 * sx / max(sy, 1e-3)), 900, pita=False)
+        if tex is not None:
+            ent.texture = tex
+            ent.color = color.white
+            ent.scale = (sx * fx, sy * fy)
+            return ent
+    except Exception:
+        pass
     t = _chrome()
     if t is not None:
         ent.texture = t
@@ -1645,20 +1663,102 @@ class UIManager:
         for e in self._buy_ents:
             e.enabled = False
 
+    # ── Menu jeda (ESC di HUD) ─────────────────────────────────────────
+    # Cangkang `_build_pause` sudah ada sejak lama (latar, judul JEDA, enam
+    # baris kosong) tanpa satu baris logika atau pemanggil pun; ESC di HUD
+    # cuma menyimpan dan menulis "tekan X di window untuk keluar". Sejak 26
+    # Okt 2026 ESC membuka menu ini. Dunia beku selama jeda karena app.update
+    # hanya menjalankan pemain/waktu/entity di mode 'hud'.
+    _JEDA_OPSI = (('lanjut', 'Lanjutkan'), ('simpan', 'Simpan Permainan'),
+                  ('muat', 'Muat Simpanan Terakhir'), ('panduan', 'Panduan Kontrol'),
+                  ('keluar', 'Keluar dari Permainan'))
+
     def _build_pause(self):
+        from . import panel_kartu as PK
         self._pause_sel = 0
-        self._pause_view = 'root'   # root | save | load | settings
-        bg = _skin_chrome(_ui(scale=(0.52, 0.64), position=(0, 0), color=color.rgb(16, 14, 12, 242), z=0.9))
-        title = _txt('JEDA', pos=(0, 0.24), scale=1.4, col=color.rgb(231, 178, 61), origin=(0, 0))
-        # pool baris (cukup untuk menu terpanjang)
-        self._pause_items = [_txt('', pos=(0, 0.12 - i * 0.074), scale=0.9,
-                                  col=color.white, origin=(0, 0)) for i in range(6)]
-        hint = _txt('[W/S] pilih   [A/D] ubah   [Enter] OK   [Esc] kembali', pos=(0, -0.25),
-                    scale=0.5, col=color.rgb(150, 135, 100), origin=(0, 0))
+        self._pause_keluar_siap = False
+        W, H = 0.56, 0.60
+        bg = _skin_chrome(_ui(scale=(W, H), position=(0, 0), color=color.rgb(16, 14, 12, 242), z=0.9))
+        redup = _ui(scale=(window.aspect_ratio + 0.2, 1.2), position=(0, 0),
+                    color=color.rgba(6, 8, 14, 150), z=0.95)
+        title = _txt('JEDA', pos=(0, 0.235), scale=1.5, col=color.rgb(*PK.EMAS), origin=(0, 0))
+        self._pause_info = _txt('', pos=(0, 0.185), scale=0.58, col=color.rgb(*PK.REDUP),
+                                origin=(0, 0))
+        garis = _ui(scale=(W - 0.12, 0.003), position=(0, 0.155),
+                    color=color.rgba(244, 214, 140, 140), z=0.85)
+        self._pause_sorot = _ui(scale=(W - 0.10, 0.058), position=(0, 0.09), z=0.86,
+                                texture=PK.kotak_tex((W - 0.10) / 0.058, 0.5),
+                                color=color.rgba(244, 214, 140, 40))
+        self._pause_penanda = _ui(scale=(0.014, 0.014), rotation_z=45, position=(-0.2, 0.09),
+                                  z=0.84, color=color.rgb(*PK.EMAS))
+        self._pause_items = [_txt('', pos=(0, 0.09 - i * 0.068), scale=0.86,
+                                  col=color.white, origin=(0, 0)) for i in range(len(self._JEDA_OPSI))]
+        hint = _txt('[W/S] pilih    [ENTER] jalankan    [ESC] lanjutkan', pos=(0, -0.255),
+                    scale=0.5, col=color.rgb(*PK.REDUP), origin=(0, 0))
         self._pause_title = title
-        self._pause_ents = [bg, title, hint] + self._pause_items
+        self._pause_ents = ([redup, bg, title, self._pause_info, garis, self._pause_sorot,
+                             self._pause_penanda, hint] + self._pause_items)
         for e in self._pause_ents:
             e.enabled = False
+
+    def open_pause(self):
+        self._pause_sel = 0
+        self._pause_keluar_siap = False
+        self.mode = 'jeda'
+        s = self.state
+        try:
+            from .scenes import SCENES
+            tempat = getattr(SCENES.get(s.scene_name), 'display', s.scene_name)
+        except Exception:
+            tempat = s.scene_name
+        self._pause_info.text = (f'Hari {s.day_in_season}, {self._season_name(s)}  ·  '
+                                 f'{self._time_txt.text}  ·  {tempat}')
+        for e in self._pause_ents:
+            e.enabled = True
+        self._render_pause()
+
+    def close_pause(self):
+        for e in getattr(self, '_pause_ents', ()):
+            e.enabled = False
+        if self.mode == 'jeda':
+            self.mode = 'hud'
+
+    def _render_pause(self):
+        from . import panel_kartu as PK
+        for i, t in enumerate(self._pause_items):
+            kunci, label = self._JEDA_OPSI[i]
+            if kunci == 'keluar' and self._pause_keluar_siap:
+                label = 'Tekan sekali lagi untuk keluar'
+            t.text = label
+            pilih = i == self._pause_sel
+            t.color = color.rgb(*PK.EMAS) if pilih else color.rgb(*PK.TERANG)
+        y = self._pause_items[self._pause_sel].y
+        self._pause_sorot.y = y
+        w = self._lebar(self._pause_items[self._pause_sel])
+        self._pause_penanda.position = (-w / 2 - 0.028, y)
+
+    def pause_input(self, key):
+        """Tombol di menu jeda. Kembalikan aksi yang harus dijalankan app
+        ('simpan', 'muat', 'panduan', 'keluar') atau None."""
+        n = len(self._JEDA_OPSI)
+        if key in ('w', 'up arrow', 'scroll up'):
+            self._pause_sel = (self._pause_sel - 1) % n
+            self._pause_keluar_siap = False
+        elif key in ('s', 'down arrow', 'scroll down'):
+            self._pause_sel = (self._pause_sel + 1) % n
+            self._pause_keluar_siap = False
+        elif key in ('enter', 'space', 'f'):
+            aksi = self._JEDA_OPSI[self._pause_sel][0]
+            if aksi == 'lanjut':
+                self.close_pause()
+                return None
+            if aksi == 'keluar' and not self._pause_keluar_siap:
+                self._pause_keluar_siap = True
+                self._render_pause()
+                return None
+            return aksi
+        self._render_pause()
+        return None
 
     # ─── MODE BANGUN/BELI (S7) ───────────────────────────
 
@@ -2090,20 +2190,31 @@ class UIManager:
         from ursina import window as _win
         self._panel_bg = _ui(scale=(_win.aspect_ratio + 0.2, 1.2), position=(0, 0),
                               color=color.rgb(10, 9, 12, 200), z=0.2)
-        # Alas panel polos dengan garis karat di atas -- bahasa yang sama
-        # dengan pelacak tutorial dan alas HUD. Tekstur chrome TSO yang lama
-        # punya margin transparan lebar, jadi yang tampil cuma kotak krem
-        # kecil di tengah, dan bagian dalamnya yang gelap menindih teks.
-        self._panel_frame = _ui(scale=(1.18, 1.02), position=(0, 0),
-                                color=color.rgb(20, 19, 18, 235), z=0.1)
-        self._panel_garis = _ui(scale=(1.18, 0.008), position=(0, 0.506),
-                                color=color.rgb(150, 96, 60), z=0.09)
-        self._panel_title = _txt('', pos=(-0.45, 0.44), scale=1.2,
-                                  col=color.rgb(220, 190, 255))
-        self._panel_body  = _txt('', pos=(-0.45, 0.36), scale=0.80,
-                                  col=color.rgb(210, 210, 230))
-        self._panel_hint  = _txt('[ESC: tutup]', pos=(-0.45, -0.44), scale=0.75,
-                                  col=color.rgb(140, 130, 180))
+        # Kartu panel (game/panel_kartu.py): sudut bulat, pita kepala, bingkai
+        # emas, bayangan lunak -- bahasa yang sama dengan layar judul. Dulu
+        # lempeng gelap polos dengan garis karat, dan isinya dump teks ASCII.
+        from . import panel_kartu as PK
+        self._PK = PK
+        tex, fx, fy = PK.kartu_tex(1440, 900)
+        self._panel_frame = _ui(scale=(PK.W * fx, PK.H * fy), position=(0, 0),
+                                texture=tex, color=color.white, z=0.1)
+        self._panel_garis = _ui(scale=(PK.W - 0.11, 0.003), position=(0, PK.Y_GARIS),
+                                color=color.rgba(244, 214, 140, 150), z=0.09)
+        self._panel_penanda = _ui(scale=(0.016, 0.016), rotation_z=45, z=0.08,
+                                  position=(PK.KIRI + 0.008, PK.Y_JUDUL),
+                                  color=color.rgb(*PK.EMAS))
+        self._panel_title = _txt('', pos=(PK.KIRI + 0.030, PK.Y_JUDUL), scale=1.15,
+                                  col=color.rgb(*PK.EMAS), origin=(-0.5, 0))
+        self._panel_sub   = _txt('', pos=(PK.KANAN, PK.Y_JUDUL), scale=0.62,
+                                  col=color.rgb(*PK.REDUP), origin=(0.5, 0))
+        self._panel_body  = _txt('', pos=(PK.KIRI, PK.Y_ISI), scale=0.74,
+                                  col=color.rgb(*PK.TERANG))
+        PK.pasang_warna(self._panel_body)
+        # Teks petunjuk tetap ada (sumber kebenaran tombol panel), tapi yang
+        # TAMPIL adalah kepingan tombol yang dirakit darinya di kaki kartu.
+        self._panel_hint  = _txt('[ESC: tutup]', pos=(PK.KIRI, PK.Y_KAKI), scale=0.62,
+                                  col=color.rgb(*PK.REDUP), origin=(-0.5, 0))
+        self._kanvas = PK.Kanvas()
         self._set_panel_visible(False)
 
     # Entity yang membentuk HUD permainan. Didaftar sekali di sini supaya
@@ -2184,10 +2295,15 @@ class UIManager:
 
     def _set_panel_visible(self, v: bool):
         for e in (self._panel_bg, self._panel_frame, self._panel_title,
-                  self._panel_body, self._panel_hint,
-                  getattr(self, '_panel_garis', None)):
+                  self._panel_body, getattr(self, '_panel_garis', None),
+                  getattr(self, '_panel_penanda', None),
+                  getattr(self, '_panel_sub', None)):
             if e is not None:
                 e.enabled = v
+        # Petunjuk mentah tidak pernah tampil; kepingannya yang tampil.
+        self._panel_hint.enabled = False
+        if not v and getattr(self, '_kanvas', None) is not None:
+            self._kanvas.bersih()
         # HUD dan pelacak tutorial minggir selama panel terbuka: keduanya
         # duduk di kiri-atas, tempat judul dan isi panel juga mulai, dan
         # tulisannya saling tindih.
@@ -2208,38 +2324,64 @@ class UIManager:
     _INV_CATS = ['Semua', 'Benih', 'Panen', 'Bahan', 'Alat']
 
     def _build_inventory_grid(self):
-        """Grid slot inventory: kategori tab + border + bg + ikon + jumlah + kursor."""
+        """Grid slot inventori di dalam kartu panel: tab kategori kapsul di atas,
+        7x5 petak bersudut bulat di kiri, rincian barang terpilih di kanan
+        (digambar ulang tiap render oleh `_render_inventory_grid`).
+
+        Grid ini sudah ada sejak lama, tapi panel [I] tidak pernah memanggil
+        penggambarnya -- yang tampil cuma tabel teks -- dan tidak ada tombol
+        yang diteruskan ke `navigate_inventory`. Keduanya disambungkan 26 Okt
+        2026 bersama rupa kartu."""
+        from . import panel_kartu as PK
         self._inv_slots   = []
         self._inv_cursor  = 0   # index slot terpilih
         self._inv_cat_idx = 0   # index kategori aktif
-        x0, y0 = -0.46, 0.28
-        dx, dy = 0.155, 0.150
+        SL, G = 0.098, 0.014
+        self._INV_SL, self._INV_G = SL, G
+        x0 = PK.KIRI + SL / 2
+        y0 = PK.Y_ISI - 0.085 - SL / 2
+        dx = dy = SL + G
+        self._inv_detail_x = x0 + self._INV_COLS * dx + 0.02
 
-        # ── Kategori tab di atas grid ──
-        self._inv_cat_tabs = []
-        cat_x0 = -0.48
+        # ── Kategori: kapsul di atas grid ──
+        self._inv_cat_tabs, self._inv_cat_bg = [], []
+        tx = PK.KIRI
         for i, cat in enumerate(self._INV_CATS):
-            tab = _txt(cat, pos=(cat_x0 + i * 0.24, y0 + 0.075), scale=0.68,
-                       col=color.rgb(255, 220, 100) if i == 0 else color.rgb(150, 140, 120),
-                       origin=(0, 0))
-            tab.enabled = False
+            w = 0.036 + 0.0125 * len(cat)
+            bg = _ui(scale=(w, 0.040), position=(tx + w / 2, PK.Y_ISI - 0.022), z=0.06,
+                     texture=PK.kotak_tex(w / 0.040, 0.5), color=color.rgba(60, 58, 70, 255))
+            tab = _txt(cat, pos=(tx + w / 2, PK.Y_ISI - 0.022), scale=0.60,
+                       col=color.rgb(*PK.REDUP), origin=(0, 0))
+            bg.enabled = tab.enabled = False
+            self._inv_cat_bg.append(bg)
             self._inv_cat_tabs.append(tab)
+            tx += w + 0.010
 
-        # ── Detail item (bawah grid) ──
-        self._inv_detail = _txt('', pos=(x0, y0 - self._INV_ROWS * dy - 0.01),
-                                scale=0.60, col=color.rgb(200, 190, 165), origin=(0, 0))
+        # ── Detail item: teks di kolom kanan (isinya dirakit di render) ──
+        self._inv_detail = _txt('', pos=(self._inv_detail_x, y0 - 0.2), scale=0.66,
+                                col=color.rgb(222, 216, 204), origin=(-0.5, 0.5))
+        self._inv_detail.line_height = 1.35
+        PK.pasang_warna(self._inv_detail)
         self._inv_detail.enabled = False
 
+        t_slot = PK.kotak_tex(1.0, 0.22)
+        t_kursor = PK.kotak_tex(1.0, 0.22, isi=(255, 255, 255, 0), garis=(255, 255, 255, 255))
         for r in range(self._INV_ROWS):
             for c in range(self._INV_COLS):
                 px = x0 + c * dx
                 py = y0 - r * dy
-                border  = _ui(scale=(0.135, 0.135), position=(px, py), color=color.rgb(95, 74, 52), z=-0.06)
-                bg      = _ui(scale=(0.122, 0.122), position=(px, py), color=color.rgb(38, 32, 28, 240), z=-0.08)
-                icon    = _ui(scale=(0.088, 0.088), position=(px, py + 0.010), color=color.rgb(120, 120, 120), z=-0.12)
-                qty     = _txt('', pos=(px + 0.028, py - 0.052), scale=0.62, col=color.rgb(255, 255, 230), z=-0.16)
-                nm      = _txt('', pos=(px, py - 0.062), scale=0.40, col=color.rgb(205, 205, 215), origin=(0, 0), z=-0.16)
-                cursor  = _ui(scale=(0.140, 0.140), position=(px, py), color=color.rgb(255, 215, 60, 180), z=-0.04)
+                border  = _ui(scale=(SL, SL), position=(px, py), texture=t_slot,
+                              color=color.rgba(70, 66, 78, 255), z=0.07)
+                bg      = _ui(scale=(SL - 0.006, SL - 0.006), position=(px, py), texture=t_slot,
+                              color=color.rgba(32, 32, 42, 255), z=0.065)
+                icon    = _ui(scale=(SL * 0.62, SL * 0.62), position=(px, py + 0.008),
+                              color=color.rgb(120, 120, 120), z=0.04)
+                qty     = _txt('', pos=(px + SL / 2 - 0.008, py - SL / 2 + 0.014), scale=0.52,
+                               col=color.rgb(255, 246, 214), origin=(0.5, 0))
+                nm      = _txt('', pos=(px, py - SL / 2 + 0.012), scale=0.34,
+                               col=color.rgb(190, 186, 176), origin=(0, 0))
+                cursor  = _ui(scale=(SL + 0.010, SL + 0.010), position=(px, py),
+                              texture=t_kursor, color=color.rgb(*PK.EMAS), z=0.03)
                 cursor.enabled = False
                 for e in (border, bg, icon, qty, nm):
                     e.enabled = False
@@ -2250,7 +2392,7 @@ class UIManager:
         for slot in getattr(self, '_inv_slots', []):
             for e in slot.values():
                 e.enabled = False
-        for tab in getattr(self, '_inv_cat_tabs', []):
+        for tab in getattr(self, '_inv_cat_tabs', []) + getattr(self, '_inv_cat_bg', []):
             tab.enabled = False
         if hasattr(self, '_inv_detail'):
             self._inv_detail.enabled = False
@@ -2317,10 +2459,15 @@ class UIManager:
         cursor  = min(cursor, max(0, len(items) - 1))
         self._inv_cursor = cursor
 
-        # Update tab warna
+        from . import panel_kartu as PK
+        aktif = getattr(self, '_inv_cat_idx', 0)
         for i, tab in enumerate(getattr(self, '_inv_cat_tabs', [])):
-            tab.color = color.rgb(255, 215, 60) if i == getattr(self, '_inv_cat_idx', 0) else color.rgb(150, 140, 120)
+            pilih = i == aktif
+            tab.color = color.rgb(24, 22, 30) if pilih else color.rgb(*PK.REDUP)
             tab.enabled = True
+            bg = self._inv_cat_bg[i]
+            bg.color = color.rgb(*PK.EMAS) if pilih else color.rgba(60, 58, 70, 255)
+            bg.enabled = True
 
         for i, slot in enumerate(self._inv_slots):
             is_cursor = (i == cursor)
@@ -2340,23 +2487,21 @@ class UIManager:
                 ic.enabled = True
                 slot['qty'].text    = str(qty) if qty > 1 else ''
                 slot['qty'].enabled = True
-                disp = CROPS.get(item_id, {}).get('name') or item_id.replace('_seed', '~').replace('_', ' ')
-                slot['nm'].text    = disp[:9]
-                slot['nm'].enabled = True
+                # Nama tidak ditulis di petak: di 0,1 satuan ia menindih angka
+                # jumlah. Namanya ada di kolom rincian, untuk petak terpilih.
+                slot['nm'].text    = ''
+                slot['nm'].enabled = False
             else:
+                # Petak kosong tetap tampil redup: tas terbaca sebagai tas
+                # dengan ruang sisa, bukan sebagai daftar yang berhenti.
                 for k, e in slot.items():
-                    e.enabled = False
+                    e.enabled = k in ('border', 'bg')
 
         # Detail item terpilih
         if hasattr(self, '_inv_detail'):
-            if items and cursor < len(items):
-                item_id, qty = items[cursor]
-                disp = CROPS.get(item_id, {}).get('name') or item_id.replace('_seed', '~').replace('_', ' ')
-                self._inv_detail.text    = f'{disp}  x{qty}'
-                self._inv_detail.enabled = True
-            else:
-                self._inv_detail.text    = 'Inventori kosong'
-                self._inv_detail.enabled = True
+            self._inv_detail.text = self._teks_rincian(items, cursor)
+            self._inv_detail.enabled = True
+            self._gambar_rincian(items, cursor)
 
     def open_panel(self, name: str):
         self._panel_name = name
@@ -2370,6 +2515,9 @@ class UIManager:
     _GARIS = {c: ('|' if c in '│┃║' else '-') for c in map(chr, range(0x2500, 0x2580))}
     _GARIS = str.maketrans(_GARIS)
 
+    # Panel yang digambar sungguhan oleh panel_kartu (bukan blok teks).
+    _PANEL_GAMBAR = ('quest', 'map', 'relations', 'help')
+
     def _render_panel(self, name: str):
         self._render_panel_isi(name)
         for e in (self._panel_title, self._panel_body, self._panel_hint):
@@ -2377,6 +2525,32 @@ class UIManager:
             t2 = t.translate(self._GARIS)
             if t2 != t:
                 e.text = t2
+        PK = self._PK
+        kv = self._kanvas
+        kv.bersih()
+        s = self.state
+        self._panel_sub.text = (f'Hari {s.day_in_season}  ·  {self._season_name(s)}'
+                                f'  ·  {s.gold}G')
+        PK.gambar_kaki(kv, self._panel_hint.text)
+        if name in self._PANEL_GAMBAR:
+            self._panel_body.text = ''
+            gambar = {'quest': lambda: PK.gambar_quest(kv, s),
+                      'map': lambda: PK.gambar_peta(kv, s),
+                      'relations': lambda: PK.gambar_relasi(kv, s),
+                      'help': lambda: PK.gambar_panduan(kv)}[name]
+            try:
+                gambar()
+            except Exception:
+                # Gagal menggambar tidak boleh membuat panel kosong: kembali
+                # ke isi teks lama, yang selalu ada.
+                import logging, traceback
+                logging.warning('panel_kartu %s gagal:\n%s', name, traceback.format_exc())
+                kv.bersih()
+                PK.gambar_kaki(kv, self._panel_hint.text)
+                self._render_panel_isi(name)
+        self._panel_body.text = PK.hias_isi(str(self._panel_body.text))
+        if name == 'inventory':
+            self._render_inventory_grid()
 
     def _render_panel_isi(self, name: str):
         s = self.state
@@ -2455,7 +2629,12 @@ class UIManager:
                 lines.append("  Peti Kirim di kebun membayar 85% tanpa perlu jalan.")
             else:
                 lines.append("  (Kosong)")
-            self._panel_body.text = '\n'.join(lines[:28])
+            # Isi teks di atas tetap dirakit (tas kosong pun punya baris),
+            # tapi yang TAMPIL adalah grid petak: tabel berkolom itu terbaca
+            # sebagai lembar kerja, bukan sebagai tas.
+            self._panel_body.text = ''
+            self._inv_teks = '\n'.join(lines[:28])
+            self._panel_hint.text = ('[WASD: pilih]   [Q/E: kategori]   [ESC: tutup]')
 
         elif name == 'papan':
             from .jobs import lines as papan_lines
@@ -3025,6 +3204,9 @@ class UIManager:
         # Bangun/Beli: sama, ESC milik buy_input tidak pernah tercapai.
         for e in getattr(self, '_buy_ents', None) or []:
             e.enabled = False
+        # Menu jeda: ESC di dalamnya berarti "lanjutkan".
+        for e in getattr(self, '_pause_ents', None) or []:
+            e.enabled = False
         self._set_dialog_visible(False)
         self._set_panel_visible(False)
         self.close_pie()
@@ -3137,6 +3319,66 @@ class UIManager:
         self._pie_callback = None
         if self.mode == 'pie':
             self.mode = 'hud'
+
+    def _teks_rincian(self, items, cursor):
+        """Kolom kanan inventori: nama, jumlah, harga, nilai, saran."""
+        s = self.state
+        if not items or cursor >= len(items):
+            return '<redup>Belum ada barang di kategori ini.<default>'
+        from .economy import item_name, best_process_hint
+        from .market import price as sell_price
+        from .data import WILD_ITEMS, CONSUMABLES, MINERALS
+        item_id, qty = items[cursor]
+        harga = sell_price(s, item_id)
+        baris = [f'<emas>{item_name(item_id)}<default>', f'Jumlah  {qty}', '']
+        if harga:
+            baris += [f'Harga jual  {harga}G', f'Nilai total  {harga * qty}G']
+        saran = best_process_hint(item_id)
+        if saran:
+            baris += ['', f'<hijau>{saran}<default>']
+        ket = ((WILD_ITEMS.get(item_id) or {}).get('description')
+               or (MINERALS.get(item_id) or {}).get('description')
+               or (CONSUMABLES.get(item_id) or {}).get('desc') or '')
+        if ket:
+            # Bungkus manual: kolom kanan sempit (~32 huruf).
+            kata, b = ket.split(), ''
+            baris.append('')
+            for k in kata:
+                if len(b) + len(k) + 1 > 32:
+                    baris.append(f'<redup>{b}<default>')
+                    b = k
+                else:
+                    b = (b + ' ' + k).strip()
+            if b:
+                baris.append(f'<redup>{b}<default>')
+        return '\n'.join(baris)
+
+    def _gambar_rincian(self, items, cursor):
+        """Ringkasan tas di atas kolom rincian + ikon besar barang terpilih."""
+        from . import panel_kartu as PK
+        kv = self._kanvas
+        kv.bersih()
+        PK.gambar_kaki(kv, self._panel_hint.text)
+        s = self.state
+        from .market import inventory_value
+        x = self._inv_detail_x
+        y = PK.Y_ISI - 0.022
+        kv.teks(f'HP {s.hp}/{s.max_hp}   ·   Energi {s.energy}/{s.max_energy}',
+                (PK.KANAN, y), 0.52, PK.REDUP, asal=(0.5, 0))
+        y = PK.Y_ISI - 0.085
+        kv.kotak((x + PK.KANAN) / 2, y - 0.05, PK.KANAN - x, 0.13, (40, 40, 52), 235, 0.15)
+        if items and cursor < len(items):
+            tex = self._item_icon_tex(items[cursor][0])
+            if tex is not None:
+                kv.quad(texture=tex, scale=(0.10, 0.10), position=(x + 0.065, y - 0.05),
+                        z=0.04, color=color.white)
+            else:
+                kv.kotak(x + 0.065, y - 0.05, 0.08, 0.08,
+                         tuple(int(c * 255) for c in self._item_icon_color(items[cursor][0])[:3]),
+                         255, 0.25, z=0.04)
+        kv.teks('Nilai tas', (x + 0.13, y - 0.030), 0.50, PK.REDUP)
+        kv.teks(f'{inventory_value(s, s.inventory)}G', (x + 0.13, y - 0.065), 1.0, PK.EMAS)
+        self._inv_detail.position = (x + 0.005, y - 0.15)
 
     # ─── INVENTORY NAVIGATION ────────────────────────────────
     def navigate_inventory(self, dr: int, dc: int):

@@ -809,6 +809,9 @@ class Game3D:
         if self.panels.mode == 'judul' and getattr(self, '_judul', None):
             self._judul.input(key)
             return
+        if self.panels.mode == 'jeda' and key != 'escape':
+            self._aksi_jeda(self.panels.pause_input(key))
+            return
         if (key == 'escape' and self.panels.mode == 'sinema'
                 and getattr(getattr(self, 'sinema', None), 'aktif', False)):
             self.sinema.input(key)
@@ -927,6 +930,18 @@ class Game3D:
                 # Input panel hanya menerima angka 1-9, jadi daftar yang lebih
                 # panjang dari sembilan baris butuh halaman.
                 self.panels.market_page(-1 if key == 'q' else 1)
+            elif self.panels._panel_name == 'inventory' and key in (
+                    'w', 'a', 's', 'd', 'up arrow', 'down arrow', 'left arrow',
+                    'right arrow', 'q', 'e', 'tab'):
+                # Grid inventori: kursor dan kategori. Dulu tidak satu tombol
+                # pun diteruskan, jadi navigate_inventory tidak punya pemanggil.
+                gerak = {'w': (-1, 0), 'up arrow': (-1, 0), 's': (1, 0),
+                         'down arrow': (1, 0), 'a': (0, -1), 'left arrow': (0, -1),
+                         'd': (0, 1), 'right arrow': (0, 1)}
+                if key in gerak:
+                    self.panels.navigate_inventory(*gerak[key])
+                else:
+                    self.panels.navigate_inventory_cat(-1 if key == 'q' else 1)
             elif (self.panels._panel_name == 'wishes'
                   and key in ('a', 'b', 'c')):
                 # Hadiah dipilih dengan huruf, bukan angka: angka 1-9 di panel
@@ -1040,14 +1055,10 @@ class Game3D:
             elif key == 'f2':
                 self._open_chargen()
             elif key == 'escape':
-                # Esc di HUD: save + tampilkan pesan, jangan langsung quit
-                # (klik X window untuk benar-benar tutup).
-                # Nilai kembalian diperiksa -- sebelumnya pesan "tersimpan"
-                # selalu muncul walau penulisannya gagal.
-                if self.state.save():
-                    self.panels.flash_msg("Game tersimpan. Tekan X di window untuk keluar.", 3.5)
-                else:
-                    self.panels.flash_msg("GAGAL menyimpan! Progresmu belum aman.", 5.0)
+                # Esc di HUD: menu jeda. Dulu menyimpan lalu menyuruh pemain
+                # menekan X di jendela untuk keluar -- tidak ada jalan keluar
+                # dari dalam permainan.
+                self.panels.open_pause()
             elif key == 'f5':
                 if self.state.save():
                     self.panels.flash_msg("[F5] Game Tersimpan!")
@@ -1056,6 +1067,35 @@ class Game3D:
                 if loaded:
                     self._ganti_state(loaded)
                     self.panels.flash_msg("[F9] Game Dimuat!")
+
+    def _aksi_jeda(self, aksi):
+        """Jalankan pilihan menu jeda. Nilai kembalian save() diperiksa:
+        pesan "tersimpan" dulu muncul walau penulisannya gagal."""
+        if not aksi:
+            return
+        p = self.panels
+        if aksi == 'simpan':
+            p.close_pause()
+            if self.state.save():
+                p.flash_msg("Permainan tersimpan.", 2.0)
+            else:
+                p.flash_msg("GAGAL menyimpan! Progresmu belum aman.", 5.0)
+        elif aksi == 'muat':
+            p.close_pause()
+            loaded = GameState.load()
+            if loaded:
+                self._ganti_state(loaded)
+                p.flash_msg("Simpanan terakhir dimuat.", 2.0)
+            else:
+                p.flash_msg("Belum ada simpanan untuk dimuat.", 2.5)
+        elif aksi == 'panduan':
+            p.close_pause()
+            p.open_panel('help')
+        elif aksi == 'keluar':
+            # Simpan dulu: keluar dari menu tidak boleh membuang progres.
+            self.state.save()
+            from ursina import application
+            application.quit()
 
     def _ganti_state(self, baru):
         """Isi state yang dipegang semua komponen diganti `baru`, lalu dunia
@@ -1146,6 +1186,10 @@ class Game3D:
             # Tanpa baris ini modal PAGI PERTAMA dipulihkan ke HUD satu frame
             # setelah terbuka, dan angka pilihannya jatuh ke pemain.
             yatim = not getattr(p, '_bc_ents', None)
+        elif mode == 'jeda':
+            # Menu jeda dimiliki entity-nya sendiri (_pause_ents).
+            yatim = not any(getattr(e, 'enabled', False)
+                            for e in getattr(p, '_pause_ents', None) or [])
         else:
             yatim = True    # mode yang tidak dikenal sama sekali
         if yatim:

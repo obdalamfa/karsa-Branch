@@ -3,11 +3,24 @@ judul: Status Sekarang
 tipe: peta
 diperbarui: 2026-10-23
 commit_acuan: f7e5650 (branch ccr-ae8cd761-mj4kbu, PR #15)
-regresi: 14/14 lulus + 9 baris global (animasi gerak baru) (lima menit, majelis batin, buy/sinema, kamera Q/E, ...)
+regresi: 14/14 lulus + 10 baris global (tampilan baru) (lima menit, majelis batin, buy/sinema, kamera Q/E, ...)
 tags: [moc, status]
 ---
 
 # Status Sekarang
+
+> [!success] Pembaruan 2026-10-26 — HUD, menu, menu jeda, kotak putih
+> Panel I/J/M/H/P/N/F1 kini kartu bergaya layar judul:
+> - Jurnal punya daftar tahap dan kartu "sedang dikerjakan".
+> - Peta dibaca dari portal; peta ASCII lama salah sambung.
+> - Hubungan memakai potret dan hati.
+> - Inventori bergrid dan bisa dinavigasi.
+>
+> ESC membuka menu jeda. HUD memakai bilah kapsul HP koral dan energi emas,
+> ikon cuaca dan koin, serta kartu tujuan beraksen emas. Dialog maju dengan
+> [F]. Kotak putih melayang di kebun ternyata makhluk liar tanpa model →
+> [[Makhluk liar tampil sebagai kotak putih]]. Regresi 14/14, baris
+> "tampilan" 36/36.
 
 > [!success] Pembaruan 2026-10-23 (malam) — animasi kerja dan mob
 > Klip kerja pemain kini dibaur, bukan dibanting. Ada lapisan ancang-ancang,

@@ -541,3 +541,64 @@ def gambar_panduan(kv):
                 kv.teks(kata, (x + 0.130, y), 0.60, TERANG)
                 y -= 0.035
             y -= 0.016
+
+
+# ── ikon kecil HUD: cuaca dan koin ──────────────────────────────────────
+# Dulu cuaca ditulis dengan karakter ASCII ('^ Cerah', '~ Hujan') dan emas
+# dengan '§'. Montserrat tidak punya glif cuaca/koin, jadi digambar.
+def ikon_hud_tex(nama, px=48):
+    kunci = ('ikon_hud', nama, px)
+    if kunci in _CACHE:
+        return _CACHE[kunci]
+    tex = None
+    try:
+        import math as _m
+        Image, ImageDraw, _ = _pil()
+        s = 4
+        n = px * s
+        img = Image.new('RGBA', (n, n), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        def awan(cx, cy, r, isi):
+            for ox, oy, rr in ((-0.55, 0.15, 0.62), (0.0, -0.18, 0.8), (0.6, 0.12, 0.6)):
+                d.ellipse([cx + (ox - rr) * r, cy + (oy - rr) * r,
+                           cx + (ox + rr) * r, cy + (oy + rr) * r], fill=isi)
+            d.rectangle([cx - 1.1 * r, cy + 0.1 * r, cx + 1.15 * r, cy + 0.72 * r], fill=isi)
+        if nama == 'Cerah':
+            c, r = n / 2, n * 0.20
+            for i in range(8):
+                a = i * _m.pi / 4
+                d.line([c + _m.cos(a) * r * 1.45, c + _m.sin(a) * r * 1.45,
+                        c + _m.cos(a) * r * 2.1, c + _m.sin(a) * r * 2.1],
+                       fill=(255, 206, 84, 255), width=int(n * 0.07))
+            d.ellipse([c - r, c - r, c + r, c + r], fill=(255, 214, 92, 255))
+        elif nama in ('Mendung', 'Hujan', 'Badai'):
+            awan(n * 0.5, n * 0.42, n * 0.24, (214, 222, 234, 255))
+            if nama == 'Hujan':
+                for x in (0.32, 0.5, 0.68):
+                    d.line([n * x, n * 0.72, n * (x - 0.05), n * 0.9],
+                           fill=(120, 180, 255, 255), width=int(n * 0.06))
+            if nama == 'Badai':
+                d.polygon([(n * 0.52, n * 0.62), (n * 0.40, n * 0.82), (n * 0.50, n * 0.82),
+                           (n * 0.44, n * 0.98), (n * 0.64, n * 0.74), (n * 0.53, n * 0.74),
+                           (n * 0.60, n * 0.62)], fill=(255, 214, 92, 255))
+        elif nama == 'Berangin':
+            for y, w in ((0.36, 0.62), (0.52, 0.78), (0.68, 0.5)):
+                d.line([n * 0.14, n * y, n * (0.14 + w), n * y],
+                       fill=(200, 226, 240, 255), width=int(n * 0.07))
+                d.arc([n * (0.14 + w) - n * 0.08, n * y - n * 0.16, n * (0.14 + w) + n * 0.08,
+                       n * y], 270, 90, fill=(200, 226, 240, 255), width=int(n * 0.07))
+        elif nama == 'koin':
+            c = n / 2
+            d.ellipse([n * 0.10, n * 0.10, n * 0.90, n * 0.90], fill=(214, 160, 40, 255))
+            d.ellipse([n * 0.18, n * 0.16, n * 0.82, n * 0.80], fill=(255, 210, 84, 255))
+            d.ellipse([n * 0.34, n * 0.32, n * 0.66, n * 0.64], outline=(214, 160, 40, 255),
+                      width=int(n * 0.06))
+        else:
+            d.ellipse([n * 0.3, n * 0.3, n * 0.7, n * 0.7], fill=(220, 220, 220, 255))
+        img = img.resize((px, px), Image.LANCZOS)
+        tex = Texture(img)
+        tex.filtering = 'bilinear'
+    except Exception:
+        tex = None
+    _CACHE[kunci] = tex
+    return tex

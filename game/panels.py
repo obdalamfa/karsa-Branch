@@ -630,6 +630,8 @@ class UIManager:
     # kiri-atas sudah membawa nomornya sendiri di tiap petak.
     _PINTASAN = (('SPACE', 'Pakai'), ('F', 'Aksi'), ('Q/E', 'Putar'), ('TAB', 'Motif'))
     _HINT_PADAM = 30.0          # detik sebelum petunjuk memudar sendiri
+    _WARNA_HP = (232, 86, 98)    # merah-koral, senada ikon hati
+    _WARNA_EN = (240, 196, 74)   # emas, senada ikon petir
 
     # ─── PUBLIC: HUD ─────────────────────────────────────
     def _build_hud(self):
@@ -726,7 +728,16 @@ class UIManager:
         self._weather_txt = _txt('^ Cerah',       pos=(X_R, r1), scale=S_KECIL, col=color.rgb(255, 240, 130), origin=self._RA)
         self._date_txt    = _txt('Hari 1 | Semi', pos=(X_R, r1), scale=S_KECIL, col=color.rgb(180, 205, 255), origin=self._RA)
         self._gold_txt    = _txt('§ 0G',          pos=(X_R, r2), scale=S_KECIL, col=GOLD_C, origin=self._RA)
-        self._scene_txt   = _txt('> Kebun',       pos=(X_R, r2), scale=S_KECIL, col=color.rgb(150, 250, 170), origin=self._RA)
+        self._scene_txt   = _txt('Kebun',         pos=(X_R, r2), scale=S_KECIL, col=color.rgb(176, 226, 186), origin=self._RA)
+        # Ikon cuaca dan koin: Montserrat tidak punya glifnya, jadi dulu
+        # cuaca ditulis '^ Cerah' / '~ Hujan' dan emas '§ 100G'.
+        from . import panel_kartu as _PK
+        self._IKW = h_jam * 0.95
+        self._weather_ikon = _ui(scale=(self._IKW, self._IKW), z=0.02, position=(X_R, r1),
+                                 texture=_PK.ikon_hud_tex('Cerah'), color=color.white)
+        self._IKG = h_kecil * 1.05
+        self._gold_ikon = _ui(scale=(self._IKG, self._IKG), z=0.02, position=(X_R, r2),
+                              texture=_PK.ikon_hud_tex('koin'), color=color.white)
 
         # ── Kiri Atas: dua bilah stamina BERIKON + roda alat ──
         # Patokan menaruh satu bilah setebal 16 px menempel di sudut. Dua
@@ -761,17 +772,23 @@ class UIManager:
 
         # Alas bilah: tanpa ini bilah yang menyusut jadi tidak terbaca sebagai
         # "sisa dari sekian", cuma sebagai garis pendek yang berubah panjang.
-        trek = color.rgb(18, 26, 30, 200)
-        self._hp_trek = _ui(scale=(BW, BH), z=0.06,
+        # Kapsul, bukan persegi panjang; dan HP/energi punya warnanya sendiri
+        # (merah-koral dan emas). Dulu keduanya hijau yang sama, sehingga
+        # satu-satunya pembeda adalah ikon 17 px di depannya.
+        from . import panel_kartu as PK
+        self._PK = PK
+        t_bilah = PK.kotak_tex(BW / BH, 0.5)
+        trek = color.rgba(14, 16, 24, 210)
+        self._hp_trek = _ui(scale=(BW, BH), z=0.06, texture=t_bilah,
                             position=(BX + BW / 2, hy), color=trek)
-        self._en_trek = _ui(scale=(BW, BH), z=0.06,
+        self._en_trek = _ui(scale=(BW, BH), z=0.06, texture=t_bilah,
                             position=(BX + BW / 2, ey), color=trek)
-        self._hp_bar = _ui(scale=(BW, BH), z=0.03,
+        self._hp_bar = _ui(scale=(BW, BH), z=0.03, texture=t_bilah,
                            position=(BX + BW / 2, hy),
-                           color=color.rgb(55, 210, 80))
-        self._en_bar = _ui(scale=(BW, BH), z=0.03,
+                           color=color.rgb(*self._WARNA_HP))
+        self._en_bar = _ui(scale=(BW, BH), z=0.03, texture=t_bilah,
                            position=(BX + BW / 2, ey),
-                           color=color.rgb(55, 205, 75))
+                           color=color.rgb(*self._WARNA_EN))
         self._hp_val = _txt('', pos=(BX + BW + self._NUM_GAP, hy),
                             scale=S_ANGKA, col=color.rgb(214, 228, 236), origin=LA)
         self._en_val = _txt('', pos=(BX + BW + self._NUM_GAP, ey),
@@ -889,45 +906,51 @@ class UIManager:
         self._motive_panel_bg = _ui(
             scale=(panel_w, panel_top - panel_bot),
             position=(X_L - PAD + panel_w / 2, (panel_top + panel_bot) / 2),
-            z=0.10,
-            color=color.rgb(12, 20, 24, 128))
+            z=0.10, texture=PK.kotak_tex(panel_w / (panel_top - panel_bot), 0.08),
+            color=color.rgba(14, 16, 24, 170))
 
-        self._mood_bg = _ui(scale=(self._NBAR_W, MOOD_H), z=0.06,
+        t_mood = PK.kotak_tex(self._NBAR_W / MOOD_H, 0.5)
+        self._mood_bg = _ui(scale=(self._NBAR_W, MOOD_H), z=0.06, texture=t_mood,
                             position=(self._NBAR_X + self._NBAR_W / 2, y_mood),
-                            color=color.rgb(28, 34, 40, 210))
-        self._mood_fill = _ui(scale=(self._NBAR_W, MOOD_H), z=0.03,
+                            color=color.rgba(40, 42, 52, 230))
+        self._mood_fill = _ui(scale=(self._NBAR_W, MOOD_H), z=0.03, texture=t_mood,
                               position=(self._NBAR_X + self._NBAR_W / 2, y_mood),
                               color=color.rgb(120, 210, 140))
 
         self._need_bg_ents   = []
         self._need_fill_ents = []
+        t_need = PK.kotak_tex(self._NBAR_W / NBH, 0.5)
         for i, key in enumerate(self._motive_keys):
             y = y_need0 + (n - 1 - i) * self._NROW
             self._need_bg_ents.append(
-                _ui(scale=(self._NBAR_W, NBH), z=0.06,
+                _ui(scale=(self._NBAR_W, NBH), z=0.06, texture=t_need,
                     position=(self._NBAR_X + self._NBAR_W / 2, y),
-                    color=color.rgb(28, 34, 40, 200)))
+                    color=color.rgba(40, 42, 52, 220)))
             self._need_fill_ents.append(
-                _ui(scale=(self._NBAR_W, NBH), z=0.03,
+                _ui(scale=(self._NBAR_W, NBH), z=0.03, texture=t_need,
                     position=(self._NBAR_X + self._NBAR_W / 2, y),
                     color=color.rgb(120, 200, 130)))
         self._motif_tampil = True
 
         # ── Objective tracker (kiri-atas) — tutorial / quest aktif ──
+        # Kartu tujuan: sudut bulat dan aksen emas TEGAK di kiri (bukan garis
+        # karat di atas) -- bahasa yang sama dengan kartu "sedang dikerjakan"
+        # di Jurnal. Teksturnya dibuat ulang saat ukuran kartu berubah.
         self._obj_bg = _ui(scale=(0.385, 0.092), position=(-0.685, 0.398),
-                           color=color.rgb(20, 19, 18, 215), z=0.9)
-        self._obj_rust = _ui(scale=(0.385, 0.006), position=(-0.685, 0.446),
-                             color=color.rgb(150, 96, 60), z=0.85)
-        self._obj_title = _txt('TUTORIAL', pos=(-0.868, 0.434), scale=0.62,
-                               col=color.rgb(214, 168, 110))
+                           color=color.rgba(16, 18, 26, 215), z=0.9)
+        self._obj_rust = _ui(scale=(0.006, 0.07), position=(-0.685, 0.446),
+                             color=color.rgb(*PK.EMAS), z=0.85,
+                             texture=PK.kotak_tex(0.25, 0.5))
+        self._obj_title = _txt('TUTORIAL', pos=(-0.868, 0.434), scale=0.56,
+                               col=color.rgb(*PK.EMAS))
         self._obj_step = _txt('...', pos=(-0.868, 0.408), scale=0.78,
-                              col=color.rgb(228, 222, 198))
-        self._obj_hint = _txt('', pos=(-0.868, 0.380), scale=0.58,
-                              col=color.rgb(150, 158, 168))
+                              col=color.rgb(238, 234, 222))
+        self._obj_hint = _txt('', pos=(-0.868, 0.380), scale=0.56,
+                              col=color.rgb(170, 174, 182))
         # Keinginan yang sedang dikejar (Tahap 4). Tanpa baris ini janji cuma
         # terlihat di panel `p`, jadi pemain yang menutup panel lupa apa yang
         # ia janjikan -- dan keinginan yang terlupa tidak memberi arah apa pun.
-        self._obj_janji = _txt('', pos=(-0.868, 0.354), scale=0.58,
+        self._obj_janji = _txt('', pos=(-0.868, 0.354), scale=0.56,
                                col=color.rgb(236, 190, 120))
         self._obj_janji_last = None
         self._obj_last = None   # cache: deteksi pergantian langkah → emote
@@ -958,7 +981,7 @@ class UIManager:
         # z lebih besar = di belakang. Pelajaran yang sudah dibayar sekali di
         # panel motif: semua elemen camera.ui duduk di z=0 dan Panda menyortir
         # bin transparannya tanpa urutan yang bisa diandalkan.
-        SCRIM_C = color.rgb(10, 16, 20, 112)
+        SCRIM_C = color.rgba(14, 16, 24, 150)
         self._scrim_kanan = _ui(scale=(0.001, 0.001), z=0.20,
                                 position=(X_R, r1), color=SCRIM_C)
         self._scrim_kiri  = _ui(scale=(0.001, 0.001), z=0.20,
@@ -1040,6 +1063,12 @@ class UIManager:
         h = (atas - bawah) + pad * 2
         scrim.scale = (w, h)
         scrim.position = ((kiri + kanan) / 2, (atas + bawah) / 2)
+        # Sudut bulat dengan jari-jari tetap ~0,012 satuan, berapa pun
+        # ukuran alasnya (tekstur di-cache per rasio yang dibulatkan).
+        PK = getattr(self, '_PK', None)
+        if PK is not None:
+            r = min(0.5, 0.012 / max(min(w, h), 1e-4))
+            scrim.texture = PK.kotak_tex(w / h, round(r * 20) / 20)
 
     def _pasang_tepi(self):
         """Ikuti tepi layar yang SEKARANG, bukan yang saat HUD dibangun.
@@ -1117,20 +1146,25 @@ class UIManager:
         G = self._GAP
 
         # Kanan atas, baris 1: jam paling kanan, lalu cuaca, lalu tanggal.
-        x = X_R
-        for e in (self._time_txt, self._weather_txt, self._date_txt):
-            e.x = x
-            if str(e.text).strip():
-                x -= self._lebar(e) + G
-        kiri1 = x + G if x < X_R else X_R
+        def _deret(isi):
+            """Tata teks (dan ikon di kirinya) rata kanan dari X_R."""
+            x = X_R
+            for e, ik, w_ik in isi:
+                e.x = x
+                if str(e.text).strip():
+                    x -= self._lebar(e)
+                    if ik is not None:
+                        ik.x = x - 0.005 - w_ik / 2
+                        x -= 0.005 + w_ik
+                    x -= G
+            return x + G if x < X_R else X_R
 
-        # Kanan atas, baris 2: emas paling kanan, lalu nama scene.
-        x = X_R
-        for e in (self._gold_txt, self._scene_txt):
-            e.x = x
-            if str(e.text).strip():
-                x -= self._lebar(e) + G
-        kiri2 = x + G if x < X_R else X_R
+        kiri1 = _deret(((self._time_txt, None, 0),
+                        (self._weather_txt, getattr(self, '_weather_ikon', None), self._IKW),
+                        (self._date_txt, None, 0)))
+        # Kanan atas, baris 2: emas (dengan koin) paling kanan, lalu scene.
+        kiri2 = _deret(((self._gold_txt, getattr(self, '_gold_ikon', None), self._IKG),
+                        (self._scene_txt, None, 0)))
 
         h1 = self._time_txt.height * self._time_txt.scale_y
         h2 = self._gold_txt.height * self._gold_txt.scale_y
@@ -1179,11 +1213,15 @@ class UIManager:
                 t is not None and str(t.text).strip()
                 for t in (self._obj_title, self._obj_step,
                           self._obj_hint, jn)) else 0.385)
-            self._obj_bg.scale_x = self._obj_rust.scale_x = w
-            self._obj_rust.position = (X_L + w / 2, atas - 0.003)
+            w += 0.010                      # ruang untuk aksen emas di kiri
+            self._obj_bg.scale = (w, h)
             self._obj_bg.position = (X_L + w / 2, atas - h / 2)
-            self._obj_bg.scale_y = h
-            tx = X_L + 0.0095
+            self._obj_rust.scale = (0.005, h - 0.022)
+            self._obj_rust.position = (X_L + 0.009, atas - h / 2)
+            PK = getattr(self, '_PK', None)
+            if PK is not None:
+                self._obj_bg.texture = PK.kotak_tex(w / h, round(min(0.5, 0.012 / h) * 20) / 20)
+            tx = X_L + 0.0215
             self._obj_title.position = (tx, atas - 0.010)
             self._obj_step.position = (tx, atas - 0.036)
             self._obj_hint.position = (tx, atas - 0.064)
@@ -1343,18 +1381,21 @@ class UIManager:
         # HP bar
         hp_r = max(0.001, s.hp / max(s.max_hp, 1))
         _shrink_bar(self._hp_bar, BAR_X_LEFT, BAR_W, hp_r)
-        if hp_r > 0.6:
-            self._hp_bar.color = color.rgb(55, 210, 80)
-        elif hp_r > 0.3:
-            self._hp_bar.color = color.rgb(255, 170, 30)
+        # Merah-koral tetap; saat kritis berdenyut, supaya terbaca tanpa
+        # harus membaca angkanya.
+        if hp_r > 0.3:
+            self._hp_bar.color = color.rgb(*self._WARNA_HP)
         else:
-            self._hp_bar.color = color.rgb(220, 55, 55)
+            import math as _m, time as _t
+            k = 0.5 + 0.5 * _m.sin(_t.time() * 8.0)
+            self._hp_bar.color = color.rgb(232, int(60 + 60 * k), int(70 + 50 * k))
         self._teks(self._hp_val, f'{int(s.hp)}/{s.max_hp}')
 
         # EN bar
         en_r = max(0.001, s.energy / max(s.max_energy, 1))
         _shrink_bar(self._en_bar, BAR_X_LEFT, BAR_W, en_r)
-        self._en_bar.color = color.rgb(220, 80, 55) if en_r <= 0.3 else color.rgb(55, 205, 75)
+        self._en_bar.color = (color.rgb(226, 120, 60) if en_r <= 0.3
+                              else color.rgb(*self._WARNA_EN))
         self._teks(self._en_val, f'{int(s.energy)}/{s.max_energy}')
 
         # Objective tracker — tutorial / quest aktif (modul game.tutorial)
@@ -1396,7 +1437,7 @@ class UIManager:
             self._mood_txt.color = color.rgb(*_mc)
 
         # Gold + buff (§ simbol web-style)
-        self._teks(self._gold_txt, f'§ {s.gold}G')
+        self._teks(self._gold_txt, f'{s.gold}')
         self._teks(self._buff_txt, '+'.join(b.upper() for b in s.buffs) if s.buffs else '')
 
         # Alat aktif: nama satu kata, dan petaknya yang menyala.
@@ -1418,16 +1459,18 @@ class UIManager:
 
         # Time / weather
         self._teks(self._time_txt, s.get_time_str())
-        w_icons = {'Cerah': '^', 'Hujan': '~', 'Badai': '!', 'Mendung': '-', 'Berangin': '='}
-        self._teks(self._weather_txt, f"{w_icons.get(s.weather, '?')} {s.weather}")
+        self._teks(self._weather_txt, f"{s.weather}")
+        if getattr(self, '_cuaca_ikon_nama', None) != s.weather:
+            self._cuaca_ikon_nama = s.weather
+            self._weather_ikon.texture = self._PK.ikon_hud_tex(s.weather)
 
         # Date / scene
         season_n = SEASON_NAMES[s.season_index]
-        self._teks(self._date_txt, f'Hari {s.day_in_season} | {season_n} Thn {s.year}')
+        self._teks(self._date_txt, f'Hari {s.day_in_season}  ·  {season_n}  ·  Thn {s.year}')
         from .scenes import SCENES
         sc_display = SCENES.get(s.scene_name,
                      type('o', (object,), {'display': s.scene_name})()).display
-        self._teks(self._scene_txt, f'> {sc_display}')
+        self._teks(self._scene_txt, f'{sc_display}')
         
         # Petunjuk tombol: prompt aksi kontekstual menang atas tiga kepingan
         # tombol tetap. Kalau ada prompt, kepingannya minggir — dua blok teks
@@ -2225,6 +2268,7 @@ class UIManager:
         '_time_txt', '_date_txt', '_weather_txt', '_scene_txt', '_gold_txt',
         '_buff_txt', '_queue_txt', '_mood_bg', '_mood_fill', '_mood_lbl',
         '_mood_ikon', '_motive_panel_bg', '_control_hint',
+        '_weather_ikon', '_gold_ikon',
     )
     # Yang ikut disembunyikan TAB: hanya ringkasan motif. Roda alat tidak —
     # ia jawaban atas "alat apa yang sedang kupegang", dan pertanyaan itu

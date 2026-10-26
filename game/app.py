@@ -877,17 +877,21 @@ class Game3D:
 
         # Intercept input saat UI / Dialog aktif
         if self.panels.mode == 'dialog':
+            # [F] ikut melanjutkan: sejak 22 Okt F adalah tombol interaksi,
+            # jadi pemain yang membuka percakapan dengan F menekan F lagi.
+            # [E] tetap diterima demi kebiasaan lama, tapi tidak lagi
+            # dijanjikan di layar (E kini memutar kamera).
             if self.panels.is_choice_active():
-                if key in ('up arrow', 'q'):
+                if key in ('up arrow', 'q', 'w'):
                     self.panels.navigate_dialog_choices(-1)
-                elif key in ('down arrow', 'r'):
+                elif key in ('down arrow', 'r', 's'):
                     self.panels.navigate_dialog_choices(1)
                 elif key.isdigit() and int(key) >= 1:
                     self.panels.select_dialog_choice(int(key))
-                elif key in ('space', 'e', 'enter'):
+                elif key in ('space', 'e', 'f', 'enter'):
                     self.panels.confirm_dialog_choice()
             else:
-                if key in ('space', 'e', 'enter'):
+                if key in ('space', 'e', 'f', 'enter'):
                     # Teks yang masih diketik dituntaskan dulu; tekan sekali
                     # lagi baru lanjut -- seperti kotak dialog Harvest Moon.
                     if not self.panels.ketik_selesai():

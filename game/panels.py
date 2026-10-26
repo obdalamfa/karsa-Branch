@@ -956,8 +956,14 @@ class UIManager:
         self._obj_last = None   # cache: deteksi pergantian langkah → emote
 
         # ── Flash message tengah ──
-        self._flash_ent = _txt('', pos=(0, 0.15), scale=1.1,
-                               col=color.rgb(255, 245, 80), origin=(0, 0))
+        # Alas kapsul gelap: teks kuning tanpa alas hilang di atas langit,
+        # air, atau lantai terang. Lebarnya dipas ke teks di flash_msg.
+        self._flash_bg = _ui(scale=(0.3, 0.056), position=(0, 0.15), z=0.05,
+                             texture=PK.kotak_tex(0.3 / 0.056, 0.5),
+                             color=color.rgba(14, 16, 24, 205))
+        self._flash_bg.enabled = False
+        self._flash_ent = _txt('', pos=(0, 0.15), scale=1.0,
+                               col=color.rgb(*PK.EMAS), origin=(0, 0))
         self._flash_ent.enabled = False
 
         # ── Scrim: jaminan kontras untuk teks HUD ──────────────
@@ -1883,7 +1889,11 @@ class UIManager:
         if self._flash_ent:
             self._flash_ent.text    = text
             self._flash_ent.enabled = True
-            if hasattr(self, '_flash_bg'):
+            if getattr(self, '_flash_bg', None) is not None:
+                w = self._lebar(self._flash_ent) + 0.05
+                h = 0.056 * max(1, str(text).count('\n') + 1)
+                self._flash_bg.scale = (w, h)
+                self._flash_bg.texture = self._PK.kotak_tex(w / h, 0.5)
                 self._flash_bg.enabled = True
             self._flash_t           = duration
 
@@ -1922,7 +1932,7 @@ class UIManager:
                               col=color.rgb(58, 40, 28))
         self._dlg_text.text = ' '          # wordwrap Ursina butuh raw_text
         self._dlg_text.wordwrap = 46
-        self._dlg_cont = _txt('[E / SPASI: lanjut]', pos=(W / 2 - 0.03, Y - H / 2 + 0.03),
+        self._dlg_cont = _txt('[F / SPASI: lanjut]', pos=(W / 2 - 0.03, Y - H / 2 + 0.03),
                               scale=0.62, col=color.rgb(130, 96, 66), origin=(0.5, 0))
         self._dlg_choice_ents = [
             _txt('', pos=(x_teks, Y - 0.02 - i * 0.04), scale=0.80, col=color.rgb(80, 56, 36))
@@ -2098,7 +2108,7 @@ class UIManager:
             else:
                 self._dlg_choices_active = False
                 self._dlg_choices = []
-                self._dlg_cont.text = '[E / SPASI: lanjut]'
+                self._dlg_cont.text = '[F / SPASI: lanjut]'
                 for ent in self._dlg_choice_ents:
                     ent.enabled = False
 
@@ -2107,7 +2117,7 @@ class UIManager:
             # Legacy simple text line
             self._dlg_choices_active = False
             self._dlg_choices = []
-            self._dlg_cont.text = '[E / SPASI: lanjut]'
+            self._dlg_cont.text = '[F / SPASI: lanjut]'
             for ent in self._dlg_choice_ents:
                 ent.enabled = False
 

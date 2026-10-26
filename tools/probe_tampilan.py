@@ -198,6 +198,34 @@ def uji_hud(g):
     langkah(2)
 
 
+def uji_dialog_kilat(g):
+    p = g.panels
+    p.start_dialog('sari', g.state)
+    langkah(3)
+    p.tuntaskan_ketik()
+    langkah(2)
+    i0, m0 = p._dialog_idx, p.mode
+    tekan(g, 'f', 3)
+    cek('[F] melanjutkan kotak dialog (F = tombol interaksi)',
+        m0 == 'dialog' and (p._dialog_idx != i0 or p.mode != 'dialog'),
+        f'mode {m0}->{p.mode} idx {i0}->{p._dialog_idx}')
+    cek('petunjuk dialog tidak menjanjikan [E]', '[E' not in str(p._dlg_cont.text),
+        repr(str(p._dlg_cont.text)))
+    for _ in range(12):
+        if p.mode != 'dialog':
+            break
+        p.tuntaskan_ketik()
+        tekan(g, 'f', 2)
+    if p.mode != 'hud':
+        tekan(g, 'escape', 3)
+    p.flash_msg('Pesan uji yang cukup panjang untuk alasnya', 2.0)
+    langkah(2)
+    kb, kt = _kotak(p._flash_bg), _kotak(p._flash_ent)
+    cek('pesan kilat beralas selebar teksnya',
+        p._flash_bg.enabled and kb and kt and kb[0] <= kt[0] and kb[1] >= kt[1],
+        f'alas={kb} teks={kt}')
+
+
 def main():
     kerja = Path(tempfile.mkdtemp(prefix='probe_tampilan_'))
     try:
@@ -211,6 +239,7 @@ def main():
             uji_peta()
             uji_inventori(g)
             uji_jeda(g)
+            uji_dialog_kilat(g)
     except Exception:
         traceback.print_exc()
         cek('probe berjalan tanpa pengecualian', False, 'lihat traceback')

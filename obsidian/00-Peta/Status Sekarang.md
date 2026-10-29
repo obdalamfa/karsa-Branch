@@ -1,13 +1,27 @@
 ---
 judul: Status Sekarang
 tipe: peta
-diperbarui: 2026-10-23
-commit_acuan: f7e5650 (branch ccr-ae8cd761-mj4kbu, PR #15)
-regresi: 14/14 lulus + 10 baris global (tampilan baru) (lima menit, majelis batin, buy/sinema, kamera Q/E, ...)
+diperbarui: 2026-10-29
+commit_acuan: 184931c (branch ccr-ae8cd761-mj4kbu, PR #15)
+regresi: 14/14 lulus + semua baris global, termasuk "lore gua" yang baru (lima menit, majelis batin, buy/sinema, kamera Q/E, ...)
 tags: [moc, status]
 ---
 
 # Status Sekarang
+
+> [!success] Pembaruan 2026-10-29 — catatan gua terbaca, dasar gua bisa ditinggali
+> Atas permintaan pemilik ("masukan ke game terbaru yang ada di github"):
+> - Catatan lantai 3/7/12 kini entri LORE_ITEMS. Dulu panel [N] menampilkan
+>   `[dungeon_3]` tanpa isi. Fragmen prasasti III pindah dari lantai 14 yang
+>   tidak ada ke lantai 13.
+> - Catatan gua tampil saat tiba, bukan sesudah tidur. Panel [N] berhalaman
+>   (Q/R) dan dibuka di catatan terbaru
+>   → [[Catatan gua tanpa isi dan fragmen III di lantai 14]].
+> - Pemain yang diam di lantai 13 tidak lagi terlempar balik ke 12
+>   → [[Pemain terpantul dari dasar gua]].
+>
+> Regresi 14/14 + baris baru "lore gua". Terbuka: `gauntlet/check.py` gagal
+> di tint kristal gua (1,5 > 1,0), sama persis di 630c805 sebelum perubahan ini.
 
 > [!success] Pembaruan 2026-10-26 — HUD, menu, menu jeda, kotak putih
 > Panel I/J/M/H/P/N/F1 kini kartu bergaya layar judul:

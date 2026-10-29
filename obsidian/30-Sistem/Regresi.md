@@ -32,6 +32,7 @@ Keluar dengan kode `1` kalau ada yang gagal, supaya bisa dipakai di skrip.
 | `save_bolak` | format save berubah; save lama tidak boleh merusak loader |
 | `arah_maju` ⚠️ | [[Arah WASD basis sumbu salah]] — basis membaca komponen sumbu yang salah. **Lapor-saja**, belum memvonis: instrumennya masih terkontaminasi antar-scene |
 | `ms_frame` | 4–29 FPS, belum pernah diprofil → [[Tahap 3 — Performa]] |
+| `lore_gua` | [[Catatan gua tanpa isi dan fragmen III di lantai 14]] dan [[Pemain terpantul dari dasar gua]] — `tools/probe_lore_gua.py` turun lantai 1–13 lewat tangga sungguhan |
 
 `ms_frame` dan jumlah entity dicatat sebagai **angka**, bukan lulus/gagal —
 supaya regresi performa **terlihat**, bukan cuma terasa.

@@ -595,6 +595,16 @@ class Game3D:
                 except Exception:
                     pass
 
+                # Catatan yang ditemukan saat pindah tempat (lantai gua: tangga
+                # memanggil check_dungeon_lore tanpa panels) disampaikan di
+                # sini, sesudah tempat barunya termuat. Dulu ia menunggu pemain
+                # tidur, dan lantai berikutnya menimpanya sebelum sempat terbaca.
+                pesan_lore = getattr(self.player, '_pending_lore_msg', None)
+                if pesan_lore:
+                    from ursina import invoke
+                    self.player._pending_lore_msg = None
+                    invoke(self.panels.flash_msg, pesan_lore, 5.0, delay=1.0)
+
             # Kamera mengikuti pemain (smooth lerp) — 3D Person Follow
             from ursina import held_keys, mouse
             
@@ -934,6 +944,9 @@ class Game3D:
                 # Input panel hanya menerima angka 1-9, jadi daftar yang lebih
                 # panjang dari sembilan baris butuh halaman.
                 self.panels.market_page(-1 if key == 'q' else 1)
+            elif self.panels._panel_name == 'catatan' and key in ('q', 'r'):
+                # Koleksi catatan lengkap lebih panjang dari satu kartu.
+                self.panels.catatan_halaman(-1 if key == 'q' else 1)
             elif self.panels._panel_name == 'inventory' and key in (
                     'w', 'a', 's', 'd', 'up arrow', 'down arrow', 'left arrow',
                     'right arrow', 'q', 'e', 'tab'):

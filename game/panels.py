@@ -2558,6 +2558,15 @@ class UIManager:
 
     def open_panel(self, name: str):
         self._panel_name = name
+        if name == 'catatan':
+            self._catatan_hal = None      # buka di halaman catatan terbaru
+            # Flash "[N] Catatan baru" terjawab oleh panel ini sendiri; kalau
+            # dibiarkan, kapsulnya menutupi teks catatan yang sama sampai habis.
+            if self._flash_t > 0 and self._flash_ent:
+                self._flash_t = 0.0
+                self._flash_ent.enabled = False
+                if getattr(self, '_flash_bg', None) is not None:
+                    self._flash_bg.enabled = False
         self._render_panel(name)
         self._set_panel_visible(True)
         self.mode = 'panel'
@@ -2898,33 +2907,57 @@ class UIManager:
             )
 
         elif name == 'catatan':
-            from .data import LORE_ITEMS
-            lines = ['Fragmen cerita dan catatan yang kau temukan:', '']
-            s_lore = getattr(s, 'lore_collected', [])
-            if not s_lore:
-                lines.append('  (Belum ada catatan. Jelajahi lembah lebih dalam.)')
-            else:
-                for lore_id in s_lore:
-                    item = LORE_ITEMS.get(lore_id, {})
-                    name_ = item.get('name', lore_id)
-                    text_ = item.get('text', '')
-                    lines.append(f'  [{name_}]')
-                    # Word wrap the text to fit panel
-                    words = text_.split()
-                    line = '    '
-                    for w in words:
-                        if len(line) + len(w) + 1 > 60:
-                            lines.append(line)
-                            line = '    ' + w
-                        else:
-                            line += (' ' if len(line) > 4 else '') + w
-                    if line.strip():
-                        lines.append(line)
-                    lines.append('')
-            self._panel_body.text = '\n'.join(lines[:28])
+            self._set_body(self._render_catatan(s))
 
     def _set_body(self, lines):
         self._panel_body.text = chr(10).join(lines)
+
+    # Catatan Lembah dibagi per halaman tanpa membelah satu catatan pun. Dulu
+    # daftarnya dipotong mati di baris ke-28: aman selama cuma enam catatan
+    # yang bisa didapat, tapi sejak catatan lantai gua ikut terkumpul koleksi
+    # lengkap butuh ~37 baris, dan yang terpotong justru yang paling baru.
+    # Karena itu panel dibuka di halaman terakhir, tempat catatan terbaru.
+    _CATATAN_BARIS = 25          # baris catatan per halaman, di luar kepala
+
+    def catatan_halaman(self, delta: int):
+        """[Q]/[R] di panel Catatan; dijepit ke halaman yang ada saat digambar."""
+        hal = getattr(self, '_catatan_hal', None)
+        self._catatan_hal = (0 if hal is None else hal) + delta
+        self._render_panel('catatan')
+
+    def _render_catatan(self, s) -> list:
+        from .data import LORE_ITEMS
+        kepala = ['Fragmen cerita dan catatan yang kau temukan:', '']
+        koleksi = getattr(s, 'lore_collected', [])
+        if not koleksi:
+            return kepala + ['  (Belum ada catatan. Jelajahi lembah lebih dalam.)']
+        halaman = [[]]
+        for lore_id in koleksi:
+            item = LORE_ITEMS.get(lore_id, {})
+            blok = [f"  [{item.get('name', lore_id)}]"]
+            # Word wrap the text to fit panel
+            line = '    '
+            for w in item.get('text', '').split():
+                if len(line) + len(w) + 1 > 60:
+                    blok.append(line)
+                    line = '    ' + w
+                else:
+                    line += (' ' if len(line) > 4 else '') + w
+            if line.strip():
+                blok.append(line)
+            blok.append('')
+            if halaman[-1] and len(halaman[-1]) + len(blok) > self._CATATAN_BARIS:
+                halaman.append([])
+            halaman[-1] += blok
+        n = len(halaman)
+        hal = getattr(self, '_catatan_hal', None)
+        hal = n - 1 if hal is None else max(0, min(hal, n - 1))
+        self._catatan_hal = hal
+        lines = kepala + halaman[hal]
+        if n > 1:
+            lines.append(f'  -- halaman {hal + 1}/{n}  [Q/R] --')
+            self._panel_hint.text = '[Q/R: halaman]   [ESC: tutup]'
+        return lines
 
     @staticmethod
     def _season_name(s):

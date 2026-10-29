@@ -538,6 +538,8 @@ DUNGEON_TILES_W   = 24
 DUNGEON_TILES_H   = 18
 
 # ── LORE ITEMS — fragmen cerita yang bisa dikumpulkan ─────
+# `found_at` berbentuk 'dungeon_<n>' DIBACA kode: check_dungeon_lore() memberikan
+# catatan itu saat pemain tiba di lantai n, jadi n harus 1..DUNGEON_MAX_LEVEL.
 LORE_ITEMS = {
     'fragmen_prasasti_1': {
         'name': 'Fragmen Prasasti I',
@@ -549,10 +551,31 @@ LORE_ITEMS = {
         'found_at': 'dungeon_10',
         'text': 'Naga tidak tidur. Naga menunggu. Menunggu yang pantas.',
     },
+    # Dulu 'dungeon_14', lantai yang tidak pernah dibuat. 13 adalah dasar gua:
+    # arena Bhutakala dengan danau legendarisnya, tempat yang pas untuk air.
     'fragmen_prasasti_3': {
         'name': 'Fragmen Prasasti III',
-        'found_at': 'dungeon_14',
+        'found_at': 'dungeon_13',
         'text': 'Air mengalir untuk yang pantas. Yang pantas bukan yang kuat — tapi yang menjaga.',
+    },
+    # Tiga catatan kedalaman. Dulu cuma pesan sekilas yang ditulis langsung di
+    # quest_controller, dicatat ke koleksi dengan id tanpa entri di sini, jadi
+    # panel Catatan menampilkan "[dungeon_3]" tanpa isi. Id-nya dipertahankan
+    # karena save yang sudah ada menyimpan persis id ini.
+    'dungeon_3': {
+        'name': 'Prasasti Kutukan',
+        'found_at': 'dungeon_3',
+        'text': "Sebuah prasasti kuno: 'Kutukan Lembah Karsa berawal dari keserakahan manusia...'",
+    },
+    'dungeon_7': {
+        'name': 'Buku Harian Penambang',
+        'found_at': 'dungeon_7',
+        'text': "Sisa-sisa kemah penambang. Ada buku harian: 'Kami menggali terlalu dalam. Sesuatu terbangun...'",
+    },
+    'dungeon_12': {
+        'name': 'Dinding Bercahaya',
+        'found_at': 'dungeon_12',
+        'text': "Dinding bercahaya: 'Hanya hati yang murni yang bisa menenangkan sang Naga Bumi...'",
     },
     'buku_paman_arsa': {
         'name': 'Buku Catatan Paman Arsa',

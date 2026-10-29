@@ -130,6 +130,11 @@ bukan pada kemungkinan yang dikarang:
                  kali perbaikan tanda karena yang diuji selalu yaw awal.
                  Diukur dengan tabrakan dimatikan sementara, supaya yang
                  dinilai hanya basis arah (lihat catatannya di fungsi).
+  lore_gua       catatan gua bertingkat tidak pernah terbaca: lantai 3/7/12
+                 dicatat dengan id tanpa entri LORE_ITEMS, fragmen III menunggu
+                 di lantai 14 yang tidak dibuat, dan pesannya baru muncul
+                 sesudah tidur. tools/probe_lore_gua.py turun 1-13 lewat tangga
+                 sungguhan dan membaca panel [N] lewat tombolnya.
 
 Pemakaian:
     python tools/regress.py                 semua scene
@@ -2041,6 +2046,7 @@ def main():
     sinema_baris = None
     gerak_baris = None
     tampilan_baris = None
+    lore_baris = None
     _pasang_save_fixture(ROOT / cfg.SAVE_FILE)
     t0 = time.time()
     try:
@@ -2492,6 +2498,27 @@ def main():
         except subprocess.TimeoutExpired:
             gerak_baris = (False, 'waktu habis')
 
+    # ── lore gua bertingkat (subproses, game baru dengan save sementara) ──
+    # Turun lantai 1-13 lewat tangga sungguhan. Tiga cacat lore gua hidup
+    # lama tanpa error apa pun: id lantai 3/7/12 tanpa entri LORE_ITEMS (panel
+    # [N] menampilkan "[dungeon_3]" kosong), fragmen III di lantai 14 yang tidak
+    # dibuat, dan pesan yang baru muncul sesudah pemain tidur.
+    if not minta:
+        import subprocess
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'probe_lore_gua.py')],
+                               cwd=ROOT, capture_output=True, text=True, timeout=600)
+            akhir = [b for b in r.stdout.splitlines()
+                     if re.search(r'\d+/\d+ lulus', b)][-1:]
+            if akhir:
+                m = re.search(r'(\d+)/(\d+) lulus', akhir[0])
+                ok = r.returncode == 0 and m.group(1) == m.group(2) and int(m.group(2)) > 0
+                lore_baris = (ok, akhir[0].strip())
+            else:
+                lore_baris = (False, f'tanpa keluaran (kode {r.returncode})')
+        except subprocess.TimeoutExpired:
+            lore_baris = (False, 'waktu habis')
+
     print('-' * 78)
     tanda_hud = 'LULUS' if not hud_baris else 'GAGAL'
     ring_hud = '; '.join(f'{k} {c}' for k, c in hud_baris) or 'semua di dalam layar'
@@ -2550,6 +2577,12 @@ def main():
         print(f'{"animasi gerak":14s} {"LULUS" if ok_gr else "GAGAL":>7s} '
               f'{"":>9s} {"":>7s}  {catatan_gr[:44]}')
         if not ok_gr:
+            gagal_total += 1
+    if lore_baris is not None:
+        ok_lr, catatan_lr = lore_baris
+        print(f'{"lore gua":14s} {"LULUS" if ok_lr else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {catatan_lr[:44]}')
+        if not ok_lr:
             gagal_total += 1
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)

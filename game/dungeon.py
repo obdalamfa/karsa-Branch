@@ -84,9 +84,13 @@ def generate_dungeon_level(level, seed=None):
         grid[3][10] = LLY
         grid[2][15] = LLY
         
-        # Player spawn at bottom center
+        # Pemain muncul di tengah bawah, tangga naik SATU ubin di belakangnya.
+        # Dulu tangga tepat di titik muncul: begitu cooldown portal 0,5 detik
+        # habis (frame muat lantai baru sendiri sering lebih panjang), pemain
+        # yang diam terlempar balik ke lantai 12 -- terukur 0,62-0,83 detik
+        # sesudah tiba. Lantai lain sudah memisahkan keduanya (up_y).
         spawn_x, spawn_y = w//2, h - 3
-        grid[spawn_y][spawn_x] = STAIRS_UP
+        grid[spawn_y + 1][spawn_x] = STAIRS_UP
         
         bx, by = w//2, 8
         mob_specs = [{

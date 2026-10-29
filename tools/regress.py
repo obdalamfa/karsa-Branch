@@ -134,7 +134,10 @@ bukan pada kemungkinan yang dikarang:
                  dicatat dengan id tanpa entri LORE_ITEMS, fragmen III menunggu
                  di lantai 14 yang tidak dibuat, dan pesannya baru muncul
                  sesudah tidur. tools/probe_lore_gua.py turun 1-13 lewat tangga
-                 sungguhan dan membaca panel [N] lewat tombolnya.
+                 sungguhan dan membaca panel [N] lewat tombolnya. Sekaligus
+                 menjaga dasar gua: pemain yang diam di lantai 13 dulu
+                 terlempar balik ke 12, karena titik muncul arena Bhutakala
+                 tepat di STAIRS_UP.
 
 Pemakaian:
     python tools/regress.py                 semua scene

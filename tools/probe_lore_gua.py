@@ -1,6 +1,6 @@
 """probe_lore_gua.py — catatan gua bertingkat, lewat tangga sungguhan.
 
-Sampai 29 Okt 2026 tiga cacat hidup di lore gua tanpa satu error pun:
+Sampai 29 Okt 2026 empat cacat hidup di gua bertingkat tanpa satu error pun:
 
   id kosong   lantai 3/7/12 mencatat 'dungeon_3/7/12' ke koleksi, tapi id itu
               tidak punya entri LORE_ITEMS -- panel Catatan [N] menampilkan
@@ -9,6 +9,9 @@ Sampai 29 Okt 2026 tiga cacat hidup di lore gua tanpa satu error pun:
   pesan diam  tangga memanggil check_dungeon_lore tanpa panels, jadi pesannya
               baru muncul sesudah pemain tidur, dan lantai berikutnya sudah
               menimpanya lebih dulu
+  terpantul   arena Bhutakala (lantai 13) menaruh titik muncul tepat di
+              STAIRS_UP: pemain yang diam terlempar balik ke lantai 12 begitu
+              cooldown portal habis, terukur 0,83 detik sesudah tiba
 
 Probe ini turun lantai 1 -> 13 dengan BERDIRI di ubin STAIRS_DOWN (app.update
 -> player.tick -> _check_portals), lalu memeriksa: tiap lantai memberi persis
@@ -64,6 +67,18 @@ def _tunggu_detik(g, detik):
     t0 = time.time()
     while time.time() - t0 < detik:
         _jalan(g)
+
+
+def _diam(g, detik):
+    """Pemain diam selama `detik` detik. Kembalikan (detik, lantai) saat
+    lantainya pertama kali berubah, atau None kalau ia tetap di tempat."""
+    s = g.state
+    lv, t0, pindah = s.dungeon_level, time.time(), None
+    while time.time() - t0 < detik:
+        _jalan(g)
+        if pindah is None and s.dungeon_level != lv:
+            pindah = (round(time.time() - t0, 2), s.dungeon_level)
+    return pindah
 
 
 def _ubin(grid, tid):
@@ -139,6 +154,7 @@ def uji_lore(g):
         return
 
     salah, tanpa_flash, kelebaran, tertunda = [], [], [], []
+    terpantul = None
     for lv in range(2, DUNGEON_MAX_LEVEL + 1):
         sebelum, k0 = list(s.lore_collected), len(kilat)
         turun = _ubin(s.dungeon_tiles, STAIRS_DOWN)
@@ -150,7 +166,10 @@ def uji_lore(g):
             cek(f'tangga membawa ke lantai {lv}', False,
                 f'scene={s.scene_name} lv={s.dungeon_level}')
             return
-        _tunggu_detik(g, 1.6)                 # flash memakai invoke(delay=1.0)
+        if lv == DUNGEON_MAX_LEVEL:
+            terpantul = _diam(g, 3.0)         # dasar gua: diam, jangan dipulangkan
+        else:
+            _tunggu_detik(g, 1.6)             # flash memakai invoke(delay=1.0)
         baru = [x for x in s.lore_collected if x not in sebelum]
         if baru != janji.get(lv, []):
             salah.append(f'{lv}: {baru} != {janji.get(lv, [])}')
@@ -170,11 +189,13 @@ def uji_lore(g):
     cek('catatan tampil sebagai flash saat tiba', not tanpa_flash, f'lantai {tanpa_flash}')
     cek('flash catatan muat di layar', not kelebaran, '; '.join(kelebaran))
     cek('tidak ada pesan tertunda sampai tidur', not tertunda, f'lantai {tertunda}')
+    cek(f'pemain yang diam di lantai {DUNGEON_MAX_LEVEL} tetap di sana (3 dtk)',
+        terpantul is None,
+        f'terpantul ke lantai {terpantul[1]} setelah {terpantul[0]} dtk' if terpantul else '')
 
     # ── naik lalu turun lagi: kunjungan ulang tidak menggandakan ──
-    # Dari lantai tempat pemain SEKARANG berada, bukan dari 13: arena lantai 13
-    # menaruh spawn tepat di STAIRS_UP, jadi pemain yang diam sudah terpantul
-    # ke lantai 12 (cacat terpisah di dungeon.py, bukan urusan probe ini).
+    # Dari lantai tempat pemain sekarang berada: kalau pantulan lantai 13
+    # kambuh ia sudah di 12, dan cek di atas yang melaporkannya.
     lv0 = s.dungeon_level
     koleksi, k0 = list(s.lore_collected), len(kilat)
     _injak(g, *_ubin(s.dungeon_tiles, STAIRS_UP)[0])

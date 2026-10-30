@@ -9,6 +9,13 @@ tags: [moc, status]
 
 # Status Sekarang
 
+> [!success] Pembaruan 2026-10-30 — panel Warung dan kawan-kawan berbaris
+> Warung, Dapur, Bengkel, Papan, Keinginan, dan Ekosistem kini digambar per
+> baris: nomor berkeping, ikon, kolom lurus, dan pil SIAP/KURANG. Bengkel
+> bertab, sehingga Perahu Kayu (dulu nomor [10], tak terjangkau) akhirnya
+> bisa dibuat → [[Perkakas bengkel bernomor 10-14 tak bisa dibuat]].
+> Regresi 14/14, baris "tampilan" 49/49.
+
 > [!success] Pembaruan 2026-10-29 — catatan gua terbaca, dasar gua bisa ditinggali
 > Atas permintaan pemilik ("masukan ke game terbaru yang ada di github"):
 > - Catatan lantai 3/7/12 kini entri LORE_ITEMS. Dulu panel [N] menampilkan

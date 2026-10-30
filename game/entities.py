@@ -45,6 +45,25 @@ def _model_instance(cached):
         return cached
 
 
+# Model yang diekspor Blender TANPA konversi sumbu: tingginya di Z, dasarnya
+# di z=0, dan baris pertamanya "# Blender ...", bukan marker fix_obj_axes.py.
+# Diukur dari berkasnya: pohon_bambu z 0..5,71, lantern 0..2,26, sumur
+# 0..3,04, pagar_bambu 0..1,30. Ide yang sama dengan Z_UP_MODELS di ae03456
+# yang hilang bersama make_obj_entity di merge 5683e79.
+_Z_ATAS = frozenset({'pohon_bambu', 'lantern', 'sumur', 'pagar_bambu'})
+
+_MARKER_Y_ATAS = '# axis-converted-to-Y-up'
+
+
+def _y_atas_bermarker(path) -> bool:
+    """Baris pertama berkas = marker fix_obj_axes.py (sudah Y-atas)."""
+    try:
+        with open(path, encoding='utf-8', errors='replace') as f:
+            return f.readline().strip() == _MARKER_Y_ATAS
+    except OSError:
+        return False
+
+
 # Warna sRGB dari material utama .mtl (Kd linear -> sRGB) untuk model yang
 # diekspor tanpa `usemtl`. genderuwo: GW_Fur (0.0685, 0.0577, 0.0523).
 _WARNA_TANPA_MATERIAL = {
@@ -106,6 +125,18 @@ def load_model_file(name: str):
                     # Assimp memuatnya sudah tegak. Tebakan `d.y > d.z` di bawah
                     # memiringkan model yang lebih lebar daripada tingginya.
                     pass
+                elif name.startswith(('pohon_', 'prop_')) and _y_atas_bermarker(path):
+                    # Berkas ini SUDAH dikonversi ke Y-atas oleh fix_obj_axes.py,
+                    # dan baris pertamanya mengatakan begitu. Tebakan `d.y > d.z`
+                    # di bawah justru merebahkannya: diukur dengan ShowBase,
+                    # pohon_kelapa jadi dz=5,10 > dy=4,01, mercusuar dz=7,18,
+                    # kurofune terguling. Marker dipercaya, bounds tidak ditebak.
+                    pass
+                elif name in _Z_ATAS:
+                    # Diekspor Blender tanpa konversi sumbu (tinggi di Z, dasar
+                    # di z=0). +90 diukur: dasar tepat di 0,00; -90 menaruhnya
+                    # terbalik di bawah tanah. Lihat _Z_ATAS.
+                    mp.setP(90)
                 elif d.y > d.z and isinstance(m, NodePath):
                     mp.setP(-90)
             except Exception:
@@ -271,12 +302,12 @@ def _dandani_manekin(actor, actor_id: str) -> float:
         # mendarat di y dunia 0,0137 — terkubur 23 cm di bawah tanah, jadi
         # yang terlihat cuma serpihan di tempat tanahnya kebetulan cekung
         # (terukur: 149 piksel dari frame 900x900).
-        actor._bayangan = Entity(parent=actor, model='quad',
-                                 position=Vec3(0, 0.0, 0),
-                                 rotation=(90, 0, 0),
-                                 scale=(1.05, 0.92, 1),
-                                 color=color.rgba(0, 0, 0, 120),
-                                 shader=None)
+        # Cakram berbulu, bukan quad persegi -- lihat game/bayangan.py.
+        # Ukurannya dalam satuan lokal actor (berskala 0,687), sama seperti
+        # quad lama; mesh baru per warga (aturan #3).
+        from .bayangan import cakram_kontak
+        actor._bayangan = cakram_kontak(actor, 1.15, 1.00, alpha=0.55,
+                                        position=Vec3(0, 0.0, 0))
 
         hw, ht = _MANEKIN_KEPALA_W, _MANEKIN_KEPALA_H
         kepala = Entity(parent=actor, position=Vec3(0, _MANEKIN_KEPALA_Y, 0))
@@ -339,6 +370,84 @@ def _baked_texture(name):
             tex = None
     _PROP_TEX_CACHE[name] = tex
     return tex
+
+
+def _punya_tekstur(np_) -> bool:
+    """Ada tekstur di model ini (map_Kd di .mtl)?
+
+    Assimp menaruh tekstur .mtl di state GeomNode, bukan di state per-geom.
+    Versi pertama fungsi ini hanya membaca state per-geom, menjawab "tidak",
+    dan sm_has_tex=0 membuat seluruh pohon Blender tampil PUTIH: diukur,
+    tajuk tropis (181,179,163) lawan (99,104,82) setelah tekstur dibaca.
+    findAllTextures membaca state di seluruh subtree.
+    """
+    return np_.findAllTextures().getNumTextures() > 0
+
+
+# Tint bawaan (ColorScale, dikalikan ke tekstur bake) untuk pohon Blender.
+# Atlas bake-nya sengaja kusam ("muted" di build_trees_lighthouse.py) dan di
+# bawah smooth_shader tampil abu-abu terang di samping pohon prosedural.
+# Angka = rata-rata RGB tajuk prosedural / tajuk Blender, diukur di frame yang
+# sama pukul 11.00 (masker tampil/sembunyi, jalur Game3D):
+#   kelapa L 94 -> 81 (target 75), tropis L 97-102 -> 57-61 (target 50),
+#   pohon_mati L 81 -> 65 (target 57).
+# Saturasi tajuk tetap di bawah prosedural; ColorScale seragam tidak bisa
+# memisahkan daun dari batang. Itu butuh bake ulang di Blender (pemilik).
+TINT_MODEL = {
+    'pohon_kelapa': (0.68, 0.85, 0.55),
+    'pohon_tropis': (0.55, 0.58, 0.55),
+    'pohon_mati':   (0.86, 0.67, 0.55),
+}
+
+
+def make_obj_entity(name, position, scale=1.0, rot_y=0.0, tint=None):
+    """Entity prop dari model Blender .obj. None kalau modelnya tidak ada.
+
+    Hilang di merge 5683e79 sementara pemanggilnya (scatter_obj_props,
+    tools/view_model.py) tetap ada dan kegagalannya ditelan. Dipulihkan
+    dengan tiga beda dari versi ae03456:
+
+    - Orientasi tidak diputar di sini lagi: load_model_file sudah menegakkan
+      model (marker fix_obj_axes / _Z_ATAS), jadi rotasi entity cuma yaw.
+    - TIAP panggilan memakai salinan baru dari load_model_file. Satu model
+      tidak pernah dipasang ke dua entity (aturan #3).
+    - Transparansi dibuang: setter model Ursina memasang M_dual pada setiap
+      model, padahal atlas bake-nya RGB tanpa alpha. Dual hanya menambah
+      satu pass dan pengurutan per pohon.
+
+    Warna: tekstur bake dari .mtl kalau ada; kalau tidak, `{nama}.png` di
+    assets/models; kalau tidak juga, MODEL_COLORS supaya tidak putih polos.
+    `tint` (ColorScale) menang atas semuanya dan dikalikan ke tekstur;
+    tanpa `tint`, TINT_MODEL dipakai bila nama model ada di sana.
+    """
+    from panda3d.core import TransparencyAttrib
+    mdl = load_model_file(name)
+    if mdl is None:
+        return None
+    e = Entity()
+    e.model = mdl
+    e.model.setTransparency(TransparencyAttrib.M_none)
+    e.position = position
+    e.scale = scale
+    e.rotation_y = rot_y
+    bertekstur = _punya_tekstur(e.model)
+    if not bertekstur:
+        tex = _baked_texture(name)
+        if tex is not None:
+            e.texture = tex
+            bertekstur = True
+    if tint is None and name in TINT_MODEL:
+        tint = color.Color(*TINT_MODEL[name], 1)
+    if tint is not None:
+        e.color = tint
+    elif not bertekstur and name in MODEL_COLORS:
+        e.color = color.rgb(*MODEL_COLORS[name])
+    else:
+        e.color = color.white
+    from .smooth_shader import apply_smooth
+    apply_smooth(e, has_texture=bertekstur)
+    return e
+
 
 def _setup_pose_swap(actor, base_name):
     """Aktifkan animasi mesh-swap 4-frame untuk model .obj."""
@@ -407,6 +516,7 @@ class EntitiesManager:
         self._update_npc_schedules()
 
     def _update_npc_schedules(self):
+        from .dua_desa import jadwal_npc
         s = self.state
         hour = s.get_hour()
         for npc_id in all_npcs():
@@ -417,7 +527,9 @@ class EntitiesManager:
             # 'farm' dan memindahkannya ke petak 20,5: kudanya lenyap dari
             # bawah penunggangnya dan muncul lagi di kandang.
             if npc_id == getattr(s, 'menunggang', ''): continue
-            sched = SCHEDULES.get(npc_id, [])
+            # Jadwal hari ini: SCHEDULES, kecuali Cerita Dua Desa sedang
+            # memindahkan warga (hari Lomba, gotong royong, jalan lama terbuka).
+            sched = jadwal_npc(npc_id, s)
             if not sched: continue
             current = sched[0]
             for entry in sched:
@@ -551,9 +663,13 @@ class EntitiesManager:
                 pos['activity'] = self._aktivitas_jadwal(npc_id)
 
     def _aktivitas_jadwal(self, npc_id):
+        # Sumber jadwal yang sama dengan _update_npc_schedules: kalau tidak,
+        # warga yang tiba di longsor Lawang saat gotong royong berlabel
+        # kegiatan dari SCHEDULES biasa ("di balai desa").
+        from .dua_desa import jadwal_npc
         hour = self.state.get_hour()
         cur = None
-        for entry in SCHEDULES.get(npc_id, []):
+        for entry in jadwal_npc(npc_id, self.state):
             if entry[0] <= hour:
                 cur = entry
         return cur[4] if cur else ''
@@ -685,7 +801,14 @@ class EntitiesManager:
                 from .wild_models import build_wild
                 e = build_wild(w['kind'], (px, GH, py))
             else:
-                e = Entity(model='quad', position=(px, GH + 0.25, py), scale=0.5, billboard=True)
+                # Dulu: Entity(model='quad', billboard=True) tanpa tekstur --
+                # kotak putih melayang di kebun/desa/danau. Model chibi untuk
+                # tiap jenis sudah lama ada di animal_models.build_wild_entity,
+                # tapi tidak pernah dipanggil (aturan #4 CLAUDE.md).
+                from .animal_models import build_wild_entity
+                e = Entity(position=(px, GH, py))
+                build_wild_entity(e, w['kind'])
+                e.model = None          # wadah saja; isinya bagian-bagian chibi
             self.wild_ents[i] = e
             
         # Spawn Mobs
@@ -1020,11 +1143,25 @@ class EntitiesManager:
                 _w.tick(dt)
             if isinstance(actor, Monster):
                 if actor.hp <= 0:
-                    if actor.is_boss: s.naga_defeated = True
-                    if actor.mob_spec in s.mobs:
-                        s.mobs.remove(actor.mob_spec)
-                    destroy(actor)
-                    del self.actors[actor_id]
+                    # Logika kematian tetap di frame ini (boss, s.mobs); yang
+                    # ditunda hanya HILANGNYA model: 0,6 dtk berputar, menyusut
+                    # dan tenggelam (mob_gerak). Dulu mob lenyap dalam satu
+                    # frame walau mob.py sudah menyiapkan dying/death_ms.
+                    if not actor.dying:
+                        actor.dying = True
+                        actor.death_ms = 0.0
+                        if actor.is_boss: s.naga_defeated = True
+                        if actor.mob_spec in s.mobs:
+                            s.mobs.remove(actor.mob_spec)
+                        for _bar in (getattr(actor, '_hp_bar', None), getattr(actor, '_bg_bar', None)):
+                            if _bar is not None:
+                                _bar.enabled = False
+                    actor.death_ms += dt * 1000.0
+                    from .mob_gerak import animasikan, DURASI_MATI
+                    animasikan(actor, dt)
+                    if actor.death_ms >= DURASI_MATI * 1000.0:
+                        destroy(actor)
+                        del self.actors[actor_id]
                     continue
                 actor.update_ai(dt, s.player_x, s.player_y, can_walk_fn)
                 
@@ -1038,10 +1175,8 @@ class EntitiesManager:
                 sc = 1.4 if actor.is_boss else 1.0
                 actor._hp_bar.scale_x = 0.9 * sc * ratio
 
-                if actor.dmg_flash_ms > 0:
-                    actor.color = color.white
-                else:
-                    actor.color = color.white # Revert to normal
+                # Kilat kena pukul kini dikerjakan mob_gerak (dulu kedua cabang
+                # di sini menyetel putih, jadi kilatnya tidak pernah terlihat).
                 
             elif isinstance(actor, NPC):
                 actor.update_ai(dt, self.brains, can_walk_fn, self.world)
@@ -1150,6 +1285,9 @@ class EntitiesManager:
 
             # Let the actor smoothly move visually
             actor.sync_visuals(dt, TS, GH)
+            if isinstance(actor, Monster):
+                from .mob_gerak import animasikan
+                animasikan(actor, dt, (s.player_x * TS, s.player_y * TS))
             # Penunggu gua: SATU panggilan per frame. Blok ini sempat
             # tergandakan, sehingga `_guardian_time` maju 2x dt dan napas naga
             # serta ayunan api banaspati berjalan dua kali kecepatan rancangan.
@@ -1247,12 +1385,18 @@ class EntitiesManager:
                     s.mobs.remove(mob)
         return killed
 
-    def try_capture_wild(self, tx: int, ty: int, state) -> tuple | None:
+    def try_capture_wild(self, tx: int, ty: int, state, kinds=None) -> tuple | None:
+        # `kinds` membatasi jenis yang boleh diambil. Interaksi [F] memanggilnya
+        # dengan herba/beri/jamur/mandrake saja (_try_harvest_wild). Parameter
+        # ini sempat hilang dari tanda tangan sementara pemanggilnya tetap ada,
+        # jadi interaksi di lapangan terbuka melempar TypeError -- lihat
+        # obsidian/40-Bug "Interaksi di lapangan terbuka melempar TypeError".
         import random as rng_mod
         sc = state.scene_name
         px, pz = tx * TS, ty * TS
         for w in list(state.wild_entities):
             if w['scene'] != sc: continue
+            if kinds is not None and w['kind'] not in kinds: continue
             wx, wz = w['x'] * TS, w['y'] * TS
             if math.sqrt((px-wx)**2 + (pz-wz)**2) > 3.0: continue
             kind = w['kind']

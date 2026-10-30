@@ -17,7 +17,7 @@ TUTORIAL_STEPS = [
     {
         'id': 'surat',
         'label': 'Baca surat Paman Arsa',
-        'hint': 'Kotak pos ada di depan rumah - dekati lalu tekan [R]',
+        'hint': 'Kotak pos ada di depan rumah - dekati lalu tekan [F]',
         'done': lambda s: bool(getattr(s, 'mail_read', False)),
     },
     {
@@ -41,7 +41,7 @@ TUTORIAL_STEPS = [
     {
         'id': 'tidur',
         'label': 'Tidur untuk ganti hari',
-        'hint': 'Masuk rumah, berdiri di kasur, tekan [R]',
+        'hint': 'Masuk rumah lalu tekan [T] untuk tidur',
         'done': lambda s: getattr(s, 'day', 1) >= 2,
     },
     {
@@ -53,7 +53,7 @@ TUTORIAL_STEPS = [
     {
         'id': 'kirim',
         'label': 'Kirim hasil ke Peti & tidur untuk dapat emas',
-        'hint': 'Bawa panen ke Peti Kirim (tanda kuning) dekat rumah, tekan [R], lalu tidur [T]',
+        'hint': 'Bawa panen ke Peti Kirim (tanda kuning) dekat rumah, tekan [F], lalu tidur [T]',
         'done': lambda s: s.stats.get('earned', 0) > 0,
     },
 ]
@@ -95,6 +95,10 @@ def tracker_lines(s):
                 pass
         return (f"TUTORIAL  {i + 1}/{len(TUTORIAL_STEPS)}", label, step.get('hint', ''))
 
-    stage = min(getattr(s, 'quest_stage', 0), len(QUEST_STAGES) - 1)
-    q = QUEST_STAGES[stage]
+    # Hanya tugas utama: entri ber-'alur' (Cerita Dua Desa) punya nomor 's'
+    # sendiri dan tersimpan SESUDAH tugas utama, jadi tanpa saringan ini
+    # quest_stage 12 (tugas utama tamat) menunjuk "Tamu yang Dicurigai".
+    utama = [q for q in QUEST_STAGES if not q.get('alur')]
+    stage = min(getattr(s, 'quest_stage', 0), len(utama) - 1)
+    q = utama[stage]
     return (f"QUEST - {q['t']}", q['d'], '')

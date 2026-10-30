@@ -18,6 +18,10 @@ class InteractionController:
     def __init__(self, player, world):
         self.player = player
         self.world = world
+        # (npc_id, item) yang sedang menunggu "Ya, berikan." di dialog
+        # gift_confirm. Disimpan supaya barang yang diserahkan PERSIS barang
+        # yang disebut di pertanyaan konfirmasi (favorit utama Cerita Dua Desa).
+        self._hadiah_tertunda = None
 
     def _social(self, s, base: int) -> float:
         """Naikkan motif sosial dgn pengaruh MOOD (S4): mood bagus membuat
@@ -104,6 +108,10 @@ class InteractionController:
                 self.player._fx_burst(fx, fy + 0.2, fz, color.rgb(60, 150, 255, 200), n=6)
                 sound_play('water', 0.8)
                 panels.flash_msg("Tanaman disiram!", 0.8)
+                # Suara ini (dan dua di cabang Panen) hilang tanpa konflik di
+                # merge 5683e79: blok Siram/Panen diambil dari sisi visual.
+                panels.say_batin_once('siram', 'akar',
+                    "Genangi tunas muda, keringkan saat menua. Air itu jadwal, bukan suasana hati.")
                 self.check_quests()
             else:
                 sound_play('blocked', 0.6)
@@ -165,6 +173,13 @@ class InteractionController:
                     ekor = f" | {hint}" if hint else ""
                     panels.flash_msg(
                         f"+1 {CROPS[crop_name]['name']} (nilai {nilai}G){ekor}", 1.6)
+                    # Baris SUKMA "mutu >= 4" dari cd92b0d tidak ikut: panen di
+                    # sini tidak membaca mutu sama sekali, jadi syaratnya tidak
+                    # punya padanan.
+                    panels.say_batin_once('panen', 'akar',
+                        "Panen pertama. Mutu mengingat segalanya yang kau lakukan dan tidak. Sawah membukukan dengan jujur.")
+                    panels.say_batin_once('kirim_hint', 'lapar',
+                        "Hasil panen tak jadi emas sendiri. Taruh di Peti Kirim dekat rumah — fajar mengubahnya jadi uang.")
                     self.check_quests(panels)
                 else:
                     sound_play('blocked', 0.6)
@@ -242,7 +257,7 @@ class InteractionController:
         s = self.player.state
         tx, ty = self.player.get_tile_pos()
 
-        # Menunggang mengambil alih [E] seluruhnya. Tombol yang menaikkanmu
+        # Menunggang mengambil alih [F] seluruhnya. Tombol yang menaikkanmu
         # adalah tombol yang menurunkanmu — itu satu-satunya cara turun yang
         # tidak perlu diajarkan. Ia dicek PALING AWAL karena selagi menunggang
         # pemain berdiri di tile yang sama dengan kudanya: kalau menu radial
@@ -262,9 +277,26 @@ class InteractionController:
             return
         if s.scene_name == 'clinic' and self.try_healing(panels):
             return
+        # Papan Titipan (Cerita Dua Desa babak 2) dicek sebelum NPC: Kades
+        # Hardjo berjaga dua ubin dari papan Balai Desa, dan get_nearest_npc()
+        # menerima NPC sejauh tiga ubin.
+        if self.try_papan_titipan(panels):
+            return
         if self._try_shipping_bin(panels):  # Peti Kirim: setor hasil panen
             return
         if self._try_plot_care(panels):     # Sakuna: cabut gulma / pupuk petak di kaki
+            return
+
+        # Surat pertama menang atas perabot di sekitar. context_prompt() sudah
+        # menjanjikan "[F] Baca surat" kepada pemain yang menghadap kotak pos,
+        # tapi menu perabot (radius 1) dicek lebih dulu dan peti di sebelah
+        # kotak pos menelan tombolnya. Terukur 16 Okt 2026 lewat
+        # tools/probe_lima_menit.py: pemain baru macet di langkah PERTAMA
+        # tutorial, karena [F] membuka menu peti, bukan surat.
+        from ..config import MB
+        if (not s.mail_read and
+                self.world.get_tile(*self.player._facing_tile()) == MB):
+            self._baca_surat(panels)
             return
 
         # Perabot di sekitar: sumber utama pengisian motif. Dicek SEBELUM
@@ -319,12 +351,7 @@ class InteractionController:
                     sims_act.start(tid, ftx, fty, panels)
                 return
             if tid == MB and not self.player.state.mail_read:
-                self.player.state.mail_read = True
-                if self.player.state.quest_stage == 0:
-                    self.player.state.quest_stage = 1
-                sound_play('menu_select', 0.8)
-                panels.emote('!', color.rgb(255, 220, 120))
-                panels.start_dialog('mailbox', self.player.state)
+                self._baca_surat(panels)
             elif tid == CL:
                 h = self.player.state.get_hour()
                 m = int(self.player.state.time_minutes % 60)
@@ -367,7 +394,7 @@ class InteractionController:
             ])
 
     def _try_collect_animal(self, npc_id, panels) -> bool:
-        """Ternak produktif: ambil hasil harian (susu/telur/wol) dgn [R].
+        """Ternak produktif: ambil hasil harian (susu/telur/wol) dgn [F].
         Return True jika hasil diambil; False (sudah/ bukan ternak) → lanjut pie menu."""
         from ..data import ANIMAL_NPCS, ANIMAL_PRODUCTS
         info = ANIMAL_NPCS.get(npc_id)
@@ -420,11 +447,11 @@ class InteractionController:
             if total:
                 panels.flash_msg(f"Peti Kirim — {total} barang menunggu fajar.", 1.4)
             else:
-                panels.flash_msg("Peti Kirim kosong. Panen dulu, lalu setor di sini [R].", 1.8)
+                panels.flash_msg("Peti Kirim kosong. Panen dulu, lalu setor di sini [F].", 1.8)
         return True
 
     def _try_plot_care(self, panels) -> bool:
-        """Sakuna: perawatan petak di kaki pemain via [R].
+        """Sakuna: perawatan petak di kaki pemain via [F].
         Prioritas: cabut gulma → pupuk (isi nutrisi). Return True jika menangani."""
         s = self.player.state
         tx, ty = self.player.get_tile_pos()
@@ -568,23 +595,23 @@ class InteractionController:
             npc = entities_mgr.get_nearest_npc(tx, ty, max_dist_tiles=1.8)
             if npc:
                 nama = npc.get('name') or npc['id'].replace('_', ' ').title()
-                return f"[R] Bicara dengan {nama}"
+                return f"[F] Bicara dengan {nama}"
 
             # 2) Objek dunia yang dihadap
             if tid_face == MB:
-                return "[R] Baca surat" if not s.mail_read else ""
+                return "[F] Baca surat" if not s.mail_read else ""
             if tid_face == LGH_B:
-                return "[R] Periksa mercusuar"
+                return "[F] Periksa mercusuar"
             if tid_here == DCK and tid_face == W and s.inventory.get('perahu', 0) > 0:
-                return "[R] Berlayar ke laut lepas"
+                return "[F] Berlayar ke laut lepas"
             if tid_face == W or tid_here == DCK:
-                return "[R] Memancing"
+                return "[F] Memancing"
             if tid_here == BD or tid_face == BD:
-                return "[R] Tidur sampai besok"
+                return "[F] Tidur sampai besok"
             if tid_face == ST:
-                return "[R] Masak (+20 Energi)"
+                return "[F] Masak (+20 Energi)"
             if tid_here == CHR:
-                return "[R] Duduk santai"
+                return "[F] Duduk santai"
 
             # 3) Pertanian — tergantung alat aktif & kondisi petak yang dihadap
             soil_key = f"{ftx},{fty},{s.scene_name}"
@@ -815,6 +842,30 @@ class InteractionController:
               or getattr(self.player, 'quest_manager', None))
         if qc is not None:
             qc.check_quest_progress(panels)
+    def try_papan_titipan(self, panels) -> bool:
+        """Buka panel Papan Titipan kalau pemain berdiri di sebelah ubin PPN
+        (Balai Desa Karsa atau Dukuh Lawang). True kalau panelnya dibuka.
+
+        Delapan tetangga ikut dihitung, bukan hanya ubin yang dihadap: papan
+        berdiri bebas di tepi jalan, dan pemain jarang berhenti tepat lurus
+        menghadapnya.
+        """
+        from ..config import PPN
+        s = self.player.state
+        desa = {'town': 'karsa', 'lawang': 'lawang'}.get(s.scene_name)
+        if not desa:
+            return False
+        tx, ty = self.player.get_tile_pos()
+        fx, fy = self.player._facing_tile()
+        dekat = self.world.get_tile(fx, fy) == PPN or any(
+            self.world.get_tile(tx + dx, ty + dy) == PPN
+            for dx in (-1, 0, 1) for dy in (-1, 0, 1))
+        if not dekat:
+            return False
+        sound_play('menu_select', 0.7)
+        panels.open_panel(f'papan_{desa}')
+        return True
+
     def give_gift(self, entities_mgr, panels, npc_id=None):
         s = self.player.state
         tx, ty = self.player.get_tile_pos()
@@ -838,29 +889,52 @@ class InteractionController:
             sound_play('blocked', 0.6)
             panels.flash_msg("NPC ini tidak menerima hadiah.", 1.0)
             return
-        if s.inventory.get(gift, 0) <= 0:
+        item = self._hadiah_untuk(npc)
+        if item is None:
+            # Sengaja hanya menyebut 'gift': favorit utama adalah kejutan.
             sound_play('blocked', 0.6)
             panels.flash_msg(f"Butuh '{gift}' untuk hadiah ke {npc.get('name', npc_id)}.", 1.5)
             return
 
         from ..data import BRANCHING_DIALOGUES
-        gift_name = gift.replace('_', ' ').title()
+        from ..economy import item_name
         npc_name = npc.get('name', npc_id)
-        BRANCHING_DIALOGUES['gift_confirm']['text'] = f"Beri 1 {gift_name} sebagai hadiah ke {npc_name}?"
+        BRANCHING_DIALOGUES['gift_confirm']['text'] = f"Beri 1 {item_name(item)} sebagai hadiah ke {npc_name}?"
+        self._hadiah_tertunda = (npc_id, item)
         panels.start_dialog(npc_id, s, node_key='gift_confirm')
 
+    def _hadiah_untuk(self, npc) -> str | None:
+        """Barang yang akan diserahkan ke `npc`, atau None kalau tidak punya.
+
+        Favorit utama (Cerita Dua Desa) didahulukan kalau pemain kebetulan
+        membawanya — itulah kejutannya. Kalau tidak, barang kesukaan biasa.
+        """
+        inv = self.player.state.inventory
+        for key in ('favorit', 'gift'):
+            item = npc.get(key)
+            if item and inv.get(item, 0) > 0:
+                return item
+        return None
+
     def complete_gift_gifting(self, npc_id, panels):
+        """Serahkan hadiah. Dipanggil efek 'serahkan_hadiah' di gift_confirm —
+        sebelum efek itu ada, "Ya, berikan." hanya membuka teks gift_yes dan
+        method ini tidak punya pemanggil sama sekali."""
         s = self.player.state
         from ..data import HUMAN_NPCS, SUPERNATURAL_NPCS, ANIMAL_NPCS
         all_d = {**HUMAN_NPCS, **SUPERNATURAL_NPCS, **ANIMAL_NPCS}
         npc = all_d.get(npc_id, {})
-        gift = npc.get('gift')
-        if not gift or s.inventory.get(gift, 0) <= 0:
+        tertunda, self._hadiah_tertunda = self._hadiah_tertunda, None
+        item = tertunda[1] if tertunda and tertunda[0] == npc_id else self._hadiah_untuk(npc)
+        if not item or s.inventory.get(item, 0) <= 0:
             return
 
-        s.inventory[gift] -= 1
+        s.inventory[item] -= 1
+        favorit = item == npc.get('favorit')
         from ..keahlian import punya
         naik = 1.5 if punya(s, 'ramah') else 1.0     # keahlian Ramah Tamah
+        if favorit:
+            naik *= 3.0                              # favorit utama: kejutan
         s.npc_hearts[npc_id] = min(10, s.npc_hearts.get(npc_id, 0) + naik)
         # Denyut senang di wajahnya. Ditaruh di state — bukan di actor —
         # karena jalur hadiah tidak memegang entities_mgr, dan menambahkan
@@ -871,11 +945,25 @@ class InteractionController:
             s._npc_senang = {}
         s._npc_senang[npc_id] = 2.6
         s.stats['gifts'] = s.stats.get('gifts', 0) + 1
-        resp = npc.get('gift_r', 'Terima kasih!')
-        sound_play('gift', 0.8)
-        panels.flash_msg(f"{npc.get('name', npc_id)}: {resp}  (+*)", 2.0)
+        if favorit:
+            resp = npc.get('favorit_r', npc.get('gift_r', 'Terima kasih!'))
+            sound_play('magic', 0.8)
+            panels.flash_msg(f"{npc.get('name', npc_id)}: {resp}  (+*** FAVORIT!)", 3.0)
+        else:
+            resp = npc.get('gift_r', 'Terima kasih!')
+            sound_play('gift', 0.8)
+            panels.flash_msg(f"{npc.get('name', npc_id)}: {resp}  (+*)", 2.0)
         if hasattr(self.player, 'check_npc_lore_gift'):
             self.player.check_npc_lore_gift(npc_id, panels)
+
+    def _baca_surat(self, panels):
+        st = self.player.state
+        st.mail_read = True
+        if st.quest_stage == 0:
+            st.quest_stage = 1
+        sound_play('menu_select', 0.8)
+        panels.emote('!', color.rgb(255, 220, 120))
+        panels.start_dialog('mailbox', st)
 
     def open_object_menu(self, panels) -> bool:
         """Buka menu aksi untuk perabot terdekat. True kalau ada yang dibuka.
@@ -1003,11 +1091,11 @@ class InteractionController:
         s      = self.player.state
 
         if npc_id in HUMAN_NPCS:
-            gift_item = npc.get('gift', '')
+            punya_hadiah = self._hadiah_untuk(npc) is not None
             opts = [
                 ('sapa',        'Sapa',         True,                             '+5 Sosial'),
                 ('ngobrol',     'Ngobrol',       hearts >= 1,                      '+15 Sosial +1❤'),
-                ('beri_hadiah', 'Beri Hadiah',   bool(s.inventory.get(gift_item)), '+20 Sosial +2❤'),
+                ('beri_hadiah', 'Beri Hadiah',   punya_hadiah,                     '+20 Sosial +2❤'),
                 ('tanya_kabar', 'Tanya Kabar',   hearts >= 3,                      '+8 Sosial +1❤'),
             ]
         # Import sistem relasi (sims_relationship.py) dari feature/3d-mobs.
@@ -1055,13 +1143,30 @@ class InteractionController:
                     opts.append(('maya_quest', 'Serahkan Stroberi', bool(s.inventory.get('stroberi')), 'Quest Sampingan'))
                 elif q_status != 'completed':
                     opts.append(('maya_quest', 'Quest Lukisan', True, 'Quest Sampingan'))
-            return opts
+            # Cerita Dua Desa: paling banyak satu opsi per tahap (data.DUA_DESA_OPSI,
+            # supaya urutan cerita hidup di data), plus Lomba Antar-Desa lewat
+            # kedua juri selama jam lomba. Ditaruh DI DEPAN, bukan di ekor: pie
+            # menu hanya memuat _PIE_MAKS = 8 dan memotong sisanya diam-diam,
+            # sedangkan tiga warga Dua Desa sudah punya tujuh opsi umum.
+            from ..data import DUA_DESA_OPSI, LOMBA_ANTAR_DESA
+            from .. import dua_desa as dd
+            cerita = []
+            opsi = DUA_DESA_OPSI.get(npc_id, {}).get(s.dua_desa_stage)
+            if opsi:
+                label, node = opsi[0], opsi[1]
+                boleh, ket = dd.syarat_opsi(s, opsi[2] if len(opsi) > 2 else {})
+                cerita.append((f'dua_desa:{node}', label, boleh, ket))
+            if npc_id in LOMBA_ANTAR_DESA['juri'] and dd.lomba_berlangsung(s):
+                boleh = bool(s.mitra_desa)
+                ket = ('Lomba Masak & Panen Terbesar' if boleh
+                       else 'Pilih desa mitra dulu (Cerita Dua Desa)')
+                cerita.append(('lomba', 'Ikut Lomba Antar-Desa', boleh, ket))
+            return cerita + opts
         elif npc_id in SUPERNATURAL_NPCS:
-            gift_item = npc.get('gift', '')
             opts = [
                 ('amati',       'Amati',         True,                             '+5 Senang'),
                 ('sapa_halus',  'Sapa Halus',    hearts >= 1,                      '+10 Sosial +1❤'),
-                ('tawarkan',    'Tawarkan',      bool(s.inventory.get(gift_item)), '+15 Senang +2❤'),
+                ('tawarkan',    'Tawarkan',      self._hadiah_untuk(npc) is not None, '+15 Senang +2❤'),
             ]
             if npc_id == 'naga_bijak':
                 opts.append(('naga_riddle', 'Ujian Kebijakan', True, '+Ujian Naga'))
@@ -1226,6 +1331,10 @@ class InteractionController:
                 panels.start_dialog(npc_id, s, node_key='maya_quest_delivery')
             else:
                 panels.start_dialog(npc_id, s, node_key='maya_quest_start')
+        elif action.startswith('dua_desa:'):
+            panels.start_dialog(npc_id, s, node_key=action.split(':', 1)[1])
+        elif action == 'lomba':
+            panels.open_panel('lomba')
         elif action == 'beri_hadiah':
             # `panels.emote()` dan `_social()` keduanya SUDAH ada di pohon
             # gabungan ini (panels.py:1192, berkas ini baris 22), jadi baris
@@ -2033,7 +2142,7 @@ class InteractionController:
         s.npc_hearts[npc_id] = min(10.0, s.npc_hearts.get(npc_id, 0) + 0.2)
         sound_play('quest', 0.9)
         if panels:
-            panels.flash_msg("Naik kuda! [E] untuk turun.", 1.6)
+            panels.flash_msg("Naik kuda! [F] untuk turun.", 1.6)
 
     def toggle_broom_flying(self, panels=None):
         self.player._is_flying = not getattr(self.player, '_is_flying', False)

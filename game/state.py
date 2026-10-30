@@ -163,6 +163,10 @@ class GameState:
     # ─── Majelis Batin (4 suara + skill-check ala Disco Elysium) ───
     batin: dict = field(default_factory=lambda: {'bara': 1, 'akar': 1, 'sukma': 1, 'lapar': 1})
     batin_red: list = field(default_factory=list)   # id red-check yang sudah gagal (terkunci)
+    # Bendera sekali-ucap Batin ('pagi_pertama', 'say_cangkul', ...). List,
+    # bukan set, supaya bisa ditulis ke JSON. Save lama tanpa kunci ini dimuat
+    # dengan list kosong: PAGI PERTAMA muncul sekali lagi, sekali itu saja.
+    batin_sekali: list = field(default_factory=list)
 
     # ─── Peti Kirim (shipping bin ala Stardew) — jual hasil panen saat tidur ───
     ship_bin: dict = field(default_factory=dict)     # item → jumlah menunggu dijual
@@ -218,6 +222,25 @@ class GameState:
     post_game:      bool = False                        # True after quest_stage reaches 11
     side_quests: dict = field(default_factory=dict)
     lighthouse_fixed: bool = False                      # True after repairing lighthouse on the beach
+
+    # ─── Cerita Dua Desa (docs/CERITA_DUA_DESA.md) ───
+    # Jalur cerita kedua yang berjalan SEJAJAR quest_stage, bukan di dalamnya:
+    # nomor quest_stage sudah dipakai kunci dialog quest_5/10/11, jadi
+    # menyisipkan tahap baru di sana akan menggeser semuanya. Tahapnya ada di
+    # data.QUEST_STAGES dengan 'alur': 'dua_desa'.
+    dua_desa_stage: int = 0
+    mitra_desa:     str = ''      # '' = belum memilih; 'karsa' atau 'lawang'
+    # Babak 2 "Menjembatani". Kerukunan 0..100 naik dari titipan, Lomba
+    # Antar-Desa dan gotong royong; ambangnya membuka tahap cerita (data.py).
+    kerukunan:      int = 0
+    # Titipan yang sudah diserahkan HARI INI: {'hari': 'tahun-musim-hari',
+    # 'selesai': [id titipan]}. Daftar titipannya sendiri tidak disimpan —
+    # dihitung ulang dari tanggal (game/dua_desa.py), jadi save tetap kecil.
+    titipan:        dict = field(default_factory=dict)
+    # Hasil Lomba Antar-Desa tahun berjalan: {'tahun': N, 'masak': {...}, 'panen': {...}}
+    lomba:          dict = field(default_factory=dict)
+    gotong_royong_hari: int  = 0      # state.day saat gotong royong boleh dimulai; 0 = belum
+    jalan_lama_terbuka: bool = False  # jalan lama Lawang <-> Gua Sang Hyang
 
     stats: dict = field(default_factory=lambda: {
         'lobak_planted':0, 'watered':0, 'lobak_harvested':0, 'corn_harvested':0,

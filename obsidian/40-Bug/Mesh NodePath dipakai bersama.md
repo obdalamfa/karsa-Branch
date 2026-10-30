@@ -46,6 +46,17 @@ lebih baik bayar ongkos membangun ulang daripada mengulang bug ini ketiga kali.
 Pemeriksaan `geom_nol` di [[Regresi]] — boot tiap scene dan cari entity
 bergeometri nol.
 
+Sampai 7a6c1dd penjaga ini buta terhadap bentuk bug yang paling mungkin:
+ia hanya menghitung GeomNode di `e.model`. Satu hasil `load_model_file`
+yang dipasang ke dua entity tetap lolos, karena setter Ursina me-reparent
+model ke entity kedua dan `A.model` masih menunjuk NodePath yang utuh.
+Terukur lewat Game3D di cemetery: cek lama `(True, '')`, cek baru
+`(False, '1 entity tanpa geometri')`. Sekarang model juga harus tergantung
+di bawah entity pemiliknya (`e.model.getParent() == e`).
+
+Titik buta yang masih ada: cek hanya menyusuri anak langsung `scene`.
+Entity bersarang (anak entity lain) tidak diperiksa.
+
 ## Tautan
 
 [[2026-08-26 — Perbaiki render, kontrol, loop permainan]] · [[Peta Kode]]

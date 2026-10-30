@@ -3,7 +3,9 @@ from game.scenes.scene_base import Scene
 
 def build_swarga():
     W_, H_ = 31, 31
-    m = [[CV_F] * W_ for _ in range(H_)]
+    # Di luar pulau adalah udara: CV_W memblokir langkah, dan kahyangan.py
+    # tidak menggambar dinding apa pun di sana.
+    m = [[CV_W] * W_ for _ in range(H_)]
     cx, cy = 15, 15
 
     # ── Pulau awan (diamond) ────────────────────────────────────────────────
@@ -47,8 +49,16 @@ def build_swarga():
     m[18][11] = GOLD_W
     m[18][19] = GOLD_W
 
-    return Scene('swarga', 'Swarga — Negeri Awan', m, portals=[
+    # Tiang gapura portal berdiri di sini; jangan bisa ditembus.
+    m[22][13] = CV_W
+    m[22][17] = CV_W
+
+    from game.scenes.kahyangan import build_kahyangan
+    scene = Scene('swarga', 'Swarga — Negeri Awan', m, portals=[
         (14, 22, 'naga_cave', 7, 6),
         (15, 22, 'naga_cave', 7, 6),
         (16, 22, 'naga_cave', 7, 6),
     ], indoor=False)
+    scene.builder = lambda world: build_kahyangan(world, scene)
+    scene.builder_name = 'swarga'
+    return scene

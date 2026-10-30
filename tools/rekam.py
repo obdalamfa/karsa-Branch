@@ -89,7 +89,7 @@ def main():
                          'kuda_pegasus. Tanpa ini klip naik_kuda di '
                          '_bench/refs/MANIFEST.json tidak punya padanan dari '
                          'sisi kita, karena tidak ada tombol yang menaiki kuda '
-                         '— menunggang dimulai dari menu radial [E].')
+                         '— menunggang dimulai dari menu radial [F].')
     ap.add_argument('--at', default=None, help='taruh pemain di x,y')
     ap.add_argument('--pitch', type=float, default=None)
     ap.add_argument('--yaw', type=float, default=None)

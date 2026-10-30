@@ -88,8 +88,10 @@ def uji_dunia(g):
 
 
 PANEL = (('i', 'inventory'), ('j', 'quest'), ('m', 'map'), ('h', 'relations'),
-         ('p', 'wishes'), ('n', 'catatan'), ('f1', 'help'))
-DIGAMBAR = ('quest', 'map', 'relations', 'help')
+         ('p', 'wishes'), ('n', 'catatan'), ('f1', 'help'), ('f6', 'papan'),
+         ('f4', 'ekosistem'))
+DIGAMBAR = ('quest', 'map', 'relations', 'help', 'wishes', 'papan', 'ekosistem',
+            'shop', 'olahan', 'crafting')
 
 
 def uji_panel(g):
@@ -198,6 +200,48 @@ def uji_hud(g):
     langkah(2)
 
 
+def _buka_di(g, scene, tombol, nama):
+    s, p = g.state, g.panels
+    s.scene_name = scene
+    langkah(30)
+    tekan(g, tombol, 4)
+    return p.mode == 'panel' and p._panel_name == nama
+
+
+def uji_panel_berbaris(g):
+    """Warung, Dapur, Bengkel lewat tombol aslinya di tempatnya, dan angka
+    di baris yang tergambar menjalankan baris yang sama."""
+    p, s = g.panels, g.state
+    s.gold = 5000
+    s.inventory.update({'kayu': 40, 'besi': 10, 'lobak': 8})
+    for scene, tombol, nama in (('shop', 'k', 'shop'), ('house', 'o', 'olahan'),
+                                ('smith', 'u', 'crafting')):
+        if not _buka_di(g, scene, tombol, nama):
+            cek(f'[{tombol}] di {scene} membuka {nama}', False, f'mode={p.mode} {p._panel_name}')
+            continue
+        hidup = [e for e in p._kanvas.ents if getattr(e, 'enabled', True)]
+        cek(f'{nama} digambar berbaris, bukan tabel teks',
+            len(hidup) >= 20 and not str(p._panel_body.text).strip(),
+            f'{len(hidup)} entity')
+        if nama == 'shop':
+            n0 = s.inventory.get('lobak_seed', 0)
+            tekan(g, '1', 3)
+            cek('Warung: [1] membeli baris pertama yang tergambar (Benih Lobak)',
+                s.inventory.get('lobak_seed', 0) == n0 + 1, f'{n0} -> {s.inventory.get("lobak_seed", 0)}')
+        if nama == 'crafting':
+            tekan(g, 'e', 2)
+            tekan(g, 'e', 2)
+            cek('Bengkel: [E][E] pindah ke tab Perkakas', getattr(p, '_craft_tab', 0) == 2,
+                getattr(p, '_craft_tab', None))
+            n0 = s.inventory.get('perahu', 0)
+            tekan(g, '1', 3)
+            cek('Bengkel: Perahu Kayu bisa dibuat (dulu nomor [10], tak terjangkau)',
+                s.inventory.get('perahu', 0) == n0 + 1, f'{n0} -> {s.inventory.get("perahu", 0)}')
+        tekan(g, 'escape', 3)
+    s.scene_name = 'farm'
+    langkah(30)
+
+
 def uji_dialog_kilat(g):
     p = g.panels
     p.start_dialog('sari', g.state)
@@ -240,6 +284,7 @@ def main():
             uji_inventori(g)
             uji_jeda(g)
             uji_dialog_kilat(g)
+            uji_panel_berbaris(g)
     except Exception:
         traceback.print_exc()
         cek('probe berjalan tanpa pengecualian', False, 'lihat traceback')

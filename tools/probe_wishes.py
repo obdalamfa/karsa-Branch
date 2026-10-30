@@ -107,7 +107,9 @@ def uji_panel_hidup(g):
         g.panels.mode == 'panel' and g.panels._panel_name == 'wishes',
         f"mode={g.panels.mode} nama={getattr(g.panels, '_panel_name', None)}")
 
-    isi = g.panels._panel_body.text or ''
+    # Sejak 30 Okt 2026 panel ini digambar berbaris (game/panel_daftar.py);
+    # teks yang dirakit wishes.baris_panel tetap disimpan di `_panel_teks`.
+    isi = getattr(g.panels, '_panel_teks', None) or g.panels._panel_body.text or ''
     cek('panel punya isi', len(isi) > 60, f'{len(isi)} karakter')
     cek('panel menyebut Kebahagiaan', 'Kebahagiaan' in isi)
     cek('panel memajang tawaran', 'TAWARAN' in isi)
@@ -161,9 +163,13 @@ def uji_panel_hidup(g):
     _render(4)
     HX, HY = _batas_ui()
     luar = []
-    for nama_e, e in (('judul', g.panels._panel_title),
-                      ('isi', g.panels._panel_body),
-                      ('hint', g.panels._panel_hint)):
+    from ursina import Text as _Text
+    hidup = [e for e in getattr(g.panels, '_kanvas', None).ents
+             if isinstance(e, _Text) and str(e.text).strip()] if getattr(
+                 g.panels, '_kanvas', None) else []
+    cek('panel menggambar isinya', len(hidup) >= 10, f'{len(hidup)} teks kanvas')
+    for nama_e, e in ([('judul', g.panels._panel_title)]
+                      + [(f'kanvas:{str(t.text)[:14]}', t) for t in hidup]):
         from ursina import camera
         kotak = e.getTightBounds(camera.ui)
         if not kotak:

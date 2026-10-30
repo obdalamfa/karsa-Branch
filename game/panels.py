@@ -2579,6 +2579,9 @@ class UIManager:
 
     # Panel yang digambar sungguhan oleh panel_kartu (bukan blok teks).
     _PANEL_GAMBAR = ('quest', 'map', 'relations', 'help')
+    # Panel berbaris (panel_daftar.py): teks lamanya tetap dirakit dan
+    # disimpan di `_panel_teks` (dibaca probe), tapi yang tampil barisnya.
+    _PANEL_DAFTAR = ('shop', 'olahan', 'crafting', 'papan', 'wishes', 'ekosistem')
 
     def _render_panel(self, name: str):
         self._render_panel_isi(name)
@@ -2594,7 +2597,22 @@ class UIManager:
         self._panel_sub.text = (f'Hari {s.day_in_season}  ·  {self._season_name(s)}'
                                 f'  ·  {s.gold}G')
         PK.gambar_kaki(kv, self._panel_hint.text)
-        if name in self._PANEL_GAMBAR:
+        self._panel_teks = str(self._panel_body.text)
+        if name in self._PANEL_DAFTAR:
+            from . import panel_daftar as PD
+            gambar = {'shop': PD.gambar_warung, 'olahan': PD.gambar_dapur,
+                      'crafting': PD.gambar_bengkel, 'papan': PD.gambar_papan,
+                      'wishes': PD.gambar_keinginan,
+                      'ekosistem': PD.gambar_ekosistem}[name]
+            try:
+                gambar(kv, self, s)
+                self._panel_body.text = ''
+            except Exception:
+                import logging, traceback
+                logging.warning('panel_daftar %s gagal:\n%s', name, traceback.format_exc())
+                kv.bersih()
+                PK.gambar_kaki(kv, self._panel_hint.text)
+        elif name in self._PANEL_GAMBAR:
             self._panel_body.text = ''
             gambar = {'quest': lambda: PK.gambar_quest(kv, s),
                       'map': lambda: PK.gambar_peta(kv, s),
@@ -2641,7 +2659,11 @@ class UIManager:
         elif name == 'olahan':
             self._panel_hint.text = '[1-9: Olah]   [Q/R: halaman]   [ESC: Tutup]'
         elif name == 'crafting':
-            self._panel_hint.text = '[1-5: Pickaxe]   [6-9: Pedang]   [ESC: Tutup]'
+            # Tiga kelompok bertab, angka 1-9 di tiap kelompok. Dulu satu
+            # daftar bernomor 1-14 sementara input hanya menerima satu digit:
+            # Perkakas [10]-[14] (termasuk Perahu Kayu, satu-satunya jalan
+            # berlayar) tidak pernah bisa dibuat.
+            self._panel_hint.text = '[Q/E: kelompok]   [1-9: buat]   [ESC: Tutup]'
         elif name == 'wishes':
             self._panel_hint.text = ('[1-5: janjikan]   [6-9: lupakan janji]'
                                      '   [A/B/C: beli hadiah]   [ESC: Tutup]')
@@ -2985,6 +3007,11 @@ class UIManager:
         self._market_page = 0
         self._render_panel(self._panel_name or 'shop')
 
+    def craft_tab(self, delta: int):
+        from .panel_daftar import TAB_BENGKEL
+        self._craft_tab = (getattr(self, '_craft_tab', 0) + delta) % len(TAB_BENGKEL)
+        self._render_panel('crafting')
+
     def market_page(self, delta: int):
         self._market_state()
         self._market_page = max(0, self._market_page + delta)
@@ -3090,7 +3117,12 @@ class UIManager:
         elif self._panel_name == 'olahan':
             return self._process_item(idx)
         elif self._panel_name == 'crafting':
-            return self._craft_item(idx)
+            from .panel_daftar import resep_bengkel
+            tab = getattr(self, '_craft_tab', 0)
+            if not (1 <= idx <= len(resep_bengkel(tab))):
+                return ''
+            geser = sum(len(resep_bengkel(t)) for t in range(tab))
+            return self._craft_item(geser + idx)
         elif self._panel_name == 'wishes':
             return self._aksi_keinginan(idx)
         elif self._panel_name == 'papan':

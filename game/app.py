@@ -940,6 +940,8 @@ class Game3D:
                 # Warung punya dua sisi (BELI/JUAL); tanpa tombol ini sisi jual
                 # tidak bisa dicapai sama sekali.
                 self.panels.cycle_market_mode()
+            elif self.panels._panel_name == 'crafting' and key in ('q', 'e', 'tab'):
+                self.panels.craft_tab(-1 if key == 'q' else 1)
             elif self.panels._panel_name in ('shop', 'olahan') and key in ('q', 'r'):
                 # Input panel hanya menerima angka 1-9, jadi daftar yang lebih
                 # panjang dari sembilan baris butuh halaman.

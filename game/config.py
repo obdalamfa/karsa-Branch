@@ -73,6 +73,10 @@ KUIL = 62   # kuil surgawi — hanya di scene swarga
 # Objek rumah tangga ala Sims (S2) — ditambah di ID baru agar tak menggeser
 # penomoran tile lama (scene & save lama tetap valid).
 KLK, WC, SWR = 63, 64, 65   # kulkas, toilet, pancuran/shower
+# Papan Titipan warga (Cerita Dua Desa babak 2, docs/CERITA_DUA_DESA.md).
+# Sama seperti di atas: ID baru SELALU di ujung, karena angkanya ikut tersimpan
+# di save (state.dungeon_tiles).
+PPN = 66
 
 TILE_NAMES = {
     G:'grass', D:'dirt', P:'path', W:'water', FL:'floor', WL:'wall',
@@ -95,6 +99,7 @@ TILE_NAMES = {
     GREENHOUSE_EXT:'greenhouse_ext',
     KUIL:'kuil',
     KLK:'kulkas', WC:'toilet', SWR:'pancuran',
+    PPN:'papan_titipan',
 }
 
 # Nama konstanta untuk tiap ID ubin. Dipakai berkas scene (yang menyimpan NAMA,
@@ -111,13 +116,14 @@ _TILE_ORDER = (
     # mereka tidak bisa disimpan ke berkas scene sama sekali -- `tile_key`
     # mengembalikan UNKNOWN_63 dan kulkas/kloset/pancuran hilang dari data.
     'WARUNG RUMAH_PG UNION_HL SHRINE DEBRIS LAUNDRY GRAFFITI_W '
-    'SHOP_EXT CLINIC_EXT SMITH_EXT GREENHOUSE_EXT KUIL KLK WC SWR'
+    'SHOP_EXT CLINIC_EXT SMITH_EXT GREENHOUSE_EXT KUIL KLK WC SWR '
+    'PPN'
 ).split()
 
 TILE_IDS = {name: globals()[name] for name in _TILE_ORDER}
 
-assert len(TILE_IDS) == 66 and set(TILE_IDS.values()) == set(range(66)), (
-    'TILE_IDS tidak cocok dengan 66 ID ubin di atas'
+assert len(TILE_IDS) == 67 and set(TILE_IDS.values()) == set(range(67)), (
+    'TILE_IDS tidak cocok dengan 67 ID ubin di atas'
 )
 
 WALKABLE  = [G, D, P, FL, DR, GT, CV_F, STR_T, DCK, LLY, MINED, STAIRS_DOWN, STAIRS_UP, SD, CLOUD]
@@ -126,7 +132,7 @@ BLOCKING  = [WL, TR, H, FN, BD, ST, TB, BS, MR, FP, CL, PP, CH, CT, SH, GR, LN, 
              CV_W, PEN, BOT, CRYS, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, MB, LGH_B, LGH_F, GOLD_W, PALM, TV, CAL,
              WARUNG, RUMAH_PG, UNION_HL, SHRINE, DEBRIS, LAUNDRY, GRAFFITI_W,
              SHOP_EXT, CLINIC_EXT, SMITH_EXT, GREENHOUSE_EXT, KUIL,
-             KLK, WC, SWR]
+             KLK, WC, SWR, PPN]
 MINEABLE  = [CV_W, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS]
 
 SEASONS      = ['Semi', 'Panas', 'Gugur', 'Dingin']

@@ -516,6 +516,7 @@ class EntitiesManager:
         self._update_npc_schedules()
 
     def _update_npc_schedules(self):
+        from .dua_desa import jadwal_npc
         s = self.state
         hour = s.get_hour()
         for npc_id in all_npcs():
@@ -526,7 +527,9 @@ class EntitiesManager:
             # 'farm' dan memindahkannya ke petak 20,5: kudanya lenyap dari
             # bawah penunggangnya dan muncul lagi di kandang.
             if npc_id == getattr(s, 'menunggang', ''): continue
-            sched = SCHEDULES.get(npc_id, [])
+            # Jadwal hari ini: SCHEDULES, kecuali Cerita Dua Desa sedang
+            # memindahkan warga (hari Lomba, gotong royong, jalan lama terbuka).
+            sched = jadwal_npc(npc_id, s)
             if not sched: continue
             current = sched[0]
             for entry in sched:
@@ -660,9 +663,13 @@ class EntitiesManager:
                 pos['activity'] = self._aktivitas_jadwal(npc_id)
 
     def _aktivitas_jadwal(self, npc_id):
+        # Sumber jadwal yang sama dengan _update_npc_schedules: kalau tidak,
+        # warga yang tiba di longsor Lawang saat gotong royong berlabel
+        # kegiatan dari SCHEDULES biasa ("di balai desa").
+        from .dua_desa import jadwal_npc
         hour = self.state.get_hour()
         cur = None
-        for entry in SCHEDULES.get(npc_id, []):
+        for entry in jadwal_npc(npc_id, self.state):
             if entry[0] <= hour:
                 cur = entry
         return cur[4] if cur else ''

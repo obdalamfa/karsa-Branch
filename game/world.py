@@ -23,8 +23,8 @@ from .config import (TILE_SIZE, GROUND_H, WALL_H, TREE_H, HOUSE_H, OBJ_H, SMALL_
                      MR, FP, CL, PP, CH, CT, SH, GR, LN, DT, CV_W, CV_F, PEN, STR_T,
                      DCK, BOT, LLY, CRYS, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH,
                      STAIRS_DOWN, STAIRS_UP, MINED, SD, LGH_B, LGH_F, CLOUD, GOLD_W, PALM, TV, CHR, CAL,
-                     WC)
-from .scenes import SCENES
+                     WC, PPN)
+from .scenes import SCENES, sesuaikan_scene
 from .data import CROPS
 # Impor ini BUKAN sekadar dekorasi: game/crops.py mendaftarkan katalog palawija,
 # padi dan pohon ke data.CROPS saat diimpor (tanpa menimpa entri yang sudah
@@ -491,6 +491,9 @@ class World3D:
             apply_placed(self.state, self.scene_obj)
         except Exception:
             pass
+        # Ubin/portal yang bergantung pada cerita (jalan lama Lawang <-> gua,
+        # Cerita Dua Desa babak 2) disetel dulu, dua arah — scenes/__init__.py.
+        sesuaikan_scene(name, self.scene_obj, self.state)
         self._build_tiles()
         self._build_all_crops()
         if hasattr(self.scene_obj, 'builder') and self.scene_obj.builder:
@@ -1350,7 +1353,8 @@ class World3D:
             from .scenes.interior import TILES as _INTERIOR_TILES
             if tid in _INTERIOR_TILES:
                 return    # rupa dari model Blender, lihat scenes/interior.py
-        if tid in (TR, PALM, DT, LN, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS, H, FP, GR, TV, CHR, CAL):
+        if tid in (TR, PALM, DT, LN, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS, H, FP, GR, TV, CHR, CAL,
+                   PPN):
             # Handled by Scene builder/props.py
             return
 

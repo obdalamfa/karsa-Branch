@@ -95,6 +95,10 @@ def tracker_lines(s):
                 pass
         return (f"TUTORIAL  {i + 1}/{len(TUTORIAL_STEPS)}", label, step.get('hint', ''))
 
-    stage = min(getattr(s, 'quest_stage', 0), len(QUEST_STAGES) - 1)
-    q = QUEST_STAGES[stage]
+    # Hanya tugas utama: entri ber-'alur' (Cerita Dua Desa) punya nomor 's'
+    # sendiri dan tersimpan SESUDAH tugas utama, jadi tanpa saringan ini
+    # quest_stage 12 (tugas utama tamat) menunjuk "Tamu yang Dicurigai".
+    utama = [q for q in QUEST_STAGES if not q.get('alur')]
+    stage = min(getattr(s, 'quest_stage', 0), len(utama) - 1)
+    q = utama[stage]
     return (f"QUEST - {q['t']}", q['d'], '')

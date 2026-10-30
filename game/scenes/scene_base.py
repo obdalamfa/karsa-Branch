@@ -45,7 +45,8 @@ SCENE_VERSION = 1
 # Nama builder yang sah. Ditulis sebagai nama, bukan referensi fungsi, supaya
 # modul ini tidak mengimpor props/rock_sanctuary/beach di level atas -- itu
 # akan membuat siklus impor, karena ketiganya mengimpor scene_base.
-BUILDER_NAMES = ('default', 'beach', 'mountain', 'cave', 'interior', 'swarga', 'dungeon')
+BUILDER_NAMES = ('default', 'beach', 'mountain', 'cave', 'interior', 'swarga', 'dungeon',
+                 'lawang')
 
 _ID_TO_KEY = {value: name for name, value in TILE_IDS.items()}
 
@@ -138,6 +139,11 @@ def resolve_builder(name: str, scene):
     if name == 'swarga':
         from .kahyangan import build_kahyangan
         return lambda world: build_kahyangan(world, scene)
+    if name == 'lawang':
+        # Dukuh Lawang: prop standar + kerbau dan kambing warga sebagai
+        # properti scene (lihat game/scenes/lawang.py).
+        from .lawang import lawang_builder
+        return lawang_builder
     from .props import default_prop_builder
     return lambda world: default_prop_builder(world, scene)
 

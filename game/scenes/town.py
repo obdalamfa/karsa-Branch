@@ -113,6 +113,11 @@ def build_town():
     # keenam warga berdiri, supaya tidak ada satu pun yang tertutup daun.
     scatter(m, [(13, 7), (26, 7), (9, 16), (22, 16), (26, 16)], TR)
 
+    # Papan Titipan warga Karsa (Cerita Dua Desa babak 2): di alun-alun, tepat
+    # di depan gerbang Balai Desa (18,9). Kades Hardjo berjaga di (18,8), jadi
+    # papan dan kades terbaca sebagai satu tempat.
+    put(m, 20, 8, PPN)
+
     sc = Scene('town', 'Desa Karsa', m, portals=[
         (0, 14, 'farm', 26, 9), (0, 15, 'farm', 26, 10),
         (6, 0, 'mountain', 14, 23), (7, 0, 'mountain', 15, 23),

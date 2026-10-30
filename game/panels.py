@@ -2093,6 +2093,11 @@ class UIManager:
                         qkey = cond['side_quest_active']
                         if self.state.side_quests.get(qkey) != 'active':
                             show = False
+                    # Cerita Dua Desa babak 2: ambang kerukunan, inklusif.
+                    if self.state.kerukunan < cond.get('min_kerukunan', self.state.kerukunan):
+                        show = False
+                    if self.state.kerukunan > cond.get('max_kerukunan', self.state.kerukunan):
+                        show = False
                 if show:
                     valid_choices.append(c)
 
@@ -2215,6 +2220,24 @@ class UIManager:
             if 'take_item' in effect:
                 item = effect['take_item']
                 s.inventory[item] = max(0, s.inventory.get(item, 0) - 1)
+            # Cerita Dua Desa dan hadiah butuh pemain (QuestController /
+            # InteractionController); tanpa pemain efek ini dilewati, sama
+            # seperti _end_dialog() memperlakukan self.player yang kosong.
+            pl = getattr(self, 'player', None)
+            if pl is not None:
+                if 'dua_desa' in effect:
+                    pl.quest_controller.maju_dua_desa(effect['dua_desa'], self)
+                if 'mitra' in effect:
+                    pl.quest_controller.pilih_mitra(effect['mitra'], self)
+                if effect.get('serahkan_hadiah'):
+                    pl.complete_gift_gifting(self._dialog_npc, self)
+                # Babak 2: penggalian dijadwalkan, catatan baru, jalan dibuka.
+                if effect.get('gotong_royong'):
+                    pl.quest_controller.jadwalkan_gotong_royong(self)
+                if 'lore' in effect:
+                    pl.quest_controller.add_lore(effect['lore'], pl, self)
+                if effect.get('buka_jalan_lama'):
+                    pl.quest_controller.buka_jalan_lama(self, getattr(pl, 'world', None))
             if 'start_side_quest' in effect:
                 qkey = effect['start_side_quest']
                 s.side_quests[qkey] = 'active'
@@ -2647,7 +2670,11 @@ class UIManager:
             'ekosistem': 'Ekosistem Lembah',
             'wishes':    'Keinginan & Kebahagiaan',
             'papan':     'Papan Permintaan Warga',
+            'lomba':     'Lomba Antar-Desa - Lapangan Dukuh Lawang',
         }
+        from .data import PAPAN_TITIPAN
+        for desa, papan in PAPAN_TITIPAN.items():
+            titles[f'papan_{desa}'] = papan['nama']
         self._panel_title.text = titles.get(name, name.capitalize())
         # Grid inventory hanya muncul di panel inventory
         if name != 'inventory':
@@ -2670,6 +2697,11 @@ class UIManager:
         elif name == 'papan':
             self._panel_hint.text = ('[1-3: setor permintaan]   [F4: lihat ekosistem]'
                                      '   [ESC: tutup]')
+        elif name.startswith('papan_'):
+            self._panel_hint.text = '[1-2: Antar titipan]   [ESC: Tutup]'
+        elif name == 'lomba':
+            # Pendek: baris petunjuk kontrol HUD menempati kanan bawah layar.
+            self._panel_hint.text = '[1-3: Masak]   [4-6: Panen]   [ESC: Tutup]'
         else:
             self._panel_hint.text = '[ESC: tutup]'
 
@@ -2772,8 +2804,13 @@ class UIManager:
             qs   = s.quest_stage
             lines= ["── TUGAS UTAMA ──", ""]
             for q in QUEST_STAGES:
+                if q.get('alur'):      # jalur cerita lain: bagiannya sendiri di bawah
+                    continue
                 mark = '[v]' if q['s'] < qs else ('[>]' if q['s'] == qs else '[ ]')
                 lines.append(f"  {mark} [{q['s']}] {q['t']}: {q['d']}")
+
+            lines.append("")
+            lines.extend(self._quest_dua_desa_lines(s))
 
             lines.append("")
             lines.append("── QUEST SAMPINGAN ──")
@@ -2799,7 +2836,7 @@ class UIManager:
                 return f'[{label}]' if cur != key else f'>>>{label}<<<'
             lines = [
                 '',
-                f"  {_loc('mountain','LERENG GUNUNG')}",
+                f"  {_loc('mountain','LERENG GUNUNG')}---{_loc('lawang','DUKUH LAWANG')}",
                 '          |',
                 f"  {_loc('farm','KEBUN')}---{_loc('town','DESA')}---{_loc('lake','DANAU')}",
                 '              |',
@@ -2816,6 +2853,8 @@ class UIManager:
                 f"  Hari   : {s.day_in_season} | {self._season_name(s)}  Thn {s.year}",
                 f"  Cuaca  : {s.weather}",
             ]
+            if getattr(s, 'jalan_lama_terbuka', False):
+                lines.insert(1, "  Jalan lama Dukuh Lawang - Gua Hyang: TERBUKA")
             self._panel_body.text = '\n'.join(lines)
 
         elif name == 'relations':
@@ -2931,6 +2970,12 @@ class UIManager:
         elif name == 'catatan':
             self._set_body(self._render_catatan(s))
 
+        elif name.startswith('papan_'):
+            self._set_body(self._render_papan(s, name[len('papan_'):]))
+
+        elif name == 'lomba':
+            self._set_body(self._render_lomba(s))
+
     def _set_body(self, lines):
         self._panel_body.text = chr(10).join(lines)
 
@@ -2979,6 +3024,109 @@ class UIManager:
         if n > 1:
             lines.append(f'  -- halaman {hal + 1}/{n}  [Q/R] --')
             self._panel_hint.text = '[Q/R: halaman]   [ESC: tutup]'
+        return lines
+
+    def _quest_dua_desa_lines(self, s):
+        """Bagian Cerita Dua Desa di panel quest (J): babak yang sedang berjalan.
+
+        Tandanya dihitung dari state.dua_desa_stage, BUKAN quest_stage: jalur
+        ini berjalan sejajar tugas utama (lihat data.QUEST_STAGES). Babak yang
+        sudah lewat diringkas jadi satu baris: panel memuat 28 baris, dan
+        tugas utama saja sudah memakai 14.
+        """
+        from .data import BABAK_DUA_DESA, MITRA_DESA, KERUKUNAN_MAKS
+        from .controllers.quest_controller import QuestController
+        from . import dua_desa as dd
+        ds = getattr(s, 'dua_desa_stage', 0)
+        babak = QuestController.babak_aktif(ds)
+        lines = [f"── CERITA DUA DESA · BABAK {babak}: {BABAK_DUA_DESA[babak].upper()} ──"]
+        for b in range(1, babak):
+            lines.append(f"  [v] Babak {b} {BABAK_DUA_DESA[b]}: selesai")
+        for q in QuestController.tahap_babak(babak):
+            mark = '[v]' if q['s'] < ds else ('[>]' if q['s'] == ds else '[ ]')
+            lines.append(f"  {mark} {q['t']}: {q['d']}")
+        info = []
+        mitra = MITRA_DESA.get(getattr(s, 'mitra_desa', ''))
+        if mitra:
+            info.append(f"Mitra: {mitra['nama']}")
+        if ds >= dd.TAHAP_BABAK2:
+            info.append(f"Kerukunan {s.kerukunan}/{KERUKUNAN_MAKS} [{dd.bar_kerukunan(s.kerukunan)}]")
+        if info:
+            lines.append('  ' + '   |   '.join(info))
+        lomba = dd.baris_lomba(s)
+        if lomba:
+            lines.append('  ' + lomba)
+        return lines
+
+    def _render_papan(self, s, desa) -> list:
+        """Papan Titipan (Cerita Dua Desa babak 2): titipan hari ini di `desa`."""
+        from . import dua_desa as dd
+        from .data import TITIPAN_KERUKUNAN, TITIPAN_HATI, KERUKUNAN_MAKS
+        from .economy import item_name
+        lines = [f"Kerukunan Karsa-Lawang  [{dd.bar_kerukunan(s.kerukunan)}]  "
+                 f"{s.kerukunan}/{KERUKUNAN_MAKS}", '']
+        if s.dua_desa_stage < dd.TAHAP_BABAK2:
+            return lines + ["  Papan ini masih kosong: warga belum cukup mengenalmu",
+                            "  untuk menitip apa pun.", '',
+                            "  (Selesaikan dulu babak 1 Cerita Dua Desa - lihat quest, J.)"]
+        lines += ["Titipan hari ini. Kertasnya diganti setiap pagi.", '']
+        sudah = dd.selesai_hari_ini(s)
+        for i, t in enumerate(dd.titipan_hari_ini(s, desa), start=1):
+            lines.append(f'  [{i}] {dd.nama_peminta(t)}: "{t["teks"]}"')
+            if t['id'] in sudah:
+                lines.append("      SELESAI - sudah kau antar. Terima kasih!")
+            else:
+                punya = s.inventory.get(t['item'], 0)
+                siap = '[o] siap diantar' if punya >= t['n'] else '[ ] barang kurang'
+                lines.append(f"      Titip {item_name(t['item'])} x{t['n']} (punya {punya})"
+                             f"   Imbalan {dd.imbalan(t)}G   {siap}")
+            lines.append('')
+        hati = f"{TITIPAN_HATI:g}".replace('.', ',')
+        lines.append(f"  Tiap titipan: Kerukunan +{TITIPAN_KERUKUNAN}, dan +{hati} hati untuk")
+        lines.append("  peminta yang kau kenal. Kerukunan membuka cerita jalan lama.")
+        return lines
+
+    def _render_lomba(self, s) -> list:
+        """Panel Lomba Antar-Desa: tiga calon terbaik pemain per kategori."""
+        from . import dua_desa as dd
+        from .data import LOMBA_ANTAR_DESA, MITRA_DESA, HUMAN_NPCS
+        from .economy import item_name
+        mitra = MITRA_DESA.get(s.mitra_desa, {}).get('nama', '-')
+        lawan = HUMAN_NPCS.get(dd.lawan_lomba(s) or '', {}).get('name', '-')
+        lines = [f"Kau mewakili {mitra}. Lawanmu: {lawan}.",
+                 "Juri: Kades Hardjo dan Mbah Rukmi. Sekali ikut per kategori;",
+                 "nilai lawan baru diumumkan juri sesudah kau menyerahkan.", '']
+        catatan = dd.catatan_lomba(s)
+        keterangan = {'masak': 'satu olahan terbaikmu',
+                      'panen': f"satu tumpukan hasil kebun, maks "
+                               f"{LOMBA_ANTAR_DESA['kategori']['panen']['maks']}"}
+        kosong = {'masak': 'Olah hasil panen di dapur rumah dulu.',
+                  'panen': 'Bawa hasil panen dari kebun.'}
+        for nomor, kat in ((1, 'masak'), (4, 'panen')):
+            k = LOMBA_ANTAR_DESA['kategori'][kat]
+            # ASCII, bukan '──': Montserrat-Bold tidak punya glyph U+2500.
+            lines.append(f"== {k['nama'].upper()} == {keterangan[kat]}")
+            hasil = catatan.get(kat)
+            if hasil:
+                nama = item_name(hasil['item']) + (f" x{hasil['n']}" if hasil['n'] > 1 else '')
+                status = 'MENANG' if hasil['menang'] else 'kalah'
+                lines.append(f"  Sudah ikut: {nama}, nilai {hasil['nilai']} lawan "
+                             f"{hasil['lawan']} - {status}.")
+            else:
+                calon = dd.pilihan_lomba(s, kat)
+                if not calon:
+                    lines.append(f"  (Belum ada yang bisa diikutkan. {kosong[kat]})")
+                # Tanpa perataan kolom: font panel (Montserrat) proporsional,
+                # jadi spasi pengisi justru membuat angka nilai zig-zag.
+                for i, (item, n, nilai) in enumerate(calon):
+                    nama = item_name(item) + (f" x{n}" if n > 1 else '')
+                    lines.append(f"  [{nomor + i}] {nama} - nilai {nilai}")
+            lines.append('')
+        kr = LOMBA_ANTAR_DESA
+        lines.append(f"  Ikut: Kerukunan +{kr['kerukunan_ikut']}. Menang: Kerukunan "
+                     f"+{kr['kerukunan_menang']} lagi dan hadiah emas")
+        lines.append(f"  ({kr['kategori']['masak']['hadiah']}G masak, "
+                     f"{kr['kategori']['panen']['hadiah']}G panen).")
         return lines
 
     @staticmethod
@@ -3130,6 +3278,22 @@ class UIManager:
             pesan = papan_aksi(self.state, idx)
             self._render_panel('papan')
             return pesan
+        elif self._panel_name.startswith('papan_') or self._panel_name == 'lomba':
+            # Cerita Dua Desa babak 2. Logikanya di QuestController; pesannya
+            # di-flash DI SINI dengan durasi lebih panjang dan kembaliannya
+            # dikosongkan, karena app.input() mem-flash kembalian hanya 1,2
+            # detik — terlalu singkat untuk hasil lomba dua baris.
+            pl = getattr(self, 'player', None)
+            if pl is None:
+                return ''
+            if self._panel_name == 'lomba':
+                kategori, nomor = ('masak', idx) if idx <= 3 else ('panen', idx - 3)
+                msg = pl.quest_controller.ikut_lomba(kategori, nomor, self)
+            else:
+                msg = pl.quest_controller.serahkan_titipan(self._panel_name[len('papan_'):], idx, self)
+            self._render_panel(self._panel_name)
+            if msg:
+                self.flash_msg(msg, 3.5)
         return ''
 
     # ─── KEINGINAN (Tahap 4) ─────────────────────────────

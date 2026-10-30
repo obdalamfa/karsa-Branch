@@ -1,5 +1,5 @@
 """Lereng berbatu dengan jalur desa, pelataran gua, dan cabang pemakaman."""
-from game.config import G, D, P, TR, DR, DT, CV_W
+from game.config import G, D, P, TR, DR, DT, CV_W, LN
 from game.scenes.scene_base import Scene
 from game.scenes.layout import blank, rect, border, hline, vline, scatter
 from game.scenes.zone_paint import Zone, BATU_ALUN
@@ -72,11 +72,25 @@ def build_mountain():
 
     _hutan(m)
 
+    # Jalur timur ke Dukuh Lawang (Cerita Dua Desa, docs/CERITA_DUA_DESA.md).
+    # Selama jalan lama lewat gua masih tertimbun longsor, inilah satu-satunya
+    # jalan ke dusun peternak itu — sengaja memutar. Ia menyambung pelataran
+    # batu (x<=23) ke tepi timur di bawah bahu tebing (24..28, 7..10), lalu
+    # menembus tebing tepi x=29 yang dibuka jadi ambang. Digambar SESUDAH
+    # _hutan() supaya urutan acak hutan di tempat lain tidak bergeser; dua
+    # lentera di ujungnya menandai ambang peta (TATA_LETAK P16).
+    for y in (12, 13):
+        for x in range(24, 30):
+            m[y][x] = D
+    m[11][28] = LN
+    m[14][28] = LN
+
     from game.scenes.rock_sanctuary import build_mountain_landscape
     scene = Scene('mountain', 'Lereng Gunung', m, portals=[
         (14, 24, 'town', 14, 1), (15, 24, 'town', 15, 1),
         (14, 3, 'naga_cave', 7, 9), (15, 3, 'naga_cave', 7, 9),
         (2, 24, 'cemetery', 8, 1),
+        (29, 12, 'lawang', 1, 9), (29, 13, 'lawang', 1, 10),
     ], paint=[
         Zone(11, 3, 18, 6, **BATU_ALUN),
         Zone(6, 7, 23, 14, **BATU_ALUN),

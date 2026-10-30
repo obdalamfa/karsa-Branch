@@ -36,3 +36,24 @@ def build_naga_cave():
     # hanya namanya yang bisa bolak-balik. Lihat game/scenes/scene_base.py.
     scene.builder_name = 'cave'
     return scene
+
+
+# Jalan lama ke Dukuh Lawang (Cerita Dua Desa babak 2). Dinding timur terbuka
+# setelah gotong royong dua desa (state.jalan_lama_terbuka). Bukaannya di baris
+# 3-4: di peta ini (12..13, 5..6) adalah bahu batu, jadi baris 3-4 satu-satunya
+# bagian dinding timur yang punya lantai bebas tepat di baliknya. Dinding gua
+# dibangun dari ubin CV_W (rock_sanctuary._dinding_gua), jadi bukaan ini benar-
+# benar terlihat berlubang. Pendaratan di Lawang dua ubin dari mulut jalan,
+# alasannya sama dengan PORTAL_GUA di lawang.py.
+PINTU_LAWANG  = ((14, 3), (14, 4))
+PORTAL_LAWANG = ((14, 3, 'lawang', 4, 3), (14, 4, 'lawang', 5, 3))
+
+
+def sesuaikan_naga_cave(scene, state):
+    """Buka/tutup jalan lama, dua arah. Dipanggil scenes.sesuaikan_scene()."""
+    buka = bool(getattr(state, 'jalan_lama_terbuka', False))
+    for x, y in PINTU_LAWANG:
+        scene.tiles[y][x] = CV_F if buka else CV_W
+    scene.portals[:] = [p for p in scene.portals if tuple(p) not in PORTAL_LAWANG]
+    if buka:
+        scene.portals.extend(PORTAL_LAWANG)

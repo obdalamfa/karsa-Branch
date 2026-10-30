@@ -271,7 +271,10 @@ def _lebar(t):
 def gambar_quest(kv, s):
     from .data import QUEST_STAGES, SIDE_QUESTS
     qs = s.quest_stage
-    n = len(QUEST_STAGES)
+    # Tugas utama saja. Entri ber-'alur' (Cerita Dua Desa) berjalan sejajar
+    # dengan nomor 's' sendiri; bloknya di kolom kanan (_gambar_dua_desa).
+    utama = [q for q in QUEST_STAGES if not q.get('alur')]
+    n = len(utama)
     # Bilah kemajuan di bawah garis kepala.
     x0, lebar = KIRI, 0.56
     y = Y_ISI - 0.006
@@ -285,7 +288,7 @@ def gambar_quest(kv, s):
 
     baris_h = 0.046
     y = yb - 0.040
-    for q in QUEST_STAGES:
+    for q in utama:
         selesai, kini = q['s'] < qs, q['s'] == qs
         if kini:
             kv.kotak(x0 + lebar / 2 - 0.006, y, lebar + 0.030, baris_h - 0.004,
@@ -307,7 +310,7 @@ def gambar_quest(kv, s):
     # Kolom kanan: kartu "sedang dikerjakan" + quest sampingan.
     xk = 0.06
     wk = KANAN - xk
-    kini = next((q for q in QUEST_STAGES if q['s'] == qs), None)
+    kini = next((q for q in utama if q['s'] == qs), None)
     yk = Y_ISI - 0.006
     kv.teks('SEDANG DIKERJAKAN', (xk, yk), 0.60, EMAS)
     hk = 0.15
@@ -323,6 +326,7 @@ def gambar_quest(kv, s):
         kv.teks('Tutorial: ' + langkah, (xk + 0.026, yk - 0.140), 0.52, (200, 190, 160))
 
     ys = yk - 0.030 - hk - 0.050
+    ys = _gambar_dua_desa(kv, s, xk, wk, ys) - 0.020
     kv.teks('QUEST SAMPINGAN', (xk, ys), 0.60, EMAS)
     ys -= 0.040
     ada = False
@@ -341,6 +345,56 @@ def gambar_quest(kv, s):
     if not ada:
         kv.teks('Belum ada. Warga kadang meminta tolong saat diajak bicara.',
                 (xk, ys), 0.52, REDUP)
+
+
+def _gambar_dua_desa(kv, s, x, w, y):
+    """Blok Cerita Dua Desa di kolom kanan panel J; kembalikan y di bawahnya.
+
+    Jalurnya sejajar tugas utama (QUEST_STAGES ber-'alur', nomor 's'
+    sendiri), jadi tidak ikut daftar kiri. Isinya sama dengan teks mentah
+    UIManager._quest_dua_desa_lines: babak berjalan, tahap aktifnya, mitra,
+    Kerukunan (mulai babak 2), dan Lomba Antar-Desa.
+    """
+    from .controllers.quest_controller import QuestController
+    from .data import BABAK_DUA_DESA, MITRA_DESA, KERUKUNAN_MAKS
+    from . import dua_desa as dd
+    ds = getattr(s, 'dua_desa_stage', 0)
+    babak = QuestController.babak_aktif(ds)
+    kv.teks('CERITA DUA DESA', (x, y), 0.60, EMAS)
+    kv.teks(f'BABAK {babak}: {BABAK_DUA_DESA[babak].upper()}', (x + w, y), 0.52, REDUP,
+            asal=(0.5, 0))
+    y -= 0.040
+    kini = next((q for q in QuestController.tahap_babak(babak) if q['s'] == ds), None)
+    cx = x + 0.012
+    kv.kotak(cx, y, 0.022, 0.022, EMAS if kini else HIJAU, 255, 0.5, z=0.04)
+    kv.kotak(cx, y, 0.012, 0.012, KARTU if kini else (18, 40, 24), 255, 0.5, z=0.035)
+    if kini:
+        kv.teks(kini['t'], (cx + 0.025, y + 0.008), 0.62, TERANG)
+        kv.teks(kini['d'], (cx + 0.025, y - 0.012), 0.46, REDUP)
+    else:
+        kv.teks(f'Babak {babak} selesai.', (cx + 0.025, y), 0.62, HIJAU)
+    y -= 0.044
+    mitra = MITRA_DESA.get(getattr(s, 'mitra_desa', ''))
+    rukun = ds >= dd.TAHAP_BABAK2
+    if mitra or rukun:
+        if mitra:
+            kv.teks(f"Mitra: {mitra['nama']}", (x, y), 0.50, REDUP)
+        if rukun:
+            nilai = max(0, min(KERUKUNAN_MAKS, s.kerukunan))
+            lb = 0.16
+            xb = x + w - lb
+            kv.teks(f'Kerukunan {nilai}/{KERUKUNAN_MAKS}', (xb - 0.012, y), 0.50, REDUP,
+                    asal=(0.5, 0))
+            kv.kotak(xb + lb / 2, y, lb, 0.010, (60, 60, 70), 255, 0.5)
+            if nilai:
+                isi = lb * nilai / KERUKUNAN_MAKS
+                kv.kotak(xb + isi / 2, y, isi, 0.010, EMAS, 255, 0.5, z=0.05)
+        y -= 0.032
+    lomba = dd.baris_lomba(s)
+    if lomba:
+        kv.teks(lomba, (x, y), 0.46, REDUP)
+        y -= 0.032
+    return y
 
 
 def _langkah_tutorial(s):
@@ -363,6 +417,7 @@ _TATA_PETA = {
     'naga_cave': (1.0, 1.0),
     'cemetery':  (0.0, 2.0),
     'mountain':  (1.0, 2.0),
+    'lawang':    (2.0, 2.0),      # ujung timur lereng; jalan lama ke gua (babak 2)
     'dungeon':   (2.0, 1.0),
     'farm':      (0.0, 3.0),
     'town':      (1.0, 3.0),
@@ -373,7 +428,7 @@ _LABEL_PETA = {
     'farm': 'Kebun', 'town': 'Desa', 'mountain': 'Lereng Gunung',
     'lake': 'Danau', 'cemetery': 'Kuburan Tua', 'beach': 'Pantai Selatan',
     'naga_cave': 'Gua Sang Hyang', 'dungeon': 'Gua Bertingkat',
-    'swarga': 'Swarga',
+    'swarga': 'Swarga', 'lawang': 'Dukuh Lawang',
 }
 # Interior menempel pada scene luarnya.
 _INDUK = {'house': 'farm', 'greenhouse': 'farm', 'shop': 'town', 'clinic': 'town',

@@ -240,6 +240,49 @@ HUMAN_NPCS = {
             'quest_11': [["Lembah ini benar-benar surga! Pantas kau menjaganya."]],
         },
         'gift_r':"Kayu untuk tambal kapal!"},
+
+    # ── Cerita Dua Desa, babak 1 (docs/CERITA_DUA_DESA.md) ──────────────
+    # 'favorit' = favorit utama: TIDAK pernah disebut di layar, jadi kejutan
+    # saat diberikan (+3 hati dan jawaban 'favorit_r'). 'gift' tetap barang
+    # kesukaan biasa yang disebut di pesan "Butuh ... untuk hadiah".
+    # Tiap baris dialog dipecah '\n' supaya muat kotak dialog selebar 0,70:
+    # Montserrat-Bold di skala dialog ~0,0137 per huruf, jadi <= 48 huruf.
+    'kades_hardjo': {'name':'Kades Hardjo','type':'human','gift':'wortel',
+        'favorit':'acar_lobak',
+        'talks':{
+            'default': [["Sawah Karsa tidak pernah kering\nselama aku jadi kades."],
+                        ["Urusan apa pun di desa ini,\nlaporkan dulu ke balai."]],
+            'hearts_3': [["Dulu Karsa dan Lawang menggelar hajatan\nbersama. Sekarang bertegur sapa pun jarang."]],
+            'hearts_5': [["Mata air lereng dulu dibagi rata. Sejak jalan\nlama longsor, semua orang saling curiga."]],
+            'hearts_7': [["Aku pernah bertengkar hebat dengan Mbah Rukmi\nsoal siapa yang salah saat perjanjian putus."]],
+            'hearts_10': [["Dudukkan Karsa dan Lawang di satu tikar, dan\nakan kuakui jasamu di depan semua warga."]],
+        },
+        'gift_r':"Wortel Karsa memang paling manis.",
+        'favorit_r':"Acar lobak... persis buatan almarhumah istriku."},
+    'mbah_rukmi': {'name':'Mbah Rukmi','type':'human','gift':'jerami',
+        'favorit':'selai_stroberi',
+        'talks':{
+            'default': [["Kerbau tidak pernah bohong.\nManusia, lain cerita."],
+                        ["Jangan berdiri di belakang kerbau, Nak.\nTendangannya keras."]],
+            'hearts_3': [["Orang Karsa bilang kami kasar. Coba mereka\nbangun subuh menggiring kerbau tiap hari."]],
+            'hearts_5': [["Dulu jalan lama lewat gua ramai. Pagi kami\nantar susu ke Karsa, sore pulang bawa beras."]],
+            'hearts_7': [["Pamanmu sering duduk di dapurku. Katanya ada\njanji lama dengan penjaga gunung."]],
+            'hearts_10': [["Kau keras kepala seperti pamanmu, Nak.\nTapi hatimu di tempat yang benar."]],
+        },
+        'gift_r':"Kerbauku yang senang, bukan aku. Tapi terima kasih.",
+        'favorit_r':"Selai stroberi! Dulu orang Karsa membawanya tiap hajatan."},
+    'sekar': {'name':'Sekar','type':'human','gift':'jagung',
+        'favorit':'ikan',
+        'talks':{
+            'default': [["Kambing-kambingku lebih pintar\ndaripada kelihatannya!"],
+                        ["Kau lewat jalur lereng?\nKakimu pasti pegal."]],
+            'hearts_3': [["Tiap pagi aku memikul susu memutar lewat\ngunung. Kata Mbah, dulu cukup lewat gua."]],
+            'hearts_5': [["Maya dari Karsa pernah melukis kambingku.\nJangan bilang Mbah, ya."]],
+            'hearts_7': [["Lomba Antar-Desa nanti, aku ikut lomba hias\nkandang. Kandangku pasti menang!"]],
+            'hearts_10': [["Kau orang pertama yang bikin Mbah tertawa\nsejak jalan lama tertutup."]],
+        },
+        'gift_r':"Jagung! Nanti kubakar di padang gembala.",
+        'favorit_r':"Ikan?! Di Lawang tidak ada danau. Ini hari terbaikku!"},
 }
 
 SUPERNATURAL_NPCS = {
@@ -440,6 +483,17 @@ SCHEDULES = {
                     (14, 19, 15, 'beach', 'istirahat'), (20, 20, 16, 'beach', 'jaga_kapal')],
     'kru_kuro': [(0, 21, 15, 'beach', 'bersih_bersih'), (7, 18, 14, 'beach', 'angkat_barang'),
                  (12, 19, 13, 'beach', 'makan'), (18, 21, 15, 'beach', 'bersih_bersih')],
+    # Cerita Dua Desa. Balai Desa Karsa = bangunan B (17..20, 10..13) yang
+    # menghadap alun-alun lewat gerbang (18,9); Kades berjaga di depannya (18,8)
+    # dan pulang ke belakang balai (19,16). Titik Lawang mengikuti peta
+    # game/scenes/lawang.py. Siang hari Sekar menyabit rumput di jalur lereng,
+    # jadi pemain bisa bertemu orang Lawang pertama kali sebelum sampai dusunnya.
+    'kades_hardjo': [(6, 18, 8, 'town', 'di balai desa'), (10, 12, 5, 'town', 'berkeliling desa'),
+                     (15, 18, 8, 'town', 'di balai desa'), (21, 19, 16, 'town', 'sleeping')],
+    'mbah_rukmi':   [(5, 23, 8, 'lawang', 'menggiring kerbau'), (11, 11, 7, 'lawang', 'duduk di beranda'),
+                     (16, 12, 14, 'lawang', 'mengawasi lapangan'), (20, 11, 7, 'lawang', 'sleeping')],
+    'sekar':        [(6, 23, 15, 'lawang', 'menggembala kambing'), (12, 24, 12, 'mountain', 'menyabit rumput'),
+                     (16, 17, 8, 'lawang', 'memerah susu'), (21, 17, 7, 'lawang', 'sleeping')],
     'naga_bijak':    [(0, 7, 6, 'naga_cave', 'sleeping'), (5, 7, 6, 'naga_cave', 'meditating')],
     'jin_kebun':     [(0, -1, -1, 'hidden', 'dormant'), (19, 5, 8, 'farm', 'helping'),
                       (4, -1, -1, 'hidden', 'dormant')],
@@ -486,7 +540,197 @@ QUEST_STAGES = [
     {'s':9,'t':'Kedalaman','d':'Capai gua level 10'},
     {'s':10,'t':'Boss Naga','d':'Kalahkan Sang Hyang Naga'},
     {'s':11,'t':'TAMAT','d':'Air Keabadian milikmu!'},
+
+    # ── Cerita Dua Desa (docs/CERITA_DUA_DESA.md) ──
+    # Jalur KEDUA. Entri tanpa 'alur' adalah tugas utama di atas; entri ini
+    # dihitung dari state.dua_desa_stage, bukan quest_stage, dan panel J
+    # menampilkannya di bagiannya sendiri. Tahap = jumlah entri babak = selesai.
+    {'alur':'dua_desa','babak':1,'s':0,'t':'Tamu yang Dicurigai',
+     'd':'Temui Kades Hardjo di Desa Karsa'},
+    {'alur':'dua_desa','babak':1,'s':1,'t':'Jalan Memutar',
+     'd':'Ikuti jalur timur Lereng Gunung ke Dukuh Lawang, temui Mbah Rukmi'},
+    {'alur':'dua_desa','babak':1,'s':2,'t':'Memilih Mitra',
+     'd':'Bawa 1 Lobak/Wortel ke Kades Hardjo, atau 1 Susu/Telur ke Mbah Rukmi'},
+    # Babak 2 "Menjembatani". Ambang kerukunan ditulis juga di 'd' supaya
+    # pemain tahu angkanya tanpa membuka dialog; yang benar-benar menahan
+    # adalah kondisi min_kerukunan di node BRANCHING_DIALOGUES.
+    {'alur':'dua_desa','babak':2,'s':3,'t':'Juru Titip',
+     'd':'Selesaikan titipan di papan Balai Desa dan di papan Dukuh Lawang'},
+    {'alur':'dua_desa','babak':2,'s':4,'t':'Akar Perselisihan',
+     'd':'Capai Kerukunan 25, lalu tanya Mbah Rukmi soal jalan lama'},
+    {'alur':'dua_desa','babak':2,'s':5,'t':'Satu Tikar',
+     'd':'Capai Kerukunan 50, lalu ajak Kades Hardjo menggali longsor bersama'},
+    {'alur':'dua_desa','babak':2,'s':6,'t':'Gotong Royong',
+     'd':'Esok paginya, temui kedua sesepuh di longsor Dukuh Lawang'},
 ]
+
+# Judul babak Cerita Dua Desa. Babak 3 menyusul; lihat rancangan.
+BABAK_DUA_DESA = {1: 'Datang', 2: 'Menjembatani'}
+
+# Ambang kerukunan babak 2. Kerukunan (state.kerukunan, 0..100) naik dari
+# titipan, Lomba Antar-Desa, dan gotong royong.
+KERUKUNAN_MAKS   = 100
+KERUKUNAN_CERITA = 25    # Mbah Rukmi mau menceritakan Watu Tikar
+KERUKUNAN_TIKAR  = 50    # Kades Hardjo mau menggali longsor bersama Lawang
+KERUKUNAN_GOTONG = 20    # hadiah gotong royong yang membuka jalan lama
+
+# Pilihan mitra di akhir babak 1. Pemain tetap tinggal di Kebun Paman Arsa;
+# bermitra hanya memberi bonus awal dan menentukan desa yang ia wakili di
+# Lomba Antar-Desa. Bibit Karsa dihitung dari musim yang sedang berjalan
+# (QuestController.pilih_mitra), jadi di sini cukup jumlah per jenisnya.
+# Bonus Lawang SENGAJA bukan seekor ternak, walau rancangan menyebutnya:
+# economy.py menetapkan jumlah ternak tetap (lima ekor, tidak bisa dibeli),
+# dan setiap entri ANIMAL_NPCS langsung dihitung husbandry.py/economy.py
+# sebagai ternak pemain.
+MITRA_DESA = {
+    'karsa':  {'nama': 'Desa Karsa',   'bibit_per_jenis': 5},
+    'lawang': {'nama': 'Dukuh Lawang', 'barang': {'pakan': 15}},
+}
+
+# Opsi pie menu cerita, {npc_id: {tahap: (label, node BRANCHING_DIALOGUES[, syarat])}}.
+# Memilih mitra langsung menutup babak 1 (tahap 3), jadi kedua opsi tahap 2
+# hilang dengan sendirinya — pilihan mitra hanya bisa dibuat sekali.
+# `syarat` opsional MENGUNCI opsinya (tampil '[terkunci]'); saat ini hanya
+# {'gotong_royong': True}: harinya sudah tiba, jam 06-18, dan pemain di Lawang
+# (game/dua_desa.syarat_opsi). Ambang kerukunan sengaja TIDAK mengunci opsi:
+# dialognya sendiri yang menolak, supaya pemain mendengar alasannya dari
+# mulut tokohnya, bukan dari label abu-abu.
+DUA_DESA_OPSI = {
+    'kades_hardjo': {0: ('Perkenalkan Diri', 'kades_sambut'),
+                     2: ('Bermitra dengan Karsa', 'kades_mitra'),
+                     3: ('Soal Titipan Warga', 'kades_titipan'),
+                     5: ('Ajak Menggali Bersama', 'kades_tikar'),
+                     6: ('Mulai Gotong Royong', 'kades_gotong', {'gotong_royong': True})},
+    'mbah_rukmi':   {1: ('Perkenalkan Diri', 'rukmi_sambut'),
+                     2: ('Bermitra dengan Lawang', 'rukmi_mitra'),
+                     3: ('Soal Titipan Warga', 'rukmi_titipan'),
+                     4: ('Tanya Jalan Lama', 'rukmi_akar'),
+                     6: ('Mulai Gotong Royong', 'rukmi_gotong', {'gotong_royong': True})},
+}
+
+# ── Papan Titipan (babak 2) ──
+# Tiap pagi TITIPAN_PER_HARI titipan per papan dipilih dari daftar ini,
+# deterministik dari tanggal (game/dua_desa.titipan_hari_ini), jadi tidak ada
+# daftar yang perlu disimpan. Warga Karsa menitip hasil ternak dan olahan —
+# barang yang dulu mereka dapat dari Lawang; warga Lawang menitip sayur Karsa.
+# Titipan tanaman mentah hanya muncul di musim tanamannya (CROPS['seasons']),
+# supaya setiap titipan yang tampil memang BISA dipenuhi. 'npc' None = warga
+# tanpa nama: tidak ada hati yang naik. Teks <= 40 huruf supaya baris
+# '[n] Nama: "teks"' muat satu baris panel.
+TITIPAN = [
+    # Papan Balai Desa Karsa
+    {'id': 'k_sari_telur',   'papan': 'karsa',  'npc': 'sari',         'item': 'telur',      'n': 3,
+     'teks': 'Warung kehabisan telur untuk kue.'},
+    {'id': 'k_jum_susu',     'papan': 'karsa',  'npc': 'mbok_jum',     'item': 'susu',       'n': 2,
+     'teks': 'Wedang susu jahe untuk peronda.'},
+    {'id': 'k_ningsih_keju', 'papan': 'karsa',  'npc': 'ningsih',      'item': 'keju',       'n': 1,
+     'teks': 'Anak-anak penasaran rasa keju.'},
+    {'id': 'k_raka_wol',     'papan': 'karsa',  'npc': 'raka',         'item': 'wol',        'n': 2,
+     'teks': 'Selimut untuk pasien klinik.'},
+    {'id': 'k_guru_kain',    'papan': 'karsa',  'npc': 'pak_guru',     'item': 'kain_wol',   'n': 1,
+     'teks': 'Taplak meja kelas sudah robek.'},
+    {'id': 'k_maya_kue',     'papan': 'karsa',  'npc': 'maya',         'item': 'kue_telur',  'n': 1,
+     'teks': 'Bekal melukis seharian di lereng.'},
+    {'id': 'k_budi_susu',    'papan': 'karsa',  'npc': 'budi',         'item': 'susu',       'n': 3,
+     'teks': 'Susu segar sehabis menempa besi.'},
+    {'id': 'k_kades_telur',  'papan': 'karsa',  'npc': 'kades_hardjo', 'item': 'telur',      'n': 4,
+     'teks': 'Hidangan rapat di balai desa.'},
+    # Papan Dukuh Lawang
+    {'id': 'l_rukmi_lobak',  'papan': 'lawang', 'npc': 'mbah_rukmi',   'item': 'lobak',      'n': 3,
+     'teks': 'Kerbau sakit perut, butuh sayur.'},
+    {'id': 'l_rukmi_wortel', 'papan': 'lawang', 'npc': 'mbah_rukmi',   'item': 'wortel',     'n': 3,
+     'teks': 'Untuk kerbau yang baru melahirkan.'},
+    {'id': 'l_sekar_jagung', 'papan': 'lawang', 'npc': 'sekar',        'item': 'jagung',     'n': 3,
+     'teks': 'Kambing bunting doyan jagung.'},
+    {'id': 'l_sekar_stroberi', 'papan': 'lawang', 'npc': 'sekar',      'item': 'stroberi',   'n': 2,
+     'teks': 'Mau belajar bikin selai ala Karsa.'},
+    {'id': 'l_warga_tomat',  'papan': 'lawang', 'npc': None,           'item': 'tomat',      'n': 3,
+     'teks': 'Sambal untuk hajatan sunatan.'},
+    {'id': 'l_warga_labu',   'papan': 'lawang', 'npc': None,           'item': 'labu',       'n': 2,
+     'teks': 'Kolak labu untuk syukuran.'},
+    {'id': 'l_warga_bayam',  'papan': 'lawang', 'npc': None,           'item': 'bayam',      'n': 3,
+     'teks': 'Sayur bening untuk nenek yang sakit.'},
+    {'id': 'l_warga_jamur',  'papan': 'lawang', 'npc': None,           'item': 'jamur',      'n': 2,
+     'teks': 'Jamur untuk sup penghangat badan.'},
+    {'id': 'l_rukmi_kayu',   'papan': 'lawang', 'npc': 'mbah_rukmi',   'item': 'kayu',       'n': 5,
+     'teks': 'Pagar kandang jebol diseruduk kerbau.'},
+    {'id': 'l_sekar_acar',   'papan': 'lawang', 'npc': 'sekar',        'item': 'acar_lobak', 'n': 1,
+     'teks': 'Acar lobak untuk tamu dari kota.'},
+    {'id': 'l_warga_saus',   'papan': 'lawang', 'npc': None,           'item': 'saus_tomat', 'n': 1,
+     'teks': 'Saus tomat untuk sate kambing.'},
+]
+PAPAN_TITIPAN = {
+    'karsa':  {'nama': 'Papan Titipan Balai Desa Karsa', 'warga': 'Warga Karsa'},
+    'lawang': {'nama': 'Papan Titipan Dukuh Lawang',     'warga': 'Warga Lawang'},
+}
+TITIPAN_PER_HARI  = 2
+TITIPAN_IMBALAN   = 1.3   # x harga jual Warung, dibulatkan ke 5G: lebih untung dari menjual
+TITIPAN_KERUKUNAN = 5
+TITIPAN_HATI      = 0.5
+
+# ── Lomba Antar-Desa (babak 2) ──
+# Digelar di lapangan Lawang pada tanggal SEASONAL_EVENTS['lomba_antar_desa'].
+# Pemain mewakili desa mitranya; lawannya juru masak desa SEBERANG, dan juri
+# satu orang dari tiap desa. Nilai lawan deterministik per tahun dan naik tiap
+# tahun (game/dua_desa.nilai_lawan): dasar + naik*(tahun-1) + acak 0..acak.
+# Di tahun pertama Saus Tomat (275) atau 6 Tomat (390) sudah cukup menang.
+LOMBA_ANTAR_DESA = {
+    'jam': (9, 17),
+    'juri': ('kades_hardjo', 'mbah_rukmi'),
+    'lawan': {'karsa': 'sekar', 'lawang': 'mbok_jum'},
+    'kategori': {
+        'masak': {'nama': 'Lomba Masak',    'dasar': 170, 'naik': 35, 'acak': 30, 'hadiah': 300},
+        'panen': {'nama': 'Panen Terbesar', 'dasar': 300, 'naik': 60, 'acak': 60, 'hadiah': 200,
+                  'maks': 10},
+    },
+    # Olahan dari PROCESS_RECIPES yang bukan masakan tidak boleh ikut lomba masak.
+    'bukan_masakan': ('pakan', 'kain_wol'),
+    'kerukunan_ikut':   5,
+    'kerukunan_menang': 10,
+    'hati_juri_menang': 1.0,
+}
+
+# ── Jadwal khusus Cerita Dua Desa (game/dua_desa.jadwal_npc) ──
+# Prioritas: hari Lomba > gotong royong > jalan lama terbuka > SCHEDULES.
+# Formatnya sama dengan SCHEDULES. Entri jam 0 menaruh tokoh di tempat
+# tidurnya, supaya malam hari mereka pulang walau siangnya di desa lain.
+JADWAL_LOMBA = {
+    'kades_hardjo': [(0, 19, 16, 'town', 'sleeping'), (7, 11, 12, 'lawang', 'menjadi juri lomba'),
+                     (18, 19, 16, 'town', 'sleeping')],
+    'mbah_rukmi':   [(0, 11, 7, 'lawang', 'sleeping'), (7, 12, 12, 'lawang', 'menjadi juri lomba'),
+                     (18, 11, 7, 'lawang', 'sleeping')],
+    'sekar':        [(0, 17, 7, 'lawang', 'sleeping'), (7, 14, 15, 'lawang', 'ikut lomba masak'),
+                     (18, 17, 7, 'lawang', 'sleeping')],
+    'mbok_jum':     [(0, 18, 14, 'town', 'sleeping'), (7, 9, 15, 'lawang', 'ikut lomba masak'),
+                     (18, 18, 14, 'town', 'sleeping')],
+}
+# Berlaku selama tahap Gotong Royong (6) dan harinya sudah tiba.
+JADWAL_GOTONG_ROYONG = {
+    'kades_hardjo': [(0, 19, 16, 'town', 'sleeping'), (6, 5, 6, 'lawang', 'menggali longsor'),
+                     (18, 19, 16, 'town', 'sleeping')],
+    'mbah_rukmi':   [(0, 11, 7, 'lawang', 'sleeping'), (6, 4, 5, 'lawang', 'menggali longsor'),
+                     (18, 11, 7, 'lawang', 'sleeping')],
+    'sekar':        [(0, 17, 7, 'lawang', 'sleeping'), (6, 6, 4, 'lawang', 'mengangkut batu'),
+                     (18, 17, 7, 'lawang', 'sleeping')],
+    'arya':         [(0, 5, 5, 'farm', 'resting'), (6, 3, 5, 'lawang', 'mengangkut batu'),
+                     (18, 5, 5, 'farm', 'resting')],
+}
+# Sesudah jalan lama terbuka, warga dua desa mulai saling berkunjung. Siang
+# hari Mbah Rukmi dan Kades Hardjo duduk bersama di balai (13.00-16.00).
+JADWAL_JALAN_TERBUKA = {
+    'sekar':        [(6, 23, 15, 'lawang', 'menggembala kambing'), (9, 5, 10, 'town', 'mengantar susu ke desa'),
+                     (12, 24, 12, 'mountain', 'menyabit rumput'), (16, 17, 8, 'lawang', 'memerah susu'),
+                     (21, 17, 7, 'lawang', 'sleeping')],
+    'mbah_rukmi':   [(5, 23, 8, 'lawang', 'menggiring kerbau'), (11, 11, 7, 'lawang', 'duduk di beranda'),
+                     (13, 19, 8, 'town', 'bertandang ke balai'), (16, 12, 14, 'lawang', 'mengawasi lapangan'),
+                     (20, 11, 7, 'lawang', 'sleeping')],
+    'kades_hardjo': [(6, 18, 8, 'town', 'di balai desa'), (10, 12, 10, 'lawang', 'meninjau jalan lama'),
+                     (13, 18, 8, 'town', 'menjamu tamu dari Lawang'), (21, 19, 16, 'town', 'sleeping')],
+    # Sama dengan SCHEDULES['maya'] kecuali sore hari: siangnya melukis kambing
+    # di Lawang alih-alih menyketsa di lereng.
+    'maya':         [(8, 6, 4, 'studio', 'painting'), (14, 8, 12, 'lawang', 'melukis kambing'),
+                     (20, 1, 2, 'studio', 'sleeping')],
+}
 
 MINERALS = {
     'tembaga':  {'name':'Tembaga','sell':30,'min_level':1,'tier':1},
@@ -592,6 +836,16 @@ LORE_ITEMS = {
         'found_at': 'quest_11',
         'text': 'Kalau kau membaca ini, berarti lembah sudah aman. Aku bangga padamu. Aku tidak pernah pergi — aku selalu di sini, di dalam tanah yang kau rawat. Jaga Lembah Karsa. Selamanya.',
     },
+    # Cerita Dua Desa babak 2: ditemukan saat gotong royong membuka longsor
+    # Lawang. Kalimat terakhirnya adalah kait babak 3 (dasar gua, Bhutakala).
+    'watu_tikar': {
+        'name': 'Watu Tikar',
+        'found_at': 'lawang_longsor',
+        'text': 'Di atas batu ini Karsa dan Lawang duduk satu tikar di hadapan penjaga '
+                'gunung: air lereng dibagi dua, jalan gua dijaga bersama. Siapa memutus '
+                'janji, gunung menutup jalannya sendiri. Janji yang putus hanya bisa '
+                'disambung di dasar gua, di hadapan sang penjaga.',
+    },
 }
 
 # ── SEASONAL EVENT DATA ──────────────────────────────────
@@ -619,6 +873,17 @@ SEASONAL_EVENTS = {
         'day': 14,
         'scene': 'mountain',
         'desc': 'Salju pertama turun. Rahasia tersembunyi di balik gunung.',
+    },
+    # Keempat entri di atas dikunci NAMA MUSIM (musimnya = kuncinya). Event
+    # yang tidak memiliki satu musim sendiri dikunci id-nya dan menyebut
+    # musimnya di 'season'. Pemain mewakili desa mitranya (state.mitra_desa).
+    'lomba_antar_desa': {
+        'name': 'Lomba Antar-Desa',
+        'season': 'panas',
+        'day': 21,
+        'scene': 'lawang',
+        'desc': 'Karsa dan Lawang beradu di lapangan dukuh: lomba masak, hias kandang, '
+                'dan panen terbesar. Dulu ditutup makan bersama; kini yang kalah langsung pulang.',
     },
 }
 
@@ -781,11 +1046,205 @@ BRANCHING_DIALOGUES = {
         'choices': []
     },
 
+    # ─── CERITA DUA DESA · BABAK 1 (docs/CERITA_DUA_DESA.md) ───
+    # Efek 'dua_desa': N memajukan state.dua_desa_stage ke N (tidak pernah
+    # mundur); efek 'mitra' memilih desa mitra dan memberi bonus awalnya.
+    # Keduanya dijalankan panels._execute_choice lewat QuestController.
+    'kades_sambut': {
+        'text': "Kades Hardjo: Jadi kau keponakan Arsa? Pamanmu\nsering ke Lawang diam-diam. Kau suruhan mereka?",
+        'choices': [
+            {'text': "Aku cuma mau merawat kebun Paman.", 'next': 'kades_sambut_kebun',
+             'effect': {'dua_desa': 1, 'hearts': {'kades_hardjo': 0.5}}},
+            {'text': "Lawang itu di mana, Pak?", 'next': 'kades_sambut_lawang',
+             'effect': {'dua_desa': 1}},
+        ]
+    },
+    'kades_sambut_kebun': {
+        'text': "Kades Hardjo: Bagus. Sawah Karsa minum dari\nmata air lereng. Jangan kau bagi ke Lawang.",
+        'choices': []
+    },
+    'kades_sambut_lawang': {
+        'text': "Kades Hardjo: Dusun peternak, lewat jalur timur\nLereng Gunung. Mereka menuduh kami mencuri air.",
+        'choices': []
+    },
+    'rukmi_sambut': {
+        'text': "Mbah Rukmi: Orang Karsa, ya? Tinggal di tanah\nKarsa. Kau datang mengintip kerbau kami?",
+        'choices': [
+            {'text': "Aku keponakan Arsa, Mbah.", 'next': 'rukmi_sambut_arsa',
+             'effect': {'dua_desa': 2, 'hearts': {'mbah_rukmi': 0.5}}},
+            {'text': "Aku cuma lewat, Mbah.", 'next': 'rukmi_sambut_lewat',
+             'effect': {'dua_desa': 2}},
+        ]
+    },
+    'rukmi_sambut_arsa': {
+        'text': "Mbah Rukmi: Keponakan Arsa? Hm. Pamanmu orang\nKarsa yang paling jarang bohong. Duduklah.",
+        'choices': []
+    },
+    'rukmi_sambut_lewat': {
+        'text': "Mbah Rukmi: Tak ada yang cuma lewat jalur\nlereng. Terlalu jauh. Bilang saja penasaran.",
+        'choices': []
+    },
+    'kades_mitra': {
+        'text': "Kades Hardjo: Orang baru membawa panen pertama\nke balai. Mau bermitra dengan Desa Karsa?",
+        'choices': [
+            {'text': "Ini lobak pertamaku. (Serahkan 1 Lobak)", 'next': 'kades_mitra_ya',
+             'condition': {'has_item': 'lobak'},
+             'effect': {'take_item': 'lobak', 'mitra': 'karsa'}},
+            {'text': "Ini wortel kebunku. (Serahkan 1 Wortel)", 'next': 'kades_mitra_ya',
+             'condition': {'has_item': 'wortel'},
+             'effect': {'take_item': 'wortel', 'mitra': 'karsa'}},
+            {'text': "Nanti dulu, Pak.", 'next': 'kades_mitra_nanti'},
+        ]
+    },
+    'kades_mitra_ya': {
+        'text': "Kades Hardjo: Selamat datang di keluarga Karsa.\nIni bibit unggul dari lumbung desa.",
+        'choices': []
+    },
+    'kades_mitra_nanti': {
+        'text': "Kades Hardjo: Jangan kelamaan. Orang Lawang\npandai merayu, apalagi pakai susu.",
+        'choices': []
+    },
+    'rukmi_mitra': {
+        'text': "Mbah Rukmi: Di Lawang, tamu dinilai dari\nkandangnya. Bawa hasil ternakmu dulu.",
+        'choices': [
+            {'text': "Ini susu sapiku. (Serahkan 1 Susu)", 'next': 'rukmi_mitra_ya',
+             'condition': {'has_item': 'susu'},
+             'effect': {'take_item': 'susu', 'mitra': 'lawang'}},
+            {'text': "Ini telur ayamku. (Serahkan 1 Telur)", 'next': 'rukmi_mitra_ya',
+             'condition': {'has_item': 'telur'},
+             'effect': {'take_item': 'telur', 'mitra': 'lawang'}},
+            {'text': "Nanti aku kembali, Mbah.", 'next': 'rukmi_mitra_nanti'},
+        ]
+    },
+    'rukmi_mitra_ya': {
+        'text': "Mbah Rukmi: Hm, kandangmu dirawat benar.\nBawa pakan ini, tanda mitra Lawang.",
+        'choices': []
+    },
+    'rukmi_mitra_nanti': {
+        'text': "Mbah Rukmi: Kerbau saja sabar menunggu hujan.\nKau juga bisa.",
+        'choices': []
+    },
+
+    # ─── CERITA DUA DESA · BABAK 2 "MENJEMBATANI" ───
+    # Efek baru (panels._execute_choice): 'gotong_royong' menjadwalkan
+    # penggalian esok pagi, 'lore' menambah catatan (N), 'buka_jalan_lama'
+    # menutup babak 2. Kondisi baru: 'min_kerukunan' / 'max_kerukunan'
+    # (inklusif). Paling banyak 3 pilihan per node: kotak dialog hanya punya
+    # tiga baris pilihan (panels._build_dialog_box).
+    'kades_titipan': {
+        'text': "Kades Hardjo: Warga Karsa butuh susu dan wol,\ntapi gengsi meminta ke orang Lawang.",
+        'choices': [
+            {'text': "Biar aku yang mengantarnya, Pak.", 'next': 'kades_titipan_ya'},
+        ]
+    },
+    'kades_titipan_ya': {
+        'text': "Kades Hardjo: Titipan warga kutempel di papan\ndepan balai. Ambil yang sanggup kau penuhi.",
+        'choices': []
+    },
+    'rukmi_titipan': {
+        'text': "Mbah Rukmi: Kerbau yang sakit butuh sayur Karsa.\nAnak-anak muda di sini malu memintanya.",
+        'choices': [
+            {'text': "Tempel saja permintaannya, Mbah.", 'next': 'rukmi_titipan_ya'},
+        ]
+    },
+    'rukmi_titipan_ya': {
+        'text': "Mbah Rukmi: Papannya di dekat gapura. Kau yang\nmengantar, Lawang tak perlu menunduk ke Karsa.",
+        'choices': []
+    },
+    'rukmi_akar': {
+        'text': "Mbah Rukmi: Jalan lama? Itu cerita pahit, Nak.\nTak kuceritakan ke sembarang orang.",
+        'choices': [
+            {'text': "Aku sudah membantu warga Lawang, Mbah.", 'next': 'rukmi_akar_watu',
+             'condition': {'min_kerukunan': KERUKUNAN_CERITA}},
+            {'text': "Maaf, Mbah. Lain kali saja.", 'next': 'rukmi_akar_nanti'},
+        ]
+    },
+    'rukmi_akar_nanti': {
+        'text': "Mbah Rukmi: Bantu dulu warga dua desa lewat\npapan titipan. Nanti kita bicara lagi.",
+        'choices': []
+    },
+    'rukmi_akar_watu': {
+        'text': "Mbah Rukmi: Di bawah longsor itu ada Watu Tikar,\nbatu tempat leluhur dua desa bersumpah.",
+        'choices': [
+            {'text': "Bersumpah apa, Mbah?", 'next': 'rukmi_akar_janji'},
+        ]
+    },
+    'rukmi_akar_janji': {
+        'text': "Mbah Rukmi: Air lereng dibagi dua, jalan gua\ndijaga bersama, disaksikan penjaga gunung.",
+        'choices': [
+            {'text': "Lalu kenapa jalannya longsor?", 'next': 'rukmi_akar_longsor'},
+        ]
+    },
+    'rukmi_akar_longsor': {
+        'text': "Mbah Rukmi: Karsa menuduh kami ingkar, kami\nmenuduh Karsa. Tak ada yang mau menggali.",
+        'choices': [
+            {'text': "Bagaimana kalau digali bersama?", 'next': 'rukmi_akar_ajak',
+             'effect': {'dua_desa': 5, 'hearts': {'mbah_rukmi': 0.5}}},
+        ]
+    },
+    'rukmi_akar_ajak': {
+        'text': "Mbah Rukmi: Lawang mau, asal Hardjo sendiri\nyang datang membawa cangkul.",
+        'choices': []
+    },
+    'kades_tikar': {
+        'text': "Kades Hardjo: Menggali longsor bersama Lawang?\nMereka yang dulu memutus janji!",
+        'choices': [
+            {'text': "Watu Tikar milik dua desa, Pak.", 'next': 'kades_tikar_setuju',
+             'condition': {'min_kerukunan': KERUKUNAN_TIKAR},
+             'effect': {'dua_desa': 6, 'gotong_royong': True, 'hearts': {'kades_hardjo': 0.5}}},
+            {'text': "Mbah Rukmi menunggu Bapak di Lawang.", 'next': 'kades_tikar_tolak',
+             'condition': {'max_kerukunan': KERUKUNAN_TIKAR - 1}},
+            {'text': "Nanti saja, Pak.", 'next': 'kades_tikar_nanti'},
+        ]
+    },
+    'kades_tikar_setuju': {
+        'text': "Kades Hardjo: Baiklah. Besok pagi warga Karsa\nnaik ke Lawang membawa cangkul.",
+        'choices': []
+    },
+    'kades_tikar_tolak': {
+        'text': "Kades Hardjo: Warga Karsa belum percaya Lawang.\nTitipan-titipanmu yang akan meyakinkan mereka.",
+        'choices': []
+    },
+    'kades_tikar_nanti': {
+        'text': "Kades Hardjo: Jangan lama-lama. Selagi warga\nmasih mau, cangkul harus segera diangkat.",
+        'choices': []
+    },
+    # Dua pintu masuk ke penggalian yang sama: bicara dengan sesepuh mana pun.
+    # Lore lebih dulu, penutupan babak sesudahnya, supaya pesan "Babak 2
+    # selesai" tidak tertimpa pesan "Catatan baru".
+    'kades_gotong': {
+        'text': "Kades Hardjo: Jangan bengong. Batu pertama\nmilikmu, yang mempertemukan kami.",
+        'choices': [
+            {'text': "(Angkat batu pertama)", 'next': 'gotong_watu', 'effect': {'lore': 'watu_tikar'}},
+        ]
+    },
+    'rukmi_gotong': {
+        'text': "Mbah Rukmi: Orang Karsa benar-benar datang.\nAyo, Nak. Batu pertama milikmu.",
+        'choices': [
+            {'text': "(Angkat batu pertama)", 'next': 'gotong_watu', 'effect': {'lore': 'watu_tikar'}},
+        ]
+    },
+    'gotong_watu': {
+        'text': "Di balik batu muncul lempeng bertulis: Watu\nTikar. Warga dua desa terdiam membacanya.",
+        'choices': [
+            {'text': "(Bacakan tulisannya keras-keras)", 'next': 'gotong_akhir',
+             'effect': {'buka_jalan_lama': True}},
+        ]
+    },
+    'gotong_akhir': {
+        'text': "Kades Hardjo dan Mbah Rukmi berjabat tangan.\nJalan lama lewat Gua Sang Hyang terbuka.",
+        'choices': []
+    },
+
     # ─── GIFT CONFIRMATION BRANCH (Premium Gifting) ───
+    # 'serahkan_hadiah' yang benar-benar menyerahkan barangnya. Tanpa efek
+    # ini "Ya, berikan." hanya membuka teks gift_yes: barang tidak berkurang
+    # dan hati tidak naik, karena complete_gift_gifting() tidak dipanggil
+    # siapa pun.
     'gift_confirm': {
         'text': "Apakah kamu yakin ingin memberikan item ini sebagai hadiah?",
         'choices': [
-            {'text': "Ya, berikan.", 'next': 'gift_yes'},
+            {'text': "Ya, berikan.", 'next': 'gift_yes', 'effect': {'serahkan_hadiah': True}},
             {'text': "Tidak, simpan saja.", 'next': 'gift_no'}
         ]
     },

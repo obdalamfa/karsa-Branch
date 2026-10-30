@@ -346,6 +346,34 @@ def _bangun_atap(world, cx, cz, sx, sz, alas_y, jenis, tinggi, undian):
     return tex, col
 
 
+def build_papan_titipan(world, wx, wz):
+    """Papan Titipan warga (ubin PPN, Cerita Dua Desa babak 2).
+
+    Dua tiang, papan kayu beratap kecil, dan kertas titipan di KEDUA sisinya:
+    papan berdiri bebas di tepi jalan, jadi pemain bisa datang dari arah mana
+    pun dan tetap melihat bahwa ini tempat orang menempel pesan. Papan dan
+    kertas sengaja bersudut tajam (soft=False) — kertas yang membulat terbaca
+    sebagai batu, bukan selebaran.
+    """
+    kayu = color.rgb(122, 84, 50)
+    ents = [world._create_entity('cylinder', (wx + dx, 0.80 + GROUND_H, wz),
+                                 (0.12, 1.60, 0.12), 'wood_plank', kayu)
+            for dx in (-0.62, 0.62)]
+    ents.append(world._create_entity('cube', (wx, 1.12 + GROUND_H, wz), (1.36, 0.78, 0.08),
+                                     'wood_plank', color.rgb(150, 108, 66), soft=False))
+    ents.append(world._create_entity('cube', (wx, 1.66 + GROUND_H, wz), (1.58, 0.07, 0.42),
+                                     'roof/terracotta', color.rgb(205, 92, 70), soft=False))
+    # Kertas: (geser x, geser y, sisi z, warna)
+    for dx, dy, sisi, col in ((-0.38, 0.10, -1, color.rgb(244, 238, 214)),
+                              (0.05, -0.06, -1, color.rgb(250, 228, 150)),
+                              (0.40, 0.12, -1, color.rgb(206, 228, 246)),
+                              (-0.25, -0.02, 1, color.rgb(244, 238, 214)),
+                              (0.30, 0.08, 1, color.rgb(250, 228, 150))):
+        ents.append(world._create_entity('cube', (wx + dx, 1.12 + GROUND_H + dy, wz + sisi * 0.05),
+                                         (0.28, 0.34, 0.012), None, col, soft=False))
+    world._obj_ents.extend(ents)
+
+
 def build_house_block(world, scene, tx, ty, wx, wz):
     """Satu bangunan dari satu blok ubin H.
 
@@ -708,6 +736,7 @@ def default_prop_builder(world, scene, pembangun_pohon=None):
             elif tid == TV: build_tv(world, wx, wz)
             elif tid == CHR: build_chair(world, wx, wz)
             elif tid == CAL: build_calendar(world, wx, wz)
+            elif tid == PPN: build_papan_titipan(world, wx, wz)
             elif tid == H: build_house_block(world, scene, tx, ty, wx, wz)
             elif tid in (ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS):
                 ore_tex = OBJ_TEX.get(tid, 'crystal')

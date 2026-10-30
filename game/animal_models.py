@@ -76,6 +76,8 @@ _C = {
     # Tanpa sklera, mata gelap di atas kepala gelap (bebek L 23, muka domba
     # L 23, kambing L 36, kuda L 35) hilang sama sekali.
     'sklera':      color.rgb(228, 224, 216),   # L 88 — putih mata
+    'kerbau':      color.rgb( 86,  82,  84),   # L 33 — kerbau Dukuh Lawang
+    'kerbau_moncong': color.rgb(128, 120, 116),  # L 48 — moncong kerbau
 }
 
 
@@ -546,7 +548,36 @@ def _kuda(r):
     return 1.90
 
 
+def _kerbau(r):
+    """Kerbau — 1,40 m, panjang 2,10 m. Ternak Dukuh Lawang (Cerita Dua Desa).
+    Yang memisahkannya dari sapi di kamera lot: badan abu-abu gelap SERAGAM
+    tanpa belang (sapi terang berbelang), kepala dibawa rendah, dan tanduk
+    panjang yang melebar ke samping-belakang, bukan tanduk pendek."""
+    _shadow(r, 1.00, 2.10)
+    _box(r,  (0, 0.98,  0.00), (0.80, 0.76, 1.42), _C['kerbau'])          # badan
+    _box(r,  (0, 1.00,  0.78), (0.50, 0.50, 0.34), _C['kerbau'])          # leher
+    k = _box(r, (0, 0.90, 1.06), (0.40, 0.38, 0.48), _C['kerbau'])        # kepala, rendah
+    # Mata di SISI kepala seperti ternak lain (lihat _mata). Takarannya ikut
+    # sapi — kepala kerbau sebesar kepala sapi — sedikit lebih kecil karena
+    # kepala yang gelap sudah membuat sklera menonjol.
+    _mata(r, k, d=0.110, naik=0.30, maju=0.05)
+    _box(r,  (0, 0.82,  1.32), (0.32, 0.24, 0.14), _C['kerbau_moncong'])  # moncong
+    for sx in (-1, 1):
+        _cone(r, (sx * 0.28, 1.12, 0.92), (0.10, 0.50, 0.10), _C['tanduk'],
+              (-35, 0, sx * -72))                                         # tanduk
+        _sendi(r, 'telinga',
+               [_box(r, (sx * 0.27, 0.98, 1.00), (0.20, 0.07, 0.12), _C['kerbau'],
+                     (0, 0, sx * -20))],
+               (-0.5 if sx > 0 else 0.5, 0, 0), 'z')                   # telinga
+    _sendi(r, 'ekor',
+           [_box(r, (0, 0.98, -0.76), (0.09, 0.56, 0.09), _C['kerbau'], (16, 0, 0))],
+           (0, 0.5, 0), 'z')                                           # ekor
+    _legs(r, _C['kerbau'], 0.28, 0.50, 0.62, 0.62, 0.18)
+    return 1.40
+
+
 _BUILDERS = {
+    'kerbau':  _kerbau,
     'ayam':    _ayam,
     'bebek':   _bebek,
     'kucing':  _kucing,
@@ -563,6 +594,7 @@ _BUILDERS = {
 HEIGHTS = {
     'ayam': 0.63, 'bebek': 0.60, 'kucing': 0.70, 'kelinci': 0.70,
     'rubah': 0.72, 'kambing': 1.02, 'domba': 0.86, 'sapi': 1.46, 'kuda': 1.90,
+    'kerbau': 1.40,
 }
 
 

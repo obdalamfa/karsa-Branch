@@ -1,13 +1,28 @@
 ---
 judul: Status Sekarang
 tipe: peta
-diperbarui: 2026-10-29
-commit_acuan: 184931c (branch ccr-ae8cd761-mj4kbu, PR #15)
-regresi: 14/14 lulus + semua baris global, termasuk "lore gua" yang baru (lima menit, majelis batin, buy/sinema, kamera Q/E, ...)
+diperbarui: 2026-10-30
+commit_acuan: e90d729 (branch ccr-ae8cd761-mj4kbu, PR #15)
+regresi: 15/15 lulus (scene baru lawang) + semua baris global, tampilan 49/49 (lima menit, majelis batin, buy/sinema, kamera Q/E, lore gua, ...)
 tags: [moc, status]
 ---
 
 # Status Sekarang
+
+> [!success] Pembaruan 2026-10-30 (malam) — Cerita Dua Desa babak 1-2 masuk PR #15
+> Atas permintaan pemilik ("kembalikan semua perkembangan ke karsa-brench di
+> github"), babak 1-2 dipindah dari checkout lokal lama ke branch ini:
+> - Dukuh Lawang di ujung timur lereng, dengan tiga warga baru: Kades Hardjo,
+>   Mbah Rukmi, dan Sekar.
+> - Pilihan desa mitra, Papan Titipan, dan Kerukunan.
+> - Gotong royong yang membuka jalan lama ke Gua Sang Hyang.
+> - Lomba Antar-Desa (Panas 21).
+>
+> Kartu J punya blok Cerita Dua Desa, dan peta M punya simpul Dukuh Lawang.
+> "Ya, berikan." kini benar-benar menyerahkan hadiah
+> → [[Ya, berikan tidak menyerahkan hadiah]]. Regresi 15/15, 0 gagal.
+> Terbuka: Dua Desa belum punya baris regresi, dan warga baru belum
+> bermodel Blender.
 
 > [!success] Pembaruan 2026-10-30 — panel Warung dan kawan-kawan berbaris
 > Warung, Dapur, Bengkel, Papan, Keinginan, dan Ekosistem kini digambar per
@@ -156,6 +171,7 @@ Angka ms/frame berasal dari runner tanpa GPU (Mesa software). Ia berguna untuk
 |---|---|---|
 | 4–29 FPS di mesin pemilik, belum pernah diprofil di GPU | 🔴 | [[Tahap 3 — Performa]] |
 | `PLAY.md` menunjuk baris & flag yang sudah tidak ada | 🟡 | [[Utang Teknis]] |
+| Cerita Dua Desa belum punya baris regresi; harness-nya di luar repo | 🟡 | [[Ya, berikan tidak menyerahkan hadiah]] |
 
 ## Yang baru saja lunas
 

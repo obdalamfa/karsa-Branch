@@ -1,0 +1,374 @@
+"""penunjuk.py — penunjuk tujuan tutorial: penanda di dunia + panah di tepi layar.
+
+Kenapa ini ada. Tutorial "Lima Menit Pertama" (game/tutorial.py) hanya
+memberi kalimat: "Kotak pos ada di depan rumah - dekati lalu tekan [F]",
+"Masuk rumah lalu tekan [T]". Pemain baru harus menerjemahkan kalimat itu
+menjadi arah di peta 28x20 yang belum pernah ia lihat, dan rumah, kotak pos,
+serta Peti Kirim tidak menonjol dari kejauhan.
+
+Penunjuk ini menjawab "ke mana" untuk tiap langkah tutorial:
+
+  surat    kotak pos (tile MB di kebun)
+  cangkul  petak tanah terdekat yang belum dicangkul
+  tanam    petak tercangkul terdekat yang masih kosong
+  siram    tanaman terdekat yang belum disiram
+  tidur    pintu rumah; di dalam rumah, kasur
+  panen    tanaman matang terdekat
+  kirim    Peti Kirim (hanya kalau tas berisi hasil panen)
+
+Target di scene lain ditunjuk lewat portal di scene sekarang yang menuju ke
+sana (dicari lewat graf portal, bukan dipatok). Target dipilih sekali lalu
+"lengket" sampai tidak berlaku lagi -- penanda yang meloncat ke petak lain
+setiap pemain melangkah terbaca sebagai gangguan, bukan petunjuk.
+
+Rupa: belah ketupat emas melayang naik-turun di atas target, cincin
+berdenyut di tanah, dan -- kalau target di luar layar -- panah emas di tepi
+layar dengan nama tujuannya.
+"""
+from __future__ import annotations
+
+import math
+from collections import deque
+
+from ursina import Entity, Text, Texture, camera, color
+
+from . import panel_kartu as PK
+
+_TEX: dict = {}
+
+
+def _tex(nama):
+    if nama in _TEX:
+        return _TEX[nama]
+    tex = None
+    try:
+        from PIL import Image, ImageDraw, ImageFilter
+        n = 128
+        img = Image.new('RGBA', (n, n), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        if nama == 'ketupat':
+            pendar = Image.new('RGBA', (n, n), (0, 0, 0, 0))
+            ImageDraw.Draw(pendar).polygon([(64, 6), (118, 64), (64, 122), (10, 64)],
+                                           fill=(*PK.EMAS, 150))
+            img.alpha_composite(pendar.filter(ImageFilter.GaussianBlur(9)))
+            d.polygon([(64, 18), (106, 64), (64, 110), (22, 64)], fill=(*PK.EMAS, 255))
+            d.polygon([(64, 18), (106, 64), (64, 64)], fill=(255, 236, 180, 255))
+            d.polygon([(64, 18), (106, 64), (64, 110), (22, 64)], outline=(120, 82, 30, 255),
+                      width=4)
+        elif nama == 'cincin':
+            d.ellipse([8, 8, n - 8, n - 8], outline=(*PK.EMAS, 255), width=9)
+            img = img.filter(ImageFilter.GaussianBlur(1.2))
+        elif nama == 'panah':
+            pendar = Image.new('RGBA', (n, n), (0, 0, 0, 0))
+            ImageDraw.Draw(pendar).polygon([(118, 64), (24, 16), (46, 64), (24, 112)],
+                                           fill=(0, 0, 0, 160))
+            img.alpha_composite(pendar.filter(ImageFilter.GaussianBlur(6)))
+            d.polygon([(112, 64), (28, 22), (48, 64), (28, 106)], fill=(*PK.EMAS, 255),
+                      outline=(120, 82, 30, 255))
+        tex = Texture(img)
+        tex.filtering = 'bilinear'
+    except Exception:
+        tex = None
+    _TEX[nama] = tex
+    return tex
+
+
+# ── mencari target ─────────────────────────────────────────────────────
+def _tile_pertama(scene, tid):
+    from .scenes import SCENES
+    sc = SCENES.get(scene)
+    if sc is None:
+        return None
+    for y, baris in enumerate(sc.tiles):
+        for x, v in enumerate(baris):
+            if v == tid:
+                return (x, y)
+    return None
+
+
+def _portal_menuju(dari, ke):
+    """Tile portal di scene `dari` yang langkah pertamanya menuju `ke`
+    (BFS di graf portal). None kalau tidak tersambung."""
+    from .scenes import SCENES
+    if dari == ke:
+        return None
+    awal = {}
+    antre = deque()
+    for p in getattr(SCENES.get(dari), 'portals', []) or []:
+        tujuan = p[2]
+        if tujuan not in awal:
+            awal[tujuan] = (p[0], p[1])
+            antre.append(tujuan)
+    asal_dari = {t: t for t in awal}
+    dikunjungi = set(awal) | {dari}
+    while antre:
+        sc = antre.popleft()
+        if sc == ke:
+            return awal[asal_dari[sc]]
+        for p in getattr(SCENES.get(sc), 'portals', []) or []:
+            if p[2] not in dikunjungi:
+                dikunjungi.add(p[2])
+                asal_dari[p[2]] = asal_dari[sc]
+                antre.append(p[2])
+    return None
+
+
+def _petak(s):
+    """[(x, y, soil)] petak di kebun."""
+    keluar = []
+    for k, soil in (getattr(s, 'soil', {}) or {}).items():
+        try:
+            x, y, sc = k.split(',')
+        except ValueError:
+            continue
+        if sc == 'farm':
+            keluar.append((int(x), int(y), soil))
+    return keluar
+
+
+def _terdekat(s, calon):
+    px, py = s.player_x, s.player_y
+    return min(calon, key=lambda c: (c[0] - px) ** 2 + (c[1] - py) ** 2) if calon else None
+
+
+def target_langkah(s, langkah_id):
+    """(scene, tx, ty, nama) untuk langkah tutorial, atau None."""
+    from .config import MB, BD, D, SHIP_BIN_TILE
+    from .data import CROPS
+    if langkah_id == 'surat':
+        t = _tile_pertama('farm', MB)
+        return ('farm', t[0], t[1], 'Kotak pos') if t else None
+    if langkah_id == 'cangkul':
+        from .scenes import SCENES
+        tergarap = {(x, y) for x, y, so in _petak(s) if so.get('tilled')}
+        calon = [(x, y) for y, r in enumerate(SCENES['farm'].tiles)
+                 for x, v in enumerate(r) if v == D and (x, y) not in tergarap]
+        # Berdiri di atas tanah yang bisa dicangkul = sudah sampai; penanda
+        # di petak sendiri cuma menutupi kepala tokoh (tangkapan pertama).
+        if s.scene_name == 'farm':
+            from .scenes import SCENES as _S
+            px, py = int(round(s.player_x)), int(round(s.player_y))
+            try:
+                if _S['farm'].tiles[py][px] == D and (px, py) not in tergarap:
+                    return None
+            except IndexError:
+                pass
+        t = _terdekat(s, calon) if s.scene_name == 'farm' else (calon[0] if calon else None)
+        return ('farm', t[0], t[1], 'Tanah untuk dicangkul') if t else None
+    if langkah_id == 'tanam':
+        calon = [(x, y) for x, y, so in _petak(s) if so.get('tilled') and not so.get('crop')]
+        t = _terdekat(s, calon)
+        return ('farm', t[0], t[1], 'Petak siap tanam') if t else None
+    if langkah_id == 'siram':
+        calon = [(x, y) for x, y, so in _petak(s) if so.get('crop') and not so.get('watered')]
+        t = _terdekat(s, calon)
+        return ('farm', t[0], t[1], 'Tanaman haus') if t else None
+    if langkah_id == 'tidur':
+        t = _tile_pertama('house', BD)
+        return ('house', t[0], t[1], 'Kasur') if t else None
+    if langkah_id == 'panen':
+        calon = [(x, y) for x, y, so in _petak(s) if so.get('crop')
+                 and so.get('age', 0) >= CROPS.get(so['crop'], {}).get('days', 4)]
+        t = _terdekat(s, calon)
+        return ('farm', t[0], t[1], 'Siap panen') if t else None
+    if langkah_id == 'kirim':
+        inv = getattr(s, 'inventory', {}) or {}
+        if any(inv.get(k, 0) > 0 for k in CROPS):
+            return ('farm', SHIP_BIN_TILE[0], SHIP_BIN_TILE[1], 'Peti Kirim')
+    return None
+
+
+def _masih_berlaku(s, langkah_id, tgt):
+    """Target lengket tetap dipakai selama masih menjawab langkahnya."""
+    scene, x, y, _ = tgt
+    soil = (getattr(s, 'soil', {}) or {}).get(f'{x},{y},farm', {})
+    if langkah_id == 'cangkul':
+        return not soil.get('tilled')
+    if langkah_id == 'tanam':
+        return soil.get('tilled') and not soil.get('crop')
+    if langkah_id == 'siram':
+        return soil.get('crop') and not soil.get('watered')
+    if langkah_id == 'panen':
+        return bool(soil.get('crop'))
+    return True
+
+
+class Penunjuk:
+    """Dibuat sekali oleh Game3D; `tick()` tiap frame."""
+
+    def __init__(self, app):
+        self.app = app
+        self._t = 0.0
+        self._langkah = None
+        self._target = None          # (scene, tx, ty, nama) tujuan akhir
+        self.titik = None            # (scene, tx, ty, nama) yang SEDANG ditunjuk
+        self.ketupat = Entity(model='quad', texture=_tex('ketupat'), billboard=True,
+                              scale=1.25, color=color.white, enabled=False)
+        self.ketupat.setLightOff()
+        self.cincin = Entity(model='quad', texture=_tex('cincin'), rotation_x=90,
+                             scale=1.6, color=color.white, enabled=False)
+        self.cincin.setLightOff()
+        self.panah = Entity(parent=camera.ui, model='quad', texture=_tex('panah'),
+                            scale=0.05, color=color.white, enabled=False, z=-0.2)
+        self.label = Text('', parent=camera.ui, font='Montserrat-Bold.ttf', scale=0.66,
+                          origin=(0, 0), color=color.rgb(*PK.EMAS), enabled=False, z=-0.2)
+        # Alas kapsul: teks emas tanpa alas hilang di atas tanah terang.
+        self.alas = Entity(parent=camera.ui, model='quad', enabled=False, z=-0.15,
+                           color=color.rgba(14, 16, 24, 200))
+
+    def _sembunyi(self):
+        for e in (self.ketupat, self.cincin, self.panah, self.label, self.alas):
+            e.enabled = False
+        self.titik = None
+
+    def tick(self, dt):
+        app = self.app
+        s = app.state
+        self._t += dt
+        if getattr(app.panels, 'mode', 'hud') != 'hud':
+            self._sembunyi()
+            return
+        from .tutorial import current_step
+        cur = current_step(s)
+        if cur is None:
+            self._sembunyi()
+            return
+        lid = cur[1].get('id')
+        if lid != self._langkah or self._target is None \
+                or not _masih_berlaku(s, lid, self._target):
+            self._langkah = lid
+            self._target = target_langkah(s, lid)
+        tgt = self._target
+        if tgt is None:
+            self._sembunyi()
+            return
+        scene, tx, ty, nama = tgt
+        if scene != s.scene_name:
+            p = _portal_menuju(s.scene_name, scene)
+            if p is None:
+                self._sembunyi()
+                return
+            from .scenes import SCENES
+            nama_sc = getattr(SCENES.get(scene), 'display', scene)
+            tgt = (s.scene_name, p[0], p[1], f'Ke {nama_sc}')
+        self.titik = tgt
+        self._gambar(tgt)
+
+    def _gambar(self, tgt):
+        from .config import TILE_SIZE as TS, GROUND_H
+        _, tx, ty, nama = tgt
+        t = self._t
+        wx, wz = tx * TS, ty * TS
+        try:
+            gy = self.app.world.get_surface_height(tx, ty)
+        except Exception:
+            gy = GROUND_H
+        self.ketupat.enabled = self.cincin.enabled = True
+        self.ketupat.position = (wx, gy + 2.3 + 0.18 * math.sin(t * 3.0), wz)
+        self.ketupat.rotation_z = 0
+        k = (t * 0.9) % 1.0
+        self.cincin.position = (wx, gy + 0.06, wz)
+        self.cincin.scale = 1.0 + 1.2 * k
+        self.cincin.color = color.rgba(255, 255, 255, int(230 * (1.0 - k)))
+
+        # Panah tepi layar bila penanda di luar pandangan.
+        sp = self._layar(self.ketupat)
+        from ursina import window
+        ex = window.aspect_ratio / 2
+        # "Terlihat" = di luar empat pojok HUD (alat, kartu tujuan, jam,
+        # motif, petunjuk tombol). Penanda di balik pojok itu tertutup, jadi
+        # diperlakukan seperti di luar layar dan ditunjuk dengan panah.
+        di_layar = sp is not None and abs(sp[0]) < ex - 0.20 and abs(sp[1]) < 0.34
+        if di_layar:
+            self.panah.enabled = False
+            # Nama tujuan kecil di atas penanda, hanya saat sudah terlihat.
+            self.label.enabled = True
+            self.label.text = nama
+            self.label.position = (sp[0], sp[1] + 0.055)
+            self._pas_alas()
+            return
+        if sp is None:
+            # Di belakang kamera: arah dari pusat layar, dibalik.
+            arah = self._arah_belakang(self.ketupat)
+        else:
+            arah = sp
+        ax, ay = arah
+        L = math.hypot(ax, ay) or 1.0
+        ax, ay = ax / L, ay / L
+        # Proyeksikan ke kotak tepi layar dengan margin.
+        mx, my = ex - 0.06, 0.40
+        sk = min(mx / abs(ax) if ax else 1e9, my / abs(ay) if ay else 1e9)
+        px, py = ax * sk, ay * sk
+        # Di tepi kiri/kanan, panah dijaga di pita tengah (|y| <= 0,26):
+        # pojok-pojoknya milik HUD.
+        if abs(px) > ex - 0.10:
+            py = max(-0.26, min(0.26, py))
+        denyut = 1.0 + 0.10 * math.sin(t * 6.0)
+        self.panah.enabled = True
+        self.panah.position = (px, py)
+        self.panah.scale = 0.064 * denyut
+        self.panah.rotation_z = -math.degrees(math.atan2(ay, ax))
+        self.label.enabled = True
+        self.label.text = nama
+        self.label.position = (px - ax * 0.085, py - ay * 0.085 - 0.002)
+        self._pas_alas()
+
+    # Blok HUD yang tidak boleh ditimpa label penunjuk.
+    _BLOK_HUD = ('_obj_bg', '_scrim_kiri', '_scrim_kanan', '_scrim_bawah',
+                 '_motive_panel_bg')
+
+    def _pas_alas(self):
+        w = PK._lebar(self.label) + 0.026
+        h = 0.034
+        x, y = self.label.position[0], self.label.position[1]
+        # Label yang jatuh di atas kartu tutorial/alas HUD menimpa teksnya:
+        # sembunyikan labelnya, panah/penandanya tetap.
+        p = getattr(self.app, 'panels', None)
+        for nama in self._BLOK_HUD:
+            e = getattr(p, nama, None)
+            if e is None or not e.enabled:
+                continue
+            ex0, ex1 = e.x - e.scale_x / 2, e.x + e.scale_x / 2
+            ey0, ey1 = e.y - e.scale_y / 2, e.y + e.scale_y / 2
+            if x + w / 2 > ex0 and x - w / 2 < ex1 and y + h / 2 > ey0 and y - h / 2 < ey1:
+                self.label.enabled = False
+                self.alas.enabled = False
+                return
+        self.alas.enabled = True
+        self.alas.position = self.label.position
+        self.alas.scale = (w, h)
+        self.alas.texture = PK.kotak_tex(w / h, 0.5)
+
+    @staticmethod
+    def _layar(node):
+        """Posisi `node` di ruang camera.ui, atau None kalau di belakang kamera.
+
+        Dibaca relatif ke base.cam lewat NodePath-nya sendiri, bukan dari
+        `world_position`: koordinat Ursina (y ke atas) bukan koordinat
+        render Panda (z ke atas), dan versi pertama yang mencampurnya
+        menganggap titik di samping pemain ada di belakang kamera."""
+        try:
+            from direct.showbase.ShowBaseGlobal import base
+            from panda3d.core import Point2
+            p3 = node.getPos(base.cam)
+            # Ursina memasang Panda dengan coordinate-system yup-left: depan
+            # kamera = +z, bukan +y. Versi pertama memeriksa p3.y dan
+            # menganggap semua titik di samping pemain ada di belakang.
+            if p3.z <= 0.01:
+                return None
+            p2 = Point2()
+            base.camLens.project(p3, p2)
+            from ursina import window
+            return (p2.x * window.aspect_ratio / 2, p2.y / 2)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _arah_belakang(node):
+        try:
+            from direct.showbase.ShowBaseGlobal import base
+            p3 = node.getPos(base.cam)
+            # Di belakang: belok ke sisi tempat target berada, panah di bawah.
+            return (p3.x if p3.x else 0.001, -0.6)
+        except Exception:
+            return (0.0, -1.0)

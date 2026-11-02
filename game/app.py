@@ -344,6 +344,10 @@ class Game3D:
         # sampai `mulai()` dipanggil, jadi biayanya nol saat tidak ada adegan.
         from .cutscene import Sinema, tandai_yang_sudah_lewat
         self.sinema = Sinema(self)
+        # Penunjuk tujuan tutorial (game/penunjuk.py): penanda di dunia dan
+        # panah di tepi layar ke kotak pos, ladang, kasur, Peti Kirim.
+        from .penunjuk import Penunjuk
+        self.penunjuk = Penunjuk(self)
         # Save lama: interaksi yang sudah pernah dilakukan sebelum adegannya
         # ada tidak diputar susulan (lihat cutscene.tandai_yang_sudah_lewat).
         tandai_yang_sudah_lewat(self.state)
@@ -439,6 +443,10 @@ class Game3D:
         # Update UI HUD
         self.panels.update(s, dt)
         self._pulihkan_mode_yatim()
+        try:
+            self.penunjuk.tick(dt)
+        except Exception:
+            logging.exception('penunjuk tujuan gagal')
 
         if self.panels.mode == 'judul' and self._judul:
             self._judul.tick(dt)

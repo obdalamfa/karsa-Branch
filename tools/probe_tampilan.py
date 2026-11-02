@@ -242,6 +242,68 @@ def uji_panel_berbaris(g):
     langkah(30)
 
 
+def uji_penunjuk(g):
+    """Penunjuk tujuan tutorial (game/penunjuk.py) lewat jalur asli."""
+    from ursina import Entity, camera, destroy
+    from game.config import TILE_SIZE as TS, MB, BD
+    from game.penunjuk import _tile_pertama
+    s, P = g.state, g.penunjuk
+    jam = s.time_minutes
+    s.scene_name = 'farm'
+    langkah(30)
+    s.mail_read = False
+    tunggu_detik(0.4)
+    mb = _tile_pertama('farm', MB)
+    cek('penunjuk: langkah surat menunjuk kotak pos',
+        P.titik is not None and tuple(P.titik[1:3]) == mb and
+        (P.ketupat.enabled or P.panah.enabled), f'titik={P.titik} kotak pos={mb}')
+    tekan(g, 'i', 3)
+    cek('penunjuk: sembunyi saat panel terbuka',
+        not P.ketupat.enabled and not P.panah.enabled, f'mode={g.panels.mode}')
+    tekan(g, 'escape', 3)
+
+    # Arah layar benar di empat sudut kamera: titik di kanan kamera harus
+    # jatuh di kanan layar. Versi pertama membaca sumbu kedalaman yang salah
+    # (Panda di Ursina memakai yup-left: depan = +z) dan menunjuk terbalik.
+    salah = []
+    px, py = g.player.get_tile_pos()
+    for yaw in (0, 90, 180, 270):
+        g.camera_yaw = yaw
+        langkah(2)
+        g._snap_camera_to_player()
+        langkah(2)
+        r = camera.right
+        e = Entity(position=(px * TS + r.x * 6, 1.0, py * TS + r.z * 6))
+        sp = P._layar(e)
+        destroy(e)
+        if sp is None or sp[0] <= 0.05:
+            salah.append(f'yaw {yaw}: {sp}')
+    cek('penunjuk: titik di kanan kamera jatuh di kanan layar', not salah, '; '.join(salah))
+
+    # Tidur: dari kebun menunjuk portal rumah, di dalam rumah menunjuk kasur.
+    s.mail_read = True
+    s.stats.update({'tilled': 3, 'lobak_planted': 3, 'watered': 3})
+    tunggu_detik(0.4)
+    from game.penunjuk import _portal_menuju
+    pintu = _portal_menuju('farm', 'house')
+    cek('penunjuk: langkah tidur dari kebun menunjuk pintu rumah',
+        P.titik is not None and tuple(P.titik[1:3]) == tuple(pintu), f'{P.titik} pintu={pintu}')
+    s.scene_name = 'house'
+    langkah(30)
+    tunggu_detik(0.3)
+    kasur = _tile_pertama('house', BD)
+    cek('penunjuk: di dalam rumah menunjuk kasur',
+        P.titik is not None and tuple(P.titik[1:3]) == kasur, f'{P.titik} kasur={kasur}')
+    s.day = 3
+    s.stats.update({'lobak_harvested': 1, 'earned': 10})
+    tunggu_detik(0.3)
+    cek('penunjuk: hilang setelah tutorial tamat',
+        not P.ketupat.enabled and not P.panah.enabled and P.titik is None, str(P.titik))
+    s.scene_name = 'farm'
+    s.time_minutes = jam
+    langkah(30)
+
+
 def uji_dialog_kilat(g):
     p = g.panels
     p.start_dialog('sari', g.state)
@@ -277,6 +339,7 @@ def main():
         if not ke_hud(g):
             cek('mencapai HUD', False, 'sinema/chargen tidak selesai')
         else:
+            uji_penunjuk(g)
             uji_dunia(g)
             uji_hud(g)
             uji_panel(g)

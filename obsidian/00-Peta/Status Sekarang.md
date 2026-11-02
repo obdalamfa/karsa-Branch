@@ -9,6 +9,11 @@ tags: [moc, status]
 
 # Status Sekarang
 
+> [!success] Pembaruan 2026-11-02 — penunjuk tujuan tutorial
+> Tiap langkah tutorial kini punya penanda emas di dunia (kotak pos, ladang,
+> pintu rumah lalu kasur, Peti Kirim) dan panah di tepi layar saat target di
+> luar pandangan atau di scene lain. Regresi 15/15, baris "tampilan" 55/55.
+
 > [!success] Pembaruan 2026-10-30 (malam) — Cerita Dua Desa babak 1-2 masuk PR #15
 > Atas permintaan pemilik ("kembalikan semua perkembangan ke karsa-brench di
 > github"), babak 1-2 dipindah dari checkout lokal lama ke branch ini:

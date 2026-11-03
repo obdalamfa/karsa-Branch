@@ -295,10 +295,12 @@ def _npc(s, npc_id):
     return (pos['scene'], int(round(pos['x'])), int(round(pos['y'])))
 
 
-# Scene yang punya makhluk liar (ecology.WILD_POPULASI), urut paling dekat ke
-# rumah. Kuburan Tua TIDAK ada di sini: tahap "Misteri Kuburan" dihitung dari
-# tangkapan [Shift+F] makhluk liar mana pun, dan kuburan tidak punya satu pun.
-_SCENE_LIAR = ('farm', 'mountain', 'town', 'lake')
+# Scene yang punya makhluk liar (ecology.WILD_POPULASI). Kuburan Tua di depan:
+# sejak 3 Nov 2026 ia punya makhluk halusnya sendiri (kemamang malam, tuyul
+# kapan saja) untuk tahap "Misteri Kuburan". Scene lain cadangan, karena
+# syarat tahapnya tetap tangkapan [Shift+F] makhluk liar mana pun.
+_SCENE_LIAR = ('cemetery', 'farm', 'mountain', 'town', 'lake')
+_HALUS = ('kemamang', 'tuyul')
 
 
 def _tangkapan(s):
@@ -306,16 +308,26 @@ def _tangkapan(s):
     malam = s.is_night() if hasattr(s, 'is_night') else False
     hidup = [w for w in getattr(s, 'wild_entities', []) or []
              if not w.get('night_only') or malam]
-    di_sini = [(int(round(w['x'])), int(round(w['y']))) for w in hidup
-               if w.get('scene') == s.scene_name]
-    t = _terdekat(s, di_sini)
-    if t:
-        return (s.scene_name, t[0], t[1], 'Tangkap  [Shift+F]')
+    def label(w):
+        return ('Makhluk halus  [Shift+F]' if w.get('kind') in _HALUS
+                else 'Tangkap  [Shift+F]')
+    # Di kuburan, atau kuburan sedang berpenghuni: ke sana dulu.
+    kuburan = [w for w in hidup if w.get('scene') == 'cemetery']
+    if s.scene_name == 'cemetery' or kuburan:
+        pilih = kuburan
+    else:
+        pilih = [w for w in hidup if w.get('scene') == s.scene_name]
+    if pilih and pilih[0].get('scene') == s.scene_name:
+        w = min(pilih, key=lambda w: (w['x'] - s.player_x) ** 2 + (w['y'] - s.player_y) ** 2)
+        return (s.scene_name, int(round(w['x'])), int(round(w['y'])), label(w))
+    if pilih:
+        w = pilih[0]
+        return (w['scene'], int(round(w['x'])), int(round(w['y'])), label(w))
     for sc in _SCENE_LIAR:
         ada = [w for w in hidup if w.get('scene') == sc]
         if ada:
             w = ada[0]
-            return (sc, int(round(w['x'])), int(round(w['y'])), 'Makhluk liar')
+            return (sc, int(round(w['x'])), int(round(w['y'])), label(w))
     return None
 
 
@@ -386,6 +398,10 @@ def _masih_berlaku(s, langkah_id, tgt):
     return True
 
 
+MODE_PENUNJUK = ('Penunjuk: keduanya', 'Penunjuk: tugas utama saja',
+                 'Penunjuk: Cerita Dua Desa saja', 'Penunjuk: mati')
+
+
 class Penunjuk:
     """Dibuat sekali oleh Game3D; `tick()` tiap frame."""
 
@@ -421,6 +437,13 @@ class Penunjuk:
         s = app.state
         self._t += dt
         if getattr(app.panels, 'mode', 'hud') != 'hud':
+            self._sembunyi()
+            return
+        # Saklar [F8] (state.penunjuk_mode): 0 keduanya, 1 tugas utama saja,
+        # 2 Cerita Dua Desa saja, 3 mati.
+        mode = getattr(s, 'penunjuk_mode', 0)
+        if mode == 3 or (mode == 1 and self.jalur == 'dua_desa') \
+                or (mode == 2 and self.jalur == 'utama'):
             self._sembunyi()
             return
         from .tutorial import current_step

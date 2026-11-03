@@ -730,8 +730,8 @@ class EntitiesManager:
     @staticmethod
     def _buat_liar(kind: str, scene: str, spot) -> dict:
         w = {'kind': kind, 'x': spot[0], 'y': spot[1], 'scene': scene,
-             'moving': kind in ('running_mushroom', 'firefly')}
-        if kind == 'firefly':
+             'moving': kind in ('running_mushroom', 'firefly', 'kemamang', 'tuyul')}
+        if kind in ('firefly', 'kemamang'):
             w['night_only'] = True
         return w
 
@@ -1317,13 +1317,13 @@ class EntitiesManager:
             if w.get('night_only') and not s.is_night(): continue
             if not w.get('moving'): continue
             dist = math.hypot(w['x']-px, w['y']-py)
-            if w['kind'] == 'running_mushroom' and dist <= 3:
+            if w['kind'] in ('running_mushroom', 'tuyul') and dist <= 3:
                 dx_ = 1 if w['x']>px else (-1 if w['x']<px else rng.choice([-1,1]))
                 dy_ = 1 if w['y']>py else 0
                 nx_, ny_ = w['x']+dx_, w['y']+dy_
                 if _can_walk(nx_, ny_, self.scene_name, s.dungeon_tiles):
                     w['x'], w['y'] = nx_, ny_
-            elif w['kind'] == 'firefly':
+            elif w['kind'] in ('firefly', 'kemamang'):
                 dx_, dy_ = rng.choice([-1,0,1]), rng.choice([-1,0,1])
                 nx_, ny_ = w['x']+dx_, w['y']+dy_
                 if _can_walk(nx_, ny_, self.scene_name, s.dungeon_tiles):
@@ -1401,6 +1401,7 @@ class EntitiesManager:
             if math.sqrt((px-wx)**2 + (pz-wz)**2) > 3.0: continue
             kind = w['kind']
             rates = {'running_mushroom': 0.60, 'firefly': 0.70,
+                     'kemamang': 0.55, 'tuyul': 0.40,
                      'mandrake': 0.30, 'wild_herb': 0.90, 'wild_berry': 0.90}
             # Kelimpahan kolam ikut menentukan peluang. Petak terakhir di lereng
             # yang sudah dikuras memang lebih sulit dipetik daripada petak

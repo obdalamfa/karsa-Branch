@@ -50,6 +50,10 @@ WILD_ITEMS = {
     'mandrake':         {'name':'Mandrake','sell':80,'description':'Akar ajaib','dangerous':True},
     'running_mushroom': {'name':'Jamur Lari','sell':45,'description':'Berlari saat didekati'},
     'firefly':          {'name':'Kunang-kunang','sell':25,'description':'Hanya muncul malam'},
+    # Makhluk halus Kuburan Tua (3 Nov 2026). Tahap "Misteri Kuburan" dulu
+    # tidak punya satu pun makhluk untuk ditangkap di kuburan.
+    'kemamang':         {'name':'Kemamang','sell':60,'description':'Api arwah biru yang melayang di kuburan saat malam'},
+    'tuyul':            {'name':'Tuyul','sell':75,'description':'Makhluk halus kecil penghuni kuburan; lari kalau didekati'},
     'wild_herb':        {'name':'Herba Liar','sell':15,'description':'Tanaman obat hutan'},
     'wild_berry':       {'name':'Beri Liar','sell':20,'description':'Beri manis'},
     'air_keabadian':    {'name':'Air Keabadian','sell':500,'description':'Air ruqyah dari naga'},

@@ -1074,6 +1074,13 @@ class Game3D:
                 self.panels.flash_msg(
                     'Ringkasan kebutuhan: ON' if nyala else
                     'Ringkasan kebutuhan: OFF  [TAB]', 1.2)
+            elif key == 'f8':
+                # Saklar penunjuk tujuan: dua penunjuk (emas tugas utama,
+                # biru-hijau Cerita Dua Desa) bisa terasa ramai.
+                from .penunjuk import MODE_PENUNJUK
+                s_ = self.state
+                s_.penunjuk_mode = (getattr(s_, 'penunjuk_mode', 0) + 1) % len(MODE_PENUNJUK)
+                self.panels.flash_msg(MODE_PENUNJUK[s_.penunjuk_mode] + '  [F8]', 1.6)
             elif key == 'f7':
                 # Majelis Batin. TAB sudah milik ringkasan motif, huruf habis,
                 # dan F7 baru bebas setelah development_mode Ursina dimatikan

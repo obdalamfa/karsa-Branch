@@ -241,6 +241,8 @@ class GameState:
     lomba:          dict = field(default_factory=dict)
     gotong_royong_hari: int  = 0      # state.day saat gotong royong boleh dimulai; 0 = belum
     jalan_lama_terbuka: bool = False  # jalan lama Lawang <-> Gua Sang Hyang
+    # Saklar penunjuk tujuan [F8]: 0 keduanya, 1 utama, 2 Dua Desa, 3 mati.
+    penunjuk_mode: int = 0
 
     stats: dict = field(default_factory=lambda: {
         'lobak_planted':0, 'watered':0, 'lobak_harvested':0, 'corn_harvested':0,

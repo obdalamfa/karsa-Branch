@@ -356,14 +356,10 @@ def uji_penunjuk_quest(g):
         _pindah(g, 'town', 15, 14)
         # Kuburan Tua tidak punya makhluk yang bisa ditangkap; yang ditunjuk
         # harus makhluk liar sungguhan (di sini, atau pintu ke scene yang punya).
-        from game.scenes import SCENES
-        liar = {w['scene'] for w in s.wild_entities
-                if not w.get('night_only') or s.is_night()}
-        tujuan_ok = P.titik is not None and (
-            'Tangkap' in P.titik[3]
-            or any(P.titik[3] == 'Ke ' + SCENES[sc].display for sc in liar))
-        cek('quest Misteri Kuburan: menunjuk makhluk yang bisa ditangkap',
-            tujuan_ok and 'Kuburan' not in P.titik[3], f'{P.titik} liar di {sorted(liar)}')
+        # Sejak 3 Nov 2026 Kuburan Tua punya makhluk halus (kemamang, tuyul):
+        # dari desa, penunjuk harus mengarah ke sana.
+        cek('quest Misteri Kuburan: dari desa menunjuk ke Kuburan Tua',
+            P.titik is not None and 'Kuburan' in P.titik[3], str(P.titik))
 
         # Penambang Pemula di dungeon: bijih tembaga terdekat.
         from game.config import ORE_TBG
@@ -475,6 +471,90 @@ def uji_penunjuk_dua_desa(g):
         s.sinema_selesai = sn
 
 
+def uji_kuburan(g):
+    """Makhluk halus Kuburan Tua bisa ditemukan, ditunjuk, dan ditangkap."""
+    from ursina import held_keys
+    from game.cutscene import NASKAH
+    from game.controllers.quest_controller import QuestController
+    s, P = g.state, g.penunjuk
+    sn = list(s.sinema_selesai)
+    s.sinema_selesai = list(NASKAH)
+    jenis = {w['kind'] for w in s.wild_entities if w.get('scene') == 'cemetery'}
+    cek('game baru: Kuburan Tua punya kemamang dan tuyul',
+        {'kemamang', 'tuyul'} <= jenis, sorted(jenis))
+    simpan = (s.quest_stage, s.mail_read, s.day, dict(s.stats), s.time_minutes,
+              s.captured_supernatural, s.gold, s.pickaxe_tier, s.sword_id)
+    try:
+        s.mail_read, s.day, s.time_minutes = True, 3, 10 * 60
+        s.stats.update({'tilled': 3, 'lobak_planted': 3, 'watered': 3, 'lobak_harvested': 3,
+                        'earned': 10, 'deepest_level': 1, 'mobs_killed': 5})
+        s.gold, s.pickaxe_tier, s.sword_id = 200, 1, 'sword_besi'
+        s.inventory.update({'tembaga': 5, 'besi': 3})
+        s.quest_stage, s.captured_supernatural = 8, 0
+        _pindah(g, 'cemetery', 10, 10)
+        tuyul = [w for w in s.wild_entities if w['scene'] == 'cemetery' and w['kind'] == 'tuyul']
+        model_ok = bool(g.entities.wild_ents) and all(
+            getattr(e, 'model', None) is None or 'quad' not in str(getattr(e.model, 'name', ''))
+            for e in g.entities.wild_ents.values())
+        cek('di kuburan siang: tuyul tampil sebagai model (bukan kotak polos)',
+            tuyul and model_ok, f'{len(tuyul)} tuyul, {len(g.entities.wild_ents)} entity liar')
+        cek('di kuburan: penunjuk menunjuk makhluk halus',
+            P.titik is not None and 'Makhluk halus' in P.titik[3], str(P.titik))
+        n0 = s.captured_supernatural
+        for _ in range(25):
+            hidup = [w for w in s.wild_entities if w['scene'] == 'cemetery'
+                     and w['kind'] == 'tuyul']
+            if not hidup or s.captured_supernatural > n0:
+                break
+            w = hidup[0]
+            g.player.set_tile_pos(int(round(w['x'])), int(round(w['y'])))
+            langkah(1)
+            held_keys['shift'] = 1
+            tekan(g, 'f', 2)
+            held_keys['shift'] = 0
+            if g.panels.mode != 'hud':
+                tekan(g, 'escape', 2)
+        cek('[Shift]+[F] menangkap makhluk halus kuburan, syarat Misteri Kuburan terpenuhi',
+            s.captured_supernatural > n0 and QuestController(s)._stage_done(8),
+            f'tertangkap {s.captured_supernatural - n0}')
+    finally:
+        held_keys['shift'] = 0
+        (s.quest_stage, s.mail_read, s.day, st, s.time_minutes, s.captured_supernatural,
+         s.gold, s.pickaxe_tier, s.sword_id) = simpan
+        s.stats.clear(); s.stats.update(st)
+        _pindah(g, 'farm', 20, 10)
+        s.sinema_selesai = sn
+
+
+def uji_saklar_penunjuk(g):
+    """[F8] memutar empat mode penunjuk."""
+    s = g.state
+    simpan = (s.mail_read, s.day, dict(s.stats), s.dua_desa_stage, s.gold,
+              s.pickaxe_tier, s.sword_id, s.quest_stage)
+    try:
+        # Tahap Alat Lebih Baik: penunjuk emas pasti punya tujuan (Bengkel).
+        s.gold, s.pickaxe_tier, s.sword_id, s.quest_stage = 200, 0, None, 4
+        s.mail_read, s.day = True, 3
+        s.stats.update({'tilled': 3, 'lobak_planted': 3, 'watered': 3, 'lobak_harvested': 3,
+                        'earned': 10})
+        s.dua_desa_stage = 0
+        s.penunjuk_mode = 0
+        _pindah(g, 'farm', 20, 10)
+        hasil_mode = []
+        for _ in range(4):
+            tekan(g, 'f8', 3)
+            hasil_mode.append((s.penunjuk_mode, g.penunjuk.titik is not None,
+                               g.penunjuk_dd.titik is not None))
+        harap = [(1, True, False), (2, False, True), (3, False, False), (0, True, True)]
+        cek('[F8] memutar mode penunjuk: utama saja, Dua Desa saja, mati, keduanya',
+            hasil_mode == harap, f'{hasil_mode}')
+    finally:
+        s.penunjuk_mode = 0
+        (s.mail_read, s.day, st, s.dua_desa_stage, s.gold, s.pickaxe_tier, s.sword_id,
+         s.quest_stage) = simpan
+        s.stats.clear(); s.stats.update(st)
+
+
 def uji_tebing(g):
     """Tebing lereng gunung tembus pandang saat menghalangi kamera.
 
@@ -554,6 +634,8 @@ def main():
             uji_tebing(g)
             uji_penunjuk_quest(g)
             uji_penunjuk_dua_desa(g)
+            uji_kuburan(g)
+            uji_saklar_penunjuk(g)
             uji_dunia(g)
             uji_hud(g)
             uji_panel(g)

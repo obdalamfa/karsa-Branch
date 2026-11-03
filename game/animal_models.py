@@ -675,6 +675,8 @@ _WILD_SCALES = {
     'mandrake':         0.52,
     'wild_herb':        0.50,
     'wild_berry':       0.46,
+    'kemamang':         0.90,
+    'tuyul':            0.85,
 }
 
 _SC = object()          # penanda: 'buat soft cube baru untuk bagian ini'
@@ -706,6 +708,8 @@ def build_wild_entity(actor, kind: str):
     elif kind == 'mandrake':         _build_mandrake(part, sc)
     elif kind == 'wild_herb':        _build_wild_herb(part, sc)
     elif kind == 'wild_berry':       _build_wild_berry(part, sc)
+    elif kind == 'kemamang':         _build_kemamang(part, sc)
+    elif kind == 'tuyul':            _build_tuyul(part, sc)
 
     actor._wild_parts = parts
     return parts
@@ -829,6 +833,43 @@ def _build_wild_herb(part, sc):
     # Bunga kecil di ujung batang
     part(sc, (0, 0.46, 0), (0.18, 0.18, 0.18), _c(245, 205, 75))
     part(sc, (0, 0.47, 0), (0.09, 0.09, 0.09), _c(248, 130, 48))
+
+def _build_kemamang(part, sc):
+    """Kemamang -- api arwah biru dari cerita rakyat Jawa: lidah api melayang
+    tanpa tubuh, inti putih, dua mata kecil. Tidak disinari lampu dunia
+    (setLightOff) supaya terbaca menyala di kuburan yang gelap."""
+    for (y, s_, c) in ((0.55, (0.62, 0.70, 0.62), (70, 150, 255)),
+                       (0.62, (0.42, 0.56, 0.42), (150, 210, 255)),
+                       (0.66, (0.22, 0.32, 0.22), (235, 248, 255))):
+        e = part('sphere', (0, y, 0), s_, _c(*c))
+        try:
+            e.setLightOff()
+        except Exception:
+            pass
+    # Ujung lidah api: kerucut lembut menjulang.
+    e = part(sc, (0, 0.98, 0), (0.18, 0.34, 0.18), _c(110, 180, 255))
+    try:
+        e.setLightOff()
+    except Exception:
+        pass
+    for sx in (-1, 1):
+        part('sphere', (sx * 0.08, 0.62, 0.20), (0.06, 0.08, 0.04), _c(20, 30, 60))
+
+
+def _build_tuyul(part, sc):
+    """Tuyul -- makhluk halus kecil berkepala plontos dari cerita rakyat:
+    badan anak kecil kehijauan pucat, kepala besar botak, mata besar."""
+    kulit = _c(178, 196, 168)
+    part(sc, (0, 0.22, 0), (0.30, 0.34, 0.24), kulit)                 # badan
+    part('sphere', (0, 0.58, 0), (0.46, 0.44, 0.42), kulit)            # kepala botak
+    for sx in (-1, 1):
+        part(sc, (sx * 0.22, 0.60, 0), (0.08, 0.12, 0.05), kulit)     # telinga
+        part('sphere', (sx * 0.10, 0.60, 0.19), (0.12, 0.13, 0.06), _EYE_W)
+        part('sphere', (sx * 0.10, 0.60, 0.215), (0.06, 0.07, 0.04), _EYE_PU)
+        part(sc, (sx * 0.08, 0.04, 0.02), (0.09, 0.10, 0.10), kulit)  # kaki
+    part(sc, (0, 0.47, 0.20), (0.10, 0.025, 0.02), _c(120, 70, 70))    # seringai
+    part(sc, (0, 0.18, 0.12), (0.26, 0.12, 0.04), _c(236, 230, 214))   # kain putih
+
 
 def _build_wild_berry(part, sc):
     """Beri liar chibi — buah bulat ungu-merah cerah, wajah ceria."""

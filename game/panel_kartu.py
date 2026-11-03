@@ -578,6 +578,7 @@ PANDUAN = (
         ('H', 'hubungan warga'), ('P', 'keinginan'), ('N', 'catatan lembah'),
         ('L', 'bangun / beli'), ('F6', 'papan permintaan'),
         ('F4', 'ekosistem & pasar'), ('F7', 'majelis batin'),
+        ('F8', 'penunjuk tujuan'),
         ('TAB', 'ringkasan kebutuhan'), ('F2', 'ubah penampilan'),
         ('F5 / F9', 'simpan / muat'), ('ESC', 'menu jeda'),
     )),

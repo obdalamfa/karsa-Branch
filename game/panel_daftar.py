@@ -377,6 +377,7 @@ GRUP_EKO = (
     ('HUTAN', ('herba_gunung', 'jamur_gunung', 'mandrake', 'kayu_gunung')),
     ('PANTAI', ('kerang_pantai',)),
     ('LEMBAH', ('kunang',)),
+    ('KUBURAN', ('makhluk_kuburan',)),
     ('BAWAH TANAH', ('bijih_dangkal', 'bijih_tengah', 'bijih_dalam')),
 )
 

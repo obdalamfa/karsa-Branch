@@ -9,6 +9,12 @@ tags: [moc, status]
 
 # Status Sekarang
 
+> [!success] Pembaruan 2026-11-03 — tebing tembus pandang
+> Keputusan pemilik: tebing lereng gunung (dan mulut gua) memudar tembus
+> pandang saat menghalangi kamera, lalu kembali pejal. Pemain kini terlihat
+> dari 12/12 posisi × sudut yang dulu tertutup sampai ~85%. Regresi 15/15,
+> "tampilan" 56/56.
+
 > [!success] Pembaruan 2026-11-02 — penunjuk tujuan tutorial
 > Tiap langkah tutorial kini punya penanda emas di dunia (kotak pos, ladang,
 > pintu rumah lalu kasur, Peti Kirim) dan panah di tepi layar saat target di
@@ -95,7 +101,7 @@ tags: [moc, status]
 >   (`KARSA_SHADOW=1`; ongkos +22..84% ms/frame).
 > Tiap jalur lulus verifikator adversarial (atau temuannya ditutup dengan
 > mutasi). Regresi penuh gabungan: 14/14, lima menit 8/8.
-> Terbuka: tebing mulut gua menutupi ~85% layar saat tiba di mountain
+> ~~Terbuka: tebing mulut gua menutupi ~85% layar saat tiba di mountain~~ (lunas 3 Nov: tembus pandang)
 > (keputusan rupa pemilik); gauntlet buta cahaya baru belum dijalankan.
 
 > [!success] Pembaruan 2026-10-18 — kegagalan farm di mesin lambat terjelaskan

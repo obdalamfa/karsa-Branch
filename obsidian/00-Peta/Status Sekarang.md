@@ -9,6 +9,11 @@ tags: [moc, status]
 
 # Status Sekarang
 
+> [!success] Pembaruan 2026-11-03 (siang) — penunjuk ke tugas utama
+> Sesudah tutorial, penunjuk emas mengikuti tugas utama: Bengkel, tangga Gua
+> Sang Hyang dan tangga tiap lantai dungeon, Kuburan Tua, sarang Naga. Dari
+> dungeon ke luar ia menunjuk tangga naik. Regresi 15/15, "tampilan" 62/62.
+
 > [!success] Pembaruan 2026-11-03 — tebing tembus pandang
 > Keputusan pemilik: tebing lereng gunung (dan mulut gua) memudar tembus
 > pandang saat menghalangi kamera, lalu kembali pejal. Pemain kini terlihat

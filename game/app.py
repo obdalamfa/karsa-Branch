@@ -348,6 +348,8 @@ class Game3D:
         # panah di tepi layar ke kotak pos, ladang, kasur, Peti Kirim.
         from .penunjuk import Penunjuk
         self.penunjuk = Penunjuk(self)
+        # Penunjuk kedua, biru-hijau: Cerita Dua Desa, sejajar tugas utama.
+        self.penunjuk_dd = Penunjuk(self, jalur='dua_desa')
         # Save lama: interaksi yang sudah pernah dilakukan sebelum adegannya
         # ada tidak diputar susulan (lihat cutscene.tandai_yang_sudah_lewat).
         tandai_yang_sudah_lewat(self.state)
@@ -445,6 +447,7 @@ class Game3D:
         self._pulihkan_mode_yatim()
         try:
             self.penunjuk.tick(dt)
+            self.penunjuk_dd.tick(dt)
         except Exception:
             logging.exception('penunjuk tujuan gagal')
 

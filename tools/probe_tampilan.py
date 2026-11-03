@@ -22,6 +22,7 @@ direktori sementara.
 """
 from __future__ import annotations
 
+import math
 import os
 import sys
 import tempfile
@@ -341,8 +342,10 @@ def uji_penunjuk_quest(g):
             P.titik is not None and P.titik[0] == 'farm' and 'Bengkel' in P.titik[3],
             str(P.titik))
         _pindah(g, 'smith', 4, 5)
-        cek('quest Alat Lebih Baik: padam di dalam Bengkel', P.titik is None
-            and not P.ketupat.enabled, str(P.titik))
+        budi = (s.npc_positions.get('budi') or {}).get('scene')
+        cek('quest Alat Lebih Baik: di dalam Bengkel menunjuk Pak Budi (atau padam)',
+            (P.titik is not None and 'Budi' in P.titik[3]) if budi == 'smith'
+            else P.titik is None, f'{P.titik} budi di {budi}')
 
         s.quest_stage, s.pickaxe_tier = 5, 1
         _pindah(g, 'mountain', 15, 12)
@@ -351,10 +354,59 @@ def uji_penunjuk_quest(g):
 
         s.quest_stage = 8
         _pindah(g, 'town', 15, 14)
-        cek('quest Misteri Kuburan: dari desa menunjuk ke Kuburan',
-            P.titik is not None and 'Kuburan' in P.titik[3], str(P.titik))
+        # Kuburan Tua tidak punya makhluk yang bisa ditangkap; yang ditunjuk
+        # harus makhluk liar sungguhan (di sini, atau pintu ke scene yang punya).
+        from game.scenes import SCENES
+        liar = {w['scene'] for w in s.wild_entities
+                if not w.get('night_only') or s.is_night()}
+        tujuan_ok = P.titik is not None and (
+            'Tangkap' in P.titik[3]
+            or any(P.titik[3] == 'Ke ' + SCENES[sc].display for sc in liar))
+        cek('quest Misteri Kuburan: menunjuk makhluk yang bisa ditangkap',
+            tujuan_ok and 'Kuburan' not in P.titik[3], f'{P.titik} liar di {sorted(liar)}')
 
+        # Penambang Pemula di dungeon: bijih tembaga terdekat.
+        from game.config import ORE_TBG
+        s.quest_stage, s.pickaxe_tier, s.sword_id = 6, 1, None
+        s.stats['deepest_level'] = 2
+        s.inventory['tembaga'] = 0
+        s.dungeon_level = 3
+        s.scene_name = 'dungeon'
+        g.player._generate_and_enter_dungeon()
+        g.player._portal_cd = 3.0
+        langkah(40)
+        bijih = {(x, y) for y, r in enumerate(s.dungeon_tiles)
+                 for x, v in enumerate(r) if v == ORE_TBG}
+        cek('quest Penambang: di dungeon menunjuk bijih tembaga',
+            (P.titik is not None and tuple(P.titik[1:3]) in bijih) if bijih
+            else (P.titik is not None and 'Tangga' in P.titik[3]),
+            f'{P.titik} bijih={len(bijih)}')
+        # Pendekar Karsa: mob terdekat.
+        s.quest_stage, s.sword_id = 7, 'sword_besi'
+        s.inventory.update({'tembaga': 5, 'besi': 3})
+        langkah(3)
+        # Mob bergerak di antara frame penunjuk menghitung dan probe membaca:
+        # cocok kalau dalam 1,5 petak dari mob hidup mana pun (ditemukan saat
+        # mutasi -- versi 'sama persis' sempat GAGAL tanpa sebab).
+        mob = [(m['x'], m['y']) for m in s.mobs if m.get('hp', 0) > 0]
+        dekat = P.titik is not None and any(
+            math.hypot(P.titik[1] - mx, P.titik[2] - my) <= 1.5 for mx, my in mob)
+        cek('quest Pendekar: di dungeon menunjuk lawan',
+            dekat if mob else (P.titik is not None and 'Tangga' in P.titik[3]),
+            f'{P.titik} mob={len(mob)}')
+        # Boss: bos hidup di lantai ini ditunjuk.
+        s.stats['mobs_killed'] = 5
+        s.captured_supernatural = 1
+        s.stats['deepest_level'] = 10
+        s.mobs.append({'kind': 'bhutakala', 'x': 5.0, 'y': 5.0, 'hp': 99, 'max_hp': 99,
+                       'is_boss': True})
+        langkah(3)
+        cek('quest Boss: bos hidup di lantai ini ditunjuk',
+            P.titik is not None and tuple(P.titik[1:3]) == (5, 5), str(P.titik))
+        s.mobs.pop()
+        s.captured_supernatural = 0
         s.quest_stage = 9
+        s.stats['deepest_level'] = 2
         s.dungeon_level = 2
         s.scene_name = 'dungeon'             # urutan sama dengan probe_gua
         g.player._generate_and_enter_dungeon()
@@ -381,6 +433,46 @@ def uji_penunjuk_quest(g):
         s.gold = emas
         _pindah(g, 'farm', 20, 10)
         s.sinema_selesai = sinema_lama
+
+
+def uji_penunjuk_dua_desa(g):
+    """Penunjuk kedua (biru-hijau) untuk Cerita Dua Desa."""
+    from game.config import PPN
+    from game.penunjuk import _tile_pertama
+    from game.cutscene import NASKAH
+    s, D = g.state, g.penunjuk_dd
+    simpan = (s.dua_desa_stage, s.mail_read, s.day, dict(s.stats), list(s.sinema_selesai),
+              getattr(s, 'gotong_royong_hari', 0))
+    s.sinema_selesai = list(NASKAH)
+    try:
+        s.mail_read = False
+        _pindah(g, 'farm', 20, 10)
+        cek('Dua Desa: penunjuk kedua diam selama tutorial', D.titik is None, str(D.titik))
+        s.mail_read, s.day = True, 3
+        s.stats.update({'tilled': 3, 'lobak_planted': 3, 'watered': 3,
+                        'lobak_harvested': 3, 'earned': 10})
+        s.dua_desa_stage = 0
+        _pindah(g, 'farm', 20, 10)
+        cek('Dua Desa tahap 0: dari kebun menunjuk ke arah Kades Hardjo',
+            D.titik is not None and D.ketupat.texture is not g.penunjuk.ketupat.texture
+            and ('Desa' in D.titik[3] or 'Hardjo' in D.titik[3]), str(D.titik))
+        s.dua_desa_stage = 3
+        s.stats['titipan_karsa'] = 0
+        _pindah(g, 'town', 15, 14)
+        ppn = _tile_pertama('town', PPN)
+        cek('Dua Desa Juru Titip: di desa menunjuk papan titipan Balai Desa',
+            D.titik is not None and tuple(D.titik[1:3]) == ppn, f'{D.titik} papan={ppn}')
+        s.dua_desa_stage = 6
+        s.gotong_royong_hari = s.day
+        _pindah(g, 'lawang', 12, 12)
+        from game.scenes.lawang import JALAN_LONGSOR
+        cek('Dua Desa Gotong Royong: di Lawang menunjuk longsor',
+            D.titik is not None and tuple(D.titik[1:3]) == tuple(JALAN_LONGSOR[0]), str(D.titik))
+    finally:
+        (s.dua_desa_stage, s.mail_read, s.day, st, sn, s.gotong_royong_hari) = simpan
+        s.stats.clear(); s.stats.update(st)
+        _pindah(g, 'farm', 20, 10)
+        s.sinema_selesai = sn
 
 
 def uji_tebing(g):
@@ -461,6 +553,7 @@ def main():
             uji_penunjuk(g)
             uji_tebing(g)
             uji_penunjuk_quest(g)
+            uji_penunjuk_dua_desa(g)
             uji_dunia(g)
             uji_hud(g)
             uji_panel(g)

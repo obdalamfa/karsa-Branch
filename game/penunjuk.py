@@ -37,9 +37,18 @@ from . import panel_kartu as PK
 _TEX: dict = {}
 
 
-def _tex(nama):
-    if nama in _TEX:
-        return _TEX[nama]
+# Warna per jalur: emas = tutorial/tugas utama, biru-hijau = Cerita Dua Desa.
+WARNA_JALUR = {
+    'utama':    (PK.EMAS, (255, 236, 180), (120, 82, 30)),
+    'dua_desa': ((112, 214, 200), (200, 246, 238), (30, 96, 88)),
+}
+
+
+def _tex(nama, jalur='utama'):
+    kunci = (nama, jalur)
+    if kunci in _TEX:
+        return _TEX[kunci]
+    isi, terang, gelap = WARNA_JALUR[jalur]
     tex = None
     try:
         from PIL import Image, ImageDraw, ImageFilter
@@ -49,27 +58,27 @@ def _tex(nama):
         if nama == 'ketupat':
             pendar = Image.new('RGBA', (n, n), (0, 0, 0, 0))
             ImageDraw.Draw(pendar).polygon([(64, 6), (118, 64), (64, 122), (10, 64)],
-                                           fill=(*PK.EMAS, 150))
+                                           fill=(*isi, 150))
             img.alpha_composite(pendar.filter(ImageFilter.GaussianBlur(9)))
-            d.polygon([(64, 18), (106, 64), (64, 110), (22, 64)], fill=(*PK.EMAS, 255))
-            d.polygon([(64, 18), (106, 64), (64, 64)], fill=(255, 236, 180, 255))
-            d.polygon([(64, 18), (106, 64), (64, 110), (22, 64)], outline=(120, 82, 30, 255),
+            d.polygon([(64, 18), (106, 64), (64, 110), (22, 64)], fill=(*isi, 255))
+            d.polygon([(64, 18), (106, 64), (64, 64)], fill=(*terang, 255))
+            d.polygon([(64, 18), (106, 64), (64, 110), (22, 64)], outline=(*gelap, 255),
                       width=4)
         elif nama == 'cincin':
-            d.ellipse([8, 8, n - 8, n - 8], outline=(*PK.EMAS, 255), width=9)
+            d.ellipse([8, 8, n - 8, n - 8], outline=(*isi, 255), width=9)
             img = img.filter(ImageFilter.GaussianBlur(1.2))
         elif nama == 'panah':
             pendar = Image.new('RGBA', (n, n), (0, 0, 0, 0))
             ImageDraw.Draw(pendar).polygon([(118, 64), (24, 16), (46, 64), (24, 112)],
                                            fill=(0, 0, 0, 160))
             img.alpha_composite(pendar.filter(ImageFilter.GaussianBlur(6)))
-            d.polygon([(112, 64), (28, 22), (48, 64), (28, 106)], fill=(*PK.EMAS, 255),
-                      outline=(120, 82, 30, 255))
+            d.polygon([(112, 64), (28, 22), (48, 64), (28, 106)], fill=(*isi, 255),
+                      outline=(*gelap, 255))
         tex = Texture(img)
         tex.filtering = 'bilinear'
     except Exception:
         tex = None
-    _TEX[nama] = tex
+    _TEX[kunci] = tex
     return tex
 
 
@@ -226,23 +235,139 @@ def target_quest(s):
     if st == 3:
         return target_langkah(s, 'kirim')
     if st == 4:
-        return ('smith', None, None, 'Bengkel Budi')
+        return _bengkel(s)
     if st == 5:
         if getattr(s, 'pickaxe_tier', 0) < 1:
-            return ('smith', None, None, 'Bengkel Budi')
+            return _bengkel(s)
         return _tangga_gua(s)
     if st == 6:
-        return None if s.scene_name == 'dungeon' else _tangga_gua(s)
+        if s.scene_name != 'dungeon':
+            return _tangga_gua(s)
+        inv = getattr(s, 'inventory', {}) or {}
+        from .config import ORE_TBG, ORE_BSI
+        cari = ORE_TBG if inv.get('tembaga', 0) < 5 else ORE_BSI
+        nama = 'Bijih tembaga' if cari == ORE_TBG else 'Bijih besi'
+        t = _terdekat(s, _tile_dungeon(s, cari))
+        return ('dungeon', t[0], t[1], nama) if t else _tangga_gua(s)
     if st == 7:
         if getattr(s, 'sword_id', None) not in _PEDANG_BESI:
-            return ('smith', None, None, 'Bengkel Budi')
-        return None if s.scene_name == 'dungeon' else _tangga_gua(s)
+            return _bengkel(s)
+        if s.scene_name != 'dungeon':
+            return _tangga_gua(s)
+        t = _terdekat(s, [(int(round(m['x'])), int(round(m['y'])))
+                          for m in getattr(s, 'mobs', []) or [] if m.get('hp', 0) > 0])
+        return ('dungeon', t[0], t[1], 'Lawan') if t else _tangga_gua(s)
     if st == 8:
-        return ('cemetery', None, None, 'Kuburan Tua')
+        return _tangkapan(s)
     if st == 9:
         return _tangga_gua(s)
     if st == 10:
-        return ('naga_cave', None, None, 'Gua Sang Hyang')
+        if s.scene_name == 'dungeon':
+            bos = next((m for m in getattr(s, 'mobs', []) or []
+                        if m.get('is_boss') and m.get('hp', 0) > 0), None)
+            if bos is not None:
+                return ('dungeon', int(round(bos['x'])), int(round(bos['y'])), 'Penguasa gua')
+        return _tangga_gua(s)
+    return None
+
+
+def _tile_dungeon(s, tid):
+    return [(x, y) for y, r in enumerate(getattr(s, 'dungeon_tiles', None) or [])
+            for x, v in enumerate(r) if v == tid]
+
+
+def _bengkel(s):
+    """Bengkel Budi. Di dalamnya: Pak Budi sendiri (kalau sedang di bengkel),
+    karena dialah yang terbaca sebagai 'tempat membuat alat'."""
+    if s.scene_name == 'smith':
+        t = _npc(s, 'budi')
+        if t and t[0] == 'smith':
+            return (t[0], t[1], t[2], 'Pak Budi  [U] bengkel')
+        return None
+    return ('smith', None, None, 'Bengkel Budi')
+
+
+def _npc(s, npc_id):
+    """(scene, tx, ty) warga dari npc_positions, atau None kalau tersembunyi."""
+    pos = (getattr(s, 'npc_positions', {}) or {}).get(npc_id)
+    if not pos or pos.get('scene') in (None, 'hidden'):
+        return None
+    return (pos['scene'], int(round(pos['x'])), int(round(pos['y'])))
+
+
+# Scene yang punya makhluk liar (ecology.WILD_POPULASI), urut paling dekat ke
+# rumah. Kuburan Tua TIDAK ada di sini: tahap "Misteri Kuburan" dihitung dari
+# tangkapan [Shift+F] makhluk liar mana pun, dan kuburan tidak punya satu pun.
+_SCENE_LIAR = ('farm', 'mountain', 'town', 'lake')
+
+
+def _tangkapan(s):
+    """Makhluk liar terdekat yang benar-benar bisa ditangkap [Shift+F]."""
+    malam = s.is_night() if hasattr(s, 'is_night') else False
+    hidup = [w for w in getattr(s, 'wild_entities', []) or []
+             if not w.get('night_only') or malam]
+    di_sini = [(int(round(w['x'])), int(round(w['y']))) for w in hidup
+               if w.get('scene') == s.scene_name]
+    t = _terdekat(s, di_sini)
+    if t:
+        return (s.scene_name, t[0], t[1], 'Tangkap  [Shift+F]')
+    for sc in _SCENE_LIAR:
+        ada = [w for w in hidup if w.get('scene') == sc]
+        if ada:
+            w = ada[0]
+            return (sc, int(round(w['x'])), int(round(w['y'])), 'Makhluk liar')
+    return None
+
+
+def target_dua_desa(s):
+    """(scene, tx, ty, nama) untuk Cerita Dua Desa (data.QUEST_STAGES ber-alur),
+    atau None. Tahapnya dari state.dua_desa_stage."""
+    from .config import PPN
+    from . import dua_desa as dd
+    from .data import KERUKUNAN_CERITA, KERUKUNAN_TIKAR
+    ds = getattr(s, 'dua_desa_stage', 0)
+    inv = getattr(s, 'inventory', {}) or {}
+    stt = getattr(s, 'stats', {}) or {}
+    kr = getattr(s, 'kerukunan', 0)
+
+    def warga(npc_id, nama):
+        t = _npc(s, npc_id)
+        return (t[0], t[1], t[2], nama) if t else None
+
+    def papan(desa):
+        sc = 'town' if desa == 'karsa' else 'lawang'
+        t = _tile_pertama(sc, PPN)
+        nama = 'Papan Titipan ' + ('Balai Desa' if desa == 'karsa' else 'Lawang')
+        return (sc, t[0], t[1], nama) if t else None
+
+    def papan_terdekat():
+        return papan('lawang' if s.scene_name == 'lawang' else 'karsa')
+
+    if ds == 0:
+        return warga('kades_hardjo', 'Kades Hardjo')
+    if ds == 1:
+        return warga('mbah_rukmi', 'Mbah Rukmi')
+    if ds == 2:
+        if inv.get('susu', 0) > 0 or inv.get('telur', 0) > 0:
+            if not (inv.get('lobak', 0) > 0 or inv.get('wortel', 0) > 0):
+                return warga('mbah_rukmi', 'Mbah Rukmi')
+        return warga('kades_hardjo', 'Kades Hardjo')
+    if ds == 3:
+        if stt.get('titipan_karsa', 0) < 1:
+            return papan('karsa')
+        if stt.get('titipan_lawang', 0) < 1:
+            return papan('lawang')
+        return None
+    if ds == 4:
+        return papan_terdekat() if kr < KERUKUNAN_CERITA else warga('mbah_rukmi', 'Mbah Rukmi')
+    if ds == 5:
+        return papan_terdekat() if kr < KERUKUNAN_TIKAR else warga('kades_hardjo', 'Kades Hardjo')
+    if ds == dd.TAHAP_GOTONG:
+        hari = getattr(s, 'gotong_royong_hari', 0)
+        if hari and getattr(s, 'day', 0) >= hari:
+            from .scenes.lawang import JALAN_LONGSOR
+            x, y = JALAN_LONGSOR[0]
+            return ('lawang', x, y, 'Longsor: gotong royong')
     return None
 
 
@@ -264,22 +389,24 @@ def _masih_berlaku(s, langkah_id, tgt):
 class Penunjuk:
     """Dibuat sekali oleh Game3D; `tick()` tiap frame."""
 
-    def __init__(self, app):
+    def __init__(self, app, jalur='utama'):
         self.app = app
+        self.jalur = jalur
         self._t = 0.0
         self._langkah = None
         self._target = None          # (scene, tx, ty, nama) tujuan akhir
         self.titik = None            # (scene, tx, ty, nama) yang SEDANG ditunjuk
-        self.ketupat = Entity(model='quad', texture=_tex('ketupat'), billboard=True,
+        self.ketupat = Entity(model='quad', texture=_tex('ketupat', jalur), billboard=True,
                               scale=1.25, color=color.white, enabled=False)
         self.ketupat.setLightOff()
-        self.cincin = Entity(model='quad', texture=_tex('cincin'), rotation_x=90,
+        self.cincin = Entity(model='quad', texture=_tex('cincin', jalur), rotation_x=90,
                              scale=1.6, color=color.white, enabled=False)
         self.cincin.setLightOff()
-        self.panah = Entity(parent=camera.ui, model='quad', texture=_tex('panah'),
+        self.panah = Entity(parent=camera.ui, model='quad', texture=_tex('panah', jalur),
                             scale=0.05, color=color.white, enabled=False, z=-0.2)
         self.label = Text('', parent=camera.ui, font='Montserrat-Bold.ttf', scale=0.66,
-                          origin=(0, 0), color=color.rgb(*PK.EMAS), enabled=False, z=-0.2)
+                          origin=(0, 0), color=color.rgb(*WARNA_JALUR[jalur][0]),
+                          enabled=False, z=-0.2)
         # Alas kapsul: teks emas tanpa alas hilang di atas tanah terang.
         self.alas = Entity(parent=camera.ui, model='quad', enabled=False, z=-0.15,
                            color=color.rgba(14, 16, 24, 200))
@@ -298,7 +425,11 @@ class Penunjuk:
             return
         from .tutorial import current_step
         cur = current_step(s)
-        if cur is not None:
+        if self.jalur == 'dua_desa':
+            # Jalur kedua tidak bersaing dengan tutorial: pemain baru belajar
+            # satu hal dulu. Sesudah tutorial ia berjalan sejajar tugas utama.
+            self._target = target_dua_desa(s) if cur is None else None
+        elif cur is not None:
             lid = cur[1].get('id')
             if lid != self._langkah or self._target is None \
                     or not _masih_berlaku(s, lid, self._target):
@@ -348,7 +479,11 @@ class Penunjuk:
         except Exception:
             gy = GROUND_H
         self.ketupat.enabled = self.cincin.enabled = True
-        self.ketupat.position = (wx, gy + 2.3 + 0.18 * math.sin(t * 3.0), wz)
+        # Jalur kedua melayang sedikit lebih tinggi dan berdenyut berlawanan
+        # fase: dua penanda di tempat yang sama tetap terbaca dua.
+        naik = 0.7 if self.jalur == 'dua_desa' else 0.0
+        fase = math.pi if self.jalur == 'dua_desa' else 0.0
+        self.ketupat.position = (wx, gy + 2.3 + naik + 0.18 * math.sin(t * 3.0 + fase), wz)
         self.ketupat.rotation_z = 0
         k = (t * 0.9) % 1.0
         self.cincin.position = (wx, gy + 0.06, wz)
@@ -387,6 +522,9 @@ class Penunjuk:
         # pojok-pojoknya milik HUD.
         if abs(px) > ex - 0.10:
             py = max(-0.26, min(0.26, py))
+        if self.jalur == 'dua_desa':
+            # Satu tingkat di bawah panah emas kalau keduanya di tepi yang sama.
+            py -= 0.085
         denyut = 1.0 + 0.10 * math.sin(t * 6.0)
         self.panah.enabled = True
         self.panah.position = (px, py)

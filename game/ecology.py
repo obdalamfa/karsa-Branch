@@ -98,6 +98,11 @@ STOCKS: dict[str, dict] = {
     # ── LEMBAH ───────────────────────────────────────────
     'kunang':       {'cap': 50,  'r': 0.40, 'jenis': 'hijau',  'label': 'Kunang-kunang'},       # HLM 5,0
 
+    # ── KUBURAN ──────────────────────────────────────────
+    # Makhluk halus kuburan (kemamang, tuyul). Kolam kecil dan pulih pelan:
+    # menangkapnya mudah sekali, menguras kuburan butuh berminggu-minggu.
+    'makhluk_kuburan': {'cap': 20, 'r': 0.22, 'jenis': 'gelap', 'label': 'Makhluk Halus Kuburan'},
+
     # ── BAWAH TANAH ──────────────────────────────────────
     # "Pemulihan" bijih bukan batu yang tumbuh; ia adalah lorong baru yang
     # terbuka saat langit-langit runtuh. Karena itu lajunya kecil dan tidak
@@ -368,6 +373,7 @@ def report_lines(state) -> list[str]:
         ('HUTAN',      ['herba_gunung', 'jamur_gunung', 'mandrake', 'kayu_gunung']),
         ('PANTAI',     ['kerang_pantai']),
         ('LEMBAH',     ['kunang']),
+        ('KUBURAN',    ['makhluk_kuburan']),
         ('BAWAH TANAH',['bijih_dangkal', 'bijih_tengah', 'bijih_dalam']),
     ]
     lines: list[str] = []
@@ -412,6 +418,8 @@ WILD_POPULASI = [
     ('firefly',          'farm',     5, 'kunang'),
     ('firefly',          'town',     4, 'kunang'),
     ('firefly',          'lake',     6, 'kunang'),
+    ('kemamang',         'cemetery', 4, 'makhluk_kuburan'),
+    ('tuyul',            'cemetery', 3, 'makhluk_kuburan'),
 ]
 
 # Jenis liar mana mengurangi kolam mana saat dipetik.
@@ -421,6 +429,8 @@ WILD_STOK = {
     'running_mushroom': 'jamur_gunung',
     'mandrake':         'mandrake',
     'firefly':          'kunang',
+    'kemamang':         'makhluk_kuburan',
+    'tuyul':            'makhluk_kuburan',
 }
 
 

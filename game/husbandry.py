@@ -506,7 +506,7 @@ def guide_lines() -> list[str]:
     """Aturan ternak, ditulis untuk dibaca DI DALAM game."""
     return [
         '── MENGURUS HEWAN ──',
-        '  Klik hewan (atau tekan E di dekatnya) untuk membuka menu:',
+        '  Klik hewan (atau tekan F di dekatnya) untuk membuka menu:',
         '    Cek Kondisi  — laporan lengkap kenyang / air / kandang / hasil',
         '    Beri Makan   — +60% kenyang, memakai satu pakan dari inventori',
         '    Beri Minum   — isi tempat minum sampai penuh, gratis',

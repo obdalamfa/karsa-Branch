@@ -73,7 +73,7 @@ dengan artifact bukti 3,28 MB terunggah. Nama paket apt yang ditebak untuk
 | `motif_waras` mengotori keadaannya | scene ke-14 apa pun gagal palsu | [[Pemeriksaan motif mengotori keadaan]] |
 | regresi hanya jalan kalau diingat | jaring digantung tapi tidak dipasang | jalan otomatis di CI |
 
-## 🟠 Pemeriksaan `arah_maju` masih terkontaminasi antar-scene
+## ✅ ~~Pemeriksaan `arah_maju` masih terkontaminasi antar-scene~~ — lunas 2026-10-13
 
 Dibuat 2026-10-04 untuk menjaga [[Arah WASD basis sumbu salah]]. Ia **menangkap
 bug sungguhan** (bug lama dipasang kembali → GAGAL 179°), tapi di larian 14
@@ -96,6 +96,16 @@ Naik pangkat jadi penjaga sungguhan begitu sumber kontaminasinya ketemu.
 Tersangka yang belum diperiksa: `camera_focus` yang hanya diperbarui di dalam
 `update()`, dan posisi pemain yang dipulihkan sebagai koordinat **lokal**
 sementara yang diukur koordinat **dunia**.
+
+**Lunas 2026-10-13 (gauntlet M2).** Di larian 13 Okt, sebelum diperbaiki, tidak
+ada lagi angka 180°. Yang tersisa simpangan 40–66° di yaw 135 (clinic, studio)
+dan 168° di mountain. Ketiganya dari tabrakan peta: langkah diagonal meluncur di
+dinding, ditambah lereng dan dorongan keluar dari petak terjepit. Sebabnya
+ditemukan dengan membaca `player.tick`. Sejak `is_walkable` ditimpa sementara
+selama pengukuran dan arah acuan dibaca sebelum berjalan, hasilnya 42/42
+pengukuran 0°, dan cek ini kini memvonis. Angka 180° yang dulu muncul **belum
+terverifikasi** sebabnya. Dugaan: gesekan lerp bertanda terbalik di dt besar,
+yang sudah diganti exp().
 
 ## 🟠 15 dari 16 probe yang dikutip kode tidak ada di repo
 

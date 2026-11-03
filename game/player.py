@@ -208,6 +208,8 @@ class Player3D(Entity):
         self._invuln           = 0.0    # ms
         self._anim_t           = 0.0
         self._attack_anim      = 0.0
+        from .jus_gerak import JusGerak
+        self._jus = JusGerak(self)    # ancang-ancang / hentakan / ikut-gerak
         self._anim_mode        = 'swing' # swing|down|water|bend
         # Alat di tangan: dibangun sekali, tapi baru TERLIHAT saat dipakai.
         self._held_tool        = None
@@ -320,12 +322,13 @@ class Player3D(Entity):
         # salah, dan ia sudah begitu sejak lama. Ketinggiannya sekarang
         # dikunci ke permukaan tiap frame di tick(), karena pemain berpindah
         # scene dan tidak selalu berdiri di ketinggian yang sama.
-        self._shadow = Entity(parent=p, model='quad',
-                              position=Vec3(0, 0.02, 0),
-                              rotation=(90, 0, 0),
-                              scale=(0.98, 0.98, 1),
-                              color=color.rgba(0, 0, 0, 120),
-                              shader=None)
+        #
+        # Bentuknya cakram berbulu (game/bayangan.py), bukan lagi quad persegi
+        # ber-alpha rata yang di layar terbaca sebagai ubin hitam bertepi
+        # keras di bawah kaki. Mesh dibuat baru untuk entity ini (aturan #3).
+        from .bayangan import cakram_kontak
+        self._shadow = cakram_kontak(p, 1.10, 1.00, alpha=0.55,
+                                     position=Vec3(0, 0.02, 0))
 
         self._is_vitaboy = True
         self._va = None
@@ -770,6 +773,14 @@ class Player3D(Entity):
         # rumput — dan terbaca sebagai cakram gelap melayang setinggi lutut.
         # Dikunci per frame karena pemain berpindah scene.
         s = self.state
+        # Mob menulis kebal-sesudah-kena ke state (mob.py), bukan ke pemain.
+        # Dulu baris sinkron di bawah menimpanya dengan _invuln (selalu 0),
+        # jadi kebal 600 ms hilang di frame berikutnya dan pemain tidak
+        # pernah berkedip. Ambil dulu dari state; pukulan baru = kebal naik.
+        if s.invuln_timer_ms > self._invuln:
+            if self._invuln <= 0:
+                self._jus.mulai('kena', 0.42)
+            self._invuln = s.invuln_timer_ms
         if self._invuln > 0:
             self._invuln = max(0, self._invuln - dt * 1000)
         self._attack_anim= max(0.0, self._attack_anim- dt * 1000)
@@ -982,6 +993,16 @@ class Player3D(Entity):
                     # Terkurung sepenuhnya: dorong ke tile terdekat yang bisa
                     # dijalani, bukan biarkan pemain kehilangan kendali.
                     self._escape_to_walkable(tx_cur, tz_cur)
+                # `return` ini melewati SEMUA animasi di bawah, termasuk
+                # char.update(): selama pemain bergerak di tile terblokir rig
+                # membeku di pose apa pun selama frame-frame itu (dibaca dari
+                # kode; pembekuan yang sempat terlihat di tangkapan 23 Okt
+                # ternyata salah alat ukur, bukan cabang ini). Rig dan lapisan
+                # gerak tetap dijalankan; gerak/tabrakan tidak disentuh.
+                _ch = getattr(self, '_char', None)
+                if _ch is not None:
+                    _ch.update(dt, 0.0)
+                    self._jus.tick(dt)
                 return
 
             # Diagonal check: prevent clipping inside diagonal corner obstacles
@@ -1224,6 +1245,7 @@ class Player3D(Entity):
         char = getattr(self, '_char', None)
         if char is not None:
             char.update(dt, v_mag if moving_now else 0.0)
+            self._jus.tick(dt)
 
         # ── Mesh-swap animation (jika model player memakai mesh swap) ──
         if getattr(self, '_use_mesh_swap', False):
@@ -1340,6 +1362,14 @@ class Player3D(Entity):
         else:
             self.body.color = Vec4(self._shirt_col[0], self._shirt_col[1],
                                    self._shirt_col[2], 1.0)
+        # Pada rig CharActor, self.body adalah Entity kosong: kedip di atas
+        # tidak mewarnai apa pun. Kedipnya dipasang di poros rig.
+        _ch = getattr(self, '_char', None)
+        if _ch is not None:
+            if self._invuln > 0 and int(self._invuln / 80) % 2 == 0:
+                _ch.poros.setColorScale(1.7, 0.55, 0.55, 1)
+            else:
+                _ch.poros.setColorScale(1, 1, 1, 1)
 
         # Sync state
         s.player_x = self.x / TS
@@ -1543,16 +1573,21 @@ class Player3D(Entity):
             self.interaction_controller.use_tool(entities_mgr, panels)
             return True
 
-        if key == 'e':
-            self.interaction_controller.interact(entities_mgr, panels)
-            return True
 
         if key == 'z':
             self.interaction_controller.attack(entities_mgr, panels)
             return True
 
+        # [F] interaksi, [Shift]+[F] tangkap. [Q]/[E] dulu interaksi dan
+        # benih-sebelumnya; sejak 22 Okt 2026 keduanya memutar kamera (app.py).
+        # Ursina membuang awalan 'shift-' dari nama tombol, jadi Shift dibaca
+        # dari held_keys.
         if key == 'f':
-            self.interaction_controller.capture(entities_mgr, panels)
+            from ursina import held_keys
+            if held_keys['shift'] or held_keys['left shift'] or held_keys['right shift']:
+                self.interaction_controller.capture(entities_mgr, panels)
+            else:
+                self.interaction_controller.interact(entities_mgr, panels)
             return True
 
         if key == 't':
@@ -1581,13 +1616,6 @@ class Player3D(Entity):
                 s.tool_index = n - 1
                 sound_play('menu_move', 0.6)
                 return True
-
-        if key == 'q':
-            keys = list(CROPS.keys())
-            idx  = keys.index(s.seed_key) if s.seed_key in keys else 0
-            s.seed_key = keys[(idx - 1) % len(keys)]
-            sound_play('menu_move', 0.6)
-            return True
 
         if key == 'r':
             keys = list(CROPS.keys())
@@ -1688,8 +1716,12 @@ class Player3D(Entity):
         char = getattr(self, '_char', None)
         if char is not None:
             klip = _KLIP_RIG.get(mode)
-            if klip:
-                char.mainkan_sekali(klip)
+            detik = float(ms) / 1000.0
+            if klip and char.mainkan_sekali(klip):
+                detik = char._sekali_dur
+            # Lapisan gerak juga untuk aksi TANPA klip (bend, gosok, bicara):
+            # dulu tokohnya berdiri diam saat memanen.
+            self._jus.mulai(mode, max(detik, 0.45 if klip is None else detik))
             return
 
         # Avatar TSO tidak digerakkan oleh pivot di bawah — pivot itu milik
@@ -1723,11 +1755,41 @@ class Player3D(Entity):
         
         # Create a falling tree pivot entity at ground level
         falling_root = Entity(position=(wx, 0, wz))
-        
+
+        # Ubin yang berdiri sebagai pohon Blender (props.POHON_BLENDER) tumbang
+        # sebagai pohon Blender juga, dengan SALINAN model baru. Model entity
+        # yang berdiri tidak dipinjam: load_scene menghancurkannya sesaat
+        # sesudah ini, dan satu model tidak boleh punya dua induk (aturan #3).
+        replika = None
+        try:
+            from .scenes.props import model_pohon
+            from .entities import make_obj_entity
+            from .config import GROUND_H
+            ptx, pty = int(round(wx / TS)), int(round(wz / TS))
+            pohon = model_pohon(self.world.scene_obj, tid, ptx, pty)
+            if pohon:
+                # Dasar sama dengan pohon yang berdiri (pasang_model_prop).
+                dasar = GROUND_H + self.world.get_surface_height(ptx, pty)
+                replika = make_obj_entity(pohon[0], (wx, dasar, wz),
+                                          scale=pohon[1], rot_y=pohon[2])
+                if replika is not None:
+                    replika.parent = falling_root
+                    replika.position = (0, dasar, 0)
+        except Exception:
+            import logging
+            logging.error('replika pohon tumbang gagal', exc_info=True)
+            replika = None
+
         # Build matching visual replica components
-        if tid == TR:
-            # Trunk
-            Entity(model='cylinder', parent=falling_root, position=(0, TREE_H * 0.40, 0),
+        if replika is not None:
+            pass
+        elif tid == TR:
+            # Trunk. Ursina 8.3 tidak punya model bawaan 'cylinder' ("missing
+            # model"): batang replika dulu tak tergambar. Pakai mesh yang sama
+            # dengan batang yang berdiri (world._e: soft_capsule_mesh, salinan
+            # baru per panggilan).
+            from .meshes import soft_capsule_mesh
+            Entity(model=soft_capsule_mesh(), parent=falling_root, position=(0, TREE_H * 0.40, 0),
                    scale=(TS * 0.35, TREE_H * 0.80, TS * 0.35), color=color.rgb(100, 70, 40))
             # Foliage
             Entity(model='sphere', parent=falling_root, position=(0, TREE_H * 1.0, 0),
@@ -1738,7 +1800,8 @@ class Player3D(Entity):
                    scale=(TS * 1.2, TS * 1.1, TS * 1.2), color=color.rgb(115, 240, 85))
         elif tid == DT:
             # Trunk only for dead tree
-            Entity(model='cylinder', parent=falling_root, position=(0, TREE_H * 0.40, 0),
+            from .meshes import soft_capsule_mesh
+            Entity(model=soft_capsule_mesh(), parent=falling_root, position=(0, TREE_H * 0.40, 0),
                    scale=(TS * 0.22, TREE_H * 0.80, TS * 0.22), color=color.rgb(68, 50, 30))
 
         # Calculate fall target rotation away from player based on facing direction
@@ -1752,10 +1815,15 @@ class Player3D(Entity):
         elif self.facing == 'right':
             rot_target = Vec3(0, 0, 75)
         
-        # Smooth ease-in-out rotation tilt
-        falling_root.animate_rotation(rot_target, duration=0.8, curve='ease_in_out')
+        # Smooth ease-in-out rotation tilt.
+        # Kurva harus FUNGSI ursina.curve. String 'ease_in_out' melempar
+        # TypeError yang ditelan use_tool_at, sehingga replika tidak pernah
+        # rebah, destroy di bawah tak pernah dijadwalkan, dan tiap tebangan
+        # meninggalkan pohon hantu berinduk scene (ikut ke scene lain).
+        from ursina import curve
+        falling_root.animate_rotation(rot_target, duration=0.8, curve=curve.in_out_sine)
         # Sinks slowly into the ground after hitting the floor
-        falling_root.animate_y(-2.5, duration=1.2, delay=0.6, curve='ease_in')
+        falling_root.animate_y(-2.5, duration=1.2, delay=0.6, curve=curve.in_sine)
         
         # Destroy visual dummy once animation completes
         invoke(destroy, falling_root, delay=1.8)

@@ -177,6 +177,19 @@ ADA diambil dari 3d-mobs.**
 | `game/grass_shader.py` | 1 | **kita** |
 | `game/sky.py` | 1 | **kita** — perbaikan langit magenta |
 
+> **Koreksi (Okt 2026), diukur pada objek git:** dari sisi 3d-mobs yang terbawa
+> ke `panels.py` hanya fungsi *pembangun* `_build_batin`/`_build_buy`/`_build_pause`.
+> Pemakainya tidak ikut: hitungan `def toggle_batin` / `Batin(self.state)` /
+> `def open_pause` pada `5683e79^2` = 1/1/1, pada `5683e79` = 0/0/0. Di
+> `game/app.py` (vonis **kita**) pembuatan Batin, rute mode `'batin'`, dan
+> TAB→`toggle_batin` hilang; di `interaction_controller.py` (vonis **campur**)
+> blok Siram dan Panen dari sisi visual ikut membuang suara `siram`, `panen`,
+> `kirim_hint`, dan SUKMA mutu≥4. Majelis Batin dipulihkan dari `5683e79^2`
+> (panel di **F7**, dijaga `tools/probe_batin.py`; nota
+> `obsidian/40-Bug/Majelis Batin hilang di merge 5683e79.md`). Menu Jeda
+> (`open_pause`/`pause_input`) BELUM dipulihkan; `_build_pause` masih membangun
+> entity tanpa pemakai.
+
 ## Empat kali merge ini gagal boot, dan semuanya satu pelajaran
 
 **Struktur kendali tidak bisa digabung sepotong-sepotong.**
@@ -210,7 +223,18 @@ kemenangan buta dengan sebuah animasi teks. Versi di pohon ini menjadwalkan
 penghapusannya sendiri lewat `invoke(destroy, e, delay=dur)`: tidak ada state
 bersama, dan tidak ada dua tempat yang harus ingat.
 
-## Yang dimenangkan sisi visual TIDAK dibuang
+## Yang dimenangkan sisi visual TIDAK dibuang — klaim ini TIDAK BENAR
+
+> **Koreksi (Okt 2026):** arsip `_bench/port/` di bawah ini **tidak pernah
+> ter-commit**. Pada 5683e79 `_bench/.gitignore` dimulai dengan pola `*`
+> (`git show 5683e79:_bench/.gitignore`), jadi seluruh `_bench/port/` diabaikan
+> git dan hanya pernah ada di disk agen yang melakukan merge. Daftarnya pun
+> tidak memuat `panels.py` maupun `interaction_controller.py`. Sumber port yang
+> benar adalah snapshot sisi 3d-mobs per berkas, `git show 5683e79^2:<berkas>`
+> (= cd92b0d). Merge-base kedua sisi tidak ada di klon shallow ini, jadi diff
+> arsip tidak bisa diregenerasi persis.
+
+Teks asli, dipertahankan sebagai catatan sejarah:
 
 Perubahan sisi 3d-mobs untuk berkas-berkas itu diarsipkan utuh sebagai diff di
 `_bench/port/` — 2.601 baris total. Port sepotong-sepotong dari sana, jangan

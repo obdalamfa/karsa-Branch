@@ -23,8 +23,8 @@ from .config import (TILE_SIZE, GROUND_H, WALL_H, TREE_H, HOUSE_H, OBJ_H, SMALL_
                      MR, FP, CL, PP, CH, CT, SH, GR, LN, DT, CV_W, CV_F, PEN, STR_T,
                      DCK, BOT, LLY, CRYS, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH,
                      STAIRS_DOWN, STAIRS_UP, MINED, SD, LGH_B, LGH_F, CLOUD, GOLD_W, PALM, TV, CHR, CAL,
-                     WC)
-from .scenes import SCENES
+                     WC, PPN)
+from .scenes import SCENES, sesuaikan_scene
 from .data import CROPS
 # Impor ini BUKAN sekadar dekorasi: game/crops.py mendaftarkan katalog palawija,
 # padi dan pohon ke data.CROPS saat diimpor (tanpa menimpa entri yang sudah
@@ -466,6 +466,10 @@ class World3D:
         # saat dindingnya dipangkas -- kalau tidak, jendela melayang di udara.
         self._wall_decor: dict  = {}
         self._cutaway_state     = None   # cache arah kamera terakhir
+        self._tembus = []                # [(entity, aabb)] tebing yang boleh memudar
+        self._tembus_alfa = {}           # id(entity) -> [entity, alfa sekarang]
+        self._tembus_kunci = None        # cache posisi kamera/fokus terakhir
+        self._tembus_target = set()      # id entity yang sedang menghalangi
         self.ground_collider = None
         # Craig-Macomber pattern: cache tinggi surface per tile (tx,ty) → float
         self._tile_heights: dict = {}
@@ -491,13 +495,80 @@ class World3D:
             apply_placed(self.state, self.scene_obj)
         except Exception:
             pass
+        # Ubin/portal yang bergantung pada cerita (jalan lama Lawang <-> gua,
+        # Cerita Dua Desa babak 2) disetel dulu, dua arah — scenes/__init__.py.
+        sesuaikan_scene(name, self.scene_obj, self.state)
         self._build_tiles()
         self._build_all_crops()
         if hasattr(self.scene_obj, 'builder') and self.scene_obj.builder:
             self.scene_obj.builder(self)
         self._build_objects()
+        self._pasang_penanda_pintu()
+        self._pasang_bayangan_statis()
         self._satukan_ubin()
         self._lepas_dari_loop_ursina()
+
+    # Model Blender penanda pintu masuk tempat-tempat penting. Ketiganya
+    # dibuat di tools/blender_interior.py (08bbf5b) lalu tidak pernah punya
+    # pemanggil -- aturan #4 CLAUDE.md: modul tanpa pemanggil efeknya nol.
+    # Kunci (scene, tujuan portal) -> (model, rotasi y, geser x). Penanda
+    # diletakkan di titik tengah ubin-ubin portal yang sama tujuannya.
+    # Diukur dari tangkapan 16 Okt 2026: mulut_gua pada rotasi 0 menghadap
+    # selatan, membelakangi pemain yang datang dari desa; gapura_swarga
+    # berpusat di x=+2,1 dalam berkasnya (rentang -1,46..5,66), jadi celahnya
+    # meleset dua ubin dari portal kalau tidak digeser.
+    _PENANDA_PORTAL = {
+        ('mountain', 'naga_cave'): ('mulut_gua', 180, 0.0),
+        ('naga_cave', 'swarga'):   ('gapura_swarga', 0, -2.1),
+    }
+    # Penanda di atas ubin tertentu, bukan portal: tangga turun ke dungeon.
+    _PENANDA_UBIN = {
+        'naga_cave': {STAIRS_DOWN: ('lubang_dungeon', 0)},
+    }
+
+    def _pasang_penanda_pintu(self):
+        """Pasang model pintu masuk; dibersihkan `_clear()` lewat _obj_ents."""
+        sc = self.scene_obj
+        if sc is None:
+            return
+        try:
+            from .scenes.interior import _pasang
+        except Exception:
+            return
+        kelompok = {}
+        for p in getattr(sc, 'portals', None) or []:
+            kunci = (self.scene_name, p[2])
+            if kunci in self._PENANDA_PORTAL:
+                kelompok.setdefault(kunci, []).append((p[0], p[1]))
+        self._penanda = []
+        for kunci, ubin in kelompok.items():
+            nama, rot, geser = self._PENANDA_PORTAL[kunci]
+            mx = sum(t[0] for t in ubin) / len(ubin)
+            my = sum(t[1] for t in ubin) / len(ubin)
+            e = _pasang(self, nama, mx * TS + geser, my * TS, rot)
+            if e is not None:
+                self._penanda.append((nama, e))
+        per_ubin = self._PENANDA_UBIN.get(self.scene_name, {})
+        if per_ubin:
+            for ty, baris in enumerate(sc.tiles):
+                for tx, tid in enumerate(baris):
+                    if tid in per_ubin:
+                        nama, rot = per_ubin[tid]
+                        e = _pasang(self, nama, tx * TS, ty * TS, rot)
+                        if e is not None:
+                            self._penanda.append((nama, e))
+
+    def _pasang_bayangan_statis(self):
+        """Cakram/rok bayangan kontak di kaki benda statis (game/bayangan.py)."""
+        try:
+            from .bayangan import bangun_bayangan_statis
+            e = bangun_bayangan_statis(self)
+        except Exception as ex:
+            print(f'[bayangan] statis gagal: {ex}')
+            e = None
+        self._bayangan_statis = e
+        if e is not None:
+            self._obj_ents.append(e)
 
     def _satukan_ubin(self):
         """Gabungkan ubin statis jadi satu mesh per keadaan render.
@@ -551,6 +622,18 @@ class World3D:
                                   'TransparencyAttrib', 'ColorAttrib'):
                         from panda3d import core as _pc
                         bersama = bersama.removeAttrib(getattr(_pc, jenis))
+                    # Net state ubin membawa SALINAN uniform siang-malam
+                    # (sm_ambient dst.) di ShaderAttrib-nya. Dipasang di akar,
+                    # salinan beku itu menimpa uniform `scene` dan tanah
+                    # seluruh scene tetap seterang tengah hari -- regresi
+                    # menangkapnya sebagai `cahaya_global` gagal. Dicabut
+                    # supaya nilainya turun dari `scene` seperti entity lain.
+                    sa = bersama.getAttrib(_pc.ShaderAttrib)
+                    if sa is not None:
+                        from game.smooth_shader import _UNIFORM_GLOBAL_AWAL
+                        for nama in _UNIFORM_GLOBAL_AWAL:
+                            sa = sa.clearShaderInput(nama)
+                        bersama = bersama.setAttrib(sa)
                     akar.setState(bersama)
                 c = gnp.copyTo(akar)
                 # Per ubin cuma teksturnya. Warnanya (ColorScaleAttrib ber-flag
@@ -813,6 +896,131 @@ class World3D:
                 for d in self._wall_decor.get((rec[3], rec[4]), ()):
                     d.enabled = not cut
 
+    # ── Tebing tembus pandang ─────────────────────────────────────────
+    # Permintaan pemilik (3 Nov 2026): "tebing dibuat tembus pandang jika
+    # menghalangi pandangan kamera". Cutaway di atas hanya memangkas dinding
+    # yang tepat di garis kamera-ke-fokus (radius 1,15 ubin) dan hanya
+    # memendekkannya. Tebing gunung setinggi 5-8 m yang miring di samping
+    # garis itu lolos, dan di mulut gua (18,4) menutup ~85% layar.
+    #
+    # Di sini tiap tebing punya kotak batas sendiri dan diuji dengan BEBERAPA
+    # sinar dari kamera ke tubuh pemain (kaki, dada, kepala, bahu kiri-kanan).
+    # Yang terkena memudar ke TEMBUS_ALFA; yang tidak, kembali pejal. Pudar
+    # bertahap (bukan banting) supaya putaran kamera tidak berkedip.
+    TEMBUS_ALFA = 0.22
+    TEMBUS_LAJU = 5.0            # per detik
+
+    def tembus_daftar(self, ent, aabb):
+        """Daftarkan entity yang boleh memudar. aabb = (x0,x1,y0,y1,z0,z1)
+        di koordinat dunia Ursina."""
+        self._tembus.append((ent, aabb))
+
+    @staticmethod
+    def _sinar_kena(o, d, b, t_maks):
+        """Slab test: apakah ruas o + t*d, 0<t<t_maks, memotong kotak b."""
+        t0, t1 = 0.0, t_maks
+        for i, (lo, hi) in enumerate(((b[0], b[1]), (b[2], b[3]), (b[4], b[5]))):
+            if abs(d[i]) < 1e-9:
+                if o[i] < lo or o[i] > hi:
+                    return False
+                continue
+            a_, c_ = (lo - o[i]) / d[i], (hi - o[i]) / d[i]
+            if a_ > c_:
+                a_, c_ = c_, a_
+            t0, t1 = max(t0, a_), min(t1, c_)
+            if t0 > t1:
+                return False
+        return True
+
+    def update_tembus(self, cam_pos, focus_pos, dt=0.0, seketika=False):
+        if not self._tembus and not self._tembus_alfa:
+            return
+        cam = (float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2]))
+        fok = (float(focus_pos[0]), float(focus_pos[1]), float(focus_pos[2]))
+        kunci = tuple(round(v, 1) for v in cam + fok)
+        if kunci != self._tembus_kunci:
+            self._tembus_kunci = kunci
+            vx, vz = fok[0] - cam[0], fok[2] - cam[2]
+            L = math.hypot(vx, vz) or 1.0
+            px, pz = -vz / L, vx / L                 # tegak lurus arah pandang
+            sasaran = [(fok[0], fok[1] + dy, fok[2]) for dy in (-1.0, 0.0, 0.9)]
+            sasaran += [(fok[0] + px * s_, fok[1], fok[2] + pz * s_) for s_ in (-1.3, 1.3)]
+            kena = set()
+            for ent, b in self._tembus:
+                if not ent:
+                    continue
+                for tx, ty, tz in sasaran:
+                    d = (tx - cam[0], ty - cam[1], tz - cam[2])
+                    # 0,96: kotak yang memuat pemain sendiri tidak dihitung
+                    # menghalangi (ubin tepat di kaki/punggungnya).
+                    if self._sinar_kena(cam, d, b, 0.96):
+                        kena.add(id(ent))
+                        if id(ent) not in self._tembus_alfa:
+                            self._tembus_alfa[id(ent)] = [ent, 1.0]
+                        break
+            self._tembus_target = kena
+        langkah = 1.0 if seketika else min(1.0, max(0.0, dt) * self.TEMBUS_LAJU)
+        selesai = []
+        for k, rec in self._tembus_alfa.items():
+            ent, a = rec
+            if not ent:
+                selesai.append(k)
+                continue
+            tuju = self.TEMBUS_ALFA if k in self._tembus_target else 1.0
+            a2 = a + (tuju - a) * langkah if not seketika else tuju
+            if abs(a2 - tuju) < 0.01:
+                a2 = tuju
+            if a2 != a or seketika:
+                self._pasang_alfa(ent, a2)
+                rec[1] = a2
+            if a2 >= 1.0 and k not in self._tembus_target:
+                selesai.append(k)
+        for k in selesai:
+            self._tembus_alfa.pop(k, None)
+
+    _BIN_TEMBUS = None
+
+    @classmethod
+    def _bin_tembus(cls):
+        """Cull bin depan-ke-belakang khusus tebing yang memudar.
+
+        Puluhan ubin tebing bertumpuk di sepanjang garis pandang. Di bin
+        'transparent' bawaan (belakang-ke-depan, tanpa tulis depth) tiap
+        lapisan 22% ikut menumpuk: sepuluh lapisan = 1-0,78^10 = 92% pejal,
+        dan tangkapan pertama memang abu-abu rata. Di bin ini ubin terdekat
+        digambar dulu DENGAN tulis depth, jadi lapisan di belakangnya gugur
+        di uji depth dan yang tampak hanya satu selaput tipis. Pemain dan
+        lantai sudah tergambar di bin opaque, jadi tetap terlihat."""
+        if cls._BIN_TEMBUS is None:
+            from panda3d.core import CullBinManager
+            m = CullBinManager.getGlobalPtr()
+            if m.findBin('tebing_tembus') < 0:
+                m.addBin('tebing_tembus', CullBinManager.BT_front_to_back, 31)
+            cls._BIN_TEMBUS = 'tebing_tembus'
+        return cls._BIN_TEMBUS
+
+    @classmethod
+    def _pasang_alfa(cls, ent, a):
+        from panda3d.core import TransparencyAttrib
+        try:
+            if a < 0.999:
+                ent.setTransparency(TransparencyAttrib.M_alpha)
+                ent.setDepthWrite(True)
+                ent.setBin(cls._bin_tembus(), 0)
+            else:
+                ent.setTransparency(TransparencyAttrib.M_none)
+                ent.setDepthWrite(True)
+                ent.clearBin()
+            # Di MODEL, bukan di entity. Ursina memasang warna lewat
+            # model.setColorScale(), dan skala alfa di entity tidak sampai ke
+            # p3d_ColorScale (diukur: entity (1,1,1,0.22) tetap pejal di
+            # layar, model (r,g,b,0.20) tembus). `ent.alpha` juga bukan
+            # jalan: setternya memanggil `.h` milik Color sedangkan warna
+            # tebing Vec4 -- AttributeError yang tertelan.
+            (ent.model if ent.model is not None else ent).setAlphaScale(a)
+        except Exception:
+            pass
+
     def _clear(self):
         for e in self._tile_ents + self._obj_ents:
             destroy(e)
@@ -840,6 +1048,10 @@ class World3D:
         self._wall_ents.clear()
         self._wall_decor.clear()
         self._cutaway_state = None
+        self._tembus.clear()
+        self._tembus_alfa.clear()
+        self._tembus_target = set()
+        self._tembus_kunci = None
         self._tile_heights.clear()
         
         if self.ground_collider:
@@ -1274,7 +1486,8 @@ class World3D:
             from .scenes.interior import TILES as _INTERIOR_TILES
             if tid in _INTERIOR_TILES:
                 return    # rupa dari model Blender, lihat scenes/interior.py
-        if tid in (TR, PALM, DT, LN, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS, H, FP, GR, TV, CHR, CAL):
+        if tid in (TR, PALM, DT, LN, ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS, H, FP, GR, TV, CHR, CAL,
+                   PPN):
             # Handled by Scene builder/props.py
             return
 
@@ -1352,14 +1565,19 @@ class World3D:
         # pucat dari kejauhan, sebelum pemain sempat memeriksa satu per satu.
         basah = soil.get('watered')
         soil_tex = 'soil_wet' if basah else 'soil_dry'
+        # Tint hangat dan jenuh: petak garapan harus tampil sebagai tanah
+        # GEMBUR yang gelap di atas ladang kering yang terang, bukan cokelat
+        # kusam di atas cokelat kusam (lihat TANAH_LADANG di zone_paint.py).
         if basah:
-            tint = color.rgb(255, 255, 255)
+            tint = color.rgb(214, 150, 112)
         elif soil.get('kering', 0) >= 2:
-            tint = color.rgb(214, 198, 172)
+            tint = color.rgb(226, 196, 160)
         else:
-            tint = color.rgb(236, 226, 210)
-        e = _e('cube', (wx, GROUND_H + 0.06, wz),
-               (TS * 0.92, 0.10, TS * 0.92), soil_tex, tint)
+            tint = color.rgb(240, 176, 128)
+        # Sedikit lebih tinggi dan lebih sempit: dari kamera main, sisinya
+        # terbaca sebagai gundukan bedengan, dan celah di antaranya sebagai alur.
+        e = _e('cube', (wx, GROUND_H + 0.09, wz),
+               (TS * 0.86, 0.16, TS * 0.86), soil_tex, tint)
         self._soil_ents[key] = e
 
     # ─── INTERNAL: TANAMAN & POHON ───────────────────────

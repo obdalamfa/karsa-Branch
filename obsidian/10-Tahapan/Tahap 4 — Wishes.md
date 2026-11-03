@@ -2,12 +2,20 @@
 judul: Tahap 4 — Wishes
 tipe: tahap
 nomor: 4
-status: belum
+status: berdiri
 ringkas: Keinginan kontekstual ala TS3 — arah tanpa mencabut kebebasan
-tags: [tahap, status/belum, gameplay]
+tags: [tahap, status/berdiri, gameplay]
 ---
 
-# Tahap 4 — Wishes ⬜
+# Tahap 4 — Wishes ✅ (berdiri, 15 Okt 2026)
+
+> [!success] Terbukti di permainan sungguhan
+> `game/wishes.py` (commit e72577b) tersambung ke panel (`p`) dan ke
+> `Game3D.update`, yang membayar sekali per detik. `tools/probe_wishes.py`
+> 17/17: janji dibuat lewat tombol, lima lobak dipanen dengan `space`, dan
+> Kebahagiaan +60 dibayar tanpa panel dibuka. Saat pembayaran di app.py
+> dimatikan, probe GAGAL. Belum ada: wish dari motif, dan bias sifat (Tahap 6).
+
 
 **Ini yang membuat game punya alasan untuk dipedulikan.** Sekarang sudah ada
 kebutuhan ([[Motif]]), objek ([[Objek dan Interaksi]]), aksi, dan antrian

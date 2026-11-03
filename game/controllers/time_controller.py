@@ -10,9 +10,21 @@ class TimeController:
     
     def __init__(self, state):
         self.state = state
+        # Detik nyata tersisa sebelum pesan pagi ditampilkan sesudah tidur
+        # paksa (lihat tick()); 0 = tidak ada yang menunggu.
+        self._pagi_tunda = 0.0
 
     def tick(self, dt, player):
         s = self.state
+        # Pesan pagi (acara hari ini, game/dua_desa.pesan_pagi) menyusul ~2,5
+        # detik sesudah "hari baru!" pada tidur paksa, lewat nilai kembalian
+        # yang sama: hanya app.update() yang memegang panel.
+        pesan_pagi = None
+        if self._pagi_tunda > 0.0:
+            self._pagi_tunda -= dt
+            if self._pagi_tunda <= 0.0:
+                pesan_pagi = getattr(player, '_pending_seasonal_event', None)
+                player._pending_seasonal_event = None
         s.time_minutes += INGAME_MINUTES_PER_REAL_SECOND * dt
         if s.time_minutes >= 1440:
             s.time_minutes -= 1440
@@ -54,8 +66,10 @@ class TimeController:
 
         if s.get_hour() >= FORCE_SLEEP_HOUR:
             self.advance_day(player)
+            if getattr(player, '_pending_seasonal_event', None):
+                self._pagi_tunda = 2.6
             return "Sudah larut malam — hari baru!"
-        return None
+        return pesan_pagi
 
     def advance_day(self, player):
         from ursina import invoke
@@ -323,6 +337,12 @@ class TimeController:
         except ImportError:
             pass
             
+        # Kabar pagi hari ini (Lomba Antar-Desa, gotong royong). SELALU ditimpa,
+        # termasuk dengan None, supaya kabar yang belum sempat tampil (mis.
+        # sesudah pingsan) tidak muncul basi pada hari berikutnya.
+        from ..dua_desa import pesan_pagi
+        player._pending_seasonal_event = pesan_pagi(s)
+
         # Optional: check quest progress
         # Lihat catatan di panels.py: `quest_manager` tidak pernah ada.
         qc = (getattr(player, 'quest_controller', None)
@@ -403,8 +423,9 @@ class TimeController:
                        f"Peti Kirim: {items} hasil panen terjual — +{earned}G", 3.0, delay=2.3)
             # Deliver pending story messages after sleep
             if getattr(player, '_pending_seasonal_event', None):
-                invoke(panels.flash_msg,
-                       f"🎉 Hari ini: {player._pending_seasonal_event}!", 4.0,
+                # Teksnya sudah lengkap dari dua_desa.pesan_pagi(). Emoji lama
+                # dibuang: font HUD tidak punya glyph-nya.
+                invoke(panels.flash_msg, player._pending_seasonal_event, 4.0,
                        delay=2.5)
                 player._pending_seasonal_event = None
             if getattr(player, '_pending_lore_msg', None):

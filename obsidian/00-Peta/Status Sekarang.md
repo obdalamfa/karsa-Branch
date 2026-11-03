@@ -9,6 +9,14 @@ tags: [moc, status]
 
 # Status Sekarang
 
+> [!success] Pembaruan 2026-11-03 (sore) — penunjuk lengkap
+> Penunjuk emas kini juga menunjuk Pak Budi di Bengkel, bijih yang kurang,
+> lawan terdekat, dan bos di dungeon, serta makhluk liar yang sungguh bisa
+> ditangkap. Penunjuk kedua biru-hijau menuntun Cerita Dua Desa (Kades,
+> Mbah Rukmi, papan titipan, longsor). Temuan desain: Kuburan Tua tidak
+> punya makhluk untuk tahap "Misteri Kuburan". Regresi 15/15, "tampilan"
+> 69/69.
+
 > [!success] Pembaruan 2026-11-03 (siang) — penunjuk ke tugas utama
 > Sesudah tutorial, penunjuk emas mengikuti tugas utama: Bengkel, tangga Gua
 > Sang Hyang dan tangga tiap lantai dungeon, Kuburan Tua, sarang Naga. Dari

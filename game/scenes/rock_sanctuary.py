@@ -133,7 +133,7 @@ def _rocks(world, scene, outdoor=False):
 _BARIS_TEBING = 10
 
 
-def _tebing_ubin(world, batu, tinggi, rgb, tanpa_dinding=lambda x, y: False):
+def _tebing_ubin(world, batu, tinggi, rgb, tanpa_dinding=lambda x, y: False, tembus=False):
     """Tebing dari ubin penghalang sebagai SATU permukaan tanpa lapisan.
 
     Dulu tiap 1-3 ubin dapat bongkah sendiri ditambah puncak kedua di atasnya:
@@ -169,7 +169,17 @@ def _tebing_ubin(world, batu, tinggi, rgb, tanpa_dinding=lambda x, y: False):
         warna = tuple(max(0, min(255, c + ((x * 7 + y * 13) % 9) - 4)) for c in rgb)
         e = _part(world, Mesh(vertices=v, triangles=list(range(len(v)))),
                   (x * TS, GROUND_H + H / 2, y * TS), (1, H, 1), warna, double_sided=True)
-        world._wall_ents.append([e, H, GROUND_H + H / 2, x, y])
+        if tembus:
+            # Tebing luar (lereng gunung) tidak dipangkas cutaway: tebing
+            # setinggi 5-8 m yang dipangkas jadi tunggul terbaca sebagai lantai
+            # pecah. Ia memudar tembus pandang saat menghalangi kamera
+            # (world.update_tembus). Dinding gua tetap di cutaway lama, yang
+            # dijaga tools/probe_gua.py.
+            world.tembus_daftar(e, (x * TS - TS / 2, x * TS + TS / 2,
+                                    GROUND_H, GROUND_H + H,
+                                    y * TS - TS / 2, y * TS + TS / 2))
+        else:
+            world._wall_ents.append([e, H, GROUND_H + H / 2, x, y])
         sel.append(e)
     return sel
 
@@ -199,7 +209,8 @@ def _tebing_menerus(world, scene):
         return h
 
     _tebing_ubin(world, batu, tinggi, (108, 124, 112),
-                 tanpa_dinding=lambda x, y: 13 <= x <= 16)   # lorong gua: atap saja
+                 tanpa_dinding=lambda x, y: 13 <= x <= 16,   # lorong gua: atap saja
+                 tembus=True)
 
 
 def _dinding_gua(world, tiles, cocok, rgb=(64, 78, 94), dasar=1.9):
@@ -528,8 +539,9 @@ def _mulut_gua(world):
         quad(P(lo2, zb), P(lo, zb), P(di, zb), P(di2, zb))        # muka belakang
         quad(P(lo, zb), P(lo2, zb), P(lo2, zf), P(lo, zf))        # punggung bukit
         quad(P(di2, zb), P(di, zb), P(di, zf), P(di2, zf))        # langit-langit lorong
-    _part(world, Mesh(vertices=v, triangles=list(range(len(v)))), (0, 0, 0), (1, 1, 1),
-          (108, 124, 112), double_sided=True)
+    muka = _part(world, Mesh(vertices=v, triangles=list(range(len(v)))), (0, 0, 0), (1, 1, 1),
+                 (108, 124, 112), double_sided=True)
+    world.tembus_daftar(muka, (cx - ow, cx + ow, gy, gy + oh, cz - tebal, cz))
 
     # Kegelapan di dalam lorong dan dinding belakang yang menutup langit.
     # Tanpa cahaya dan kabut: kalau ikut diterangi, kabut jarak mewarnainya

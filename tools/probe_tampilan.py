@@ -304,6 +304,46 @@ def uji_penunjuk(g):
     langkah(30)
 
 
+def uji_tebing(g):
+    """Tebing lereng gunung tembus pandang saat menghalangi kamera.
+
+    Permintaan pemilik 3 Nov 2026. Di mulut gua (18,4) tebing dulu menutup
+    ~85% layar. Di tiap posisi x sudut, garis kamera -> kepala pemain tidak
+    boleh menembus tebing yang masih pejal (alfa model > 0,5)."""
+    from ursina import camera
+    s, w = g.state, g.world
+    s.scene_name = 'mountain'
+    langkah(60)
+    if not getattr(w, '_tembus', None):
+        cek('tebing gunung terdaftar untuk tembus pandang', False, '0 tebing')
+        return
+    menghalangi, pudar_total = [], 0
+    for (x, y) in ((18, 4), (14, 4), (20, 8)):
+        for yaw in (0, 90, 180, 270):
+            g.player.set_tile_pos(x, y)
+            g.camera_yaw = yaw
+            langkah(3)
+            g._snap_camera_to_player()
+            langkah(2)
+            c = camera.world_position
+            o = (c[0], c[1], c[2])
+            p = g.player.world_position
+            d = (p[0] - o[0], p[1] + 1.2 - o[1], p[2] - o[2])
+            for ent, b in w._tembus:
+                if not ent or not w._sinar_kena(o, d, b, 0.96):
+                    continue
+                a = (ent.model if ent.model is not None else ent).getColorScale()[3]
+                if a > 0.5:
+                    menghalangi.append(f'({x},{y}) yaw {yaw}')
+                    break
+                pudar_total += 1
+    cek('tebing yang menghalangi kamera memudar (12 posisi x sudut)',
+        not menghalangi and pudar_total > 0,
+        f'pejal di {menghalangi[:3]}; {pudar_total} tebing pudar')
+    s.scene_name = 'farm'
+    langkah(40)
+
+
 def uji_dialog_kilat(g):
     p = g.panels
     p.start_dialog('sari', g.state)
@@ -340,6 +380,7 @@ def main():
             cek('mencapai HUD', False, 'sinema/chargen tidak selesai')
         else:
             uji_penunjuk(g)
+            uji_tebing(g)
             uji_dunia(g)
             uji_hud(g)
             uji_panel(g)

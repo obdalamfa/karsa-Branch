@@ -680,6 +680,8 @@ class Game3D:
 
             # Pangkas dinding yang menghalangi pandangan (wall cutaway ala Sims 1)
             self.world.update_wall_cutaway(camera.position, self.camera_focus)
+            # Tebing yang menghalangi memudar tembus pandang (world.update_tembus).
+            self.world.update_tembus(camera.position, self.camera_focus, dt)
 
             # ── Sky Dome + Grass Shader update ──────────────
             is_indoor = self.world.scene_obj.indoor if self.world.scene_obj else False
@@ -1467,6 +1469,7 @@ class Game3D:
         camera.look_at(self.camera_focus)
         camera.rotation_z = 0
         self.world.update_wall_cutaway(camera.position, self.camera_focus)
+        self.world.update_tembus(camera.position, self.camera_focus, seketika=True)
 
     @staticmethod
     def _is_opengl_pipeline_static() -> bool:

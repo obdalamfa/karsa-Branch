@@ -466,6 +466,10 @@ class World3D:
         # saat dindingnya dipangkas -- kalau tidak, jendela melayang di udara.
         self._wall_decor: dict  = {}
         self._cutaway_state     = None   # cache arah kamera terakhir
+        self._tembus = []                # [(entity, aabb)] tebing yang boleh memudar
+        self._tembus_alfa = {}           # id(entity) -> [entity, alfa sekarang]
+        self._tembus_kunci = None        # cache posisi kamera/fokus terakhir
+        self._tembus_target = set()      # id entity yang sedang menghalangi
         self.ground_collider = None
         # Craig-Macomber pattern: cache tinggi surface per tile (tx,ty) → float
         self._tile_heights: dict = {}
@@ -892,6 +896,131 @@ class World3D:
                 for d in self._wall_decor.get((rec[3], rec[4]), ()):
                     d.enabled = not cut
 
+    # ── Tebing tembus pandang ─────────────────────────────────────────
+    # Permintaan pemilik (3 Nov 2026): "tebing dibuat tembus pandang jika
+    # menghalangi pandangan kamera". Cutaway di atas hanya memangkas dinding
+    # yang tepat di garis kamera-ke-fokus (radius 1,15 ubin) dan hanya
+    # memendekkannya. Tebing gunung setinggi 5-8 m yang miring di samping
+    # garis itu lolos, dan di mulut gua (18,4) menutup ~85% layar.
+    #
+    # Di sini tiap tebing punya kotak batas sendiri dan diuji dengan BEBERAPA
+    # sinar dari kamera ke tubuh pemain (kaki, dada, kepala, bahu kiri-kanan).
+    # Yang terkena memudar ke TEMBUS_ALFA; yang tidak, kembali pejal. Pudar
+    # bertahap (bukan banting) supaya putaran kamera tidak berkedip.
+    TEMBUS_ALFA = 0.22
+    TEMBUS_LAJU = 5.0            # per detik
+
+    def tembus_daftar(self, ent, aabb):
+        """Daftarkan entity yang boleh memudar. aabb = (x0,x1,y0,y1,z0,z1)
+        di koordinat dunia Ursina."""
+        self._tembus.append((ent, aabb))
+
+    @staticmethod
+    def _sinar_kena(o, d, b, t_maks):
+        """Slab test: apakah ruas o + t*d, 0<t<t_maks, memotong kotak b."""
+        t0, t1 = 0.0, t_maks
+        for i, (lo, hi) in enumerate(((b[0], b[1]), (b[2], b[3]), (b[4], b[5]))):
+            if abs(d[i]) < 1e-9:
+                if o[i] < lo or o[i] > hi:
+                    return False
+                continue
+            a_, c_ = (lo - o[i]) / d[i], (hi - o[i]) / d[i]
+            if a_ > c_:
+                a_, c_ = c_, a_
+            t0, t1 = max(t0, a_), min(t1, c_)
+            if t0 > t1:
+                return False
+        return True
+
+    def update_tembus(self, cam_pos, focus_pos, dt=0.0, seketika=False):
+        if not self._tembus and not self._tembus_alfa:
+            return
+        cam = (float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2]))
+        fok = (float(focus_pos[0]), float(focus_pos[1]), float(focus_pos[2]))
+        kunci = tuple(round(v, 1) for v in cam + fok)
+        if kunci != self._tembus_kunci:
+            self._tembus_kunci = kunci
+            vx, vz = fok[0] - cam[0], fok[2] - cam[2]
+            L = math.hypot(vx, vz) or 1.0
+            px, pz = -vz / L, vx / L                 # tegak lurus arah pandang
+            sasaran = [(fok[0], fok[1] + dy, fok[2]) for dy in (-1.0, 0.0, 0.9)]
+            sasaran += [(fok[0] + px * s_, fok[1], fok[2] + pz * s_) for s_ in (-1.3, 1.3)]
+            kena = set()
+            for ent, b in self._tembus:
+                if not ent:
+                    continue
+                for tx, ty, tz in sasaran:
+                    d = (tx - cam[0], ty - cam[1], tz - cam[2])
+                    # 0,96: kotak yang memuat pemain sendiri tidak dihitung
+                    # menghalangi (ubin tepat di kaki/punggungnya).
+                    if self._sinar_kena(cam, d, b, 0.96):
+                        kena.add(id(ent))
+                        if id(ent) not in self._tembus_alfa:
+                            self._tembus_alfa[id(ent)] = [ent, 1.0]
+                        break
+            self._tembus_target = kena
+        langkah = 1.0 if seketika else min(1.0, max(0.0, dt) * self.TEMBUS_LAJU)
+        selesai = []
+        for k, rec in self._tembus_alfa.items():
+            ent, a = rec
+            if not ent:
+                selesai.append(k)
+                continue
+            tuju = self.TEMBUS_ALFA if k in self._tembus_target else 1.0
+            a2 = a + (tuju - a) * langkah if not seketika else tuju
+            if abs(a2 - tuju) < 0.01:
+                a2 = tuju
+            if a2 != a or seketika:
+                self._pasang_alfa(ent, a2)
+                rec[1] = a2
+            if a2 >= 1.0 and k not in self._tembus_target:
+                selesai.append(k)
+        for k in selesai:
+            self._tembus_alfa.pop(k, None)
+
+    _BIN_TEMBUS = None
+
+    @classmethod
+    def _bin_tembus(cls):
+        """Cull bin depan-ke-belakang khusus tebing yang memudar.
+
+        Puluhan ubin tebing bertumpuk di sepanjang garis pandang. Di bin
+        'transparent' bawaan (belakang-ke-depan, tanpa tulis depth) tiap
+        lapisan 22% ikut menumpuk: sepuluh lapisan = 1-0,78^10 = 92% pejal,
+        dan tangkapan pertama memang abu-abu rata. Di bin ini ubin terdekat
+        digambar dulu DENGAN tulis depth, jadi lapisan di belakangnya gugur
+        di uji depth dan yang tampak hanya satu selaput tipis. Pemain dan
+        lantai sudah tergambar di bin opaque, jadi tetap terlihat."""
+        if cls._BIN_TEMBUS is None:
+            from panda3d.core import CullBinManager
+            m = CullBinManager.getGlobalPtr()
+            if m.findBin('tebing_tembus') < 0:
+                m.addBin('tebing_tembus', CullBinManager.BT_front_to_back, 31)
+            cls._BIN_TEMBUS = 'tebing_tembus'
+        return cls._BIN_TEMBUS
+
+    @classmethod
+    def _pasang_alfa(cls, ent, a):
+        from panda3d.core import TransparencyAttrib
+        try:
+            if a < 0.999:
+                ent.setTransparency(TransparencyAttrib.M_alpha)
+                ent.setDepthWrite(True)
+                ent.setBin(cls._bin_tembus(), 0)
+            else:
+                ent.setTransparency(TransparencyAttrib.M_none)
+                ent.setDepthWrite(True)
+                ent.clearBin()
+            # Di MODEL, bukan di entity. Ursina memasang warna lewat
+            # model.setColorScale(), dan skala alfa di entity tidak sampai ke
+            # p3d_ColorScale (diukur: entity (1,1,1,0.22) tetap pejal di
+            # layar, model (r,g,b,0.20) tembus). `ent.alpha` juga bukan
+            # jalan: setternya memanggil `.h` milik Color sedangkan warna
+            # tebing Vec4 -- AttributeError yang tertelan.
+            (ent.model if ent.model is not None else ent).setAlphaScale(a)
+        except Exception:
+            pass
+
     def _clear(self):
         for e in self._tile_ents + self._obj_ents:
             destroy(e)
@@ -919,6 +1048,10 @@ class World3D:
         self._wall_ents.clear()
         self._wall_decor.clear()
         self._cutaway_state = None
+        self._tembus.clear()
+        self._tembus_alfa.clear()
+        self._tembus_target = set()
+        self._tembus_kunci = None
         self._tile_heights.clear()
         
         if self.ground_collider:

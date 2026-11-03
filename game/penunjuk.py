@@ -178,6 +178,74 @@ def target_langkah(s, langkah_id):
     return None
 
 
+_PEDANG_BESI = ('sword_besi', 'sword_emas', 'sword_mithril')
+
+
+def _tangga_gua(s):
+    """Tangga turun: di dungeon, tangga lantai itu; di luar, tangga di Gua
+    Sang Hyang (dungeon tidak punya portal, ia dimasuki lewat tangga)."""
+    from .config import STAIRS_DOWN
+    if s.scene_name == 'dungeon':
+        tiles = getattr(s, 'dungeon_tiles', None) or []
+        for y, r in enumerate(tiles):
+            for x, v in enumerate(r):
+                if v == STAIRS_DOWN:
+                    return ('dungeon', x, y, 'Tangga turun')
+        return None
+    t = _tile_pertama('naga_cave', STAIRS_DOWN)
+    return ('naga_cave', t[0], t[1], 'Tangga ke gua') if t else None
+
+
+def target_quest(s):
+    """(scene, tx, ty, nama) untuk tugas utama sesudah tutorial, atau None.
+
+    Mengikuti syarat SUNGGUHAN di QuestController._stage_done, bukan judul
+    tahapnya. tx/ty None = tujuannya sebuah tempat: ditunjuk lewat pintunya,
+    dan penanda padam begitu pemain sudah di dalam."""
+    st = getattr(s, 'quest_stage', 0)
+    # Tahap pertama yang syaratnya BELUM terpenuhi, dengan pemeriksa yang sama
+    # dengan QuestController. quest_stage baru maju saat ada kejadian yang
+    # memanggil check_quest_progress, jadi angka mentahnya bisa tertinggal
+    # satu-dua tahap dari keadaan sebenarnya.
+    try:
+        from .controllers.quest_controller import QuestController
+        qc = QuestController(s)
+        while st < 11 and qc._stage_done(st):
+            st += 1
+    except Exception:
+        pass
+    stt = getattr(s, 'stats', {}) or {}
+    if st == 0:
+        return target_langkah(s, 'surat')
+    if st == 1:
+        if stt.get('lobak_planted', 0) < 3:
+            return target_langkah(s, 'tanam')
+        return target_langkah(s, 'siram')
+    if st == 2:
+        return target_langkah(s, 'panen')
+    if st == 3:
+        return target_langkah(s, 'kirim')
+    if st == 4:
+        return ('smith', None, None, 'Bengkel Budi')
+    if st == 5:
+        if getattr(s, 'pickaxe_tier', 0) < 1:
+            return ('smith', None, None, 'Bengkel Budi')
+        return _tangga_gua(s)
+    if st == 6:
+        return None if s.scene_name == 'dungeon' else _tangga_gua(s)
+    if st == 7:
+        if getattr(s, 'sword_id', None) not in _PEDANG_BESI:
+            return ('smith', None, None, 'Bengkel Budi')
+        return None if s.scene_name == 'dungeon' else _tangga_gua(s)
+    if st == 8:
+        return ('cemetery', None, None, 'Kuburan Tua')
+    if st == 9:
+        return _tangga_gua(s)
+    if st == 10:
+        return ('naga_cave', None, None, 'Gua Sang Hyang')
+    return None
+
+
 def _masih_berlaku(s, langkah_id, tgt):
     """Target lengket tetap dipakai selama masih menjawab langkahnya."""
     scene, x, y, _ = tgt
@@ -230,20 +298,36 @@ class Penunjuk:
             return
         from .tutorial import current_step
         cur = current_step(s)
-        if cur is None:
-            self._sembunyi()
-            return
-        lid = cur[1].get('id')
-        if lid != self._langkah or self._target is None \
-                or not _masih_berlaku(s, lid, self._target):
-            self._langkah = lid
-            self._target = target_langkah(s, lid)
+        if cur is not None:
+            lid = cur[1].get('id')
+            if lid != self._langkah or self._target is None \
+                    or not _masih_berlaku(s, lid, self._target):
+                self._langkah = lid
+                self._target = target_langkah(s, lid)
+        else:
+            # Tutorial tamat: tugas utama. Dihitung ulang tiap frame karena
+            # targetnya bergantung pada scene (tangga lantai dungeon, pintu
+            # tempat) -- murah: paling banyak satu pindaian peta.
+            self._langkah = f'quest{getattr(s, "quest_stage", 0)}'
+            self._target = target_quest(s)
         tgt = self._target
         if tgt is None:
             self._sembunyi()
             return
         scene, tx, ty, nama = tgt
-        if scene != s.scene_name:
+        if scene == s.scene_name and tx is None:
+            self._sembunyi()            # sudah sampai di tempatnya
+            return
+        if scene != s.scene_name and s.scene_name == 'dungeon':
+            # Dungeon tanpa portal: jalan keluarnya tangga naik.
+            from .config import STAIRS_UP
+            naik = next(((x, y) for y, r in enumerate(getattr(s, 'dungeon_tiles', None) or [])
+                         for x, v in enumerate(r) if v == STAIRS_UP), None)
+            if naik is None:
+                self._sembunyi()
+                return
+            tgt = ('dungeon', naik[0], naik[1], 'Tangga naik')
+        elif scene != s.scene_name:
             p = _portal_menuju(s.scene_name, scene)
             if p is None:
                 self._sembunyi()

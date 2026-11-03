@@ -297,11 +297,90 @@ def uji_penunjuk(g):
     s.day = 3
     s.stats.update({'lobak_harvested': 1, 'earned': 10})
     tunggu_detik(0.3)
-    cek('penunjuk: hilang setelah tutorial tamat',
-        not P.ketupat.enabled and not P.panah.enabled and P.titik is None, str(P.titik))
+    # Sejak 3 Nov 2026 penunjuk tidak padam saat tutorial tamat: ia
+    # meneruskan ke tugas utama (uji_penunjuk_quest). Yang dijaga di sini:
+    # langkah tutorial tidak lagi ditunjuk -- bukan kasur lagi.
+    cek('penunjuk: sesudah tutorial tamat tidak lagi menunjuk langkah tutorial',
+        P.titik is None or P.titik[3] != 'Kasur', str(P.titik))
     s.scene_name = 'farm'
     s.time_minutes = jam
     langkah(30)
+
+
+def _pindah(g, nama, tx=None, ty=None):
+    s = g.state
+    s.scene_name = nama
+    langkah(40)
+    if tx is not None:
+        g.player.set_tile_pos(tx, ty)
+    g.player._portal_cd = 3.0
+    langkah(4)
+
+
+def uji_penunjuk_quest(g):
+    """Sesudah tutorial: penunjuk mengikuti tugas utama (QuestController)."""
+    from game.config import STAIRS_DOWN, STAIRS_UP
+    s, P = g.state, g.penunjuk
+    # Adegan tiba di tempat baru (lereng, desa, dungeon) menelan mode HUD;
+    # adegan diuji probe_sinema, bukan di sini.
+    from game.cutscene import NASKAH
+    sinema_lama = list(s.sinema_selesai)
+    s.sinema_selesai = list(NASKAH)
+    simpan = (s.quest_stage, s.pickaxe_tier, s.sword_id, s.day, dict(s.stats),
+              s.mail_read, s.time_minutes)
+    s.mail_read = True
+    s.day = 3
+    s.stats.update({'tilled': 3, 'lobak_planted': 3, 'watered': 3,
+                    'lobak_harvested': 3, 'earned': 10})
+    emas = s.gold
+    s.gold = max(s.gold, 200)            # tahap 3 (150G) terpenuhi
+    try:
+        s.quest_stage, s.pickaxe_tier, s.sword_id = 4, 0, None
+        _pindah(g, 'farm', 20, 10)
+        cek('quest Alat Lebih Baik: dari kebun menunjuk ke Bengkel',
+            P.titik is not None and P.titik[0] == 'farm' and 'Bengkel' in P.titik[3],
+            str(P.titik))
+        _pindah(g, 'smith', 4, 5)
+        cek('quest Alat Lebih Baik: padam di dalam Bengkel', P.titik is None
+            and not P.ketupat.enabled, str(P.titik))
+
+        s.quest_stage, s.pickaxe_tier = 5, 1
+        _pindah(g, 'mountain', 15, 12)
+        cek('quest Eksplorasi Gua (punya pickaxe): lereng menunjuk Gua Sang Hyang',
+            P.titik is not None and 'Gua Sang Hyang' in P.titik[3], str(P.titik))
+
+        s.quest_stage = 8
+        _pindah(g, 'town', 15, 14)
+        cek('quest Misteri Kuburan: dari desa menunjuk ke Kuburan',
+            P.titik is not None and 'Kuburan' in P.titik[3], str(P.titik))
+
+        s.quest_stage = 9
+        s.dungeon_level = 2
+        s.scene_name = 'dungeon'             # urutan sama dengan probe_gua
+        g.player._generate_and_enter_dungeon()
+        g.player._portal_cd = 3.0
+        langkah(40)
+        bawah = next(((x, y) for y, r in enumerate(s.dungeon_tiles)
+                      for x, v in enumerate(r) if v == STAIRS_DOWN), None)
+        cek('quest Kedalaman: di dungeon menunjuk tangga turun lantai itu',
+            P.titik is not None and bawah is not None and tuple(P.titik[1:3]) == bawah,
+            f'{P.titik} tangga={bawah}')
+        # Alat Lebih Baik lagi: tanpa pickaxe/pedang tahap 4 belum terpenuhi,
+        # jadi tujuannya Bengkel -- di luar dungeon.
+        s.quest_stage, s.pickaxe_tier, s.sword_id = 4, 0, None
+        langkah(3)
+        naik = next(((x, y) for y, r in enumerate(s.dungeon_tiles)
+                     for x, v in enumerate(r) if v == STAIRS_UP), None)
+        cek('dari dungeon ke tempat di luar: menunjuk tangga naik',
+            P.titik is not None and naik is not None and tuple(P.titik[1:3]) == naik,
+            f'{P.titik} naik={naik}')
+    finally:
+        (s.quest_stage, s.pickaxe_tier, s.sword_id, s.day, st, s.mail_read,
+         s.time_minutes) = simpan
+        s.stats.clear(); s.stats.update(st)
+        s.gold = emas
+        _pindah(g, 'farm', 20, 10)
+        s.sinema_selesai = sinema_lama
 
 
 def uji_tebing(g):
@@ -381,6 +460,7 @@ def main():
         else:
             uji_penunjuk(g)
             uji_tebing(g)
+            uji_penunjuk_quest(g)
             uji_dunia(g)
             uji_hud(g)
             uji_panel(g)

@@ -169,6 +169,102 @@ def uji_mob(g):
         m2 not in g.entities.actors.values(), 'masih di actors')
 
 
+def _mob_baru(g, kind, dx, dy=0.0, hp=40, speed=0.0):
+    s = g.state
+    sebelum = {id(a) for a in g.entities.actors.values()}
+    px, py = s.player_x, s.player_y
+    g.entities.spawn_mobs([dict(kind=kind, x=px + dx, y=py + dy, hp=hp, max_hp=hp,
+                                damage=5, speed=speed)])
+    langkah(2)
+    baru = [a for a in g.entities.actors.values()
+            if type(a).__name__ == 'Monster' and id(a) not in sebelum]
+    return baru[0] if baru else None
+
+
+def uji_tempur(g):
+    """Rupa tempur mob (mob_rupa.py) dan gaya serang per jenis (mob.py)."""
+    from ursina import camera
+    from game.config import TILE_SIZE as TS
+    from game import mob_rupa
+    s = g.state
+    s.hp = s.max_hp
+    m = _mob_baru(g, 'genderuwo', 3.0, hp=100)
+    if m is None:
+        cek('mob tempur muncul', False, 'spawn gagal')
+        return
+    m.attack_cooldown_ms = 99999
+    papan = getattr(m, '_papan', None)
+    cek('mob punya papan nama + HP billboard dan aura',
+        papan is not None and papan.billboard and getattr(m, '_aura', None) is not None
+        and 'Genderuwo' in str(m._papan_nama.text), f'papan={papan}')
+    # Bilah HP mengikuti HP; papan tetap menghadap kamera walau aktor berputar.
+    w0 = m._hp_bar.scale_x
+    n_angka = len(mob_rupa._ANGKA)
+    m.hp -= 50
+    langkah(2)
+    cek('bilah HP menyusut sesuai HP', abs(m._hp_bar.scale_x - w0 * 0.5) < 0.02,
+        f'{w0:.2f} -> {m._hp_bar.scale_x:.2f}')
+    cek('angka kerusakan muncul saat HP mob turun', len(mob_rupa._ANGKA) > n_angka,
+        f'{n_angka} -> {len(mob_rupa._ANGKA)}')
+    # Arah papan TIDAK diuji lewat getQuat: efek billboard Panda baru
+    # diterapkan saat cull, dan mob_gerak menimpa rotation_y aktor tiap frame,
+    # jadi cek 'orientasi dunia tetap' versi pertama lulus juga untuk papan
+    # yang bukan billboard (ketahuan lewat mutasi). Yang dijaga: bilahnya anak
+    # papan, dan papannya billboard (cek di atas).
+    cek('bilah HP anak papan billboard, bukan anak aktor yang berputar',
+        m._hp_bar.parent is papan and m._bg_bar.parent is papan, '')
+    # Cincin ancaman: muncul saat windup, diameternya = radius kena sungguhan.
+    m.windup_total = m.windup_gaya
+    m.windup_ms = m.windup_gaya * 0.5
+    langkah(1)
+    d_dunia = m._cincin.scale_x * float(m.scale_x)
+    d_harap = 2 * m.atk_r * 1.35 * TS
+    cek('cincin ancaman saat windup = jangkauan pukulan sungguhan',
+        m._cincin.enabled and abs(d_dunia - d_harap) < 0.05,
+        f'{d_dunia:.2f} vs {d_harap:.2f}')
+    m.windup_ms = 0
+    m.hp = 0
+    langkah(3)
+    cek('mob mati: papan dan aura padam', not papan.enabled and not m._aura.enabled, '')
+    tunggu_detik(1.0)
+
+    # Gaya serang per jenis: kelelawar gesit, genderuwo berat.
+    from game.mob import GAYA_SERANG
+    cek('gaya serang berbeda per jenis (windup kelelawar < genderuwo)',
+        GAYA_SERANG['kelelawar'][0] < GAYA_SERANG['genderuwo'][0]
+        and GAYA_SERANG['genderuwo'][1] > GAYA_SERANG['kelelawar'][1], '')
+
+    # Terjang lewat AI sungguhan: kelelawar mulai ancang-ancang dari dekat,
+    # pemain mundur ke luar jangkauan pukulan diam (0,9 x 1,35 = 1,2 petak),
+    # tapi terjangan 0,8 petak tetap mengenainya.
+    s.hp = s.max_hp
+    s.invuln_timer_ms = 0
+    k = _mob_baru(g, 'kelelawar', 0.7)
+    if k is None:
+        cek('kelelawar muncul', False, '')
+        return
+    t0 = time.time()
+    while time.time() - t0 < 3.0 and (k.windup_ms or 0) <= 0:
+        langkah(1)
+    mulai = (k.windup_ms or 0) > 0
+    # Mundur: kelelawar di +x, pemain pindah ke -x sejauh 1,6 petak dari mob.
+    sx, sy = s.player_x, s.player_y
+    s.player_x = k.logical_x - 1.6
+    g.player.x = s.player_x * TS
+    hp0 = s.hp
+    t0 = time.time()
+    while time.time() - t0 < 1.0 and s.hp >= hp0 and (k.windup_ms or 0) > 0:
+        s.player_x = min(s.player_x, k.logical_x - 1.6) if (k.windup_ms or 0) > 0 else s.player_x
+        langkah(1)
+    langkah(2)
+    cek('kelelawar menerjang: pemain yang mundur 1,6 petak tetap kena',
+        mulai and s.hp < hp0, f'windup mulai={mulai} hp {hp0}->{s.hp}')
+    k.hp = 0
+    tunggu_detik(0.8)
+    s.player_x, s.player_y = sx, sy
+    s.hp = s.max_hp
+
+
 def uji_kena_pemain(g):
     """Mob memukul pemain sungguhan (AI mob, bukan hp diubah tangan).
 
@@ -217,6 +313,7 @@ def main():
             uji_pemain(g)
             uji_mob(g)
             uji_kena_pemain(g)
+            uji_tempur(g)
     except Exception:
         traceback.print_exc()
         cek('probe berjalan tanpa pengecualian', False, 'lihat traceback')

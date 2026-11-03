@@ -85,6 +85,13 @@ def animasikan(actor, dt, pemain_xz=None):
     hp = getattr(actor, 'hp', 0)
     if hp < getattr(actor, '_mg_hp_lalu', hp):
         actor._mg_kena = DURASI_KENA
+        try:
+            from .mob_rupa import angka
+            p = actor.world_position
+            angka((p[0], p[1] + 2.0 * float(actor.scale_y), p[2]),
+                  getattr(actor, '_mg_hp_lalu', hp) - hp)
+        except Exception:
+            pass
     actor._mg_hp_lalu = hp
 
     dy = dh = dp = dr = 0.0
@@ -151,8 +158,9 @@ def animasikan(actor, dt, pemain_xz=None):
         if k > 0.85:                              # terjang di ujung wind-up
             dp += 40 * (k - 0.85) / 0.15
     cd = getattr(actor, 'attack_cooldown_ms', 0) or 0
-    if cd > 850 and windup <= 0:                  # sesaat sesudah memukul
-        q = (cd - 850) / 150.0
+    cd_total = getattr(actor, 'cd_total', 1000) or 1000
+    if cd > cd_total - 150 and windup <= 0:       # sesaat sesudah memukul
+        q = (cd - (cd_total - 150)) / 150.0
         dp += 22 * q
 
     # ── kena pukul ──

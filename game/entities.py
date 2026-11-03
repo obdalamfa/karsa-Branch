@@ -1068,6 +1068,14 @@ class EntitiesManager:
             hp_y = GH + (3.5 if is_boss else 2.4) * sc
             actor._bg_bar = Entity(parent=actor, model='cube', position=(0, hp_y, 0), scale=(0.9*sc, 0.10, 0.10), color=color.rgb(45, 45, 45))
             actor._hp_bar = Entity(parent=actor, model='cube', position=(0, hp_y, -0.02), scale=(0.9*sc, 0.08, 0.08), color=color.rgb(225, 48, 48))
+            # Papan nama + HP billboard, aura, lingkar ancaman (mob_rupa.py).
+            # Kubus di atas hanya cadangan kalau pemasangan gagal.
+            try:
+                from .mob_rupa import pasang
+                pasang(actor, hp_y / sc, sc)
+            except Exception:
+                import logging
+                logging.exception('mob_rupa gagal dipasang')
             
             self.actors[actor_id] = actor
 
@@ -1088,6 +1096,8 @@ class EntitiesManager:
         
         if self.brains is not None:
             self.brains.tick(dt)
+        from .mob_rupa import tick_angka
+        tick_angka(dt)
 
         self._tick_perjalanan(dt)
         self._npc_sched_t += dt
@@ -1153,7 +1163,10 @@ class EntitiesManager:
                         if actor.is_boss: s.naga_defeated = True
                         if actor.mob_spec in s.mobs:
                             s.mobs.remove(actor.mob_spec)
-                        for _bar in (getattr(actor, '_hp_bar', None), getattr(actor, '_bg_bar', None)):
+                        for _bar in (getattr(actor, '_hp_bar', None), getattr(actor, '_bg_bar', None),
+                                     getattr(actor, '_papan', None), getattr(actor, '_aura', None),
+                                     getattr(actor, '_cincin', None),
+                                     getattr(actor, '_cincin_isi', None)):
                             if _bar is not None:
                                 _bar.enabled = False
                     actor.death_ms += dt * 1000.0
@@ -1163,8 +1176,17 @@ class EntitiesManager:
                         destroy(actor)
                         del self.actors[actor_id]
                     continue
+                hp_pemain = s.hp
                 actor.update_ai(dt, s.player_x, s.player_y, can_walk_fn)
-                
+                if s.hp < hp_pemain:
+                    # Pukulan mendarat: angka merah di atas pemain.
+                    try:
+                        from .mob_rupa import angka
+                        angka((s.player_x * TS, GH + 2.4, s.player_y * TS),
+                              hp_pemain - s.hp, ke_pemain=True)
+                    except Exception:
+                        pass
+
                 # Sync state back to dict so game can read it
                 actor.mob_spec['x'] = actor.logical_x
                 actor.mob_spec['y'] = actor.logical_y
@@ -1173,7 +1195,11 @@ class EntitiesManager:
                 # Update visual HP bar
                 ratio = max(0, actor.hp / max(actor.mob_spec.get('max_hp', 1), 1))
                 sc = 1.4 if actor.is_boss else 1.0
-                actor._hp_bar.scale_x = 0.9 * sc * ratio
+                if getattr(actor, '_papan', None) is not None:
+                    from .mob_rupa import segarkan
+                    segarkan(actor, dt)
+                else:
+                    actor._hp_bar.scale_x = 0.9 * sc * ratio
 
                 # Kilat kena pukul kini dikerjakan mob_gerak (dulu kedua cabang
                 # di sini menyetel putih, jadi kilatnya tidak pernah terlihat).

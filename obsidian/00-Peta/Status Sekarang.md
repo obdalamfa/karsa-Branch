@@ -9,6 +9,13 @@ tags: [moc, status]
 
 # Status Sekarang
 
+> [!success] Pembaruan 2026-11-03 (malam) — kuburan berpenghuni, mob terbaca
+> Kuburan Tua punya kemamang (malam) dan tuyul untuk tahap Misteri Kuburan.
+> [F8] mengatur dua penunjuk. Mob penyerang kini punya papan nama dan HP
+> billboard, aura, cincin ancaman seukuran jangkauan pukulan, angka
+> kerusakan, dan gaya serang per jenis (termasuk terjangan). Regresi 15/15,
+> "tampilan" 74/74, "animasi gerak" 23/23.
+
 > [!success] Pembaruan 2026-11-03 (sore) — penunjuk lengkap
 > Penunjuk emas kini juga menunjuk Pak Budi di Bengkel, bijih yang kurang,
 > lawan terdekat, dan bos di dungeon, serta makhluk liar yang sungguh bisa

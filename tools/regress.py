@@ -2050,6 +2050,7 @@ def main():
     gerak_baris = None
     tampilan_baris = None
     lore_baris = None
+    dua_desa_baris = None
     _pasang_save_fixture(ROOT / cfg.SAVE_FILE)
     t0 = time.time()
     try:
@@ -2522,6 +2523,27 @@ def main():
         except subprocess.TimeoutExpired:
             lore_baris = (False, 'waktu habis')
 
+    # ── Dua Desa: titipan, lomba, tahap (subproses) ──
+    # Logika Dua Desa tinggal di game/dua_desa.py dan tidak pernah menyentuh
+    # layar, jadi tidak ada scene yang bisa menangkapnya kalau rusak. Probe ini
+    # memanggil fungsi murni dan QuestController langsung: syarat tahap, jadwal
+    # NPC, nilai lawan, dan imbalan titipan yang lebih besar dari harga jual.
+    if not minta:
+        import subprocess
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'probe_dua_desa.py')],
+                               cwd=ROOT, capture_output=True, text=True, timeout=600)
+            akhir = [b for b in r.stdout.splitlines()
+                     if re.search(r'\d+/\d+ lulus', b)][-1:]
+            if akhir:
+                m = re.search(r'(\d+)/(\d+) lulus', akhir[0])
+                ok = r.returncode == 0 and m.group(1) == m.group(2) and int(m.group(2)) > 0
+                dua_desa_baris = (ok, akhir[0].strip())
+            else:
+                dua_desa_baris = (False, f'tanpa keluaran (kode {r.returncode})')
+        except subprocess.TimeoutExpired:
+            dua_desa_baris = (False, 'waktu habis')
+
     print('-' * 78)
     tanda_hud = 'LULUS' if not hud_baris else 'GAGAL'
     ring_hud = '; '.join(f'{k} {c}' for k, c in hud_baris) or 'semua di dalam layar'
@@ -2586,6 +2608,12 @@ def main():
         print(f'{"lore gua":14s} {"LULUS" if ok_lr else "GAGAL":>7s} '
               f'{"":>9s} {"":>7s}  {catatan_lr[:44]}')
         if not ok_lr:
+            gagal_total += 1
+    if dua_desa_baris is not None:
+        ok_dd, catatan_dd = dua_desa_baris
+        print(f'{"dua desa":14s} {"LULUS" if ok_dd else "GAGAL":>7s} '
+              f'{"":>9s} {"":>7s}  {catatan_dd[:44]}')
+        if not ok_dd:
             gagal_total += 1
     print('-' * 78)
     n_lulus = sum(1 for _, _, _, _, b, _ in baris if not b)

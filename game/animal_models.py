@@ -76,6 +76,8 @@ _C = {
     # Tanpa sklera, mata gelap di atas kepala gelap (bebek L 23, muka domba
     # L 23, kambing L 36, kuda L 35) hilang sama sekali.
     'sklera':      color.rgb(228, 224, 216),   # L 88 — putih mata
+    'kerbau':      color.rgb( 86,  82,  84),   # L 33 — kerbau Dukuh Lawang
+    'kerbau_moncong': color.rgb(128, 120, 116),  # L 48 — moncong kerbau
 }
 
 
@@ -546,7 +548,36 @@ def _kuda(r):
     return 1.90
 
 
+def _kerbau(r):
+    """Kerbau — 1,40 m, panjang 2,10 m. Ternak Dukuh Lawang (Cerita Dua Desa).
+    Yang memisahkannya dari sapi di kamera lot: badan abu-abu gelap SERAGAM
+    tanpa belang (sapi terang berbelang), kepala dibawa rendah, dan tanduk
+    panjang yang melebar ke samping-belakang, bukan tanduk pendek."""
+    _shadow(r, 1.00, 2.10)
+    _box(r,  (0, 0.98,  0.00), (0.80, 0.76, 1.42), _C['kerbau'])          # badan
+    _box(r,  (0, 1.00,  0.78), (0.50, 0.50, 0.34), _C['kerbau'])          # leher
+    k = _box(r, (0, 0.90, 1.06), (0.40, 0.38, 0.48), _C['kerbau'])        # kepala, rendah
+    # Mata di SISI kepala seperti ternak lain (lihat _mata). Takarannya ikut
+    # sapi — kepala kerbau sebesar kepala sapi — sedikit lebih kecil karena
+    # kepala yang gelap sudah membuat sklera menonjol.
+    _mata(r, k, d=0.110, naik=0.30, maju=0.05)
+    _box(r,  (0, 0.82,  1.32), (0.32, 0.24, 0.14), _C['kerbau_moncong'])  # moncong
+    for sx in (-1, 1):
+        _cone(r, (sx * 0.28, 1.12, 0.92), (0.10, 0.50, 0.10), _C['tanduk'],
+              (-35, 0, sx * -72))                                         # tanduk
+        _sendi(r, 'telinga',
+               [_box(r, (sx * 0.27, 0.98, 1.00), (0.20, 0.07, 0.12), _C['kerbau'],
+                     (0, 0, sx * -20))],
+               (-0.5 if sx > 0 else 0.5, 0, 0), 'z')                   # telinga
+    _sendi(r, 'ekor',
+           [_box(r, (0, 0.98, -0.76), (0.09, 0.56, 0.09), _C['kerbau'], (16, 0, 0))],
+           (0, 0.5, 0), 'z')                                           # ekor
+    _legs(r, _C['kerbau'], 0.28, 0.50, 0.62, 0.62, 0.18)
+    return 1.40
+
+
 _BUILDERS = {
+    'kerbau':  _kerbau,
     'ayam':    _ayam,
     'bebek':   _bebek,
     'kucing':  _kucing,
@@ -563,6 +594,7 @@ _BUILDERS = {
 HEIGHTS = {
     'ayam': 0.63, 'bebek': 0.60, 'kucing': 0.70, 'kelinci': 0.70,
     'rubah': 0.72, 'kambing': 1.02, 'domba': 0.86, 'sapi': 1.46, 'kuda': 1.90,
+    'kerbau': 1.40,
 }
 
 
@@ -630,6 +662,26 @@ def _soft_cube():
     from .meshes import soft_cube_mesh
     return soft_cube_mesh()
 
+# Dipulihkan: dihapus di ae03456 bersama blok lain, padahal
+# build_wild_entity dan builder jamur/kunang di bawah masih memakainya.
+# Tidak ketahuan karena build_wild_entity tidak punya pemanggil sampai
+# 26 Okt 2026 (kotak putih melayang di kebun).
+_BLUSH = _c(248, 158, 165)
+_EYE_W = _c(252, 252, 252)
+_EYE_PU = _c(22, 18, 22)
+_WILD_SCALES = {
+    'running_mushroom': 0.58,
+    'firefly':          0.32,
+    'mandrake':         0.52,
+    'wild_herb':        0.50,
+    'wild_berry':       0.46,
+    'kemamang':         0.90,
+    'tuyul':            0.85,
+}
+
+_SC = object()          # penanda: 'buat soft cube baru untuk bagian ini'
+
+
 def build_wild_entity(actor, kind: str):
     """Rakit entitas liar cute sebagai child-parts pada `actor`."""
     from .smooth_shader import apply_smooth
@@ -639,18 +691,25 @@ def build_wild_entity(actor, kind: str):
     actor.scale  = _WILD_SCALES.get(kind, 0.50)
 
     def part(model, pos, scale, c, **kw):
+        # Satu mesh per bagian: Mesh Ursina adalah NodePath dan hanya boleh
+        # punya satu parent (aturan #3). Dulu satu `sc` dibagi ke semua
+        # bagian sehingga hanya bagian terakhir yang kebagian geometri.
+        if model is _SC:
+            model = _soft_cube()
         e = Entity(parent=actor, model=model, position=pos, scale=scale, color=c, **kw)
         apply_smooth(e, has_texture=False)
         parts.append(e)
         return e
 
-    sc = _soft_cube()
+    sc = _SC
 
     if   kind == 'running_mushroom': _build_mushroom(part, sc)
     elif kind == 'firefly':          _build_firefly(part, sc)
     elif kind == 'mandrake':         _build_mandrake(part, sc)
     elif kind == 'wild_herb':        _build_wild_herb(part, sc)
     elif kind == 'wild_berry':       _build_wild_berry(part, sc)
+    elif kind == 'kemamang':         _build_kemamang(part, sc)
+    elif kind == 'tuyul':            _build_tuyul(part, sc)
 
     actor._wild_parts = parts
     return parts
@@ -774,6 +833,43 @@ def _build_wild_herb(part, sc):
     # Bunga kecil di ujung batang
     part(sc, (0, 0.46, 0), (0.18, 0.18, 0.18), _c(245, 205, 75))
     part(sc, (0, 0.47, 0), (0.09, 0.09, 0.09), _c(248, 130, 48))
+
+def _build_kemamang(part, sc):
+    """Kemamang -- api arwah biru dari cerita rakyat Jawa: lidah api melayang
+    tanpa tubuh, inti putih, dua mata kecil. Tidak disinari lampu dunia
+    (setLightOff) supaya terbaca menyala di kuburan yang gelap."""
+    for (y, s_, c) in ((0.55, (0.62, 0.70, 0.62), (70, 150, 255)),
+                       (0.62, (0.42, 0.56, 0.42), (150, 210, 255)),
+                       (0.66, (0.22, 0.32, 0.22), (235, 248, 255))):
+        e = part('sphere', (0, y, 0), s_, _c(*c))
+        try:
+            e.setLightOff()
+        except Exception:
+            pass
+    # Ujung lidah api: kerucut lembut menjulang.
+    e = part(sc, (0, 0.98, 0), (0.18, 0.34, 0.18), _c(110, 180, 255))
+    try:
+        e.setLightOff()
+    except Exception:
+        pass
+    for sx in (-1, 1):
+        part('sphere', (sx * 0.08, 0.62, 0.20), (0.06, 0.08, 0.04), _c(20, 30, 60))
+
+
+def _build_tuyul(part, sc):
+    """Tuyul -- makhluk halus kecil berkepala plontos dari cerita rakyat:
+    badan anak kecil kehijauan pucat, kepala besar botak, mata besar."""
+    kulit = _c(178, 196, 168)
+    part(sc, (0, 0.22, 0), (0.30, 0.34, 0.24), kulit)                 # badan
+    part('sphere', (0, 0.58, 0), (0.46, 0.44, 0.42), kulit)            # kepala botak
+    for sx in (-1, 1):
+        part(sc, (sx * 0.22, 0.60, 0), (0.08, 0.12, 0.05), kulit)     # telinga
+        part('sphere', (sx * 0.10, 0.60, 0.19), (0.12, 0.13, 0.06), _EYE_W)
+        part('sphere', (sx * 0.10, 0.60, 0.215), (0.06, 0.07, 0.04), _EYE_PU)
+        part(sc, (sx * 0.08, 0.04, 0.02), (0.09, 0.10, 0.10), kulit)  # kaki
+    part(sc, (0, 0.47, 0.20), (0.10, 0.025, 0.02), _c(120, 70, 70))    # seringai
+    part(sc, (0, 0.18, 0.12), (0.26, 0.12, 0.04), _c(236, 230, 214))   # kain putih
+
 
 def _build_wild_berry(part, sc):
     """Beri liar chibi — buah bulat ungu-merah cerah, wajah ceria."""

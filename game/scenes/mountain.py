@@ -1,8 +1,44 @@
 """Lereng berbatu dengan jalur desa, pelataran gua, dan cabang pemakaman."""
-from game.config import G, D, P, TR, DR, DT, CV_W
+from game.config import G, D, P, TR, DR, DT, CV_W, LN
 from game.scenes.scene_base import Scene
 from game.scenes.layout import blank, rect, border, hline, vline, scatter
 from game.scenes.zone_paint import Zone, BATU_ALUN
+
+
+# Titik jadwal warga, makhluk, dan hewan di lereng (data.py). Hutan tidak
+# boleh tumbuh di sini atau tepat di sebelahnya, supaya mereka tetap bisa
+# berdiri dan didekati pemain.
+_TITIK_JADWAL = [(10, 20), (5, 20), (14, 12), (11, 4), (22, 18), (15, 18)]
+
+
+def _hutan(m):
+    """Hutan lebat di kaki lereng, seperti versi lama sebelum tata letak tangan.
+
+    Versi lama menanam pohon acak di 20% ubin rumput (benih 42) dan terasa
+    seperti hutan sungguhan sebelum gua. Versi tangan menyisakan 17 pohon
+    sehingga lereng terlihat gundul. Di sini kepadatan lama dikembalikan, tapi
+    hanya di rumput yang berjarak satu ubin dari jalur dan pelataran batu,
+    jadi jalan ke gua dan pemakaman tetap lapang.
+    """
+    import random
+    rng = random.Random(42)
+    h, w = len(m), len(m[0])
+
+    def dekat(x, y, jenis):
+        return any(0 <= y + dy < h and 0 <= x + dx < w and m[y + dy][x + dx] in jenis
+                   for dy in (-1, 0, 1) for dx in (-1, 0, 1))
+
+    for y in range(11, h - 1):
+        for x in range(1, w - 1):
+            if m[y][x] != G or dekat(x, y, (P, D, DR)):
+                continue
+            if any(abs(x - tx) <= 1 and abs(y - ty) <= 1 for tx, ty in _TITIK_JADWAL):
+                continue
+            r = rng.random()
+            if r < 0.30:
+                m[y][x] = TR
+            elif r < 0.33:
+                m[y][x] = DT
 
 
 def build_mountain():
@@ -34,11 +70,27 @@ def build_mountain():
     m[24][2] = P
     m[3][14] = m[3][15] = DR
 
+    _hutan(m)
+
+    # Jalur timur ke Dukuh Lawang (Cerita Dua Desa, docs/CERITA_DUA_DESA.md).
+    # Selama jalan lama lewat gua masih tertimbun longsor, inilah satu-satunya
+    # jalan ke dusun peternak itu — sengaja memutar. Ia menyambung pelataran
+    # batu (x<=23) ke tepi timur di bawah bahu tebing (24..28, 7..10), lalu
+    # menembus tebing tepi x=29 yang dibuka jadi ambang. Digambar SESUDAH
+    # _hutan() supaya urutan acak hutan di tempat lain tidak bergeser; dua
+    # lentera di ujungnya menandai ambang peta (TATA_LETAK P16).
+    for y in (12, 13):
+        for x in range(24, 30):
+            m[y][x] = D
+    m[11][28] = LN
+    m[14][28] = LN
+
     from game.scenes.rock_sanctuary import build_mountain_landscape
     scene = Scene('mountain', 'Lereng Gunung', m, portals=[
         (14, 24, 'town', 14, 1), (15, 24, 'town', 15, 1),
         (14, 3, 'naga_cave', 7, 9), (15, 3, 'naga_cave', 7, 9),
         (2, 24, 'cemetery', 8, 1),
+        (29, 12, 'lawang', 1, 9), (29, 13, 'lawang', 1, 10),
     ], paint=[
         Zone(11, 3, 18, 6, **BATU_ALUN),
         Zone(6, 7, 23, 14, **BATU_ALUN),

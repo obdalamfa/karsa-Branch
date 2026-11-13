@@ -12,6 +12,24 @@ class MobState(Enum):
     ATTACK = auto()
     DEAD = auto()
 
+# Gaya serang per jenis: (windup ms, jangkauan petak, jeda sesudah pukul ms,
+# terjang petak). Dulu semua mob sama persis (380 ms, 1 petak, 1000 ms):
+# kelelawar yang gesit dan genderuwo yang berat terasa satu makhluk.
+#   windup   cepat = sulit dielak, pendek jangkauannya
+#   terjang  di ujung windup mob MELOMPAT maju sejauh ini sebelum pukulan
+#            diperiksa -- mundur satu langkah tidak cukup melawan kelelawar
+GAYA_SERANG = {
+    'kelelawar':  (260, 0.9, 750,  0.8),
+    'tikus_gua':  (240, 0.8, 700,  0.6),
+    'genderuwo':  (560, 1.5, 1400, 0.0),
+    'banaspati':  (440, 1.6, 1300, 0.0),
+    'kuntilanak': (380, 1.1, 1050, 0.5),
+    'leak':       (340, 1.2, 950,  0.7),
+    'pocong':     (500, 1.3, 1300, 0.9),
+}
+GAYA_BOS = (620, 1.9, 1500, 0.0)
+
+
 class Monster(BaseActor):
     """
     Hostile mobs with patrol, alert, and chase states.
@@ -31,7 +49,8 @@ class Monster(BaseActor):
         self.ai_state = MobState.PATROL
         self.alert_r = 10.0 if self.is_boss else 5.0
         self.chase_r = 14.0 if self.is_boss else 8.0
-        self.atk_r = 1.5 if self.is_boss else 1.0
+        g = GAYA_BOS if self.is_boss else GAYA_SERANG.get(self.kind, (380, 1.0, 1000, 0.0))
+        self.windup_gaya, self.atk_r, self.cd_total, self.terjang = g
         
         self.patrol_t = 0.0
         self.patrol_interval = random.uniform(1.5, 3.5)
@@ -104,6 +123,18 @@ class Monster(BaseActor):
             self.windup_ms = max(0, self.windup_ms - dt * 1000)
             self.telegraph_ms = self.windup_ms
             if self.windup_ms <= 0:
+                # Terjang: mob yang gesit melompat maju di ujung ancang-ancang.
+                if self.terjang > 0 and dist > 0.3:
+                    lompat = min(self.terjang, max(0.0, dist - 0.4))
+                    dx = (player_x - self.logical_x) / dist
+                    dy = (player_y - self.logical_y) / dist
+                    for _ in range(4):
+                        nx = self.logical_x + dx * lompat / 4
+                        ny = self.logical_y + dy * lompat / 4
+                        if not can_walk_fn(nx, ny):
+                            break
+                        self.logical_x, self.logical_y = nx, ny
+                    dist = math.hypot(self.logical_x - player_x, self.logical_y - player_y)
                 # pukulan mendarat — hanya kena bila pemain masih di jangkauan
                 if dist <= self.atk_r * 1.35 and self.state.invuln_timer_ms <= 0:
                     self.state.hp = max(0, self.state.hp - self.damage)
@@ -112,10 +143,10 @@ class Monster(BaseActor):
                         from .sound import play as _play
                         _play('hurt')
                     except Exception: pass
-                self.attack_cooldown_ms = 1000
+                self.attack_cooldown_ms = self.cd_total
         elif dist <= self.atk_r and self.attack_cooldown_ms <= 0:
-            # mulai wind-up (telegraph) — boss menahan lebih lama agar terbaca
-            self.windup_total = 600 if self.is_boss else 380
+            # mulai wind-up (telegraph) — lamanya menurut watak jenisnya
+            self.windup_total = self.windup_gaya
             self.windup_ms = self.windup_total
             self.telegraph_ms = self.windup_total
             self.ai_state = MobState.ATTACK

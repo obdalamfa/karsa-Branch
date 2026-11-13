@@ -41,3 +41,7 @@ refs/_sb/
 # Log hasil harness.
 progress.jsonl
 progress.html
+
+# Ronde gauntlet: tangkapan, lembar A/B, dan KUNCI-nya. Kunci yang ter-commit
+# bisa dibaca kritikus berikutnya, dan itu membatalkan kebutaannya.
+gauntlet/

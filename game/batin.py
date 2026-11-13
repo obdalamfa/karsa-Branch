@@ -60,12 +60,31 @@ def raise_voice(state, voice, n=1):
 
 
 class Batin:
-    """Penyimpan log suara + bendera sekali-ucap. Satu instance per game."""
+    """Penyimpan log suara + bendera sekali-ucap. Satu instance per game.
+
+    Bendera sekali-ucap tinggal di `state.batin_sekali` (list, ikut disimpan),
+    bukan di memori. Dulu ia sebuah set di sini, jadi PAGI PERTAMA muncul
+    lagi di setiap sesi dan pilihannya bisa menaikkan suara +1 per sesi.
+    Bendera dibaca lewat `self.state` tiap kali: F9 mengganti ISI state di
+    tempat (app.py), jadi rujukan ke objeknya tetap benar.
+
+    `lines` sengaja TIDAK disimpan: ia riwayat obrolan untuk panel, bukan
+    keadaan permainan. Sesi baru mulai dengan log kosong.
+    """
 
     def __init__(self, state):
         self.state = state
         self.lines = []        # [(voice, text)] — riwayat untuk panel
-        self._said = set()     # bendera sekali-ucap (in-memory, reset per run)
+
+    def _sekali(self):
+        s = getattr(self.state, 'batin_sekali', None)
+        if not isinstance(s, list):
+            s = []
+            try:
+                self.state.batin_sekali = s
+            except Exception:
+                pass
+        return s
 
     def say(self, voice, text):
         self.lines.append((voice, text))
@@ -73,17 +92,17 @@ class Batin:
             self.lines.pop(0)
 
     def say_once(self, flag, voice, text):
-        if flag in self._said:
+        if not self.once(flag):
             return False
-        self._said.add(flag)
         self.say(voice, text)
         return True
 
     def once(self, flag):
         """True hanya pada panggilan pertama untuk `flag` (pemicu satu kali)."""
-        if flag in self._said:
+        sudah = self._sekali()
+        if flag in sudah:
             return False
-        self._said.add(flag)
+        sudah.append(flag)
         return True
 
     def check(self, voice, diff):

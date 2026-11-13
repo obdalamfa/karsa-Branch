@@ -346,6 +346,34 @@ def _bangun_atap(world, cx, cz, sx, sz, alas_y, jenis, tinggi, undian):
     return tex, col
 
 
+def build_papan_titipan(world, wx, wz):
+    """Papan Titipan warga (ubin PPN, Cerita Dua Desa babak 2).
+
+    Dua tiang, papan kayu beratap kecil, dan kertas titipan di KEDUA sisinya:
+    papan berdiri bebas di tepi jalan, jadi pemain bisa datang dari arah mana
+    pun dan tetap melihat bahwa ini tempat orang menempel pesan. Papan dan
+    kertas sengaja bersudut tajam (soft=False) — kertas yang membulat terbaca
+    sebagai batu, bukan selebaran.
+    """
+    kayu = color.rgb(122, 84, 50)
+    ents = [world._create_entity('cylinder', (wx + dx, 0.80 + GROUND_H, wz),
+                                 (0.12, 1.60, 0.12), 'wood_plank', kayu)
+            for dx in (-0.62, 0.62)]
+    ents.append(world._create_entity('cube', (wx, 1.12 + GROUND_H, wz), (1.36, 0.78, 0.08),
+                                     'wood_plank', color.rgb(150, 108, 66), soft=False))
+    ents.append(world._create_entity('cube', (wx, 1.66 + GROUND_H, wz), (1.58, 0.07, 0.42),
+                                     'roof/terracotta', color.rgb(205, 92, 70), soft=False))
+    # Kertas: (geser x, geser y, sisi z, warna)
+    for dx, dy, sisi, col in ((-0.38, 0.10, -1, color.rgb(244, 238, 214)),
+                              (0.05, -0.06, -1, color.rgb(250, 228, 150)),
+                              (0.40, 0.12, -1, color.rgb(206, 228, 246)),
+                              (-0.25, -0.02, 1, color.rgb(244, 238, 214)),
+                              (0.30, 0.08, 1, color.rgb(250, 228, 150))):
+        ents.append(world._create_entity('cube', (wx + dx, 1.12 + GROUND_H + dy, wz + sisi * 0.05),
+                                         (0.28, 0.34, 0.012), None, col, soft=False))
+    world._obj_ents.extend(ents)
+
+
 def build_house_block(world, scene, tx, ty, wx, wz):
     """Satu bangunan dari satu blok ubin H.
 
@@ -585,8 +613,96 @@ def trough_pour_point(world):
     return t['pos'] if t else None
 
 
-def default_prop_builder(world, scene):
+# ─── MODEL BLENDER ──────────────────────────────────────────────────────────
+# Pohon Blender (build_trees_lighthouse.py) sudah ada di assets/models sejak
+# lama tanpa satu pemanggil pun di game -- aturan #4. Tabel ini yang
+# menyambungkannya: (scene, ubin) -> (model, skala, hanya_dalam).
+# `hanya_dalam` = ubin di tepi peta (baris/kolom pertama dan terakhir) tetap
+# primitif: di cemetery 74 DT keliling itu PAGAR, bukan pohon yang dilihat.
+#
+# Sengaja TIDAK di tabel:
+#   mountain (TR) -- hutan lebat pinus dari integrasi/satu (mountain.py
+#       memberi `pembangun_pohon` sendiri). Pemilik minta hutan yang sudah
+#       diperbaiki bentuknya itu yang dipakai, jadi ia menang atas
+#       pohon_tropis (22 Okt 2026).
+#   farm (TR 8, DT 6) -- layar lima menit pertama dan patokan farm_wide yang
+#       dinilai buta di gauntlet. Rupa tekstur bake sengaja kusam di sumbernya
+#       (build_trees_lighthouse.py "muted") dan belum lolos kalibrasi rupa
+#       terhadap pohon prosedural; layar pertama tidak dipakai untuk menguji.
+#   lake (TR 15, DT 14) -- pohon tepinya adalah batas peta, dan scene ini
+#       dibiarkan prosedural sebagai pembanding rupa di regresi yang sama
+#       sampai kalibrasi itu diputuskan pemilik.
+#   pohon_bambu -- 53 GeomNode / 76.632 vertex per pohon. flattenStrong
+#       hanya menurunkannya ke 33 geom (bukan segelintir), dan 12 salinan
+#       tidak lebih cepat (ms/frame 33-37 asli lawan 35-44 diratakan, tiga
+#       ronde). Puluhan draw call per rumpun; jangan pasang sebelum dibake
+#       ulang menjadi satu material.
+#   kenney_tree_* -- sengaja tidak dipakai: tinggi 1,15-1,71 unit, warna
+#       teal yang lain gaya, dan mtllib-nya merujuk nama berkas yang salah.
+POHON_BLENDER = {
+    ('beach', PALM):  ('pohon_kelapa', 1.0, False),
+    ('town', TR):     ('pohon_tropis', 1.2, False),
+    ('cemetery', DT): ('pohon_mati',   1.1, True),
+}
+
+
+def model_pohon(scene, tid, tx, ty):
+    """(model, skala, rot_y) pohon Blender untuk ubin ini, atau None (primitif).
+
+    Dipakai pembangun scene DAN replika pohon tumbang (player.py), supaya yang
+    tumbang selalu rupa -- dan arah hadap -- yang sama dengan yang berdiri.
+    rot_y dari posisi ubin supaya sebaris pohon tidak terlihat di-copy.
+    """
+    v = POHON_BLENDER.get((getattr(scene, 'name', ''), tid))
+    if v is None:
+        return None
+    nama, skala, hanya_dalam = v
+    if hanya_dalam and not (0 < tx < scene.w - 1 and 0 < ty < scene.h - 1):
+        return None
+    return nama, skala, (tx * 73 + ty * 151) % 360
+
+
+def pasang_model_prop(world, nama, wx, wz, skala=1.0, rot_y=0.0, tint=None):
+    """Satu model Blender berdiri di (wx, wz), terdaftar di world._obj_ents.
+
+    Pola mercusuar beach.py dan interior._pasang: entity baru dengan salinan
+    model baru (make_obj_entity), dibersihkan _clear() lewat _obj_ents.
+    None kalau modelnya tidak ada -- pemanggil jatuh ke primitif lama.
+    """
+    from game.entities import make_obj_entity
+    tx, ty = int(round(wx / TS)), int(round(wz / TS))
+    y = GROUND_H + world.get_surface_height(tx, ty)
+    e = make_obj_entity(nama, (wx, y, wz), scale=skala, rot_y=rot_y, tint=tint)
+    if e is None:
+        return None
+    # Penanda untuk filter rock_sanctuary yang mematikan semua _obj_ents
+    # ber-y < 0,25 (tambalan tanah lama). Dasar pohon Blender memang di
+    # GROUND_H = 0,2, jadi tanpa ini seluruh pohon mountain hilang diam-diam.
+    e.is_pohon = nama.startswith('pohon_')
+    world._obj_ents.append(e)
+    return e
+
+
+# Sebaran model Blender per scene, dipanggil dari default_prop_builder.
+# Dulu spesifikasi ini ada di cemetery_builder/lake_builder, dan keduanya
+# mati dua lapis: make_obj_entity hilang di merge 5683e79, lalu sejak Fase 3
+# (4a425d3) lake.json/cemetery.json memuat builder 'default' sehingga kedua
+# fungsi itu tidak pernah dipanggil lagi. Di sini ia ikut jalur data.
+# pohon_mati keluar dari sebaran cemetery: pohon mati sekarang lewat ubin DT
+# (POHON_BLENDER), bukan ditabur acak di atas lantai.
+SEBARAN_OBJ = {
+    'cemetery': dict(specs=[('lantern', 2.0), ('pagar_bambu', 1.0)],
+                     count=7, seed=47, floor=D),
+    'lake':     dict(specs=[('lantern', 2.2), ('prop_peti_sayur', 1.0),
+                            ('prop_jerami', 1.0)],
+                     count=7, seed=33),
+}
+
+
+def default_prop_builder(world, scene, pembangun_pohon=None):
+    """`pembangun_pohon` menggantikan build_tree untuk ubin TR (mis. pinus gunung)."""
     from game.world import OBJ_TEX
+    build_tree_ = pembangun_pohon or build_tree
     from game.scenes.zone_paint import paint_zone
 
     outdoor = not getattr(scene, 'indoor', False)
@@ -604,7 +720,14 @@ def default_prop_builder(world, scene):
             tid = scene.tiles[ty][tx]
             wx, wz = tx * TS, ty * TS
 
-            if tid == TR: build_tree(world, wx, wz)
+            # Ubin TR yang punya pembangun khusus scene (hutan pinus mountain)
+            # tidak diganti model Blender.
+            pakai_blender = tid in (PALM, DT) or (tid == TR and pembangun_pohon is None)
+            pohon = model_pohon(scene, tid, tx, ty) if pakai_blender else None
+            if pohon and pasang_model_prop(world, pohon[0], wx, wz, pohon[1],
+                                           rot_y=pohon[2]) is not None:
+                pass      # model Blender; kalau modelnya hilang, jatuh ke primitif
+            elif tid == TR: build_tree_(world, wx, wz)
             elif tid == PALM: build_palm(world, wx, wz)
             elif tid == DT: build_dead_tree(world, wx, wz)
             elif tid == LN: build_lantern(world, wx, wz)
@@ -613,10 +736,28 @@ def default_prop_builder(world, scene):
             elif tid == TV: build_tv(world, wx, wz)
             elif tid == CHR: build_chair(world, wx, wz)
             elif tid == CAL: build_calendar(world, wx, wz)
+            elif tid == PPN: build_papan_titipan(world, wx, wz)
             elif tid == H: build_house_block(world, scene, tx, ty, wx, wz)
             elif tid in (ORE_TBG, ORE_BSI, ORE_EMS, ORE_KRS, ORE_MTH, CRYS):
                 ore_tex = OBJ_TEX.get(tid, 'crystal')
                 build_ore(world, wx, wz, ore_tex)
+
+    # Kandang kebun punya satu palung minum. Dibangun di sini, bukan dari ubin,
+    # supaya peta tidak berubah sama sekali — palung yang jadi tile akan
+    # menutup ubin dan bisa mengurung pemain di dalam kandang.
+    #
+    # Blok ini sempat terkubur di ekor scatter_obj_props (merge 60734dd
+    # menyisipkan fungsi itu di antara loop di atas dan blok ini, dengan
+    # indentasi yang sama). Akibatnya world.trough tidak pernah dibangun:
+    # "Beri Minum" hilang dari pie ternak dan tidak ada jalan lain mengisi
+    # air hewan kandang. Lihat obsidian/40-Bug.
+    world.trough = None
+    if getattr(scene, 'name', '') == 'farm':
+        build_trough(world, *TROUGH_TILE)
+
+    sebaran = SEBARAN_OBJ.get(getattr(scene, 'name', ''))
+    if sebaran:
+        scatter_obj_props(world, scene, **sebaran)
 
 
 # ── scatter_obj_props(), dibawa dari feature/3d-mobs ───────────────────────
@@ -632,15 +773,22 @@ def scatter_obj_props(world, scene, specs, count, seed=0, avoid=2, floor=None):
     """Sebar model .obj di tile lantai kosong yang walkable & jauh dari portal.
 
     specs : list (model_name, scale). Penempatan deterministik (LCG) supaya
-            konsisten tiap boot & tak menimpa portal/jalur. Aman: kalau model
-            tak ada atau tak ada tile kosong, fungsi diam saja.
+            konsisten tiap boot & tak menimpa portal/jalur. Model yang tak
+            ada dilewati DENGAN log error; tak ada tile kosong = diam saja.
     floor : tile (atau tuple tile) yang dianggap lantai kosong; default G (rumput).
             Scene berlantai lain (mis. kuburan = D) cukup oper floor=D.
     """
     from game.config import TILE_SIZE as _TS, GROUND_H as _GH, G as _G
+    import logging
     try:
         from game.entities import make_obj_entity
-    except Exception:
+    except Exception as e:
+        # Dulu `except: return` diam-diam. `make_obj_entity` hilang di merge
+        # 5683e79 dan lake/cemetery tampil tanpa satu pun model sebaran
+        # selama sebulan, tanpa satu baris log. Kegagalan ini harus berisik.
+        logging.error('scatter_obj_props: make_obj_entity tidak bisa diimpor '
+                      '(%s); %d model sebaran %s di %s TIDAK dipasang',
+                      e, count, [n for n, _ in specs], getattr(scene, 'name', '?'))
         return
     allowed = (floor,) if (floor is not None and not isinstance(floor, (tuple, list, set))) \
         else (tuple(floor) if floor is not None else (_G,))
@@ -658,6 +806,7 @@ def scatter_obj_props(world, scene, specs, count, seed=0, avoid=2, floor=None):
     placed = 0
     i = seed * 7 + 3
     used = set()
+    hilang = set()
     guard = 0
     while placed < count and guard < count * 40:
         guard += 1
@@ -668,16 +817,14 @@ def scatter_obj_props(world, scene, specs, count, seed=0, avoid=2, floor=None):
         used.add((tx, ty))
         name, sc = specs[placed % len(specs)]
         placed += 1
-        e = make_obj_entity(name, (tx * _TS, _GH, ty * _TS), scale=sc, rot_y=i % 360)
+        # Berdiri di permukaan ubinnya, sama dengan pasang_model_prop; dulu _GH
+        # polos sehingga di ubin berketinggian benda melayang/terbenam.
+        y = _GH + world.get_surface_height(tx, ty)
+        e = make_obj_entity(name, (tx * _TS, y, ty * _TS), scale=sc, rot_y=i % 360)
         if e is not None:
             world._obj_ents.append(e)
+        elif name not in hilang:
+            hilang.add(name)
+            logging.error('scatter_obj_props: model %r tidak ada; sebarannya di %s '
+                          'dilewati', name, getattr(scene, 'name', '?'))
 
-
-# ─── OBJEK KECIL ─────────────────────────────────────────────────────────────
-
-    # Kandang kebun punya satu palung minum. Dibangun di sini, bukan dari ubin,
-    # supaya peta tidak berubah sama sekali — palung yang jadi tile akan
-    # menutup ubin dan bisa mengurung pemain di dalam kandang.
-    world.trough = None
-    if getattr(scene, 'name', '') == 'farm':
-        build_trough(world, *TROUGH_TILE)

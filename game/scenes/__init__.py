@@ -36,6 +36,7 @@ from .greenhouse import build_greenhouse
 from .naga_cave import build_naga_cave
 from .dungeon import build_dungeon_placeholder
 from .swarga import build_swarga
+from .lawang import build_lawang
 from .scene_base import Scene
 
 _DIR = Path(__file__).resolve().parent
@@ -61,6 +62,7 @@ SCENE_BUILDERS = {
     'naga_cave': build_naga_cave,
     'dungeon': build_dungeon_placeholder,
     'swarga': build_swarga,
+    'lawang': build_lawang,      # Dukuh Lawang, Cerita Dua Desa
 }
 
 
@@ -90,3 +92,31 @@ def _muat(nama: str, bangun):
 
 
 SCENES = {nama: _muat(nama, bangun) for nama, bangun in SCENE_BUILDERS.items()}
+
+
+def sesuaikan_scene(nama: str, scene, state) -> None:
+    """Setel ubin & portal yang bergantung pada kemajuan cerita.
+
+    Cerita Dua Desa babak 2 membuka jalan lama Lawang <-> Gua Sang Hyang.
+    SCENES dibangun sekali saat impor, jadi peta yang bisa berubah harus disetel
+    ulang TIAP kali dimuat, dua arah (buka maupun tutup) — supaya memuat save
+    lama sesudah save baru tidak mewarisi ubin yang sudah dibuka.
+
+    Kaitnya dikunci NAMA scene di sini, bukan ditempel di objek Scene: sebagian
+    besar SCENES hasil bacaan berkas JSON, dan fungsi Python tidak bisa ikut
+    tersimpan di sana — alasan yang sama dengan BUILDER_NAMES di scene_base.py.
+    World3D.load_scene() memanggilnya sebelum ubin dibangun.
+    """
+    sebelum = list(scene.portals)
+    if nama == 'lawang':
+        from .lawang import sesuaikan_lawang
+        sesuaikan_lawang(scene, state)
+    elif nama == 'naga_cave':
+        from .naga_cave import sesuaikan_naga_cave
+        sesuaikan_naga_cave(scene, state)
+    if list(scene.portals) != sebelum:
+        # Graf portal berubah. perjalanan.rute di-cache (lru_cache), jadi tanpa
+        # ini warga yang rutenya dihitung saat jalan lama terbuka tetap menuju
+        # pintu (4,1) sesudah save lama menutupnya lagi.
+        from ..perjalanan import rute
+        rute.cache_clear()

@@ -16,14 +16,14 @@
 |---|---|---|
 | **M1** Lima Menit Pertama | **~90%** | judul/intro/tutorial/tracker/prompt/signpost ADA & lulus smoke_boot |
 | **M2** Tampilan | **~90%** | skybox+lighting+cuaca + dressing obj (farm/town/beach/greenhouse + mountain/lake/cemetery scatter) + **rumah panggung 3D (gantikan "gumpalan")** + ikon 3D Blender ADA; sisa: tekstur interior |
-| **M3** HUD & UX | **~95%** | HUD Disco + Majelis Batin + menu Jeda berlapis + **27 ikon 3D + panel chrome TSO** ADA; polish opsional |
+| **M3** HUD & UX | **~85%** | HUD Disco + Majelis Batin (F7, dipulihkan Okt 2026) + **27 ikon 3D + panel chrome TSO** ADA; menu Jeda HILANG di merge 5683e79 (belum dipulihkan) |
 | **M4** Gameplay core | **~90%** | crafting+laut, upgrade alat, tani Sakuna, **Peti Kirim, ternak produktif, quest 0→11 audit** ADA; sisa: balance via playtest manusia |
 | **M5** Animasi & kehidupan | **~90%** | walk mesh-swap + pose + jadwal NPC per-jam (+**fix kreatur-malam**) + ambient + telegraph/death mob + **3 mob remodel Blender** ADA; sisa: 4-frame walk |
 | **M6** Audio & game-feel | **~95%** | 27 SFX + 6 BGM ambient + musik tempur dinamis + SFX tempur + screen-shake + fade scene ADA |
 | **M7** Rilis | **~55%** | scaffold packaging + **audit bug multi-agen (6 bug nyata diperbaiki: 2 crash interaksi, quest tahap-7 macet, save atomik, dll)** ADA; sisa: jalankan build & uji exe (sisi user), perf pass, playtest |
 
 **BONUS lintas-milestone yang sudah jadi (di luar rencana awal):**
-- **Majelis Batin** — 4 suara batin (BARA/AKAR/SUKMA/LAPAR) + skill-check 2d6 white/red (TAB) — DNA Disco, di-port dari prototipe three.js
+- **Majelis Batin** — 4 suara batin (BARA/AKAR/SUKMA/LAPAR), modal PAGI PERTAMA, panel di **F7** — DNA Disco, di-port dari prototipe three.js. Hilang sebagian di merge 5683e79, dipulihkan Okt 2026 (dijaga `tools/probe_batin.py`). Skill-check 2d6 white/red ada di `game/batin.py` tapi TIDAK punya pemanggil, jadi tidak dipasang di UI
 - **Tani Sakuna mendalam** — jadwal air muda-basah/menua-kering, nutrisi, gulma → mutu ★1-5 → hasil & harga
 - **Kamera third-person** diperbaiki (lebih dekat, sudut lebih baik, smoothing stabil)
 - **Petapa Srimana 2 wujud** (kalem → galak saat interaksi), **Kapal Kurofune + Mercusuar**, **crafting + pelayaran**
@@ -66,14 +66,17 @@
 
 ## M3 — HUD & UX 2.0
 - [x] Skin HUD: panel chrome TSO (opsi A) — tekstur bingkai logam+parchment (`tools/make_ui_chrome.py`)
-      dipasang ke Majelis Batin, modal skill-check, & menu Jeda (tahan-stretch, bukan 9-slice penuh)
+      dipasang ke Majelis Batin, modal pilihan batin, Bangun/Beli (dan `_build_pause` yang belum dipakai);
+      teksturnya dipangkas ke bagian opaknya (49% tiap sumbu) sejak Okt 2026 — tahan-stretch, bukan 9-slice
 - [x] **Ikon item bergambar**: 18 ikon 64px prosedural PIL (`tools/make_item_icons.py`) —
       tanpa Blender (crop/material/produk belum punya model 3D); grid auto-muat via _item_icon_tex
 - [x] Inventory grid pakai ikon + tooltip; kategori tab jelas (grid sudah ada, kini berikon)
 - [ ] Pie menu NPC dengan ikon aksi
-- [x] Pause menu berlapis (Esc → Lanjut/Simpan/Muat/Pengaturan/Kontrol) + Settings volume master & fullscreen
-- [x] Save/Load slot UI (3 slot, ringkasan nama/hari/emas; slot 0 = save lama kompatibel)
-- [x] Sistem notifikasi terpadu (flash/emote/toast/subtitle batin)
+- [ ] Pause menu berlapis (Esc → Lanjut/Simpan/Muat/Pengaturan/Kontrol) + Settings volume master & fullscreen
+      — PERNAH ADA di feature/3d-mobs, hilang di merge 5683e79 (`open_pause`/`pause_input` tidak ada;
+      `_build_pause` membangun entity tanpa pemakai). Esc di HUD sekarang menyimpan.
+- [ ] Save/Load slot UI (3 slot) — hilang bersama menu Jeda; `GameState.slot_path` masih ada
+- [x] Sistem notifikasi terpadu (flash/emote/toast/subtitle batin — subtitle dipulihkan Okt 2026)
 **DoD:** semua sistem bisa dioperasikan tanpa membaca README.
 
 ## M4 — GAMEPLAY CORE LENGKAP

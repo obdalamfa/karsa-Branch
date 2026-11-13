@@ -2,7 +2,7 @@
   "passed": [
     "mountain portal and arrival connectivity",
     "naga_cave portal and arrival connectivity",
-    "cave crystals have real geometry, outward normals, and no clipped tint",
+    "cave crystals have real geometry, outward normals, and unclipped facet color",
     "exact hour visibility and sleep/wake without re-entering cave",
     "actual save/load and obsolete guardian position restoration",
     "save is atomic, corrupt files quarantined, dynamic fields survive",

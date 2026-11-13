@@ -8,7 +8,7 @@
   ],
   "indoor": true,
   "has_horizon": false,
-  "builder": "default",
+  "builder": "dungeon",
   "legend": [
     "CV_W",
     "CV_F"

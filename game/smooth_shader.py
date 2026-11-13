@@ -5,11 +5,14 @@ Diadaptasi dari LightingCommon.fx (FreeSO) ke GLSL Panda3D/Ursina.
 Tujuan: ganti tampilan voxel-flat menjadi soft-shaded ala Animal Crossing / TSO
 tanpa mengubah geometri entity.
 
-Fitur:
-  - Half-Lambert diffuse (lebih lembut dari Lambert biasa)
-  - Soft rim light (tepi mesh sedikit terang — efek "painterly")
+Fitur (yang BENAR-BENAR ada di fragmen; dulu docstring ini menjanjikan
+Half-Lambert dan rim light, dan keduanya tidak pernah ditulis --
+`sm_rim_strength` dideklarasikan tapi tidak dibaca siapa pun):
+  - Cel tiga pita (terang / tengah / gelap) dari dot(N, L)
+  - Ambient hemisfer: langit sejuk dari atas, pantulan tanah hangat dari bawah
   - Fake ambient occlusion: gradien gelap di bagian bawah world Y
-  - Saturation lift ringan untuk warna pop ala cartoon
+  - Tepi digelapkan (outline lembut) dari dot(N, V)
+  - Saturation lift ringan, bahu sorot, dan normalisasi puncak per rona
 
 Pemakaian:
     from .smooth_shader import get_smooth_shader, apply_smooth
@@ -64,6 +67,19 @@ uniform float sm_rim_strength;
 uniform float sm_ao_strength;
 uniform float sm_ao_height;
 uniform float sm_saturation;
+#ifdef BAYANGAN_MATAHARI
+// Matahari dari LightAttrib Panda: cuma peta bayangannya yang dibaca (warna
+// dan arah tetap lewat sm_sun_color / sm_sun_dir). Tanpa caster -- dalam
+// ruang atau node tanpa lampu -- Panda mengikat peta dummy dan texture()
+// memberi 1: terang penuh, tidak ada yang berubah. Seluruh blok ini hanya
+// dikompilasi dengan KARSA_SHADOW=1 (lihat _pasang_define di bawah): peta
+// dummy pun tetap dicicip tiap fragmen, terukur ~+7 ms/frame di llvmpipe.
+uniform struct {
+    sampler2DShadow shadowMap;
+    mat4 shadowViewMatrix;
+} p3d_LightSource[1];
+uniform mat4 p3d_ViewMatrix;
+#endif
 
 in vec3 v_world_pos;
 in vec3 v_world_normal;
@@ -71,6 +87,65 @@ in vec2 v_uv;
 in vec4 v_color;
 
 out vec4 fragColor;
+
+// Ambient HEMISFER: langit sejuk dari atas, pantulan tanah hangat dari bawah.
+//
+// Ini yang membuat sisi gelap SEJUK, bukan cuma redup. Di patokan farm_wide
+// rumput dalam bayangan lumbung punya B/G 0,92-0,98 sementara rumput tersinar
+// 0,67-0,69 -- bayangannya bergeser ke biru jauh lebih besar daripada
+// terangnya turun (luminans cuma ~1,5x). Di sini dulu ambient dan matahari
+// serona hangat (R/B 1,23 dan 1,19), jadi sisi gelap hanya matahari yang
+// diredupkan: probe_cahaya mengukur geser B/G sisi gelap -0,04, berlawanan
+// arah dengan patokannya.
+//
+// Konstanta, bukan uniform: uniform global baru wajib didaftarkan di
+// _UNIFORM_GLOBAL_AWAL (ubin lebur membekukannya kalau tidak -- bug yang
+// pernah nyata) dan wajib disediakan rumput, yang memakai fragmen ini juga.
+// Reratanya 1,0 per kanal, jadi muka tegak menerima sm_ambient apa adanya;
+// yang berubah cuma muka yang menghadap ke atas (lebih biru) dan ke bawah
+// (lebih hangat). Semuanya tetap DIKALI sm_ambient, jadi siang-malam dan
+// cek `cahaya_global` tetap memegang ambient sepenuhnya.
+//
+// Sengaja lemah (+-10% di biru). Birunya sudah dibawa sm_ambient sendiri
+// (game/cahaya.py); versi pertama memakai +-26% dan muka atas yang TERSINAR
+// -- tanah, bidang terbesar di layar -- ikut membiru (B/G 1,01-1,05),
+// berlawanan dengan rumput tersinar patokan yang hangat.
+const vec3 AMB_LANGIT = vec3(0.92, 1.00, 1.10);
+const vec3 AMB_TANAH  = vec3(1.08, 1.00, 0.90);
+
+// Tiga pita cel. Pita gelap 0,46 -> 0,40: dengan ambient yang kini sejuk,
+// pita gelap yang lebih rendah membiarkan ambient itu yang menentukan rona
+// sisi gelap. Rasio terang/gelap kelabu setelah post 1,53 -> 1,64, di dalam
+// rentang patokan 1,4-1,8.
+const float PITA_TENGAH = 0.70;
+const float PITA_GELAP  = 0.40;
+
+// Faktor terang matahari 0..1 dari shadow map.
+//
+// Satu panggilan texture() pada sampler2DShadow: peta bayangan Panda difilter
+// FT_shadow (GL_LINEAR + compare), jadi perangkat keras membandingkan EMPAT
+// texel tetangga dan memadukannya bilinear -- PCF 2x2 tanpa empat tap manual.
+// Empat tap manual terukur ~+6 ms/frame di llvmpipe tanpa beda yang terbaca
+// pada film 36 m.
+//
+// Koordinatnya dihitung DI FRAGMEN dari posisi dunia, bukan dioper dari
+// vertex: fragmen ini dipakai bersama grass_shader, dan varying baru akan
+// memutus rumput. Posisi digeser sepanjang normal (normal offset) sebelum
+// diproyeksikan -- bias kedalaman saja tidak cukup untuk bidang yang hampir
+// sejajar sinar (dinding samping, helai rumput) dan memberi jerawat.
+#ifdef BAYANGAN_MATAHARI
+float terang_matahari(vec3 N) {
+    vec3 p = v_world_pos + N * 0.06;
+    vec4 c = p3d_LightSource[0].shadowViewMatrix * (p3d_ViewMatrix * vec4(p, 1.0));
+    vec3 q = c.xyz / max(c.w, 1e-5);
+    // Di luar film: terang. Bayangan cuma ada di sekitar pemain.
+    if (q.x <= 0.0 || q.x >= 1.0 || q.y <= 0.0 || q.y >= 1.0 || q.z >= 1.0) {
+        return 1.0;
+    }
+    q.z -= 0.0015;
+    return texture(p3d_LightSource[0].shadowMap, q);
+}
+#endif
 
 vec3 lift_saturation(vec3 c, float s) {
     float luma = dot(c, vec3(0.299, 0.587, 0.114));
@@ -153,12 +228,16 @@ void main() {
     // menaikkan pita bayangan berarti menaikkan juga sisi terang yang sudah
     // terpotong. Sekarang sisi terang punya bahu, jadi jarak antar pita bisa
     // dipersempit tanpa kehilangan bentuk.
+    //
+    // Pita gelap kini 0,40 (lihat PITA_GELAP): pengali sisi gelap siang
+    // (0,53 0,56 0,62) lawan dulu (0,61 0,58 0,51) -- kanal hijau sama, merah
+    // turun, biru naik. Jauh dari 0,66/1,37 yang membuat atap hitam.
     if (ndl > 0.3) {
         diff = 1.0;          // Bagian yang kena sinar matahari (Terang)
     } else if (ndl > -0.1) {
-        diff = 0.70;         // Batas bayangan (Sedang)
+        diff = PITA_TENGAH;  // Batas bayangan (Sedang)
     } else {
-        diff = 0.46;         // Bagian yang tidak kena cahaya (Gelap)
+        diff = PITA_GELAP;   // Bagian yang tidak kena cahaya (Gelap)
     }
 
     // cam_pos dan V sudah dihitung di atas, sebelum normal dibalik — dan harus
@@ -175,7 +254,28 @@ void main() {
     float ao = mix(1.0 - sm_ao_strength * 0.5, 1.0,
                    clamp(v_world_pos.y / max(sm_ao_height, 0.01), 0.0, 1.0));
 
-    vec3 lit = base.rgb * (sm_ambient + sm_sun_color * diff) * ao;
+    // Kekuatan hemisfer mengikuti porsi matahari dalam cahaya total. Di luar
+    // ruang matahari memegang ~70% (siang, senja, hujan) dan hemisfer penuh;
+    // di dalam ruang ambient lampu memegang ~80% dan tidak ada langit yang
+    // bisa memberi fill biru -- lantai rumah tidak boleh membiru. Dibaca dari
+    // uniform yang sudah ada, jadi tidak ada uniform baru.
+    float porsi_sun = dot(sm_sun_color, vec3(1.0))
+                    / max(1e-4, dot(sm_sun_color + sm_ambient, vec3(1.0)));
+    float hemi = smoothstep(0.35, 0.60, porsi_sun);
+    vec3 amb = sm_ambient * mix(mix(vec3(1.0), AMB_TANAH, hemi),
+                                mix(vec3(1.0), AMB_LANGIT, hemi),
+                                N.y * 0.5 + 0.5);
+
+    // Bayangan jatuhan cuma menurunkan SUKU MATAHARI, dan paling dalam ke
+    // pita gelap -- tanah teduh jadi seterang sisi gelap benda, bukan cuma
+    // ambient. Ambient sendirian ~3x lebih gelap dari tersinar; patokan
+    // farm_wide memberi teduh/terbuka ~1,5, sama dengan rasio terang/gelap.
+#ifdef BAYANGAN_MATAHARI
+    float s_mat = terang_matahari(N);
+    diff = mix(min(diff, PITA_GELAP), diff, s_mat);
+#endif
+
+    vec3 lit = base.rgb * (amb + sm_sun_color * diff) * ao;
 
     lit *= outline_darken; // Tepi sedikit gelap, tidak full hitam
     lit = lift_saturation(lit, sm_saturation * 1.08); // Saturasi ringan — tidak neon
@@ -207,6 +307,24 @@ void main() {
 _smooth_shader = None
 _shader_failed  = False
 _pipeline_checked = False
+
+def _pasang_define(frag: str) -> str:
+    """Nyalakan blok BAYANGAN_MATAHARI di fragmen kalau shadow map diminta.
+
+    Ditentukan SEKALI saat modul diimpor: grass_shader mengimpor `_FRAG`
+    yang sama, jadi dua shader itu tidak bisa berbeda pendapat."""
+    try:
+        from .bayangan_matahari import diminta
+        if not diminta():
+            return frag
+    except Exception:
+        return frag
+    kepala, _, sisa = frag.partition('\n#version 140\n')
+    return kepala + '\n#version 140\n#define BAYANGAN_MATAHARI\n' + sisa
+
+
+_FRAG = _pasang_define(_FRAG)
+
 
 def reset_shader_cache():
     """Paksa re-compile shader berikutnya (panggil setelah hot-reload)."""
@@ -316,10 +434,16 @@ def get_smooth_shader():
 # yang ditulis saat kena matahari penuh, dan sisi bayangannya turun ke ~0,33.
 # Nisbah hangat/dingin aslinya dipertahankan — mataharinya tetap sedikit
 # kekuningan, ambient-nya tetap sedikit kebiruan.
+#
+# Catatan: nilai di sini cuma hidup sampai frame pertama -- app._init_env()
+# menimpanya dengan tabel game/cahaya.py. Yang wajib dari kamus ini adalah
+# NAMA-nya: uniform yang ada di sini dijamin ada sebelum frame pertama, dan
+# world._satukan_ubin() mencabut tepat nama-nama ini dari ubin lebur supaya
+# tidak membeku. Angkanya disamakan dengan target siang di game/cahaya.py.
 _UNIFORM_GLOBAL_AWAL = {
     'sm_sun_dir':   Vec3(-0.5, -0.8, -0.4),
-    'sm_sun_color': Vec3(0.70, 0.68, 0.61),
-    'sm_ambient':   Vec3(0.33, 0.34, 0.37),
+    'sm_sun_color': Vec3(0.871, 0.737, 0.478),
+    'sm_ambient':   Vec3(0.180, 0.267, 0.431),
 }
 
 

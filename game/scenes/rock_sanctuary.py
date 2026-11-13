@@ -301,8 +301,11 @@ def build_cavern(world, scene):
                 kolam_cahaya(world,x*TS,y*TS,3.2,(70,210,220),kuat=.42)
                 for k in range(3):
                     # Seed ikut koordinat tile supaya keempat klaster berbeda.
+                    # Palet berhenti di 214 per kanal: terang faset terpanggang
+                    # mencapai ~1,19x, jadi kanal di atas itu terpotong 1,0 dan
+                    # faset paling terang kehilangan gradasi.
                     seed=x*17+y*29+k
-                    pijar(world,_kristal_pijar_mesh(seed,(70+18*k,196+14*k,206+10*k)),
+                    pijar(world,_kristal_pijar_mesh(seed,(70+14*k,196+9*k,206+4*k)),
                           (x*TS+(k-1)*.36,.2,y*TS+(k%2)*.3),(.48,.9+k*.33,.48),
                           (255,255,255),rotation=(0,(seed*47)%360,0))
                 halo(world,(x*TS,1.0,y*TS),1.9,(90,220,230),kuat=.30)
@@ -693,8 +696,10 @@ def build_dungeon(world, scene):
                     halo(world, (wx, .9, wz), 1.1, rgb, kuat=.22)
             elif tid == K.CRYS:
                 for k in range(3):
+                    # Palet sama dengan gua naga; batas 214/kanal menjaga
+                    # gradasi faset terang tidak terpotong saat dipanggang.
                     seed = x * 17 + y * 29 + k
-                    pijar(world, _kristal_pijar_mesh(seed, (70 + 18 * k, 196 + 14 * k, 206 + 10 * k)),
+                    pijar(world, _kristal_pijar_mesh(seed, (70 + 14 * k, 196 + 9 * k, 206 + 4 * k)),
                           (wx + (k - 1) * .36, .2, wz + (k % 2) * .3), (.48, .9 + k * .33, .48),
                           (255, 255, 255), rotation=(0, (seed * 47) % 360, 0))
                 kolam_cahaya(world, wx, wz, 3.0, (70, 210, 220), kuat=.38)

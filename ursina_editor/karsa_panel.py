@@ -216,11 +216,11 @@ class PanelKarsa:
             scale=0.8, color=color.rgb(220, 200, 140), z=0.0)
         y -= 0.035
         for kolom, (tid, nama, ada_tekstur) in enumerate(kt.palet()):
-            bx = -0.5 + 0.02 + (kolom % 4) * ((self.LEBAR - 0.05) / 4)
-            by = y - (kolom // 4) * 0.021
+            bx = -0.5 + 0.02 + (kolom % kt.KOLOM_PALET) * ((self.LEBAR - 0.05) / kt.KOLOM_PALET)
+            by = y - (kolom // kt.KOLOM_PALET) * 0.021
             b = Button(
                 parent=self.root, text='' if ada_tekstur else '?',
-                scale=((self.LEBAR - 0.06) / 4, 0.019), position=(bx, by),
+                scale=((self.LEBAR - 0.06) / kt.KOLOM_PALET, 0.019), position=(bx, by),
                 color=kt.warna_ubin(tid), highlight_color=color.white,
             )
             b.on_click = (lambda t=tid, n=nama: self._pilih(t, n))
@@ -230,7 +230,7 @@ class PanelKarsa:
         # Palet terpisah dari palet ubin karena keduanya benda yang berbeda:
         # ubin MENEMPATI sel, objek BERDIRI di posisi bebas dan bisa digeser
         # gizmo. Mencampurnya di satu baris akan membuat perbedaan itu hilang.
-        y = y - (51 // 4 + 1) * 0.021
+        y = y - (kt.baris_palet() + 1) * 0.021
         self.label_kind = Text(
             parent=self.root, text='objek aktif: -', position=(-0.5 + 0.02, y),
             scale=0.8, color=color.rgb(200, 170, 230), z=0.0)

@@ -66,9 +66,11 @@ di viewport untuk mengecat**. Tombol `SIMPAN PETA` menulis
 `game/scenes/<nama>.json`.
 
 Ubin ditampilkan memakai **tekstur asli game** dari `assets/textures/`, bukan
-warna karangan, supaya peta terlihat seperti di game. Empat ubin (PALM, TV, CHR,
-CAL) tidak punya tekstur di `world.py`; keempatnya memakai warna netral dan
-ditandai `?` di palet.
+warna karangan, supaya peta terlihat seperti di game. Ubin yang tidak punya
+tekstur — PALM, TV, CHR, CAL, ditambah bangunan dan properti yang di game
+digambar `scenes/props.py` — memakai warna cadangan dari `WARNA_CADANGAN` dan
+ditandai `?` di palet. Kalau sebuah ubin tampil abu-abu netral di palet, itu
+berarti ia lupa didaftarkan di sana, bukan berarti tidak ada warna yang cocok.
 
 ### Yang belum bisa dilakukan di sini
 

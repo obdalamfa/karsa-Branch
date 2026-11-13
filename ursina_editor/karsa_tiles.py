@@ -20,10 +20,12 @@ dimuat lewat jalur absolut dan di-cache.
 
 ## Ubin tanpa tekstur
 
-Empat ubin -- PALM, TV, CHR, CAL -- tidak punya entri di `TILE_TEX` maupun
-`OBJ_TEX`, dan juga tidak ada di `OBJ_COLORS`. Ketiganya mendapat warna netral
-di `WARNA_CADANGAN` supaya tetap terlihat dan tetap bisa disunting, alih-alih
-menghilang dari viewport tanpa penjelasan.
+Sebagian ubin tidak punya entri di `TILE_TEX` maupun `OBJ_TEX`. Dua kelompok:
+ubin yang memang tidak bertekstur di game (PALM, TV, CHR, CAL), dan ubin yang
+di game digambar oleh builder prop -- rumah, warung, papan titipan, kulkas,
+pancuran. Tanpa warna cadangan, semuanya jatuh ke satu abu-abu anonim yang sama
+sehingga palet tidak bisa dibedakan satu sama lain. `WARNA_CADANGAN` menutup
+seluruh kelompok itu; yang belum tercatat di sana dianggap celah, bukan pilihan.
 """
 import sys
 from pathlib import Path
@@ -48,11 +50,33 @@ TEKSTUR = {**TILE_TEX, **OBJ_TEX}
 _ID_KE_NAMA = {tid: nama for nama, tid in TILE_IDS.items()}
 
 # Ubin yang tidak punya tekstur maupun warna di world.py.
+#
+# Daftar ini harus menutup SETIAP ubin tanpa tekstur. `warna_ubin()` memakai
+# abu-abu netral sebagai jaring terakhir, dan abu-abu itu sengaja tidak
+# enak dipakai: kalau sebuah ubin muncul abu-abu di palet, berarti ia lupa
+# didaftar di sini -- bukan berarti tidak ada warna yang cocok.
 WARNA_CADANGAN = {
     'PALM': (110, 150, 90),
     'TV':   (60, 60, 70),
     'CHR':  (130, 95, 60),
     'CAL':  (230, 230, 220),
+    # Bangunan dan properti yang di game dibangun `scenes/props.py`, bukan
+    # sebagai kubus bertekstur ubin. Warnanya cuma penanda di editor.
+    'WARUNG':         (168, 116, 74),
+    'RUMAH_PG':       (150, 112, 78),
+    'UNION_HL':       (140, 140, 150),
+    'SHRINE':         (150, 145, 130),
+    'DEBRIS':         (110, 104, 96),
+    'LAUNDRY':        (170, 190, 205),
+    'GRAFFITI_W':     (120, 126, 134),
+    'SHOP_EXT':       (170, 140, 100),
+    'CLINIC_EXT':     (200, 214, 210),
+    'SMITH_EXT':      (96, 88, 84),
+    'GREENHOUSE_EXT': (150, 190, 155),
+    'KUIL':           (200, 175, 110),
+    'KLK':            (205, 210, 214),
+    'SWR':            (150, 175, 190),
+    'PPN':            (140, 110, 78),
 }
 
 _TEX_CACHE: dict = {}
@@ -101,11 +125,23 @@ def _tekstur(nama: str):
     return t
 
 
+KOLOM_PALET = 4
+
+
 def palet() -> list:
     """Daftar (tid, nama, punya_tekstur) untuk panel palet editor."""
     return sorted(((tid, nama, tekstur_ubin(tid) is not None)
                    for nama, tid in TILE_IDS.items()),
                   key=lambda r: r[1])
+
+
+def baris_palet() -> int:
+    """Jumlah baris tombol palet. Panel memakainya untuk menggeser tata letak.
+
+    Dihitung dari isi palet, bukan dari angka tetap: dulu `karsa_panel` memakai
+    `51 // 4` dan ketika ubin bertambah ke 67 tombolnya menimpa panel objek.
+    """
+    return (len(palet()) + KOLOM_PALET - 1) // KOLOM_PALET
 
 
 class LayerUbin:

@@ -66,14 +66,14 @@ w=World3D(s); w.load_scene(s.scene_name)
 e=EntitiesManager(s); e.load_scene(s.scene_name)
 
 # Kristal gua: tiap shard harus punya geometri nyata, normal yang menunjuk
-# keluar, dan tint di bawah plafon clipping smooth_shader.
+# keluar, dan warna faset yang tidak terpotong di puncak.
 #
-# Plafon itu nyata, bukan gaya: `_FRAG` mengalikan warna dengan
-# (ambient + sun_color*diff), dan puncaknya 0,45 + 1,05 = 1,50 pada pita
-# terang. Tint lama (kanal G 201..225, B 213..233) menembus 1,0 di sana
-# sehingga faset paling terang terpotong pucat kelabu dan pita toon-nya hilang
-# -- kristal terbaca rata. Itu bug rupa yang tidak muncul sebagai "geometri
-# nol", jadi diperiksa terpisah di sini.
+# Shard ini memakai `unlit_shader` (`fx_suasana.pijar`), jadi plafon
+# smooth_shader tidak berlaku lagi. Warna akhirnya hasil kali dua hal: tint
+# entitas dan warna verteks yang dipanggang `_kristal_pijar_mesh` dari arah
+# cahaya tetap. Memeriksa tint mentah saja buta terhadap kanal yang jenuh di
+# 1,0 setelah dipanggang -- dan justru di situ faset paling terang kehilangan
+# gradasi lalu terbaca rata. Karena itu yang diperiksa hasil kalinya.
 #
 # Shard dikenali dari sidik mesh-nya (5 sisi -> 10 + 5 segitiga = 45 vertex),
 # bukan dari daftar warna tetap, supaya penyesuaian tint yang sah tidak
@@ -101,9 +101,11 @@ for ent in _shards:
     total=len(verts)//3
     assert outward>=total*0.8, f'normal menghadap ke dalam: {outward}/{total} keluar'
     c=ent.color
-    peak=max(c[0],c[1],c[2])*1.5
-    assert peak<=1.002, f'tint menembus plafon clipping: puncak {peak:.3f} > 1,0'
-record('cave crystals have real geometry, outward normals, and no clipped tint')
+    cols=list(getattr(ent.model,'colors',[]))
+    assert cols, 'shard tanpa warna verteks: terang faset tidak terpanggang'
+    peak=max(max(col[0]*c[0],col[1]*c[1],col[2]*c[2]) for col in cols)
+    assert peak<=0.999, f'warna terang terpotong di puncak: {peak:.3f} > 1,0'
+record('cave crystals have real geometry, outward normals, and unclipped facet color')
 
 for minute,expected,activity in ((359,{'naga_bijak','banaspati'},'meditating'),
     (360,{'naga_bijak'},'meditating'),(1079,{'naga_bijak'},'meditating'),
@@ -186,7 +188,10 @@ logging.disable(logging.NOTSET)
 record('save is atomic, corrupt files quarantined, dynamic fields survive')
 
 panels=Mock()
-pl=SimpleNamespace(state=s)
+# Pemain tiruan: controller memanggil `_play_tool_anim` untuk aksi bicara
+# (player.py:1705). Tanpa itu dialog lolos uji hanya kalau aksinya kebetulan
+# tidak beranimasi -- persis celah yang dulu menyembunyikan pose bicara diam.
+pl=SimpleNamespace(state=s,_play_tool_anim=lambda *a,**k:None)
 controller=InteractionController(pl,w)
 for key in ('naga_bijak','banaspati'):
     assert any(opt[0]=='amati' and opt[2] for opt in controller.build_pie_options(key))
@@ -600,9 +605,22 @@ for (x,y),ent in list(_layer.ubin.items())[:40]:
     assert _layer.koordinat(ent)==(x,y), (x,y,_layer.koordinat(ent))
 assert _layer.koordinat(object()) is None, 'entity asing dianggap ubin'
 _palet=_kt.palet()
-assert len(_palet)==51, f'palet harus mencakup 51 ubin, dapat {len(_palet)}'
-_bertekstur=sum(1 for _,_,ada in _palet if ada)
-assert _bertekstur>=47, f'hanya {_bertekstur} ubin punya tekstur'
+# Palet adalah katalog: setiap jenis ubin di `TILE_IDS` harus muncul tepat
+# sekali. Dulu di sini tertulis "51" dan angka itu basi begitu ubin bertambah
+# ke 67 -- assertion-nya gagal bukan karena paletnya rusak.
+assert sorted(tid for tid,_,_ in _palet)==sorted(_kt.TILE_IDS.values()), \
+    'palet harus memuat tiap jenis ubin tepat sekali'
+# Ubin tanpa tekstur wajib punya warna sendiri. Tanpa itu semuanya jatuh ke
+# abu-abu anonim yang sama dan palet berhenti bisa dibedakan -- persis yang
+# terjadi sebelum WARNA_CADANGAN menutup ubin hasil builder prop.
+_tanpa_tex=[(tid,nama) for tid,nama,ada in _palet if not ada]
+_abu_abu=[(tid,nama) for tid,nama in _tanpa_tex
+          if tid not in _kt.OBJ_COLORS and nama not in _kt.WARNA_CADANGAN]
+assert not _abu_abu, f'ubin tanpa tekstur dan tanpa warna sendiri: {_abu_abu}'
+# Panel menggeser panel objek dengan `baris_palet()`; kalau barisnya kurang,
+# tombol palet menimpa panel di bawahnya.
+assert _kt.baris_palet()*_kt.KOLOM_PALET>=len(_palet), \
+    f'{len(_palet)} ubin tidak muat dalam {_kt.baris_palet()} baris'
 # Satu perubahan harus mendarat di scene DAN viewport.
 from game.config import G as _G, FN as _FN
 _lama=SCENES['farm'].tiles[0][0]
@@ -633,7 +651,19 @@ import shutil as _shutil
 import ursina_editor.karsa_panel as _kp
 import ursina_editor.karsa_scene as _ksc
 _sesi=_kp.SesiKarsa()
-assert len(_sesi.daftar())==15, len(_sesi.daftar())
+# Yang dijanjikan panel adalah "semua scene game". Dulu di sini tertulis angka
+# 15 dan angka itu basi begitu `lawang` lahir -- assertion gagal bukan karena
+# daftarnya rusak. Sekarang yang diperiksa sumbernya: daftar editor harus sama
+# persis dengan kamus builder yang juga dipakai game, dan setiap nama yang
+# ditawarkan harus benar-benar bisa dimuat. Scene yang muncul di panel tapi
+# gagal dibuka lebih buruk daripada scene yang tidak muncul sama sekali.
+from game.scenes import SCENE_BUILDERS as _SCENE_BUILDERS
+assert set(_sesi.daftar())==set(_SCENE_BUILDERS), \
+    f'editor menawarkan {sorted(_sesi.daftar())}, game membangun {sorted(_SCENE_BUILDERS)}'
+for _nama_scene in _sesi.daftar():
+    _isi,_sumbernya=_ksc.muat(_nama_scene)
+    assert _isi.w>0 and _isi.h>0 and len(_isi.tiles)==_isi.h, _nama_scene
+    assert _sumbernya in ('data','kode'), (_nama_scene,_sumbernya)
 _sesi.buka('farm')
 assert _sesi.scene is not None and _sesi.layer is not None and not _sesi.kotor
 assert _sesi.klik(None) is False and _sesi.klik(object()) is False, \

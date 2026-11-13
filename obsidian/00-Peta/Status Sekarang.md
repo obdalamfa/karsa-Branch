@@ -1,13 +1,23 @@
 ---
 judul: Status Sekarang
 tipe: peta
-diperbarui: 2026-10-30
-commit_acuan: e90d729 (branch ccr-ae8cd761-mj4kbu, PR #15)
-regresi: 15/15 lulus (scene baru lawang) + semua baris global, tampilan 49/49 (lima menit, majelis batin, buy/sinema, kamera Q/E, lore gua, ...)
+diperbarui: 2026-11-13
+commit_acuan: fbadbfd (branch ccr-ae8cd761-mj4kbu, PR #15)
+regresi: 15/15 scene lulus + semua baris global, dua desa 154/154, tampilan 74/74, animasi gerak 23/23 (lima menit, majelis batin, buy/sinema, kamera Q/E, lore gua, dua desa, ...)
 tags: [moc, status]
 ---
 
 # Status Sekarang
+
+> [!success] Pembaruan 2026-11-13 — baris regresi "dua desa"
+> Logika Cerita Dua Desa tidak pernah menyentuh layar, jadi tidak ada scene
+> yang bisa menangkapnya kalau rusak. Kini ada `tools/probe_dua_desa.py`
+> (154 pemeriksaan) dan baris `dua desa` di `tools/regress.py`. Yang diuji
+> nilai, bukan angka salinan: imbalan 1,25–1,35× harga Warung untuk 19
+> titipan, nilai lawan di dalam rentang + naik ketat tiap tahun, emas
+> sebagai selisih. Strings yang dilihat pemain (`baris_lomba`,
+> `pesan_pagi`, pesan kilat) justru dipatok. Regresi penuh 15/15 scene,
+> 0 gagal → [[2026-11-12 — Regresi- baris -dua desa- lewat probe_dua_desa.py]].
 
 > [!success] Pembaruan 2026-11-03 (malam) — kuburan berpenghuni, mob terbaca
 > Kuburan Tua punya kemamang (malam) dan tuyul untuk tahap Misteri Kuburan.
@@ -188,7 +198,7 @@ tags: [moc, status]
 ## Angka terbaru
 
 ```
-14/14 scene lulus · 0 pemeriksaan gagal · boot 3,6 detik
+15/15 scene lulus · 0 pemeriksaan gagal · boot 3,6 detik
 ms/frame  46,4 (house)  →  119,6 (mountain)      [dirender CPU, bukan GPU]
 entity     384 (studio) →   2177 (mountain)
 ```
@@ -202,9 +212,10 @@ Angka ms/frame berasal dari runner tanpa GPU (Mesa software). Ia berguna untuk
 |---|---|---|
 | 4–29 FPS di mesin pemilik, belum pernah diprofil di GPU | 🔴 | [[Tahap 3 — Performa]] |
 | `PLAY.md` menunjuk baris & flag yang sudah tidak ada | 🟡 | [[Utang Teknis]] |
-| Cerita Dua Desa belum punya baris regresi; harness-nya di luar repo | 🟡 | [[Ya, berikan tidak menyerahkan hadiah]] |
 
 ## Yang baru saja lunas
+
+- **Cerita Dua Desa punya baris regresi** (12 Nov). Harness-nya di luar repo dan tidak punya penjaga, jadi probe berdiri sendiri mengikuti pola `probe_lore_gua.py`. 154 pemeriksaan, nilai bukan angka salinan; regresi penuh 15/15 scene → [[2026-11-12 — Regresi- baris -dua desa- lewat probe_dua_desa.py]].
 
 - **`arah_maju` memvonis** (13 Okt, gauntlet M2). "Kontaminasi antar-scene" ternyata cacat di alat ukurnya sendiri: tabrakan peta membelokkan lintasan, dan arah acuan dibaca dari kamera yang tertinggal. Setelah diperbaiki, 42/42 pengukuran menunjukkan 0°. Rumus lama dipasang kembali → farm/town/house GAGAL 180°.
 

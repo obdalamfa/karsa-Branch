@@ -2,12 +2,25 @@
 judul: Status Sekarang
 tipe: peta
 diperbarui: 2026-11-13
-commit_acuan: fbadbfd (branch ccr-ae8cd761-mj4kbu, PR #15)
-regresi: 15/15 scene lulus + semua baris global, dua desa 154/154, tampilan 74/74, animasi gerak 23/23 (lima menit, majelis batin, buy/sinema, kamera Q/E, lore gua, dua desa, ...)
+commit_acuan: 096bb31 (branch ccr-ae8cd761-mj4kbu, PR #15)
+regresi: 15/15 scene lulus + semua baris global, gauntlet 20/20, dua desa 154/154, tampilan 74/74, animasi gerak 23/23 (lima menit, majelis batin, buy/sinema, kamera Q/E, lore gua, dua desa, ...)
 tags: [moc, status]
 ---
 
 # Status Sekarang
+
+> [!success] Pembaruan 2026-11-13 (sore) — gauntlet hijau 20/20
+> `gauntlet/check.py` gagal di tiga titik yang tidak ada hubungannya dengan
+> kode yang sedang dikerjakan: ketiganya assertion yang memaku angka/rumus
+> lama sementara kodenya berubah sah. Diperbaiki dengan mengukur invarian
+> aslinya, bukan melonggarkan batas: warna kristal diperiksa sebagai hasil
+> kali entity × vertex terpanggang (palet lama memuncak 1,0493 → terpotong;
+> palet baru 0,9936), palet editor menuntut satu warna per jenis ubin
+> (15 properti `props.py` dulu jatuh ke abu-abu anonim), dan daftar scene
+> dibandingkan dengan `SCENE_BUILDERS` + tiap scene harus benar-benar bisa
+> dimuat. Uji suntik membuktikan assertion palet menggigit. Gauntlet
+> **20/20**, regresi **15/15 scene, 0 gagal**, boot 5,4 detik
+> → [[2026-11-13 — Gauntlet- tiga assertion basi dibalikkan ke invarian aslinya]].
 
 > [!success] Pembaruan 2026-11-13 — baris regresi "dua desa"
 > Logika Cerita Dua Desa tidak pernah menyentuh layar, jadi tidak ada scene
@@ -83,8 +96,9 @@ tags: [moc, status]
 > - Pemain yang diam di lantai 13 tidak lagi terlempar balik ke 12
 >   → [[Pemain terpantul dari dasar gua]].
 >
-> Regresi 14/14 + baris baru "lore gua". Terbuka: `gauntlet/check.py` gagal
-> di tint kristal gua (1,5 > 1,0), sama persis di 630c805 sebelum perubahan ini.
+> Regresi 14/14 + baris baru "lore gua". ~~Terbuka: `gauntlet/check.py` gagal
+> di tint kristal gua (1,5 > 1,0), sama persis di 630c805 sebelum perubahan ini.~~
+> (lunas 13 Nov: warna yang tampil diukur sebagai hasil kali, palet diturunkan)
 
 > [!success] Pembaruan 2026-10-26 — HUD, menu, menu jeda, kotak putih
 > Panel I/J/M/H/P/N/F1 kini kartu bergaya layar judul:
@@ -194,13 +208,14 @@ tags: [moc, status]
 | Avatar Vitaboy jalur native C++ (0,288 ms/avatar) | [[Avatar Vitaboy]] |
 | **Otonomi NPC hidup** — NPC berjalan ke perabot, motif pulih saat memakai | [[Tahap 5 — Autonomi]] · pemanggil di `game/npc.py:92` |
 | CI terbukti hijau di GitHub, bukan cuma di mesin lokal | 4 larian `success` |
+| `gauntlet/check.py` 20/20 — dijalankan di mesin sungguhan | larian 2026-11-13, exit 0 |
 
 ## Angka terbaru
 
 ```
-15/15 scene lulus · 0 pemeriksaan gagal · boot 3,6 detik
-ms/frame  46,4 (house)  →  119,6 (mountain)      [dirender CPU, bukan GPU]
-entity     384 (studio) →   2177 (mountain)
+15/15 scene lulus · gauntlet 20/20 · 0 pemeriksaan gagal · boot 5,4 detik
+ms/frame  16,2 (house)  →  47,2 (mountain)      [dirender CPU, bukan GPU]
+entity     555 (smith)  →  3035 (mountain)
 ```
 
 Angka ms/frame berasal dari runner tanpa GPU (Mesa software). Ia berguna untuk
@@ -214,6 +229,8 @@ Angka ms/frame berasal dari runner tanpa GPU (Mesa software). Ia berguna untuk
 | `PLAY.md` menunjuk baris & flag yang sudah tidak ada | 🟡 | [[Utang Teknis]] |
 
 ## Yang baru saja lunas
+
+- **Gauntlet 20/20, tiga assertion basi** (13 Nov). Kristal gua diperiksa sebagai warna yang benar-benar tampil (entity × vertex terpanggang), bukan `max(ent.color)*1.5`; palet editor menuntut satu warna per jenis ubin setelah 15 properti `props.py` ternyata jatuh ke abu-abu anonim yang sama; daftar scene editor dibandingkan dengan `SCENE_BUILDERS` dan tiap scene harus bisa dimuat, bukan dipaku 15. Tata letak palet yang dulu `51 // 4` = 12 baris untuk 67 ubin juga bug sungguhan: 5 baris tombol menimpa panel objek → [[2026-11-13 — Gauntlet- tiga assertion basi dibalikkan ke invarian aslinya]].
 
 - **Cerita Dua Desa punya baris regresi** (12 Nov). Harness-nya di luar repo dan tidak punya penjaga, jadi probe berdiri sendiri mengikuti pola `probe_lore_gua.py`. 154 pemeriksaan, nilai bukan angka salinan; regresi penuh 15/15 scene → [[2026-11-12 — Regresi- baris -dua desa- lewat probe_dua_desa.py]].
 

@@ -24,7 +24,8 @@ try:
     import mathutils
 except ImportError:
     import sys
-    BLEND_LUAR = r'E:/Game Research/Lembah Karsa 3D/.claude/worktrees/coba-play-game-d5f058/assets/blend/characters_vitaboy.blend'
+    BLEND_LUAR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              'assets', 'blend', 'characters_vitaboy.blend').replace('\\', '/')
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from blender_rpc import run
     # Dua panggilan: open_mainfile meninggalkan konteks tanpa objek aktif
@@ -33,7 +34,7 @@ except ImportError:
     print(run(f"exec(open(r'{os.path.abspath(__file__)}', encoding='utf-8').read())"))
     raise SystemExit
 
-WT = r'E:/Game Research/Lembah Karsa 3D/.claude/worktrees/coba-play-game-d5f058'
+WT = os.environ.get('LK_WORKTREE') or r'E:/Game Research/Karsa Brench'
 BLEND = WT + '/assets/blend/characters_vitaboy.blend'
 TEX_DIR = WT + '/assets/blend/tex'
 OUT_DIR = WT + '/assets/models/actors'
@@ -310,7 +311,7 @@ def ekspor(rig, nama):
     ad = rig.animation_data or rig.animation_data_create()
     for t in list(ad.nla_tracks):
         ad.nla_tracks.remove(t)
-    for anim in ('idle', 'walk', 'hoe', 'swing', 'water'):
+    for anim in ('idle', 'walk', 'hoe', 'swing', 'water', 'talk', 'wave', 'give'):
         act = bpy.data.actions.get(f'{nama}_rig_{anim}')
         if act is None:
             continue

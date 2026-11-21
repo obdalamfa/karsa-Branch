@@ -14,10 +14,10 @@ import bpy
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'tools'))
-from blender_walk_cycle import buat_siklus_jalan  # noqa: E402
+from blender_walk_cycle import bangun_semua_aksi  # noqa: E402
 TEX_DIR = os.path.join(ROOT, 'assets', 'blend', 'tex')
 OUT_DIR = os.path.join(ROOT, 'assets', 'models', 'actors')
-ANIMS = ('idle', 'walk', 'hoe', 'swing', 'water')
+ANIMS = ('idle', 'walk', 'hoe', 'swing', 'water', 'talk', 'wave', 'give')
 
 
 def _remap_images():
@@ -32,7 +32,7 @@ def _remap_images():
 def _export(name):
     rig = bpy.data.objects[name + '_rig']
     parts = [o for o in bpy.data.objects if o.parent == rig]
-    buat_siklus_jalan(rig)
+    bangun_semua_aksi(rig)
 
     ad = rig.animation_data or rig.animation_data_create()
     for t in list(ad.nla_tracks):

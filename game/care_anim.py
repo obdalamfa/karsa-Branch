@@ -1457,6 +1457,23 @@ def mulai(player, jenis: str, titik_tuang=None, pemicu=None,
     aksi.mulai(player)
     aksi.terapkan(player)
     player._care_anim = aksi
+    # Jika pemain menggunakan rig 29-tulang (_char), putar juga NLA clip yang cocok
+    ch = getattr(player, '_char', None)
+    if ch is not None:
+        _PETA_CHAR = {
+            'siram': 'water', 'minum': 'water',
+            'tebang': 'swing', 'tambang': 'swing',
+            'petik': 'give', 'ambil': 'give', 'pakan': 'give', 'belai': 'give',
+            'bicara': 'talk', 'dengar': 'idle',
+            'gosok': 'swing',
+        }
+        klip = _PETA_CHAR.get(jenis)
+        if klip == 'talk':
+            ch.set_bicara(True)
+        elif klip == 'idle':
+            ch.set_bicara(False)
+        elif klip:
+            ch.mainkan_sekali(klip)
     return aksi
 
 
@@ -1543,6 +1560,9 @@ def _lepas_properti(player) -> None:
 
 def bereskan(player) -> None:
     """Akhiri aksi yang sedang berjalan dan kembalikan rig ke pose diam."""
+    ch = getattr(player, '_char', None)
+    if ch is not None:
+        ch.set_bicara(False)
     aksi = getattr(player, '_care_anim', None)
     if aksi is not None:
         aksi.usai(player)

@@ -79,6 +79,7 @@ class CharActor:
                 self.actor.loop(a)
                 self.actor.setControlEffect(a, self._bobot[a])
         self._sekali = None
+        self._bicara = False
 
     def _ke_tengah(self, parent):
         """Tarik model ke titik asal entity-nya, di bidang mendatar.
@@ -114,6 +115,14 @@ class CharActor:
                 return
             self.actor.setControlEffect(self._sekali, 0.0)
             self._sekali = None
+        if self._bicara and 'talk' in self.anims:
+            for a in self._bobot:
+                if a in self.anims:
+                    self.actor.setControlEffect(a, 0.0)
+            self.actor.setControlEffect('talk', 1.0)
+            return
+        if 'talk' in self.anims:
+            self.actor.setControlEffect('talk', 0.0)
         jalan = 1.0 if laju > 0.05 else 0.0
         langkah = min(1.0, dt / _BAUR)
         w = self._bobot['walk'] + (jalan - self._bobot['walk']) * langkah
@@ -124,13 +133,36 @@ class CharActor:
         if 'walk' in self.anims and laju > 0.05:
             self.actor.setPlayRate(max(0.6, min(2.8, laju / _LAJU_ACUAN)), 'walk')
 
+    def set_bicara(self, aktif: bool):
+        """Loop animasi tulang 'talk' selama percakapan berlangsung."""
+        if 'talk' not in self.anims:
+            self._bicara = False
+            return False
+        if aktif and not self._bicara:
+            self._bicara = True
+            for a in self._bobot:
+                if a in self.anims:
+                    self.actor.setControlEffect(a, 0.0)
+            self.actor.setControlEffect('talk', 1.0)
+            self.actor.loop('talk')
+        elif not aktif and self._bicara:
+            self._bicara = False
+            self.actor.stop('talk')
+            self.actor.setControlEffect('talk', 0.0)
+            for a, b in self._bobot.items():
+                if a in self.anims:
+                    self.actor.setControlEffect(a, b)
+        return True
+
     def mainkan_sekali(self, nama):
-        """Animasi kerja (hoe/swing/water) diputar penuh sekali di atas baur jalan."""
+        """Animasi kerja/interaksi (hoe/swing/water/wave/give/talk) diputar penuh sekali."""
         if nama not in self.anims:
             return False
         for a in self._bobot:
             if a in self.anims:
                 self.actor.setControlEffect(a, 0.0)
+        if 'talk' in self.anims and nama != 'talk':
+            self.actor.setControlEffect('talk', 0.0)
         self.actor.setControlEffect(nama, 1.0)
         self.actor.play(nama)
         self._sekali = nama

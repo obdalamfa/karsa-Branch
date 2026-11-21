@@ -911,6 +911,7 @@ class EntitiesManager:
             
             model_name = 'naga' if is_boss else f"mob_{kind}"
             panda_model = load_model_file(model_name)
+            actor._base_scale = sc
             if panda_model:
                 actor.model = panda_model
                 actor.scale = sc
@@ -1039,7 +1040,11 @@ class EntitiesManager:
                 actor._hp_bar.scale_x = 0.9 * sc * ratio
 
                 if actor.dmg_flash_ms > 0:
-                    actor.color = color.white
+                    actor.color = color.rgb(255, 110, 110)
+                elif actor.windup_ms > 0:
+                    # Kedip peringatan oranye-merah saat hantu/monster mengambil ancang-ancang menyerang
+                    kedip = 0.5 + 0.5 * math.sin(actor.windup_ms * 0.04)
+                    actor.color = color.rgb(255, int(150 + 90 * kedip), int(120 + 100 * kedip))
                 else:
                     actor.color = color.white # Revert to normal
                 

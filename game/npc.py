@@ -193,6 +193,10 @@ class NPC(BaseActor):
         dz = pz / _TS - self.logical_y
         if abs(dx) > 1e-6 or abs(dz) > 1e-6:
             self._paling(math.degrees(math.atan2(dx, dz)), self.PALING_MS)
+        ch = getattr(self, '_char', None)
+        if ch is not None:
+            ch.set_bicara(True)
+            ch.mainkan_sekali('wave')
 
     # ── berpaling ───────────────────────────────────────────────────────────
     def _paling(self, ke_derajat: float, panjang_ms: float) -> None:
@@ -237,6 +241,12 @@ class NPC(BaseActor):
             self.mulai_percakapan(px, pz)
         self._tick_paling(dt)
         self._bicara_t += dt
+        ch = getattr(self, '_char', None)
+        if ch is not None and 'talk' in getattr(ch, 'anims', ()):
+            # Rig 29-tulang sudah menggerakkan SPINE, NECK, HEAD, dan tangan lewat
+            # NLA track 'talk' / 'wave'. Jangan miringkan seluruh entity dari mata kaki!
+            ch.update(dt, 0.0)
+            return
         t = self._bicara_t
 
         napas = self.NAPAS_DERAJAT * math.sin(t * math.tau / self.NAPAS_PERIODE)
@@ -269,6 +279,9 @@ class NPC(BaseActor):
         kepala.rotation_z = -sway * self.KEPALA_LAWAN
 
     def akhiri_percakapan(self) -> None:
+        ch = getattr(self, '_char', None)
+        if ch is not None:
+            ch.set_bicara(False)
         if getattr(self, '_bicara_t', None) is None:
             return
         self._bicara_t = None

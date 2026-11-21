@@ -1134,7 +1134,7 @@ class Game3D:
             s.player_x, s.player_y = float(tx), float(ty)
             return
         # Cari melebar dari titik yang sudah dijepit, cincin demi cincin.
-        span = max(len(grid[0]), len(grid)) if grid else 12
+        span = (len(grid[0]) + len(grid)) if grid else 16
         for r in range(1, span + 1):
             for dy in range(-r, r + 1):
                 for dx in range(-r, r + 1):
@@ -1167,6 +1167,9 @@ class Game3D:
         """
         from . import care_anim
         p = self.player
+        ch_p = getattr(p, '_char', None)
+        if ch_p is not None:
+            ch_p.update(dt, 0.0)
         aksi = getattr(p, '_care_anim', None)
         if aksi is not None:
             aksi.update(dt)
@@ -1185,6 +1188,18 @@ class Game3D:
         actor = self.entities.actors.get(lawan) if lawan else None
         if actor is not None and hasattr(actor, 'tick_percakapan'):
             actor.tick_percakapan(dt, p.x, p.z)
+
+        # Bingkai kamera halus ke titik tengah antara pemain dan lawan bicara
+        if actor is not None and hasattr(self, 'camera_focus'):
+            from ursina import camera, Vec3, lerp
+            mid_x = (p.x + actor.x) * 0.5
+            mid_z = (p.z + actor.z) * 0.5
+            ideal_focus = Vec3(mid_x, p.y + 1.35, mid_z)
+            self.camera_focus = lerp(self.camera_focus, ideal_focus, min(1.0, 4.5 * dt))
+            target_cam = self.camera_focus + self._camera_offset() * 0.86
+            camera.position += (target_cam - camera.position) * min(1.0, 4.5 * dt)
+            camera.look_at(self.camera_focus)
+            camera.rotation_z = 0
 
         # Wajah harus tetap jalan selama modal terbuka. Loop entitas dan
         # player.tick() sengaja TIDAK dipanggil di sini (itu akan memajukan

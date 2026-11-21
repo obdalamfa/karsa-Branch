@@ -1547,35 +1547,49 @@ class UIManager:
 
     def _build_dialog_box(self):
         W, H, Y = self._DLG_W, self._DLG_H, self._DLG_Y
-        kayu, krem = color.rgb(96, 64, 40), color.rgb(242, 230, 204)
-        self._dlg_border = _ui(scale=(W + 0.022, H + 0.022), position=(0, Y),
+        kayu, krem = color.rgb(86, 56, 34), color.rgb(245, 234, 210)
+        emas = color.rgb(188, 146, 82)
+        self._dlg_shadow = _ui(scale=(W + 0.036, H + 0.036), position=(0.008, Y - 0.010),
+                               color=color.rgba(18, 12, 8, 150), z=0.065)
+        self._dlg_border = _ui(scale=(W + 0.024, H + 0.024), position=(0, Y),
                                color=kayu, z=0.06)
+        self._dlg_trim = _ui(scale=(W + 0.008, H + 0.008), position=(0, Y),
+                             color=emas, z=0.055)
         self._dlg_bg = _ui(scale=(W, H), position=(0, Y), color=krem, z=0.05)
-        x_pot = -W / 2 + 0.03 + self._POT / 2
-        self._dlg_bingkai = _ui(scale=(self._POT + 0.016, self._POT + 0.016),
-                                position=(x_pot, Y), color=kayu, z=0.04)
-        self._dlg_potret_bg = _ui(scale=(self._POT, self._POT), position=(x_pot, Y),
-                                  color=color.rgb(206, 190, 160), z=0.035)
-        self._dlg_potret = _ui(scale=(self._POT, self._POT), position=(x_pot, Y),
+        x_pot = -W / 2 + 0.035 + self._POT / 2
+        self._dlg_pot_x = x_pot
+        self._dlg_pot_y = Y + 0.006
+        self._dlg_bingkai = _ui(scale=(self._POT + 0.020, self._POT + 0.020),
+                                position=(x_pot, self._dlg_pot_y), color=kayu, z=0.04)
+        self._dlg_potret_bg = _ui(scale=(self._POT, self._POT), position=(x_pot, self._dlg_pot_y),
+                                  color=color.rgb(216, 200, 170), z=0.035)
+        self._dlg_potret = _ui(scale=(self._POT, self._POT), position=(x_pot, self._dlg_pot_y),
                                color=color.white, z=0.03)
-        x_teks = x_pot + self._POT / 2 + 0.035
+        x_teks = x_pot + self._POT / 2 + 0.038
         self._DLG_X_TEKS = x_teks
-        self._dlg_papan = _ui(scale=(0.26, 0.05), position=(x_teks + 0.13, Y + H / 2 + 0.012),
-                              color=color.rgb(150, 96, 60), z=0.02)
-        self._dlg_name = _txt('', pos=(x_teks + 0.13, Y + H / 2 + 0.012), scale=0.85,
-                              col=color.rgb(250, 238, 214), origin=(0, 0))
-        self._dlg_text = _txt('', pos=(x_teks, Y + H / 2 - 0.05), scale=0.86,
-                              col=color.rgb(58, 40, 28))
+        self._dlg_papan_border = _ui(scale=(0.34, 0.058), position=(x_teks + 0.16, Y + H / 2 + 0.014),
+                                     color=kayu, z=0.025)
+        self._dlg_papan = _ui(scale=(0.326, 0.048), position=(x_teks + 0.16, Y + H / 2 + 0.014),
+                              color=color.rgb(142, 90, 52), z=0.02)
+        self._dlg_name = _txt('', pos=(x_teks + 0.16, Y + H / 2 + 0.014), scale=0.84,
+                              col=color.rgb(252, 240, 215), origin=(0, 0))
+        self._dlg_role = _txt('', pos=(x_teks + 0.35, Y + H / 2 + 0.012), scale=0.62,
+                              col=color.rgb(122, 84, 52), origin=(-0.5, 0))
+        self._dlg_hearts = _txt('', pos=(W / 2 - 0.035, Y + H / 2 - 0.024), scale=0.72,
+                                col=color.rgb(205, 68, 72), origin=(0.5, 0))
+        self._dlg_text = _txt('', pos=(x_teks, Y + H / 2 - 0.052), scale=0.86,
+                              col=color.rgb(54, 36, 24))
         self._dlg_text.text = ' '          # wordwrap Ursina butuh raw_text
         self._dlg_text.wordwrap = 46
-        self._dlg_cont = _txt('[E / SPASI: lanjut]', pos=(W / 2 - 0.03, Y - H / 2 + 0.03),
-                              scale=0.62, col=color.rgb(130, 96, 66), origin=(0.5, 0))
+        self._dlg_cont = _txt('[E / SPASI: lanjut]', pos=(W / 2 - 0.035, Y - H / 2 + 0.032),
+                              scale=0.62, col=color.rgb(130, 92, 60), origin=(0.5, 0))
         self._dlg_choice_ents = [
-            _txt('', pos=(x_teks, Y - 0.02 - i * 0.04), scale=0.80, col=color.rgb(80, 56, 36))
+            _txt('', pos=(x_teks, Y - 0.022 - i * 0.040), scale=0.80, col=color.rgb(80, 56, 36))
             for i in range(3)
         ]
         self._dlg_penuh = ''
         self._dlg_ketik = 0.0
+        self._dlg_anim_t = 0.0
         self._set_dialog_visible(False)
 
     def _pasang_potret(self, npc_id):
@@ -1609,7 +1623,20 @@ class UIManager:
         self._dlg_text.text = self._dlg_penuh
 
     def _tick_ketik(self, dt):
-        if self.mode != 'dialog' or self.ketik_selesai():
+        if self.mode != 'dialog':
+            return
+        # Animasi potret bernapas & berdenyut saat NPC berbicara
+        self._dlg_anim_t = getattr(self, '_dlg_anim_t', 0.0) + dt
+        if getattr(self, '_dlg_potret', None) is not None and self._dlg_potret.enabled:
+            import math
+            sedang_ketik = not self.ketik_selesai()
+            freq = 11.0 if sedang_ketik else 2.2
+            amp = 0.0055 if sedang_ketik else 0.0022
+            bob = math.sin(self._dlg_anim_t * freq) * amp
+            self._dlg_potret.y = getattr(self, '_dlg_pot_y', self._DLG_Y) + bob
+            sk = self._POT * (1.0 + math.sin(self._dlg_anim_t * freq * 0.5) * (0.018 if sedang_ketik else 0.006))
+            self._dlg_potret.scale = (self._POT, sk)
+        if self.ketik_selesai():
             return
         self._dlg_ketik += dt * 55.0          # huruf per detik
         n = min(len(self._dlg_penuh), int(self._dlg_ketik))
@@ -1617,10 +1644,13 @@ class UIManager:
             self._dlg_text.text = self._dlg_penuh[:n]
 
     def _set_dialog_visible(self, v: bool):
-        for e in (self._dlg_bg, self._dlg_border, self._dlg_bingkai,
-                  self._dlg_potret_bg, self._dlg_papan,
-                  self._dlg_name, self._dlg_text, self._dlg_cont):
-            e.enabled = v
+        for e in (getattr(self, '_dlg_shadow', None), self._dlg_bg, self._dlg_border,
+                  getattr(self, '_dlg_trim', None), self._dlg_bingkai,
+                  self._dlg_potret_bg, getattr(self, '_dlg_papan_border', None),
+                  self._dlg_papan, self._dlg_name, getattr(self, '_dlg_role', None),
+                  getattr(self, '_dlg_hearts', None), self._dlg_text, self._dlg_cont):
+            if e is not None:
+                e.enabled = v
         if v and self._dialog_npc:
             self._pasang_potret(self._dialog_npc)
         else:
@@ -1702,6 +1732,16 @@ class UIManager:
             return
         npc_data = _ALL_NPCS.get(self._dialog_npc, {})
         name     = npc_data.get('name', self._dialog_npc) if self._dialog_npc != 'mailbox' else 'Kotak Pos'
+        role     = npc_data.get('role', '') if self._dialog_npc != 'mailbox' else 'Surat Paman Arsa'
+        if getattr(self, '_dlg_role', None) is not None:
+            self._dlg_role.text = f"— {role}" if role else ''
+        if getattr(self, '_dlg_hearts', None) is not None:
+            if self._dialog_npc and self._dialog_npc != 'mailbox' and self.state is not None:
+                h_val = float(self.state.npc_hearts.get(self._dialog_npc, 0))
+                h_int = max(0, min(10, int(round(h_val))))
+                self._dlg_hearts.text = f"Hati: {'*' * h_int}{'.' * (10 - h_int)} ({h_val:.1f}/10)"
+            else:
+                self._dlg_hearts.text = ''
         line     = self._dialog_lines[self._dialog_idx]
 
         if isinstance(line, dict):
@@ -1800,12 +1840,12 @@ class UIManager:
         for i, ent in enumerate(self._dlg_choice_ents):
             if i < len(self._dlg_choices):
                 c = self._dlg_choices[i]
-                prefix = '> ' if i == self._dlg_choice_idx else '  '
+                prefix = '>> ' if i == self._dlg_choice_idx else '   '
                 ent.text = f"{prefix}[{i+1}] {c['text']}"
                 if i == self._dlg_choice_idx:
-                    ent.color = color.rgb(245, 215, 80)
+                    ent.color = color.rgb(175, 72, 24)
                 else:
-                    ent.color = color.rgb(200, 185, 230)
+                    ent.color = color.rgb(88, 62, 42)
                 ent.enabled = True
             else:
                 ent.text = ''
@@ -2803,23 +2843,31 @@ class UIManager:
     def set_queue_count(self, n: int):
         self._queue_txt.text = f'[ANT:{n}] C=jalan' if n > 0 else ''
 
-    # ─── PIE MENU (FreeSO VMThread.ActionStrings + MotiveAdChanges) ─
+    # ─── PIE MENU (Warm Wood & Parchment Harvest Moon Interaction Menu) ─
     def _build_pie_menu(self):
-        BG = color.rgb(12, 6, 28, 235)
-        BD = color.rgb(140, 80, 200, 220)
-        self._pie_bg     = _ui(scale=(0.45, 0.32), position=(-0.14, -0.10), color=BG)
-        self._pie_border = _ui(scale=(0.452, 0.322), position=(-0.14, -0.10), color=BD)
-        self._pie_title  = _txt('', pos=(-0.34, 0.040), scale=0.90,
-                                col=color.rgb(245, 215, 80))
+        KAYU = color.rgb(78, 50, 30, 245)
+        EMAS = color.rgb(196, 152, 84, 240)
+        KREM = color.rgb(244, 233, 208, 248)
+        HEADER = color.rgb(138, 86, 48, 248)
+        self._pie_shadow = _ui(scale=(0.514, 0.394), position=(-0.132, -0.108),
+                               color=color.rgba(16, 10, 6, 150), z=0.065)
+        self._pie_border = _ui(scale=(0.502, 0.382), position=(-0.14, -0.10), color=KAYU, z=0.06)
+        self._pie_trim   = _ui(scale=(0.490, 0.370), position=(-0.14, -0.10), color=EMAS, z=0.055)
+        self._pie_bg     = _ui(scale=(0.480, 0.360), position=(-0.14, -0.10), color=KREM, z=0.05)
+        self._pie_hdr    = _ui(scale=(0.480, 0.054), position=(-0.14, 0.053), color=HEADER, z=0.045)
+        self._pie_title  = _txt('', pos=(-0.36, 0.062), scale=0.88,
+                                col=color.rgb(255, 242, 214), z=0.04)
+        self._pie_sub    = _txt('', pos=(0.08, 0.060), scale=0.64,
+                                col=color.rgb(255, 210, 165), origin=(0.5, 0), z=0.04)
         self._pie_items  = [
-            _txt('', pos=(-0.34, 0.010 - i * 0.030), scale=0.80, col=color.white)
+            _txt('', pos=(-0.355, 0.012 - i * 0.032), scale=0.78, col=color.rgb(62, 42, 26), z=0.04)
             for i in range(6)
         ]
-        self._pie_fx     = _txt('', pos=(-0.34, -0.200), scale=0.72,
-                                col=color.rgb(127, 220, 255))
-        self._pie_hint   = _txt('[</> ] Pilih  [SPACE] OK  [ESC] Batal',
-                                pos=(-0.34, -0.240), scale=0.65,
-                                col=color.rgb(160, 140, 200))
+        self._pie_fx     = _txt('', pos=(-0.355, -0.202), scale=0.70,
+                                col=color.rgb(42, 118, 72), z=0.04)
+        self._pie_hint   = _txt('[Q/R atau Panah] Pilih   [SPASI/E] Lakukan   [ESC] Tutup',
+                                pos=(-0.355, -0.242), scale=0.58,
+                                col=color.rgb(128, 94, 62), z=0.04)
         self._pie_hint.origin = (0, 0)
         self._set_pie_visible(False)
 
@@ -2829,9 +2877,12 @@ class UIManager:
         self._pie_callback       = None
 
     def _set_pie_visible(self, v: bool):
-        for e in [self._pie_bg, self._pie_border, self._pie_title,
+        for e in [getattr(self, '_pie_shadow', None), self._pie_bg, self._pie_border,
+                  getattr(self, '_pie_trim', None), getattr(self, '_pie_hdr', None),
+                  self._pie_title, getattr(self, '_pie_sub', None),
                   self._pie_fx, self._pie_hint] + self._pie_items:
-            e.enabled = v
+            if e is not None:
+                e.enabled = v
 
     def open_pie_menu(self, npc_id: str, options: list, callback):
         """Open pie menu. options = [(action, label, available, effects_str), ...]"""
@@ -2898,27 +2949,41 @@ class UIManager:
         # Menu perabot mengirim id 'obj:<Nama>' — pakai nama itu apa adanya,
         # jangan cari di daftar NPC (dulu judulnya tampil sebagai 'obj:12').
         if self._pie_npc_id.startswith('obj:'):
-            self._pie_title.text = f">> {self._pie_npc_id[4:]}"
+            self._pie_title.text = f"{self._pie_npc_id[4:]}"
+            if getattr(self, '_pie_sub', None) is not None:
+                self._pie_sub.text = "Perabot"
         else:
             npc = all_d.get(self._pie_npc_id, {})
-            self._pie_title.text = f">> {npc.get('name', self._pie_npc_id)}"
+            self._pie_title.text = f"{npc.get('name', self._pie_npc_id)}"
+            if getattr(self, '_pie_sub', None) is not None:
+                h_val = float(self.state.npc_hearts.get(self._pie_npc_id, 0)) if self.state else 0.0
+                role = npc.get('role', npc.get('type', ''))
+                self._pie_sub.text = f"{role}  ({h_val:.1f} Hati)" if role else f"{h_val:.1f} Hati"
 
-        for i, item_ent in enumerate(self._pie_items):
-            if i < len(self._pie_options):
-                _, label, available, effects = self._pie_options[i]
-                prefix  = '>' if i == self._pie_selected else ' '
-                avail_s = '' if available else ' [terkunci]'
-                item_ent.text  = f'{prefix} [{i+1}] {label}{avail_s}'
+        total_opts = len(self._pie_options)
+        n_vis = len(self._pie_items)
+        # Jendela gulir (sliding window) supaya opsi > 6 tetap terlihat saat dipilih
+        start_idx = 0
+        if total_opts > n_vis:
+            start_idx = max(0, min(self._pie_selected - n_vis // 2, total_opts - n_vis))
+
+        for slot_i, item_ent in enumerate(self._pie_items):
+            opt_i = start_idx + slot_i
+            if opt_i < total_opts:
+                _, label, available, effects = self._pie_options[opt_i]
+                prefix  = '>>' if opt_i == self._pie_selected else '  '
+                avail_s = '' if available else ' (belum siap)'
+                item_ent.text  = f'{prefix} [{opt_i+1}] {label}{avail_s}'
                 if not available:
-                    item_ent.color = color.rgb(100, 80, 120)
-                elif i == self._pie_selected:
-                    item_ent.color = color.rgb(245, 215, 80)
+                    item_ent.color = color.rgb(155, 140, 122)
+                elif opt_i == self._pie_selected:
+                    item_ent.color = color.rgb(180, 68, 20)
                 else:
-                    item_ent.color = color.rgb(200, 185, 230)
+                    item_ent.color = color.rgb(64, 44, 28)
             else:
                 item_ent.text = ''
 
         # Effects preview for selected option (FreeSO MotiveAdChanges)
         if self._pie_options:
             _, _, _, effects = self._pie_options[self._pie_selected]
-            self._pie_fx.text = f'Efek: {effects}' if effects else ''
+            self._pie_fx.text = f'Manfaat: {effects}' if effects else ''

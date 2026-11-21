@@ -665,15 +665,15 @@ def build_dungeon(world, scene):
             wx, wz = x * TS, y * TS
             if tid in bijih:
                 rgb = bijih[tid]
-                _part(world, _rock_mesh(x * 31 + y * 17), (wx, .2, wz), (1.55, 1.05, 1.55), dinding)
+                _part(world, _rock_mesh(x * 31 + y * 17), (wx, .2, wz), (1.75, 1.35, 1.75), dinding)
                 for k in range(3):
                     seed = x * 13 + y * 7 + k
                     pijar(world, _kristal_pijar_mesh(seed, rgb),
-                          (wx + (k - 1) * .32, .55 + .2 * (k % 2), wz + (k % 2 - .5) * .3),
-                          (.26, .42 + .12 * k, .26), (255, 255, 255),
+                          (wx + (k - 1) * .38, .65 + .22 * (k % 2), wz + (k % 2 - .5) * .34),
+                          (.42, .68 + .18 * k, .42), (255, 255, 255),
                           rotation=(15 * (k - 1), (seed * 53) % 360, 0))
-                if tid in (K.ORE_EMS, K.ORE_KRS, K.ORE_MTH):
-                    halo(world, (wx, .9, wz), 1.1, rgb, kuat=.22)
+                halo(world, (wx, .95, wz), 1.25, rgb,
+                     kuat=.28 if tid in (K.ORE_EMS, K.ORE_KRS, K.ORE_MTH) else .18)
             elif tid == K.CRYS:
                 for k in range(3):
                     seed = x * 17 + y * 29 + k

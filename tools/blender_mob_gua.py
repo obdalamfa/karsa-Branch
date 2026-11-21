@@ -26,7 +26,7 @@ except ImportError:          # dijalankan dari luar Blender: kirim diri sendiri
 
 import os
 
-WT = os.environ.get('LK_WORKTREE') or r'E:/Game Research/Lembah Karsa 3D/.claude/worktrees/coba-play-game-d5f058'
+WT = os.environ.get('LK_WORKTREE') or r'E:/Game Research/Karsa Brench'
 MDIR = WT + '/assets/models'
 PREV = WT + '/tools/icon3d'
 os.makedirs(PREV, exist_ok=True)

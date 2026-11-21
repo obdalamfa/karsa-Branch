@@ -148,11 +148,17 @@ _PEGANG_ROT = (180.0, 0.0, 0.0)
 _PEGANG_SKALA = 1.0
 
 _KLIP_RIG = {
-    'hoe':   'hoe',
-    'water': 'water',
-    'swing': 'swing',
-    'mine':  'swing',
-    'down':  'hoe',
+    'hoe':    'hoe',
+    'water':  'water',
+    'swing':  'swing',
+    'mine':   'swing',
+    'down':   'hoe',
+    'bend':   'give',
+    'give':   'give',
+    'pickup': 'give',
+    'bicara': 'wave',
+    'wave':   'wave',
+    'talk':   'talk',
 }
 
 

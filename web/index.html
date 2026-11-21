@@ -1,0 +1,3245 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Lembah Karsa — Lembah Kehendak</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#1b281d; font-family:'Montserrat',sans-serif; }
+  #c { display:block; width:100vw; height:100vh; filter:saturate(.9) brightness(1.04) contrast(.96); cursor:grab; }
+  #c:active { cursor:grabbing; }
+  /* AWL soft dreamy vignette */
+  #vignette { position:fixed; inset:0; pointer-events:none; z-index:0;
+              background:radial-gradient(ellipse at 50% 45%, rgba(255,250,235,0) 55%, rgba(70,50,30,.30) 100%); }
+  .ui { position:fixed; color:#fff; user-select:none; pointer-events:none; }
+  /* ---------- HARVEST MOON CLASSIC HUD ---------- */
+  #hud-top { top:14px; left:14px; display:flex; gap:10px; align-items:flex-start; }
+  .badge { background:linear-gradient(180deg, #fffbf0 0%, #f4ead2 100%); border:3px solid #5a3825; border-radius:12px;
+           padding:8px 14px; font-weight:800; font-size:13px; line-height:1.5; color:#3e2415;
+           box-shadow:3px 4px 0 rgba(0,0,0,.5); }
+  .badge b { color:#b85c14; }
+  .bar { width:130px; height:12px; background:#2c1b10; border:2px solid #5a3825; border-radius:6px; overflow:hidden; margin-top:3px; }
+  .bar > i { display:block; height:100%; transition:width .25s; }
+  #hpFill { background:linear-gradient(90deg,#e53935,#ff6f60); }
+  #enFill { background:linear-gradient(90deg,#f57c00,#ffb74d); }
+  #staminaFace { width:36px; height:36px; border-radius:50%; background:#4caf50; border:2.5px solid #2e7d32;
+                 display:flex; align-items:center; justify-content:center; font-size:20px; box-shadow:1px 2px 0 rgba(0,0,0,.4); }
+  #hud-quest { top:14px; right:14px; max-width:320px; text-align:right; }
+  #hud-quest .badge { border-color:#8b5a2b; background:linear-gradient(180deg, #fffbf0 0%, #f4ead2 100%); color:#3e2415; }
+  #hud-tool { bottom:16px; left:50%; transform:translateX(-50%); display:flex; gap:8px; }
+  .slot { width:58px; height:60px; background:linear-gradient(180deg,#8d5b36 0%,#6d4224 100%); border:3px solid #4a2d18;
+          border-radius:10px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+          font-size:24px; font-weight:800; box-shadow:2px 3px 0 rgba(0,0,0,.6); cursor:pointer; color:#fff; transition:transform .12s; }
+  .slot small { font-size:9px; font-weight:bold; color:#ffd54f; margin-top:2px; }
+  .slot.active { border-color:#ffd54f; background:linear-gradient(180deg,#b57c48 0%,#8d5b36 100%);
+                 box-shadow:0 0 14px rgba(255,213,79,.9), 2px 4px 0 #3a1e0d; transform:translateY(-5px); }
+  #seedTag { position:fixed; bottom:82px; left:50%; transform:translateX(-50%); }
+  /* ---------- Dialog ---------- */
+  #dialog { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); width:min(680px,92vw);
+            background:rgba(14,28,20,.95); border:3px solid #6fae7a; border-radius:14px; padding:16px 20px;
+            color:#fff; display:none; pointer-events:auto; cursor:pointer; }
+  #dialog .who { color:#ffe27a; font-weight:800; font-size:15px; margin-bottom:5px; }
+  #dialog .txt { font-size:15px; line-height:1.55; min-height:48px; }
+  #dialog .hint { font-size:11px; opacity:.6; margin-top:8px; text-align:right; }
+  /* ---------- Panels ---------- */
+  .panel { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:min(560px,94vw);
+           max-height:84vh; overflow:auto; background:rgba(13,26,19,.97); border:3px solid #6fae7a;
+           border-radius:16px; padding:22px 26px; color:#fff; display:none; pointer-events:auto; }
+  .panel h2 { font-size:20px; color:#ffe27a; margin-bottom:14px; letter-spacing:.5px; }
+  .row { display:flex; justify-content:space-between; align-items:center; padding:8px 10px;
+         border-bottom:1px solid #ffffff14; font-size:14px; gap:10px; }
+  .row:last-child { border-bottom:none; }
+  .row b { color:#ffe27a; }
+  .grid { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+  .cell { background:#1b3326; border:2px solid #406b4c; border-radius:9px; padding:8px 4px;
+          text-align:center; font-size:11px; min-height:62px; }
+  .cell .ic { font-size:22px; display:block; margin-bottom:3px; }
+  .buy { background:#2c6b3c; border:2px solid #6fae7a; color:#fff; font-family:inherit; font-weight:800;
+         border-radius:8px; padding:6px 12px; cursor:pointer; font-size:12px; }
+  .buy:hover { background:#3a8a4f; }
+  .buy:disabled { opacity:.4; cursor:not-allowed; }
+  .qdone { color:#7ee08a; } .qcur { color:#ffe27a; } .qlock { opacity:.4; }
+  .panel .close { font-size:11px; opacity:.6; margin-top:14px; text-align:center; }
+  /* ---------- Chargen / Title ---------- */
+  #title { position:fixed; inset:0; background:radial-gradient(circle at 50% 35%,#1d4030,#0a160f);
+           display:flex; flex-direction:column; align-items:center; justify-content:center;
+           color:#fff; z-index:50; pointer-events:auto; text-align:center; padding:20px; }
+  #title h1 { font-size:clamp(34px,7vw,68px); font-weight:800; color:#ffe27a;
+              text-shadow:4px 4px 0 #000,0 0 30px #ffd24a55; letter-spacing:2px; }
+  #title .sub { font-size:15px; opacity:.85; margin:8px 0 26px; max-width:560px; line-height:1.6; }
+  .cg { background:rgba(0,0,0,.35); border:2px solid #6fae7a; border-radius:14px; padding:20px 26px;
+        display:flex; flex-direction:column; gap:14px; min-width:300px; }
+  .cg label { font-size:12px; opacity:.75; text-transform:uppercase; letter-spacing:1px; }
+  .cg input { font-family:inherit; font-weight:700; font-size:15px; padding:9px 12px; border-radius:8px;
+              border:2px solid #406b4c; background:#102018; color:#fff; outline:none; }
+  .swatches { display:flex; gap:8px; flex-wrap:wrap; }
+  .sw { width:34px; height:34px; border-radius:50%; border:3px solid transparent; cursor:pointer; }
+  .sw.on { border-color:#ffe27a; transform:scale(1.12); }
+  #startBtn { margin-top:6px; background:#ffd24a; color:#1a1206; font-family:inherit; font-weight:800;
+              font-size:17px; padding:13px; border:none; border-radius:10px; cursor:pointer; letter-spacing:1px; }
+  #startBtn:hover { background:#ffe27a; }
+  #toast { position:fixed; left:50%; top:74px; transform:translateX(-50%); background:rgba(255,210,74,.94);
+           color:#1a1206; font-weight:800; padding:10px 22px; border-radius:24px; font-size:14px;
+           display:none; z-index:40; pointer-events:none; box-shadow:0 4px 16px rgba(0,0,0,.4); }
+  #help-tip { position:fixed; bottom:16px; right:16px; font-size:11px; opacity:.45; }
+  #fade { position:fixed; inset:0; background:#000; opacity:0; pointer-events:none; transition:opacity .35s; z-index:30; }
+  #mute { position:fixed; top:14px; left:50%; transform:translateX(-50%); pointer-events:auto;
+          background:rgba(20,38,28,.82); border:2px solid #406b4c; color:#fff; font-family:inherit;
+          font-weight:800; border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; }
+  input[type=file]{ display:none; }
+  ::-webkit-scrollbar{ width:8px;} ::-webkit-scrollbar-thumb{ background:#406b4c; border-radius:4px;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="vignette"></div>
+
+<!-- HUD -->
+<div id="hud-top" class="ui">
+  <div class="badge" id="clock">🌸 Semi · Hari 1 · Sen<br>06:00 ☀️</div>
+  <div class="badge" style="display:flex;align-items:center;gap:10px;">
+    <div id="staminaFace">😃</div>
+    <div>
+      ❤ <span id="hpVal">100</span><div class="bar"><i id="hpFill" style="width:100%"></i></div>
+      ⚡ <span id="enVal">100</span><div class="bar"><i id="enFill" style="width:100%"></i></div>
+      🪙 <span id="goldVal">100</span> G
+    </div>
+  </div>
+</div>
+<div id="hud-quest" class="ui"><div class="badge" id="questBox">Quest…</div></div>
+<div id="seedTag" class="ui badge" style="display:none"></div>
+<div id="hud-tool" class="ui"></div>
+<div id="help-tip" class="ui">F1 = Bantuan</div>
+
+<button id="mute">🔊 Audio</button>
+<div id="toast"></div>
+<div id="fade"></div>
+
+<!-- Dialog -->
+<div id="dialog"><div class="who"></div><div class="txt"></div><div class="hint">Klik / E untuk lanjut ▸</div></div>
+
+<!-- Panels -->
+<div class="panel" id="pInv"><h2>🎒 Inventori</h2><div class="grid" id="invGrid"></div><div class="close">I / ESC menutup</div></div>
+<div class="panel" id="pQuest"><h2>📜 Buku Quest — Lembah Karsa</h2><div id="questList"></div><div class="close">J / ESC menutup</div></div>
+<div class="panel" id="pShop"><h2>🛒 Warung Bu Sari</h2><div id="shopList"></div><div class="close">K / ESC menutup</div></div>
+<div class="panel" id="pForge"><h2>⚒️ Bengkel Budi</h2><div id="forgeList"></div><div class="close">U / ESC menutup</div></div>
+<div class="panel" id="pRel"><h2>💚 Hubungan</h2><div id="relList"></div><div class="close">H / ESC menutup</div></div>
+<div class="panel" id="pMap"><h2>🗺️ Peta Lembah Karsa</h2><div id="mapList"></div><div class="close">M / ESC menutup</div></div>
+<div class="panel" id="pBatin"><h2>🧠 Majelis Batin (Suara Batin)</h2><div id="batinList"></div><div class="close">TAB / ESC menutup</div></div>
+<div class="panel" id="pHelp"><h2>❔ Bantuan & Kontrol</h2><div id="helpBody"></div><div class="close">F1 / ESC menutup</div></div>
+
+<!-- Title / Chargen -->
+<div id="title">
+  <h1>LEMBAH KARSA</h1>
+  <div class="sub">Lembah Kehendak — sebuah desa Nusantara tempat kau bertani, berteman dengan warga &amp; makhluk halus, menambang gua bertingkat, dan suatu hari berdamai dengan Sang Hyang Naga.</div>
+  <div class="cg">
+    <div><label>Nama</label><br><input id="cgName" maxlength="14" value="Karsa" style="width:100%"></div>
+    <div><label>Warna Kulit</label><div class="swatches" id="cgSkin"></div></div>
+    <div><label>Warna Rambut</label><div class="swatches" id="cgHair"></div></div>
+    <div><label>Warna Baju</label><div class="swatches" id="cgShirt"></div></div>
+    <div><label>Model Karakter (opsional)</label><br>
+      <button id="loadModelBtn" type="button" style="font-family:inherit;font-weight:800;font-size:13px;padding:8px 12px;border:2px solid #6fae7a;border-radius:8px;background:#102018;color:#fff;cursor:pointer;width:100%">🧍 Muat .glb dari Blender</button>
+      <div id="modelStatus" style="font-size:11px;opacity:.7;margin-top:5px">Belum dimuat — memakai chibi prosedural bawaan.</div></div>
+    <button id="startBtn">▶ MULAI HIDUP BARU</button>
+  </div>
+</div>
+
+<input type="file" id="loadFile" accept=".json">
+<input type="file" id="glbFile" accept=".glb,.gltf">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+"use strict";
+/* =========================================================================
+   LEMBAH KARSA — Farming Life-Sim RPG (three.js port of the Ursina blueprint)
+   Roadmap order: tilemap → player → camera → time → farming → inventory →
+   NPC+schedule → shop → dungeon+mining+combat → quests → boss → save → polish
+   ========================================================================= */
+
+/* ---------- KONSTANTA ---------- */
+const TILE = 2.0;
+const REAL_SECONDS_PER_DAY = 540;            // 9 menit/ hari (sedikit dipercepat utk browser)
+const PLAYER_SPEED = 9.0, RUN_MULT = 1.85;
+const ATTACK_RANGE = 3.2, ATTACK_CD = 400;
+const DUN_MAX = 15, DUN_W = 22, DUN_H = 16;
+const SEASONS = ["Semi","Panas","Gugur","Dingin"];
+
+/* ---------- TILE IDS ---------- */
+const T = { GRASS:0,DIRT:1,PATH:2,WATER:3,FLOOR:4,WALL:5,TREE:6,HOUSE:7,MAILBOX:8,
+  DOOR:9,FENCE:10,GATE:11,BED:12,GRAVE:13,LANTERN:14,DEADTREE:15,CAVEWALL:16,
+  CAVEFLOOR:17,DOCK:18,WATERLILY:19,COUNTER:20,SHOP:21,FORGE:22,STAIRSD:23,
+  STAIRSU:24, ORE_CU:30,ORE_FE:31,ORE_CR:32,ORE_AU:33,ORE_MI:34, MINED:35,
+  PORTAL:40,
+  // expansion: interior + dungeon es + festival
+  FLOOR_WOOD:50, WALL_IN:51, BED_NPC:52, TABLE:53, CHAIR:54, CHEST_HOME:55,
+  STOVE:56, BOOKSHELF:57, FLOWERPOT:58,
+  ICE_FLOOR:60, ICE_WALL:61, ORE_SAPPHIRE:62, ORE_FROST:63, ICEPORTAL:64,
+  FESTIVAL_BOOTH:70, FISHING_SPOT:71 };
+const BLOCK = new Set([T.WALL,T.TREE,T.HOUSE,T.FENCE,T.DEADTREE,T.CAVEWALL,
+  T.COUNTER,T.SHOP,T.FORGE,T.ORE_CU,T.ORE_FE,T.ORE_CR,T.ORE_AU,T.ORE_MI,T.WATER,T.MAILBOX,
+  T.WALL_IN, T.BED_NPC, T.TABLE, T.CHEST_HOME, T.STOVE, T.BOOKSHELF, T.FLOWERPOT,
+  T.ICE_WALL, T.ORE_SAPPHIRE, T.ORE_FROST, T.FESTIVAL_BOOTH ]);
+const TILLABLE = new Set([T.GRASS,T.DIRT]);
+const MINEABLE = { [T.ORE_CU]:'tembaga',[T.ORE_FE]:'besi',[T.ORE_CR]:'kristal',
+                   [T.ORE_AU]:'emas',[T.ORE_MI]:'mithril',
+                   [T.ORE_SAPPHIRE]:'sapphire',[T.ORE_FROST]:'froststeel' };
+
+/* ---------- DATA: TANAMAN ---------- */
+const CROPS = {
+  lobak:   {season:"Semi",  days:2, sell:22, seed:5,  col:0xf1f1f1},
+  wortel:  {season:"Semi",  days:3, sell:35, seed:8,  col:0xff8c2b},
+  stroberi:{season:"Semi",  days:4, sell:55, seed:12, col:0xe23b5b},
+  melati:       {season:"Semi",  days:3, sell:45, seed:10, col:0xfff5e0},
+  kacangpanjang:{season:"Semi",  days:4, sell:42, seed:9,  col:0x6ab85a},
+  jagung:  {season:"Panas", days:4, sell:48, seed:10, col:0xffd24a},
+  tomat:   {season:"Panas", days:5, sell:65, seed:14, col:0xd23b3b},
+  semangka:{season:"Panas", days:6, sell:90, seed:20, col:0x4caf50},
+  cabai:   {season:"Panas", days:4, sell:55, seed:12, col:0xff3a2a},
+  labu:    {season:"Gugur", days:5, sell:70, seed:15, col:0xe07a1f},
+  ubi:     {season:"Gugur", days:4, sell:60, seed:13, col:0xc06a3a},
+  terong:  {season:"Gugur", days:5, sell:65, seed:14, col:0x5a2a8a},
+  bayam:   {season:"Dingin",days:2, sell:30, seed:7,  col:0x4f9e4f},
+  jamur:   {season:"Dingin",days:3, sell:55, seed:12, col:0xc8a070},
+  kentangdingin:{season:"Dingin",days:4, sell:60, seed:13, col:0xd8c89a},
+  bungaes: {season:"Dingin",days:5, sell:120,seed:30, col:0x9ed8ff},
+};
+const SELL = { tembaga:30,besi:60,kristal:90,emas:120,mithril:250, kayu:8,
+  herba:15, beri:20, mandrake:80, kunang:25, air_keabadian:500,
+  sapphire:140, froststeel:280, kristal_es:200, ikan:35, telur:15 };
+Object.keys(CROPS).forEach(k=>SELL[k]=CROPS[k].sell);
+
+/* ---------- DATA: RECIPES (cooking di stove rumah player) ---------- */
+const RECIPES = {
+  sup_labu:    {nm:"Sup Labu",     ing:{labu:1,wortel:1},        hp:40, sell:80,  col:0xe07a1f},
+  nasi_goreng: {nm:"Nasi Goreng",  ing:{jagung:2,cabai:1},        hp:35, sell:70,  col:0xd8a93b},
+  kue_stroberi:{nm:"Kue Stroberi", ing:{stroberi:3,telur:1},      hp:50, sell:110, col:0xe23b5b},
+  salad_segar: {nm:"Salad Segar",  ing:{bayam:1,tomat:1,lobak:1}, hp:30, sell:65,  col:0x6ab85a},
+  semur_ubi:   {nm:"Semur Ubi",    ing:{ubi:1,terong:1},          hp:40, sell:85,  col:0x9a5a3a},
+  rujak_buah:  {nm:"Rujak Buah",   ing:{semangka:1,stroberi:1,cabai:1}, hp:45, sell:100, col:0xff7a2b},
+  jamur_panggang:{nm:"Jamur Panggang", ing:{jamur:2,kayu:1},      hp:35, sell:75,  col:0xc8a070},
+  teh_melati:  {nm:"Teh Melati",   ing:{melati:2,herba:1},        hp:25, sell:55,  col:0xfff5e0},
+  sup_es:      {nm:"Sup Bunga Es", ing:{bungaes:1,kentangdingin:1}, hp:60, sell:180, col:0x9ed8ff},
+  pindang_ikan:{nm:"Pindang Ikan", ing:{ikan:2,cabai:1},          hp:55, sell:130, col:0xc8d8e8},
+};
+Object.keys(RECIPES).forEach(k=>SELL[k]=RECIPES[k].sell);
+
+/* ---------- DATA: ALAT ---------- */
+const TOOLS = ["Cangkul","Siram","Tanam","Panen","Kapak","Hadiah","Pickaxe","Pedang"];
+const TOOL_ICON = ["⛏️","💧","🌱","🌾","🪓","🎁","⚒️","⚔️"];
+const PICK_TIER = [
+  {n:"Kayu",   g:50,  mat:{kayu:5},          mine:1},
+  {n:"Tembaga",g:120, mat:{kayu:3,tembaga:3},mine:2},
+  {n:"Besi",   g:250, mat:{besi:5},          mine:3},
+  {n:"Emas",   g:500, mat:{emas:3,besi:5},   mine:4},
+  {n:"Mithril",g:1200,mat:{mithril:3,emas:3},mine:5},
+];
+const SWORD_TIER = [
+  {n:"Kayu",   g:80,  mat:{kayu:8},          dmg:10},
+  {n:"Besi",   g:200, mat:{besi:6,kayu:2},   dmg:25},
+  {n:"Emas",   g:600, mat:{emas:5},          dmg:45},
+  {n:"Mithril",g:1500,mat:{mithril:5},       dmg:80},
+];
+const ORE_MINLVL = { tembaga:1,besi:1,kristal:2,emas:2,mithril:3, sapphire:2, froststeel:3 };
+
+/* ---------- DATA: MOB ---------- */
+const MOBS = {
+  kelelawar:{hp:15,dmg:5,spd:2.6,lv:[1,6],drop:"kayu",xp:5,col:0x6b5a8c},
+  tikus:    {hp:12,dmg:4,spd:2.2,lv:[1,4],drop:"tembaga",xp:3,col:0x8c7a5a},
+  genderuwo:{hp:50,dmg:15,spd:1.6,lv:[5,12],drop:"besi",xp:15,col:0x3a2a1f},
+  banaspati:{hp:60,dmg:20,spd:2.1,lv:[6,13],drop:"kristal",xp:20,col:0xff7a2b},
+  kuntilanak:{hp:45,dmg:18,spd:1.9,lv:[7,12],drop:"kristal",xp:18,col:0xf0f0f0},
+  leak:     {hp:90,dmg:30,spd:2.3,lv:[10,14],drop:"emas",xp:35,col:0xc23b3b},
+  pocong:   {hp:100,dmg:25,spd:1.1,lv:[9,14],drop:"emas",xp:30,col:0xeae5da},
+  // ice dungeon mobs
+  yuki_onna:{hp:55,dmg:20,spd:2.0,lv:[3,12],drop:"sapphire",xp:22,col:0xd8e8ff,ice:true},
+  es_serigala:{hp:70,dmg:24,spd:2.8,lv:[5,14],drop:"froststeel",xp:28,col:0xa0c8e0,ice:true},
+  golem_es: {hp:120,dmg:32,spd:1.2,lv:[8,14],drop:"kristal_es",xp:45,col:0x6aa0d8,ice:true},
+};
+const BOSS = {hp:300,dmg:40,spd:1.3,drop:"air_keabadian",xp:200,col:0x2e8b57};
+const BOSS_ICE = {hp:280,dmg:38,spd:1.4,drop:"kristal_es",xp:180,col:0x6ad8ff};
+
+/* ---------- DATA: QUEST ---------- */
+const QUESTS = [
+  {t:"Baru Datang",        d:"Periksa kotak pos di depan rumah (dekati lalu tekan E)."},
+  {t:"Petani Pemula",      d:"Cangkul, siram & tanam 3 benih lobak."},
+  {t:"Panen Pertama",      d:"Panen 3 lobak yang sudah tumbuh."},
+  {t:"Ekonomi Desa",       d:"Kumpulkan 150 G (jual hasil tani di warung)."},
+  {t:"Alat Lebih Baik",    d:"Buat Pickaxe Kayu di Bengkel Budi."},
+  {t:"Eksplorasi Gua",     d:"Masuk ke Gua Sang Hyang."},
+  {t:"Penambang Pemula",   d:"Kumpulkan 5 Tembaga + 3 Besi dari gua."},
+  {t:"Pendekar Karsa",     d:"Buat Pedang Besi & kalahkan 5 mob."},
+  {t:"Misteri Kuburan",    d:"Tangkap 1 makhluk halus / makhluk liar (F)."},
+  {t:"Kedalaman",          d:"Capai gua level 10."},
+  {t:"Boss Naga",          d:"Kalahkan Sang Hyang Naga di level 15."},
+  {t:"TAMAT",              d:"Kau memperoleh Air Keabadian. Lembah aman. ✦"},
+];
+
+/* ---------- DATA: SIDE QUESTS per-NPC (unlock di affection threshold) ---------- */
+const SIDE_QUESTS = {
+  bu_sari:[
+    {t:"Bu Sari: Resep Lama",   d:"Bawakan 3 tomat & 2 cabai",     req:{tomat:3,cabai:2},     reward:{gold:120,aff:1}, threshold:2},
+    {t:"Bu Sari: Bunga Pasar",  d:"Bawakan 5 melati",              req:{melati:5},            reward:{gold:200,item:"benih_bungaes",aff:1}, threshold:5},
+    {t:"Bu Sari: Pesta Warga",  d:"Bawakan 1 kue stroberi",        req:{kue_stroberi:1},      reward:{gold:300,aff:1}, threshold:7},
+  ],
+  budi:[
+    {t:"Budi: Bahan Tempa",     d:"Bawakan 5 kayu & 3 tembaga",     req:{kayu:5,tembaga:3},   reward:{gold:150,aff:1}, threshold:2},
+    {t:"Budi: Sapphire Langka", d:"Bawakan 2 sapphire dari Kuil Es",req:{sapphire:2},          reward:{gold:400,aff:1}, threshold:5},
+    {t:"Budi: Mahakarya",       d:"Bawakan 1 froststeel & 1 mithril",req:{froststeel:1,mithril:1}, reward:{gold:800,item:"benih_semangka",aff:1}, threshold:7},
+  ],
+  pak_joko:[
+    {t:"Pak Joko: Umpan",       d:"Bawakan 3 beri",                 req:{beri:3},              reward:{gold:80,item:"ikan",aff:1}, threshold:1},
+    {t:"Pak Joko: Bekal Pagi",  d:"Bawakan 1 pindang ikan",         req:{pindang_ikan:1},     reward:{gold:200,aff:1}, threshold:4},
+    {t:"Pak Joko: Ikan Danau",  d:"Tangkap 5 ikan total",            req:{ikan:5},              reward:{gold:350,aff:1}, threshold:6},
+  ],
+  maya:[
+    {t:"Maya: Cat dari Bunga",  d:"Bawakan 3 melati & 2 stroberi",  req:{melati:3,stroberi:2}, reward:{gold:130,aff:1}, threshold:2},
+    {t:"Maya: Inspirasi Senja", d:"Bawakan 1 kunang-kunang",         req:{kunang:1},            reward:{gold:180,aff:1}, threshold:4},
+    {t:"Maya: Pameran",         d:"Bawakan 1 air keabadian (lihat saja, dikembalikan)", req:{air_keabadian:1}, reward:{gold:1000,aff:2,returnItem:"air_keabadian"}, threshold:8},
+  ],
+};
+
+/* ---------- DATA: FESTIVALS (cek di newDay) ---------- */
+const FESTIVALS = {
+  tanam:  {nm:"Festival Tanam",  day:7,  season:0, desc:"Persembahkan benih ke booth. Reward: benih langka."},
+  air:    {nm:"Festival Air",    day:14, season:1, desc:"Tangkap ikan terbanyak hari ini di booth."},
+  panen:  {nm:"Festival Panen",  day:21, season:2, desc:"Persembahkan hasil tani musim ini. Reward: gold besar + resep."},
+  roh:    {nm:"Festival Roh",    day:28, season:3, desc:"Roh keluar siang hari. Tangkap mereka untuk berkah."},
+};
+function checkFestival(day,season){
+  for(const k in FESTIVALS){ const f=FESTIVALS[k];
+    if(f.day===day && f.season===season) return Object.assign({key:k},f);
+  } return null;
+}
+
+/* ---------- DATA: NPC ---------- */
+const NPCS = {
+  bu_sari:{name:"Bu Sari",role:"Pemilik warung",fav:"tomat",col:0xd86a8c,scene:"desa",
+    style:"apron", hair:0x4a2a18, skin:0xe8b48a,
+    talks:["Selamat datang di warung! Benih segar tiap pagi.","Hasil tani bagus, ya. Jual sini saja.","Hujan begini cocok untuk menanam."],
+    gr:"Tomat! Pas untuk sambal. Terima kasih ya~",
+    sched:[[6,"rumah_busari",3,3],[8,"desa",10,6],[18,"desa",16,10],[22,"rumah_busari",3,3]]},
+  budi:{name:"Budi",role:"Pandai besi",fav:"lobak",col:0x8c4a3a,scene:"desa",
+    style:"bandana", hair:0x1a1a1a, skin:0xc89060,
+    talks:["Bawa material, kubuatkan alat terbaik.","Pickaxe bagus membuka ore yang lebih dalam.","Tempaan butuh bara dan kesabaran."],
+    gr:"Lobak segar. Boleh juga, terima kasih.",
+    sched:[[7,"rumah_budi",3,3],[9,"desa",6,6],[19,"desa",6,6],[23,"rumah_budi",3,3]]},
+  pak_joko:{name:"Pak Joko",role:"Nelayan",fav:"beri",col:0x4a7a8c,scene:"desa",
+    style:"hat", hair:0x3a2a18, skin:0xc89060,
+    talks:["Subuh adalah waktu terbaik memancing.","Danau menyimpan rahasia, Nak.","Pernah lihat eceng gondok bergerak sendiri? Itu bukan angin."],
+    gr:"Beri liar! Manis sekali. Hatur nuhun.",
+    sched:[[5,"desa",18,12],[10,"desa",14,12],[15,"desa",10,6],[21,"rumah_pakjoko",3,3]]},
+  maya:{name:"Maya",role:"Pelukis",fav:"stroberi",col:0xc06ad8,scene:"desa",
+    style:"beret_long", hair:0x6a3a8a, skin:0xf0d0b0,
+    talks:["Warna senja di lembah ini... tak terlukiskan.","Aku menggambar Mbah Demit kemarin. Ia tersenyum.","Kalau lembah tenang, kuasku ikut tenang."],
+    gr:"Stroberi! Warnanya inspiratif. Makasih ya.",
+    sched:[[8,"desa",14,4],[12,"desa",14,4],[17,"desa",16,10],[22,"rumah_maya",3,3]]},
+  jin_kebun:{name:"Jin Kebun",role:"Jin penjaga kebun",fav:"tomat",col:0x4ad8c0,scene:"kebun",spirit:true,
+    style:"robe", hair:0x1a8a8a, skin:0x9adcc8,
+    talks:["Hsss… kebun ini kujaga sejak lama.","Tanamlah dengan niat baik, kuberkati.","Malam, aku menyiram yang kau lupa."],
+    gr:"Tomat… persembahan diterima. Berkah untukmu.",
+    sched:[[19,"kebun",4,4],[23,"kebun",4,4],[5,"hidden",0,0]]},
+  kuntilanak:{name:"Kuntilanak",role:"Makhluk halus",fav:"stroberi",col:0xf2f2f2,scene:"kuburan",spirit:true,
+    style:"robe_long", hair:0x1a1a1a, skin:0xf2f2f2,
+    talks:["Kihihihi… kau berani datang malam-malam?","Merah… aku suka yang merah seperti darah.","Jangan menengok ke belakang, Nak."],
+    gr:"Stroberi merah… kau baik. Aku tak akan menggodamu.",
+    sched:[[20,"kuburan",6,5],[23,"kuburan",6,5],[5,"hidden",0,0]]},
+  pocong:{name:"Pocong",role:"Makhluk halus",fav:"herba",col:0xeae5da,scene:"kuburan",spirit:true,
+    style:"pocong", hair:0xeae5da, skin:0xeae5da,
+    talks:["…(melompat mendekat)…","Lepaskan ikatanku… atau beri aku herba.","(Mengangguk pelan)"],
+    gr:"(Mengangguk tenang. Ia tampak damai.)",
+    sched:[[21,"kuburan",10,8],[23,"kuburan",10,8],[5,"hidden",0,0]]},
+};
+
+/* ---------- SCENES (tilemap = list of strings) ---------- */
+// legenda char: G grass D dirt P path . tree H house M mailbox F fence g gate
+//   w water k dock l lily b bed C counter S shop B forge X cave-wall x cave-floor
+//   * portal  T deadtree  + grave  L lantern
+function mapFromStr(rows){
+  const ch={G:T.GRASS,D:T.DIRT,P:T.PATH,'.':T.TREE,H:T.HOUSE,M:T.MAILBOX,F:T.FENCE,
+    g:T.GATE,w:T.WATER,k:T.DOCK,l:T.WATERLILY,b:T.BED,C:T.COUNTER,S:T.SHOP,B:T.FORGE,
+    X:T.CAVEWALL,x:T.CAVEFLOOR,'*':T.PORTAL,T:T.DEADTREE,'+':T.GRAVE,L:T.LANTERN,
+    // interior + es + festival
+    d:T.DOOR, W:T.WALL_IN, f:T.FLOOR_WOOD, N:T.BED_NPC, t:T.TABLE, c:T.CHAIR,
+    h:T.CHEST_HOME, s:T.STOVE, o:T.BOOKSHELF, p:T.FLOWERPOT,
+    'i':T.ICE_FLOOR, 'I':T.ICE_WALL, 'Z':T.ICEPORTAL,
+    'A':T.FISHING_SPOT, 'q':T.FESTIVAL_BOOTH };
+  return rows.map(r=>r.split('').map(c=>ch[c]!==undefined?ch[c]:T.GRASS));
+}
+const SCENES = {
+  kebun:{ name:"Kebun Paman Arsa", bg:0x9fd98a,
+    tiles:mapFromStr([
+    "FFFFFFFFFFFFFFFFFF",
+    "FGGGGGGGGGGGGGGGGF",
+    "FGHHHHHGGGGGGGGGGF",
+    "FGHHHHHGGDDDDGGGGF",
+    "FGHHHHHGGDDDDGGGGF",
+    "FGHHdHHGGDDDDGGGGF",
+    "FGGGGGGGGGDDDGGGGF",
+    "FGGGMGGGGGGGGGGGGF",
+    "FGGGGGGGGGGGGGGGGF",
+    "FGGGGGGGGGGGGGGGGF",
+    "FGGGGGGGGGGGGGGGgF",
+    "FGGGGGGGGGGGGGGGGF",
+    "FFFFFFggFFFFFFFFFF"]),
+    portals:[{x:6,y:12,to:"desa",tx:7,ty:13},{x:7,y:12,to:"desa",tx:7,ty:13},
+             {x:16,y:10,to:"hutan",tx:1,ty:1},
+             {x:4,y:5,to:"rumah_player",tx:4,ty:4}],
+    spawn:[8,8] },
+  desa:{ name:"Desa Karsa", bg:0xaee0a0,
+    tiles:mapFromStr([
+    "FFFFFFFFggFFFFFFFFF",
+    "FGGGGGGGPPGGGGGGGGF",
+    "FGSSGGGGPPGGGGHHGGF",
+    "FGSCGGGGPPGGGGHbGGF",
+    "FGdGGGGGPPGGGGHHGGF",
+    "FGGGGGGGPPGGGGGdGGF",
+    "FGBBGGGGPPGGGGGGGGF",
+    "FGBCGGGPPPGGGGGGGGF",
+    "FGdGGGPPGGGGGHHGGGF",
+    "FGGGGGPPGGGGGHbGGGF",
+    "FGGGGGPPGGGGGHHwwGF",
+    "FGGGGGPPGGGGGGdwwGF",
+    "FGGGGGPPGGGGGGkwwGF",
+    "FGGGGGPPGGGGGGGGGGF",
+    "FFFFFF**FFFFF***FFF"]),
+    portals:[{x:6,y:14,to:"kebun",tx:6,ty:11},{x:7,y:14,to:"kebun",tx:7,ty:11},
+             {x:13,y:14,to:"hutan",tx:8,ty:1},{x:14,y:14,to:"hutan",tx:8,ty:1},
+             {x:15,y:14,to:"hutan",tx:8,ty:1},
+             // Doors to homes (tile 'd')
+             {x:2,y:4, to:"rumah_busari", tx:3,ty:4},
+             {x:15,y:5, to:"rumah_maya",   tx:3,ty:4},
+             {x:2,y:8, to:"rumah_budi",    tx:3,ty:4},
+             {x:14,y:11,to:"rumah_pakjoko",tx:3,ty:4}],
+    spawn:[9,2] },
+  hutan:{ name:"Lereng & Hutan", bg:0x7fc878,
+    tiles:mapFromStr([
+    "FFFFFFFF**FFFFFFFF",
+    "*GGGGGGGGGGGGGGGGF",
+    "GGGGGGGGGGGGGGGGGF",
+    "GG.GGGG.GGGG.GwAGF",
+    "GGGGGGGGGGGGGGwAGF",
+    "*GGGGGGGGGGGGGGGXF",
+    "GGGGGGGGGGGGGGGG*F",
+    "*GGGGGGGGGGGGGGGXF",
+    "GGGGGGGGGGGGGGGGGF",
+    "GG.GGGGG.GGGGG.GGF",
+    "GZGGGGGGGGGGGGGGGF",
+    "FFFFFFFFFFFFFFFFFF"]),
+    portals:[{x:0,y:1,to:"kebun",tx:15,ty:10},{x:0,y:7,to:"desa",tx:14,ty:13},
+             {x:8,y:0,to:"kuburan",tx:8,ty:9},{x:9,y:0,to:"kuburan",tx:8,ty:9},
+             {x:16,y:6,to:"cave",tx:0,ty:0},
+             {x:1,y:10,to:"cave_es",tx:0,ty:0}],
+    spawn:[8,5] },
+  kuburan:{ name:"Kuburan Tua", bg:0x4a5a4f, dark:true,
+    tiles:mapFromStr([
+    "FFFFFFFFFFFFFFFFFF",
+    "FGGTGGGGLGGGGTGGGF",
+    "FG++GG++GG++GG++GF",
+    "FG++GG++GG++GG++GF",
+    "FGGGGGGGGGGGGGGGGF",
+    "FGL+GG++TG++GGL+GF",
+    "FG++GG++GG++GG++GF",
+    "FGGGGGGGGGGGGGGGGF",
+    "FG++GGTGGGG++GG++F",
+    "FGGGGGGGGGGGGGGGGF",
+    "FGGGGGLGGGGGLGGGGF",
+    "FFFFFF**FFFFFFFFFF"]),
+    portals:[{x:6,y:11,to:"hutan",tx:8,ty:2},{x:7,y:11,to:"hutan",tx:8,ty:2}],
+    spawn:[8,9] },
+
+  /* ---- Interior rumah (indoor:true) — portal pintu = tile 'd' ---- */
+  // Spawn tile (3,4)/(4,4) di rumah HARUS 'f' (floor) supaya pemain tidak stuck di pintu.
+  rumah_busari:{ name:"Rumah Bu Sari", bg:0x2a2030, indoor:true,
+    tiles:mapFromStr([
+    "WWWWWWWW",
+    "WhffNffW",
+    "WoffftcW",
+    "WfffffcW",
+    "WsffffpW",
+    "WWWdWWWW"]),
+    portals:[{x:3,y:5,to:"desa",tx:2,ty:5}],
+    spawn:[3,4] },
+  rumah_budi:{ name:"Rumah Budi", bg:0x2a2030, indoor:true,
+    tiles:mapFromStr([
+    "WWWWWWWW",
+    "WhffNffW",
+    "WfffftcW",
+    "WfffffcW",
+    "WosfffpW",
+    "WWWdWWWW"]),
+    portals:[{x:3,y:5,to:"desa",tx:2,ty:9}],
+    spawn:[3,4] },
+  rumah_pakjoko:{ name:"Rumah Pak Joko", bg:0x2a2030, indoor:true,
+    tiles:mapFromStr([
+    "WWWWWWWW",
+    "WhffNffW",
+    "WoffftpW",
+    "WfffftcW",
+    "WsffffoW",
+    "WWWdWWWW"]),
+    portals:[{x:3,y:5,to:"desa",tx:14,ty:12}],
+    spawn:[3,4] },
+  rumah_maya:{ name:"Rumah Maya", bg:0x2a2030, indoor:true,
+    tiles:mapFromStr([
+    "WWWWWWWW",
+    "WhffNffW",
+    "WofftttW",
+    "WfffttcW",
+    "WosfffpW",
+    "WWWdWWWW"]),
+    portals:[{x:3,y:5,to:"desa",tx:15,ty:6}],
+    spawn:[3,4] },
+  rumah_player:{ name:"Rumahmu", bg:0x2a2030, indoor:true,
+    tiles:mapFromStr([
+    "WWWWWWWWWW",
+    "WhfffffbpW",
+    "WoffffftcW",
+    "WfffffffcW",
+    "WsfffffotW",
+    "WWWWdWWWWW"]),
+    portals:[{x:4,y:5,to:"kebun",tx:4,ty:6}],
+    spawn:[4,4] },
+
+  /* ---- Dungeon Es (placeholder; di-handle oleh genDungeon type) ---- */
+  cave_es:{ name:"Kuil Es Lereng", bg:0x1a2230, dark:true, iceDungeon:true,
+    tiles:mapFromStr([
+    "FFFFFFFFFFFFFFFFFF"]),
+    portals:[], spawn:[0,0] },
+};
+
+/* ---------- WORLD STATE ---------- */
+let scene,camera,renderer,clock;
+let player, playerGrp, worldGrp, particleGrp;
+const keys={};
+const G = {            // GameState (di-serialize ke JSON)
+  name:"Karsa", skin:0xe8b48a, hair:0x2a1a10, shirt:0x3a7ad8,
+  scene:"kebun", px:8, py:8,
+  hp:100,maxhp:100, en:100, gold:100, xp:0,
+  day:1, season:0, year:1, minute:6*60,
+  inv:{ benih_lobak:3, kayu:5, telur:3 },
+  seedSel:0, tool:0,
+  pick:-1, sword:-1,                 // tier index, -1 = belum punya
+  quest:0, mobsKilled:0, captured:0,
+  affection:{}, farm:{}, dunLevel:0, maxDun:0,
+  weather:"cerah",
+  // expansion state
+  sideQ:{bu_sari:0, budi:0, pak_joko:0, maya:0},   // current side quest index per NPC
+  sideActive:{},                                    // {npcId: questDef} if accepted
+  festival:null,                                    // {key,nm,desc,...} if today is festival
+  festivalScore:0,                                  // counter for festival activities (e.g. fish caught)
+  dungeonType:"cave",                               // "cave" | "kuil_es"
+  maxDunEs:0
+};
+const SEED_LIST = Object.keys(CROPS);
+let dungeon=null;          // {level,grid,mobs}
+let curScene="kebun";
+let npcEnts=[], mobEnts=[], wildEnts=[], festBoothMesh=null;
+let lastAttack=0, lastHit=0, busy=false, paused=true, gameStarted=false;
+
+/* ---------- AUDIO (prosedural) ---------- */
+let actx=null, muted=false;
+function beep(freq,dur,type="sine",vol=.12){
+  if(muted) return;
+  try{
+    if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type=type; o.frequency.value=freq;
+    o.connect(g); g.connect(actx.destination);
+    g.gain.setValueAtTime(vol,actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.0001,actx.currentTime+dur);
+    o.start(); o.stop(actx.currentTime+dur);
+  }catch(e){}
+}
+const SFX={
+  step:()=>beep(120+Math.random()*40,.05,"square",.05),
+  swing:()=>beep(300,.12,"sawtooth",.09),
+  hit:()=>beep(150,.16,"square",.13),
+  harvest:()=>{beep(520,.08);setTimeout(()=>beep(760,.1),70);},
+  till:()=>beep(180,.1,"square",.08),
+  water:()=>beep(420,.14,"sine",.06),
+  plant:()=>beep(620,.1,"triangle",.07),
+  kaching:()=>{beep(880,.07);setTimeout(()=>beep(1175,.12),60);},
+  mine:()=>beep(220,.12,"square",.1),
+  roar:()=>beep(70,.6,"sawtooth",.2),
+  blip:()=>beep(440,.04,"square",.05),
+  level:()=>{beep(660,.1);setTimeout(()=>beep(990,.16),90);},
+  hurt:()=>beep(110,.22,"sawtooth",.14),
+};
+
+/* ---------- UTIL ---------- */
+const $=s=>document.querySelector(s);
+function toast(msg,ms=1800){const t=$("#toast");t.textContent=msg;t.style.display="block";
+  clearTimeout(t._t);t._t=setTimeout(()=>t.style.display="none",ms);}
+function addItem(k,n=1){G.inv[k]=(G.inv[k]||0)+n;}
+function hasItem(k,n=1){return (G.inv[k]||0)>=n;}
+function takeItem(k,n=1){ if(!hasItem(k,n))return false; G.inv[k]-=n; if(G.inv[k]<=0)delete G.inv[k]; return true;}
+function tileAt(map,x,y){ if(y<0||y>=map.length||x<0||x>=map[0].length) return T.WALL; return map[y][x]; }
+
+/* =========================================================================
+   THREE.JS SETUP (Harvest Moon Crisp Isometric Lighting & Shadows)
+   ========================================================================= */
+let petalPts=null;
+function initAtmosphere(){
+  const n=35, pos=[], vel=[];
+  for(let i=0;i<n;i++){
+    pos.push((Math.random()-0.5)*90, Math.random()*25, (Math.random()-0.5)*90);
+    vel.push(-0.8-Math.random()*0.8, -0.4-Math.random()*0.4, -0.8-Math.random()*0.8);
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  petalPts=new THREE.Points(geo,new THREE.PointsMaterial({
+    color:0xffb7c5, size:0.7, transparent:true, opacity:0.85
+  }));
+  petalPts.userData={vel};
+  scene.add(petalPts);
+}
+function tickAtmosphere(dt){
+  if(!petalPts) return;
+  const p=petalPts.geometry.attributes.position.array;
+  const v=petalPts.userData.vel;
+  for(let i=0;i<p.length;i+=3){
+    p[i]+=v[i]*dt*3.5;
+    p[i+1]+=v[i+1]*dt*2.0;
+    p[i+2]+=v[i+2]*dt*3.5;
+    if(p[i+1]<0){ p[i+1]=25; p[i]+=40; p[i+2]+=40; }
+  }
+  petalPts.geometry.attributes.position.needsUpdate=true;
+  if(G.season===0) petalPts.material.color.setHex(0xffb7c5);
+  else if(G.season===1) petalPts.material.color.setHex(0xffe082);
+  else if(G.season===2) petalPts.material.color.setHex(0xff8a65);
+  else petalPts.material.color.setHex(0xe0f7fa);
+}
+
+function initThree(){
+  scene=new THREE.Scene();
+  scene.fog=new THREE.Fog(0xd8e8f0, 60, 300);
+  camera=new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.3, 1000);
+  renderer=new THREE.WebGLRenderer({canvas:$("#c"), antialias:true, powerPreference:"high-performance"});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  function resize(){
+    renderer.setSize(innerWidth, innerHeight);
+    camera.aspect=innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+  }
+  addEventListener("resize",resize); resize();
+
+  // ---- AWL soft pastel lighting: strong sky/ground bounce + gentle warm sun ----
+  const amb=new THREE.AmbientLight(0xfff6ea, 0.45); scene.add(amb);
+  const sun=new THREE.DirectionalLight(0xfff1d8, 0.8);
+  sun.position.set(30, 50, 30);
+  sun.castShadow = true;
+  sun.shadow.mapSize.width = 2048;
+  sun.shadow.mapSize.height = 2048;
+  sun.shadow.camera.near = 5;
+  sun.shadow.camera.far = 160;
+  sun.shadow.camera.left = -45;
+  sun.shadow.camera.right = 45;
+  sun.shadow.camera.top = 45;
+  sun.shadow.camera.bottom = -45;
+  sun.shadow.bias = -0.0006;
+  scene.add(sun); scene.add(sun.target);
+
+  const hemi=new THREE.HemisphereLight(0xd6ecff, 0xa8c98a, 0.6);
+  scene.add(hemi);
+  scene.userData={amb,sun,hemi};
+
+  // ---- Gradient sky dome (zenith → creamy horizon haze), follows the camera ----
+  const skyUni={ top:{value:new THREE.Color(0x8fc8f2)}, horizon:{value:new THREE.Color(0xf3ecd9)} };
+  const skyMat=new THREE.ShaderMaterial({
+    uniforms:skyUni, side:THREE.BackSide, depthWrite:false, fog:false,
+    vertexShader:`varying vec3 vP; void main(){ vP=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader:`uniform vec3 top; uniform vec3 horizon; varying vec3 vP;
+      void main(){ float h=clamp(vP.y,0.0,1.0); float t=pow(h,0.55);
+        vec3 c=mix(horizon,top,t); if(vP.y<0.0) c=horizon; gl_FragColor=vec4(c,1.0); }`
+  });
+  skyMat.color=skyUni.top.value;          // shim: legacy code calls sky.material.color.setHex()
+  const sky=new THREE.Mesh(new THREE.SphereGeometry(450,24,16), skyMat);
+  sky.renderOrder=-10;
+  scene.add(sky); scene.userData.sky=sky; scene.userData.skyUni=skyUni;
+
+  // Stars (children of sky so they follow the camera)
+  const sg=new THREE.BufferGeometry(), sp=[];
+  for(let i=0;i<500;i++){const r=400,a=Math.random()*6.28,b=0.15+Math.random()*1.3;
+    sp.push(Math.cos(a)*r*Math.cos(b),Math.sin(b)*r,Math.sin(a)*r*Math.cos(b));}
+  sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
+  const stars=new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:2.2,transparent:true,opacity:0,fog:false}));
+  sky.add(stars); scene.userData.stars=stars;
+
+  // Puffy AWL clouds
+  const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:.92, fog:false});
+  const cloudGrp=new THREE.Group(); scene.add(cloudGrp);
+  const cGeo=new THREE.SphereGeometry(1,12,9);
+  for(let i=0;i<14;i++){
+    const cl=new THREE.Group();
+    const n=4+Math.floor(Math.random()*4);
+    for(let k=0;k<n;k++){
+      const s=new THREE.Mesh(cGeo,cloudMat);
+      const r=6+Math.random()*7;
+      s.scale.set(r*1.3, r*.6, r);
+      s.position.set((k-n/2)*7+Math.random()*3, Math.random()*3, Math.random()*6-3);
+      cl.add(s);
+    }
+    const a=Math.random()*Math.PI*2, d=120+Math.random()*150;
+    cl.position.set(Math.cos(a)*d, 75+Math.random()*35, Math.sin(a)*d);
+    cl.userData.spd=0.8+Math.random()*1.4;
+    cloudGrp.add(cl);
+  }
+  scene.userData.cloudGrp=cloudGrp; scene.userData.cloudMat=cloudMat;
+
+  worldGrp=new THREE.Group(); scene.add(worldGrp);
+  particleGrp=new THREE.Group(); scene.add(particleGrp);
+  clock=new THREE.Clock();
+
+  // Target-tile cursor (soft ring, helps aiming with a free-rotating camera)
+  const cur=new THREE.Mesh(new THREE.RingGeometry(.62,.86,4,1),
+    new THREE.MeshBasicMaterial({color:0xfffbe8, transparent:true, opacity:.55, depthWrite:false}));
+  cur.rotation.x=-Math.PI/2; cur.rotation.z=Math.PI/4; cur.position.y=.04; cur.visible=false;
+  scene.add(cur); scene.userData.tileCursor=cur;
+
+  initCameraControls();
+  initAtmosphere();
+}
+
+/* ---------- AWL third-person orbit camera controls ---------- */
+let camYaw=0, camYawTarget=0, camPitch=0.5, camDist=15;
+const camLook=new THREE.Vector3();
+function initCameraControls(){
+  const cv=$("#c"); let drag=null;
+  cv.addEventListener('contextmenu',e=>e.preventDefault());
+  cv.addEventListener('pointerdown',e=>{ drag={x:e.clientX,y:e.clientY}; });
+  addEventListener('pointermove',e=>{
+    if(!drag) return;
+    const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag={x:e.clientX,y:e.clientY};
+    camYawTarget-=dx*0.0065;
+    camPitch=Math.max(0.18,Math.min(1.3,camPitch+dy*0.005));
+  });
+  addEventListener('pointerup',()=>drag=null);
+  cv.addEventListener('wheel',e=>{ e.preventDefault();
+    camDist=Math.max(7,Math.min(30,camDist*(1+e.deltaY*0.001))); },{passive:false});
+}
+function tickCameraInput(dt){
+  if(keys['arrowleft'])  camYawTarget+=1.9*dt;
+  if(keys['arrowright']) camYawTarget-=1.9*dt;
+  if(keys['arrowup'])    camPitch=Math.max(0.18,camPitch-0.9*dt);
+  if(keys['arrowdown'])  camPitch=Math.min(1.3, camPitch+0.9*dt);
+}
+function resetCameraBehind(){
+  // place camera directly behind the direction the player faces
+  const want=Math.atan2(-facing.x,-facing.z);
+  let d=want-camYawTarget; d=Math.atan2(Math.sin(d),Math.cos(d));
+  camYawTarget+=d;
+}
+
+/* ---------- CHIBI CHARACTER BUILDER ---------- */
+/* ---- Model dari Blender (.glb) — opsional, recolor & rig otomatis ---- */
+let CHIBI_TPL=null;
+function normalizeTpl(root){
+  root.updateMatrixWorld(true);
+  let b=new THREE.Box3().setFromObject(root);
+  const size=new THREE.Vector3(); b.getSize(size);
+  const s=2.4/(size.y||1);
+  root.scale.multiplyScalar(s);
+  root.updateMatrixWorld(true);
+  b=new THREE.Box3().setFromObject(root);
+  root.position.x-=(b.min.x+b.max.x)/2;
+  root.position.z-=(b.min.z+b.max.z)/2;
+  root.position.y-=b.min.y;
+  const wrap=new THREE.Group(); wrap.add(root);
+  return wrap;
+}
+function findPart(root,keys){
+  let f=null;
+  root.traverse(o=>{ if(f)return; const n=(o.name||'').toLowerCase();
+    if(keys.some(k=>n===k||n.includes(k))) f=o; });
+  return f;
+}
+function buildChibiModel(skin,hair,shirt,opts){
+  const g=new THREE.Group();
+  const inst=CHIBI_TPL.clone(true);
+  inst.traverse(o=>{ if(o.isMesh){
+    const mn=((o.material&&o.material.name)||'').toLowerCase();
+    let c=shirt;
+    if(mn.includes('skin'))      c=skin;
+    else if(mn.includes('hair')) c=hair;
+    else if(mn.includes('eye'))  c=0x161616;
+    else if(mn.includes('pant')) c=0x35506a;
+    else if(mn.includes('shirt')||mn.includes('cloth')||mn.includes('body')) c=shirt;
+    o.material=new THREE.MeshLambertMaterial({color:c});
+  }});
+  g.add(inst);
+  const ud={ t:0,
+    legL:findPart(inst,['legl','leg_l','leg.l','leftleg']),
+    legR:findPart(inst,['legr','leg_r','leg.r','rightleg']),
+    armL:findPart(inst,['arml','arm_l','arm.l','leftarm']),
+    armR:findPart(inst,['armr','arm_r','arm.r','rightarm']),
+    head:findPart(inst,['head']) };
+  if(!ud.legL||!ud.legR||!ud.armL||!ud.armR)
+    return buildChibiSprite(skin,hair,shirt,opts);  // rig tak cocok → fallback sprite
+  g.userData=ud;
+  if(opts&&opts.tag){
+    const cv=document.createElement('canvas');cv.width=256;cv.height=64;
+    const cx=cv.getContext('2d');cx.fillStyle="rgba(0,0,0,.55)";cx.fillRect(0,0,256,64);
+    cx.font="bold 30px Montserrat,sans-serif";
+    cx.fillStyle=opts.spirit?"#ff9bd0":"#ffe27a";cx.textAlign="center";
+    cx.fillText(opts.tag,128,42);
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({
+      map:new THREE.CanvasTexture(cv),transparent:true}));
+    sp.scale.set(2.4,.6,1); sp.position.y=3.0; g.add(sp);
+  }
+  return g;
+}
+function buildChibi(skin,hair,shirt,opts={}){
+  // A Wonderful Life style: fully 3D chibi characters (big round head, stubby limbs).
+  if(opts.useModel && CHIBI_TPL) return buildChibiModel(skin,hair,shirt,opts);
+  if(opts.sprite) return buildChibiSprite(skin,hair,shirt,opts);
+  return buildChibi3D(skin,hair,shirt,opts);
+}
+
+/* ---------- 3D CHIBI (Harvest Moon: A Wonderful Life style) ---------- */
+const CHIBI_GEO={};
+function cgeo(k,f){ return CHIBI_GEO[k]||(CHIBI_GEO[k]=f()); }
+function buildChibi3D(skin,hair,shirt,opts={}){
+  const style=opts.style||(opts.player?'farmer':null);
+  const spirit=!!opts.spirit;
+  const pantsCol=opts.pants||(spirit?0x6a6aa0:0x3d5f8a);
+  const mk=(c)=>{ const m=new THREE.MeshLambertMaterial({color:c});
+    if(spirit){ m.transparent=true; m.opacity=0.84; m.emissive=new THREE.Color(c).multiplyScalar(0.28); }
+    return m; };
+  const mSkin=mk(skin), mHair=mk(hair), mShirt=mk(shirt), mPants=mk(pantsCol), mShoe=mk(0x5a3a22);
+  const mEye=new THREE.MeshBasicMaterial({color:spirit&&style!=='pocong'?0x3a1030:0x1e1410});
+  const mWhite=new THREE.MeshBasicMaterial({color:0xffffff});
+  const mBlush=new THREE.MeshBasicMaterial({color:0xff8f8f,transparent:true,opacity:.5,depthWrite:false});
+
+  const g=new THREE.Group(), rig=new THREE.Group(), body=new THREE.Group();
+  g.add(rig); rig.add(body);
+  function mesh(geo,mat,x,y,z,parent){ const m=new THREE.Mesh(geo,mat); m.position.set(x,y,z);
+    m.castShadow=true; (parent||body).add(m); return m; }
+  const pivot=(x,y,z)=>{ const p=new THREE.Group(); p.position.set(x,y,z); body.add(p); return p; };
+
+  let legL, legR, armL, armR, head;
+  const robe = style==='robe'||style==='robe_long';
+  const skirt= style==='apron'||style==='beret_long';
+
+  if(style==='pocong'){
+    // Shroud body, no limbs — hops instead of walking
+    const mShroud=mk(0xeae5da);
+    mesh(cgeo('pcBody',()=>new THREE.CylinderGeometry(.42,.38,1.5,14)),mShroud,0,.8,0);
+    head=mesh(cgeo('pcHead',()=>new THREE.SphereGeometry(.48,16,12)),mShroud,0,1.72,0);
+    mesh(cgeo('pcKnot',()=>new THREE.SphereGeometry(.14,8,6)),mShroud,0,2.26,0);
+    const band=mk(0xb8b0a0);
+    mesh(cgeo('pcBand',()=>new THREE.CylinderGeometry(.44,.44,.06,14)),band,0,1.3,0);
+    mesh(cgeo('pcBand2',()=>new THREE.CylinderGeometry(.4,.4,.06,14)),band,0,.25,0);
+    mesh(cgeo('pcFace',()=>new THREE.CircleGeometry(.3,14)),new THREE.MeshBasicMaterial({color:0x6a6258}),0,1.7,.47);
+    for(const s of [-1,1]) mesh(cgeo('pcEye',()=>new THREE.SphereGeometry(.05,6,5)),new THREE.MeshBasicMaterial({color:0x111111}),s*.1,1.74,.5);
+    legL=legR=armL=armR=new THREE.Group();
+  } else {
+    // ---- legs (pivot at hip) ----
+    legL=pivot(-.15,.62,0); legR=pivot(.15,.62,0);
+    for(const L of [legL,legR]){
+      if(!robe){
+        mesh(cgeo('leg',()=>new THREE.CylinderGeometry(.12,.11,.5,10)),mPants,0,-.25,0,L);
+        const sh=mesh(cgeo('shoe',()=>new THREE.SphereGeometry(.14,10,8)),mShoe,0,-.52,.05,L);
+        sh.scale.set(1,.62,1.45);
+      }
+    }
+    // ---- torso ----
+    mesh(cgeo('torso',()=>new THREE.CylinderGeometry(.3,.37,.64,14)),mShirt,0,.93,0);
+    if(style==='farmer'){
+      // AWL overalls + straps
+      const mDen=mk(0x3a6ea8);
+      mesh(cgeo('ovr',()=>new THREE.CylinderGeometry(.33,.38,.38,14)),mDen,0,.8,0);
+      mesh(cgeo('bib',()=>new THREE.BoxGeometry(.36,.28,.07)),mDen,0,1.07,.3);
+      for(const s of [-1,1]){
+        const st=mesh(cgeo('strap',()=>new THREE.BoxGeometry(.07,.42,.06)),mDen,s*.16,1.16,.05);
+        st.rotation.x=.2;
+        mesh(cgeo('btn',()=>new THREE.SphereGeometry(.035,6,5)),mk(0xffd54f),s*.13,1.17,.34);
+      }
+    }
+    if(skirt || robe){
+      const len=robe?1.0:.5;
+      const sk=mesh(cgeo('skirt'+len,()=>new THREE.CylinderGeometry(.33,robe?.6:.52,len,16)),mShirt,0,robe?.55:.66,0);
+      if(style==='robe_long') sk.scale.y=1.08;
+    }
+    if(style==='apron'){
+      const mA=mk(0xfbf6ea);
+      mesh(cgeo('apron',()=>new THREE.BoxGeometry(.46,.62,.05)),mA,0,.78,.37).rotation.x=-.12;
+      mesh(cgeo('apronTie',()=>new THREE.BoxGeometry(.5,.06,.06)),mA,0,1.0,-.3);
+    }
+    // ---- arms (pivot at shoulder) ----
+    armL=pivot(-.4,1.17,0); armR=pivot(.4,1.17,0);
+    armL.rotation.z=-.14; armR.rotation.z=.14;
+    for(const A of [armL,armR]){
+      mesh(cgeo('arm',()=>new THREE.CylinderGeometry(.095,.085,.44,9)),mShirt,0,-.2,0,A);
+      mesh(cgeo('hand',()=>new THREE.SphereGeometry(.11,10,8)),mSkin,0,-.45,0,A);
+    }
+    // ---- head: big round AWL chibi head ----
+    head=new THREE.Group(); head.position.set(0,1.72,0); body.add(head);
+    mesh(cgeo('head',()=>new THREE.SphereGeometry(.56,22,16)),mSkin,0,0,0,head);
+    // hair shell (sits a little back & up → natural fringe)
+    const hs=mesh(cgeo('hair',()=>new THREE.SphereGeometry(.6,22,16)),mHair,0,.08,-.07,head);
+    if(style==='robe_long'||style==='beret_long'){
+      mesh(cgeo('longHair',()=>new THREE.CylinderGeometry(.44,.36,.95,14)),mHair,0,-.42,-.2,head);
+    }
+    if(style==='apron'){ mesh(cgeo('bun',()=>new THREE.SphereGeometry(.22,12,10)),mHair,0,.42,-.42,head); }
+    if(style==='robe_long'){
+      for(const s of [-1,1]) mesh(cgeo('strand',()=>new THREE.BoxGeometry(.14,.85,.12)),mHair,s*.38,-.42,.25,head);
+    }
+    // face
+    for(const s of [-1,1]){
+      const e=mesh(cgeo('eye',()=>new THREE.SphereGeometry(.085,10,8)),mEye,s*.19,-.04,.5,head);
+      e.scale.set(.78,1.18,.45); e.castShadow=false;
+      const hl=mesh(cgeo('eyeHl',()=>new THREE.SphereGeometry(.028,6,5)),mWhite,s*.19+.025,0,.54,head);
+      hl.castShadow=false;
+      const b=mesh(cgeo('blush',()=>new THREE.CircleGeometry(.075,12)),mBlush,s*.33,-.17,.44,head);
+      b.rotation.y=s*.62; b.castShadow=false;
+    }
+    mesh(cgeo('mouth',()=>new THREE.BoxGeometry(.09,.025,.02)),new THREE.MeshBasicMaterial({color:0x8a3a2a}),0,-.22,.53,head).castShadow=false;
+
+    // ---- headwear ----
+    if(style==='farmer'){
+      const mCap=mk(0x3a6ea8);
+      mesh(cgeo('cap',()=>new THREE.SphereGeometry(.62,20,10,0,Math.PI*2,0,Math.PI/2)),mCap,0,.1,-.02,head);
+      const br=mesh(cgeo('brim',()=>new THREE.CylinderGeometry(.34,.34,.05,16,1,false,0,Math.PI)),mCap,0,.13,.46,head);
+      br.rotation.y=-Math.PI/2;
+    } else if(style==='hat'){
+      const mStraw=mk(0xcfa865);
+      mesh(cgeo('hatBrim',()=>new THREE.CylinderGeometry(.98,.98,.05,22)),mStraw,0,.38,0,head);
+      mesh(cgeo('hatCrown',()=>new THREE.CylinderGeometry(.42,.5,.36,16)),mStraw,0,.56,0,head);
+      mesh(cgeo('hatBand',()=>new THREE.CylinderGeometry(.505,.505,.08,16)),mk(0x6a3a1a),0,.42,0,head);
+    } else if(style==='bandana'){
+      const mBan=mk(0xc8382e);
+      mesh(cgeo('band',()=>new THREE.CylinderGeometry(.615,.615,.14,18,1,true)),mBan,0,.22,-.02,head)
+        .material.side=THREE.DoubleSide;
+      mesh(cgeo('knot',()=>new THREE.BoxGeometry(.14,.22,.08)),mBan,0,.14,-.62,head);
+    } else if(style==='beret_long'||style==='beret'){
+      const br=mesh(cgeo('beret',()=>new THREE.SphereGeometry(.52,16,10)),mk(0x5a2a8a),.08,.48,-.04,head);
+      br.scale.set(1,.34,1); br.rotation.z=.25;
+    }
+    hs.castShadow=true;
+  }
+
+  // soft round blob shadow (AWL-style contact shadow)
+  const shadowCv=document.createElement('canvas'); shadowCv.width=32; shadowCv.height=32;
+  const sxc=shadowCv.getContext('2d');
+  const sgrd=sxc.createRadialGradient(16,16,2,16,16,15);
+  sgrd.addColorStop(0,'rgba(30,40,20,.32)'); sgrd.addColorStop(1,'rgba(30,40,20,0)');
+  sxc.fillStyle=sgrd; sxc.fillRect(0,0,32,32);
+  const shadow=new THREE.Mesh(cgeo('blob',()=>new THREE.PlaneGeometry(1.5,1.5)),
+    new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(shadowCv),transparent:true,depthWrite:false}));
+  shadow.rotation.x=-Math.PI/2; shadow.position.y=0.03; g.add(shadow);
+
+  g.userData={ chibi3d:true, rig, body, head, legL, legR, armL, armR, shadow,
+    t:0, idle:Math.random()*6, swingT:0, hop:style==='pocong', toolProp:null };
+
+  if(opts.tag){
+    const cv=document.createElement('canvas');cv.width=256;cv.height=48;
+    const cx=cv.getContext('2d');
+    cx.fillStyle="rgba(255,250,235,.88)";
+    if(cx.roundRect){ cx.beginPath(); cx.roundRect(4,4,248,40,18); cx.fill(); } else cx.fillRect(4,4,248,40);
+    cx.font="bold 24px Montserrat,sans-serif";
+    cx.fillStyle=opts.spirit?"#9a3a7a":"#5a3825";
+    cx.textAlign="center"; cx.fillText(opts.tag,128,33);
+    const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false}));
+    tag.scale.set(2.2,.42,1); tag.position.y=(style==='hat'?3.05:2.85);
+    g.add(tag); g.userData.tag=tag;
+  }
+  return g;
+}
+
+/* Tool prop shown in the right hand while swinging */
+function setToolProp(ud,tool){
+  if(ud.toolProp){ ud.armR.remove(ud.toolProp); ud.toolProp=null; }
+  const M=c=>new THREE.MeshLambertMaterial({color:c});
+  const p=new THREE.Group(); p.position.set(0,-.45,0);
+  const add=(geo,c,x,y,z)=>{ const m=new THREE.Mesh(geo,M(c)); m.position.set(x,y,z); m.castShadow=true; p.add(m); return m; };
+  const stick=()=>{ const s=add(cgeo('tStick',()=>new THREE.CylinderGeometry(.035,.035,.95,6)),0x8a5a30,0,0,.38); s.rotation.x=Math.PI/2; };
+  switch(tool){
+    case 0: stick(); add(cgeo('tHoe',()=>new THREE.BoxGeometry(.26,.2,.05)),0xa8a8b0,0,-.08,.84); break;           // cangkul
+    case 1: add(cgeo('tCan',()=>new THREE.CylinderGeometry(.15,.17,.26,12)),0x4aa8c0,0,-.05,.2);                      // siram
+            { const sp=add(cgeo('tSpout',()=>new THREE.CylinderGeometry(.03,.04,.38,6)),0x4aa8c0,0,0,.45); sp.rotation.x=1.1; } break;
+    case 2: add(cgeo('tSack',()=>new THREE.SphereGeometry(.16,10,8)),0xd8c08a,0,-.05,.12); break;                       // tanam
+    case 3: { const h=add(cgeo('tHandle',()=>new THREE.CylinderGeometry(.03,.03,.3,6)),0x8a5a30,0,0,.15); h.rotation.x=Math.PI/2;
+              const b=add(cgeo('tSickle',()=>new THREE.TorusGeometry(.18,.03,5,10,Math.PI)),0xc8c8d0,0,0,.42); b.rotation.y=Math.PI/2; } break;
+    case 4: stick(); add(cgeo('tAxe',()=>new THREE.BoxGeometry(.06,.26,.3)),0xa0a0a8,0,.08,.8); break;
+    case 5: add(cgeo('tGift',()=>new THREE.BoxGeometry(.26,.22,.26)),0xff7aa8,0,0,.14);
+            add(cgeo('tRib',()=>new THREE.BoxGeometry(.28,.24,.06)),0xffe27a,0,0,.14); break;
+    case 6: stick(); add(cgeo('tPick',()=>new THREE.BoxGeometry(.6,.06,.07)),0x8a8a92,0,0,.84); break;
+    case 7: { const bl=add(cgeo('tBlade',()=>new THREE.BoxGeometry(.06,.03,1.0)),0xe0e4ec,0,0,.6);
+              add(cgeo('tGuard',()=>new THREE.BoxGeometry(.3,.05,.06)),0xc8a040,0,0,.1); } break;
+  }
+  ud.armR.add(p); ud.toolProp=p;
+}
+
+/* Animate a 3D chibi: turn toward movement, swing limbs, idle breathing, tool swing */
+function tickChibi3D(g,dt,mvx,mvz,fast){
+  const ud=g.userData;
+  const moving=!!(mvx||mvz);
+  if(moving){
+    const target=Math.atan2(mvx,mvz);
+    let d=target-ud.rig.rotation.y; d=Math.atan2(Math.sin(d),Math.cos(d));
+    ud.rig.rotation.y+=d*Math.min(1,dt*12);
+    ud.t+=dt*(fast?14:9.5);
+    const s=Math.sin(ud.t);
+    if(ud.hop){ ud.body.position.y=Math.abs(Math.sin(ud.t*.7))*.4; }
+    else{
+      ud.legL.rotation.x= s*.75; ud.legR.rotation.x=-s*.75;
+      if(ud.swingT<=0){ ud.armL.rotation.x=-s*.65; ud.armR.rotation.x=s*.65; }
+      ud.body.position.y=Math.abs(Math.cos(ud.t))*.08;
+      ud.body.rotation.x=fast?.12:.05;
+    }
+  } else {
+    ud.idle+=dt*2;
+    const k=Math.min(1,dt*10);
+    ud.legL.rotation.x*=1-k; ud.legR.rotation.x*=1-k;
+    if(ud.swingT<=0){ ud.armL.rotation.x*=1-k; ud.armR.rotation.x*=1-k; }
+    ud.body.rotation.x*=1-k;
+    ud.body.position.y=ud.hop?Math.max(0,ud.body.position.y-dt*2):Math.sin(ud.idle)*.018;
+    if(ud.head) ud.head.rotation.z=Math.sin(ud.idle*.5)*.04;
+  }
+  if(ud.swingT>0){
+    ud.swingT-=dt;
+    const p=1-Math.max(0,ud.swingT)/0.34;
+    ud.armR.rotation.x = p<.35 ? -0.3-2.4*(p/.35) : -2.7+2.2*((p-.35)/.65);
+    if(ud.swingT<=0){ ud.armR.rotation.x=0; if(ud.toolProp) ud.toolProp.visible=false; }
+  }
+}
+function loadGLBFile(file){
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      new THREE.GLTFLoader().parse(r.result,'',gltf=>{
+        try{
+          CHIBI_TPL=normalizeTpl(gltf.scene);
+          const st=$("#modelStatus");
+          if(st){ st.textContent="✅ Model Blender dimuat — karakter memakai model."; st.style.color="#7ee08a"; }
+          toast("Model Blender dimuat!",2400);
+          if(gameStarted){
+            const pos=playerGrp?playerGrp.position.clone():null;
+            if(playerGrp) scene.remove(playerGrp);
+            spawnPlayer(); if(pos) playerGrp.position.copy(pos);
+            if(dungeon) buildDungeon(); else buildScene(curScene);
+          }
+        }catch(e){ console.error(e); toast("Model tak bisa diproses."); }
+      },err=>{ console.error(err); toast("Gagal mem-parsing .glb"); });
+    }catch(e){ console.error(e); toast("GLTFLoader tidak tersedia."); }
+  };
+  r.readAsArrayBuffer(file);
+}
+function box(w,h,d,col){return new THREE.Mesh(new THREE.BoxGeometry(w,h,d),
+  new THREE.MeshLambertMaterial({color:col}));}
+
+/* ---------- PIXEL-ART SPRITE CHARACTER (Harvest Moon SNES style) ---------- */
+const hexCss = h => '#'+(h>>>0).toString(16).padStart(6,'0').slice(-6);
+function drawChar(skin,hair,shirt,pants,dir,step,style){
+  const cv=document.createElement('canvas'); cv.width=16; cv.height=24;
+  const cx=cv.getContext('2d'); cx.imageSmoothingEnabled=false;
+  const H=hexCss(hair), S=hexCss(skin), Sh=hexCss(shirt), P=hexCss(pants||0x35506a);
+
+  // ---- POCONG (white wrapped figure, no limbs) ----
+  if(style==='pocong'){
+    cx.fillStyle='#eae5da'; cx.fillRect(3,2,10,21);  // body shroud
+    cx.fillStyle='#c8c2b6'; cx.fillRect(3,2,10,1); cx.fillRect(3,22,10,1);  // shadows
+    cx.fillStyle='#8a8276'; cx.fillRect(5,3,6,1); cx.fillRect(5,21,6,1);    // tie wrap
+    cx.fillStyle='#1a1a1a'; cx.fillRect(6,8,1,1); cx.fillRect(9,8,1,1);     // hollow eyes
+    cx.fillStyle='rgba(0,0,0,.18)'; cx.fillRect(11,2,1,21);
+    return cv;
+  }
+
+  // ---- head ----
+  cx.fillStyle=S;  cx.fillRect(4,3,8,7);                   // face block
+  // hair (varies by style/dir)
+  cx.fillStyle=H;  cx.fillRect(3,2,10,3);                  // hair top
+  cx.fillRect(3,2,1,5); cx.fillRect(12,2,1,5);             // hair sides
+  if(dir==='back'){ cx.fillRect(4,3,8,5); }
+  else if(dir==='left'){ cx.fillRect(4,4,3,2); }
+  else if(dir==='right'){ cx.fillRect(9,4,3,2); }
+  else { cx.fillRect(4,4,2,2); cx.fillRect(10,4,2,2); }
+  // ---- HAIR style add-ons ----
+  if(style==='beret_long' || style==='long_hair'){
+    cx.fillStyle=H;
+    cx.fillRect(3,5,1,7); cx.fillRect(12,5,1,7);            // long hair sides
+    if(dir==='back') cx.fillRect(4,10,8,3);                 // ponytail down back
+  }
+  // ---- HEADWEAR overlays ----
+  if(style==='bandana'){
+    cx.fillStyle='#c83a3a'; cx.fillRect(3,2,10,2);
+    cx.fillStyle='#8a2020'; cx.fillRect(3,3,10,1);
+    if(dir==='back'){ cx.fillStyle='#c83a3a'; cx.fillRect(2,3,1,3); cx.fillRect(13,3,1,3); }
+  } else if(style==='hat'){
+    // wide-brim fisherman hat
+    cx.fillStyle='#6a4828'; cx.fillRect(1,3,14,1);          // brim
+    cx.fillRect(3,1,10,2);                                  // crown
+    cx.fillStyle='#4a3018'; cx.fillRect(1,3,14,1);          // shadow
+    cx.fillRect(3,2,10,1);
+  } else if(style==='beret_long' || style==='beret'){
+    cx.fillStyle='#5a2a8a'; cx.fillRect(3,1,10,3);
+    cx.fillStyle='#3a1a5a'; cx.fillRect(11,0,2,2);          // tilt
+    cx.fillStyle='#1a0a2a'; cx.fillRect(3,4,10,1);          // brim shadow
+  }
+  // eyes
+  if(dir!=='back'){
+    cx.fillStyle='#0a0a0a';
+    if(dir==='left'){ cx.fillRect(5,7,1,1); cx.fillRect(7,7,1,1); }
+    else if(dir==='right'){ cx.fillRect(8,7,1,1); cx.fillRect(10,7,1,1); }
+    else { cx.fillRect(6,7,1,1); cx.fillRect(9,7,1,1); }
+  }
+  if(dir==='front'){ cx.fillStyle='#5a2820'; cx.fillRect(7,9,2,1); }
+
+  // ---- body / shirt ----
+  cx.fillStyle=Sh; cx.fillRect(4,10,8,6);                  // torso
+  const aOff = step===0 ? 0 : 1;
+  cx.fillRect(2, 11+aOff, 2, 4);                            // left arm
+  cx.fillRect(12,11-aOff, 2, 4);                            // right arm
+  cx.fillStyle=S; cx.fillRect(2,15+aOff,2,1); cx.fillRect(12,15-aOff,2,1);
+  cx.fillStyle='#000'; cx.fillRect(7,10,2,1);
+
+  // ---- CLOTHING style overlays ----
+  if(style==='apron'){
+    cx.fillStyle='#f0eada'; cx.fillRect(5,10,6,6);          // cream apron front
+    cx.fillStyle='#b8a888'; cx.fillRect(5,10,6,1);          // apron top trim
+    cx.fillStyle='#8a7868'; cx.fillRect(5,15,6,1);          // bottom edge
+    // apron tie strap
+    cx.fillStyle='#b8a888'; cx.fillRect(4,10,1,2); cx.fillRect(11,10,1,2);
+  }
+  if(style==='robe' || style==='robe_long'){
+    cx.fillStyle=Sh; cx.fillRect(3,11,10,9);                // wider robe
+    cx.fillStyle='rgba(0,0,0,.2)'; cx.fillRect(3,19,10,1);  // hem shadow
+    // hide pants area later
+  }
+
+  // ---- legs / pants ----
+  if(style!=='robe' && style!=='robe_long'){
+    cx.fillStyle=P;
+    if(step===0){ cx.fillRect(5,16,3,6); cx.fillRect(8,16,3,5); }
+    else        { cx.fillRect(5,16,3,5); cx.fillRect(8,16,3,6); }
+    cx.fillStyle='#1a1a1a';
+    if(step===0){ cx.fillRect(5,22,3,2); cx.fillRect(8,21,3,2); }
+    else        { cx.fillRect(5,21,3,2); cx.fillRect(8,22,3,2); }
+  } else {
+    // robe trailing bottom
+    cx.fillStyle=Sh; cx.fillRect(4,20,8,3);
+    cx.fillStyle='rgba(0,0,0,.25)'; cx.fillRect(4,22,8,1);
+  }
+
+  // ---- outline shading (right side darker, retro PSX look) ----
+  cx.fillStyle='rgba(0,0,0,.18)';
+  cx.fillRect(11,3,1,7); cx.fillRect(11,10,1,6); cx.fillRect(13,11,1,4);
+  cx.fillRect(10,16,1,6);
+  return cv;
+}
+function makeCharTex(skin,hair,shirt,pants,dir,step,style){
+  const tex=new THREE.CanvasTexture(drawChar(skin,hair,shirt,pants,dir,step,style));
+  tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter;
+  tex.generateMipmaps=false;
+  return tex;
+}
+function makeCharFrames(skin,hair,shirt,pants,style){
+  const f={};
+  for(const dir of ['front','back','left','right']){
+    f[dir]=[makeCharTex(skin,hair,shirt,pants,dir,0,style),
+            makeCharTex(skin,hair,shirt,pants,dir,1,style)];
+  }
+  return f;
+}
+// Dummy joint object so legacy animation code (legL.rotation.x = ...) doesn't throw
+function _jointStub(){ return { rotation:{x:0,y:0,z:0}, position:{x:0,y:0,z:0} }; }
+
+function buildChibiSprite(skin,hair,shirt,opts={}){
+  const g=new THREE.Group();
+  // pants color (dark blue jeans by default, lighter for spirit)
+  const pants = opts.pants || (opts.spirit ? 0x6a6aa0 : 0x35506a);
+  const style = opts.style || null;
+  const frames = makeCharFrames(skin,hair,shirt,pants,style);
+  const mat = new THREE.SpriteMaterial({map:frames.front[0], transparent:true, alphaTest:0.5});
+  const sp = new THREE.Sprite(mat);
+  // 16x24 sprite: width ratio = 16/24, scale Y to ~2.4 units (HM character height)
+  sp.scale.set(1.6, 2.4, 1);
+  sp.position.y = 1.2;
+  g.add(sp);
+  // ---- HM-style ground shadow ----
+  const shadowCv=document.createElement('canvas'); shadowCv.width=32; shadowCv.height=16;
+  const sxc=shadowCv.getContext('2d');
+  const sgrd=sxc.createRadialGradient(16,8,2,16,8,14);
+  sgrd.addColorStop(0,'rgba(0,0,0,.45)'); sgrd.addColorStop(1,'rgba(0,0,0,0)');
+  sxc.fillStyle=sgrd; sxc.fillRect(0,0,32,16);
+  const shadowTex=new THREE.CanvasTexture(shadowCv);
+  shadowTex.magFilter=THREE.LinearFilter;
+  const shadow=new THREE.Mesh(new THREE.PlaneGeometry(1.4,.7),
+    new THREE.MeshBasicMaterial({map:shadowTex,transparent:true,depthWrite:false}));
+  shadow.rotation.x=-Math.PI/2; shadow.position.y=0.03;
+  g.add(shadow);
+  // Spirit ethereal effect: slight opacity
+  if(opts.spirit){ mat.opacity=0.88; }
+  g.userData = {
+    sprite: sp, frames, shadow, dir:'front', step:0, t:0, bobT:0, walking:false,
+    // legacy stubs so old animation code keeps working as no-ops
+    legL:_jointStub(), legR:_jointStub(),
+    armL:_jointStub(), armR:_jointStub(), head:sp
+  };
+  if(opts.tag){
+    const cv=document.createElement('canvas');cv.width=192;cv.height=40;
+    const cx=cv.getContext('2d');
+    cx.fillStyle="rgba(0,0,0,.6)"; cx.fillRect(0,0,192,40);
+    cx.font="bold 20px monospace";
+    cx.fillStyle=opts.spirit?"#ff9bd0":"#ffe27a";
+    cx.textAlign="center"; cx.fillText(opts.tag,96,27);
+    const tex=new THREE.CanvasTexture(cv);
+    tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter;
+    const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true}));
+    tag.scale.set(2.0,.42,1); tag.position.y=2.95; g.add(tag);
+  }
+  return g;
+}
+
+// Update sprite frame based on direction + walk step
+function spriteFaceFromMove(mvx,mvz){
+  if(Math.abs(mvx)>Math.abs(mvz)) return mvx>0?'right':'left';
+  if(mvz>0) return 'front';
+  if(mvz<0) return 'back';
+  return null;
+}
+function tickSprite(g, dt, mvx, mvz, fast){
+  const ud=g.userData;
+  if(ud.chibi3d){ tickChibi3D(g,dt,mvx,mvz,fast); return; }
+  if(!ud.frames) return;
+  const moving = !!(mvx||mvz);
+  ud.walking = moving;
+  if(moving){
+    const dir = spriteFaceFromMove(mvx,mvz);
+    if(dir) ud.dir = dir;
+    ud.t += dt*(fast?9:6);
+    const step = Math.floor(ud.t)%2;
+    if(step!==ud.step || ud._lastDir!==ud.dir){
+      ud.step=step; ud._lastDir=ud.dir;
+      ud.sprite.material.map = ud.frames[ud.dir][step];
+      ud.sprite.material.needsUpdate=true;
+    }
+    // gentle vertical hop while walking
+    ud.bobT += dt*(fast?12:8);
+    ud.sprite.position.y = 1.2 + Math.abs(Math.sin(ud.bobT))*0.06;
+  } else {
+    // idle: lock to step 0 of last facing
+    if(ud.step!==0){
+      ud.step=0;
+      ud.sprite.material.map = ud.frames[ud.dir][0];
+      ud.sprite.material.needsUpdate=true;
+    }
+    // idle breathing bob
+    ud.bobT += dt*1.6;
+    ud.sprite.position.y = 1.2 + Math.sin(ud.bobT)*0.04;
+  }
+}
+
+/* ---------- WORLD BUILD ---------- */
+const geoCache={};
+function gbox(w,h,d){const k=w+'_'+h+'_'+d; return geoCache[k]||(geoCache[k]=new THREE.BoxGeometry(w,h,d));}
+
+/* ---------- AWL SOFT GROUND TEXTURES (seamless, painterly, smooth-filtered) ---------- */
+const SOFT_PAL={
+  grass:     {base:'#88c763', dark:['#74b553','#6aa94b'], light:['#9cd677','#a8dc86'], blade:'#5f9d42', flowers:true},
+  graveyard: {base:'#5e7462', dark:['#50655a','#475a4f'], light:['#6c8370','#748c78'], blade:'#3e5246', flowers:false},
+  path:      {base:'#d2b78a', dark:['#c0a274','#b39468'], light:['#e0c89e','#e8d4ac'], blade:null, flowers:false, pebbles:true},
+};
+function makeSoftTex(kind){
+  const P=SOFT_PAL[kind], N=128;
+  const cv=document.createElement('canvas'); cv.width=N; cv.height=N;
+  const cx=cv.getContext('2d');
+  cx.fillStyle=P.base; cx.fillRect(0,0,N,N);
+  let s=kind.length*977+13; const r=()=>{ s=(s*16807)%2147483647; return (s-1)/2147483646; };
+  // wrap-aware draw → texture tiles seamlessly
+  const blob=(x,y,rad,col,a)=>{ cx.globalAlpha=a; cx.fillStyle=col;
+    for(const ox of [-N,0,N]) for(const oy of [-N,0,N]){
+      cx.beginPath(); cx.ellipse(x+ox,y+oy,rad,rad*.7,0,0,Math.PI*2); cx.fill(); } };
+  for(let i=0;i<70;i++) blob(r()*N,r()*N,6+r()*14,P.dark[i%2],.22);
+  for(let i=0;i<70;i++) blob(r()*N,r()*N,5+r()*12,P.light[i%2],.2);
+  for(let i=0;i<260;i++) blob(r()*N,r()*N,.8+r()*1.6,r()<.5?P.dark[1]:P.light[1],.45);
+  if(P.blade){
+    cx.globalAlpha=.55; cx.strokeStyle=P.blade; cx.lineWidth=1.2;
+    for(let i=0;i<160;i++){ const x=r()*N, y=r()*N, h=3+r()*4, lean=(r()-.5)*3;
+      for(const ox of [-N,0,N]) for(const oy of [-N,0,N]){
+        cx.beginPath(); cx.moveTo(x+ox,y+oy); cx.lineTo(x+ox+lean,y+oy-h); cx.stroke(); } }
+  }
+  if(P.pebbles){ for(let i=0;i<40;i++) blob(r()*N,r()*N,1+r()*1.8,r()<.5?'#a88a62':'#f0e2c4',.7); }
+  if(P.flowers){
+    for(let i=0;i<5;i++){ const x=r()*N, y=r()*N, c=['#fff6d0','#ffe066','#ffb3c8'][i%3];
+      for(let k=0;k<4;k++) blob(x+Math.cos(k*1.57)*1.6,y+Math.sin(k*1.57)*1.6,1.3,c,.95);
+      blob(x,y,.9,'#f5a623',1); }
+  }
+  cx.globalAlpha=1;
+  const tex=new THREE.CanvasTexture(cv);
+  tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+  tex.magFilter=THREE.LinearFilter; tex.minFilter=THREE.LinearMipmapLinearFilter;
+  tex.anisotropy=renderer?Math.min(8,renderer.capabilities.getMaxAnisotropy()):1;
+  return tex;
+}
+
+/* ---------- PIXEL-ART TILE TEXTURES (Harvest Moon 32x32 Checkerboard & Furrows) ---------- */
+const tileTexCache = {};
+function rseed(s){ let x=Math.sin(s*9301+49297)*233280; return x-Math.floor(x); }
+function makeTileTex(kind){
+  if(tileTexCache[kind]) return tileTexCache[kind];
+  if(SOFT_PAL[kind]) return (tileTexCache[kind]=makeSoftTex(kind));
+  const cv=document.createElement('canvas'); cv.width=32; cv.height=32;
+  const cx=cv.getContext('2d'); cx.imageSmoothingEnabled=false;
+  const px=(x,y,c)=>{cx.fillStyle=c;cx.fillRect(x,y,1,1);};
+
+  if(kind==='grass'){
+    // Harvest Moon iconic checkerboard grass base
+    cx.fillStyle='#60b84c'; cx.fillRect(0,0,32,32);
+    cx.fillStyle='#69be55'; cx.fillRect(0,0,16,16); cx.fillRect(16,16,16,16);
+    cx.fillStyle='#5ab046'; cx.fillRect(16,0,16,16); cx.fillRect(0,16,16,16);
+
+    // Natural grass blade tufts
+    cx.fillStyle='#439a34';
+    for(let i=0;i<24;i++){
+      const x=(i*7+3)%30, y=(i*5+2)%30;
+      cx.fillRect(x,y,1,3); cx.fillRect(x+1,y+1,1,2);
+    }
+    cx.fillStyle='#7ece66';
+    for(let i=0;i<20;i++){
+      const x=(i*11+5)%30, y=(i*9+4)%30;
+      cx.fillRect(x,y,2,1);
+    }
+    // Charming wildflowers (Harvest Moon dandelions & daisies)
+    // Yellow buttercup cluster
+    cx.fillStyle='#ffd54f';
+    cx.fillRect(20,6,2,2); cx.fillRect(22,7,2,2); cx.fillRect(21,9,2,2);
+    cx.fillStyle='#ffb300'; cx.fillRect(21,7,1,1);
+    // White daisy
+    cx.fillStyle='#ffffff';
+    cx.fillRect(8,22,3,1); cx.fillRect(7,23,1,3); cx.fillRect(11,23,1,3); cx.fillRect(8,26,3,1);
+    cx.fillStyle='#ff9800'; cx.fillRect(9,24,1,1);
+    // Pink clover
+    cx.fillStyle='#ff80ab'; cx.fillRect(26,24,2,2);
+  } else if(kind==='dirt'){
+    // Warm rich farmland loam
+    cx.fillStyle='#7c4e2a'; cx.fillRect(0,0,32,32);
+    // 4 prominent tilled furrow ridges (Harvest Moon iconic furrows)
+    for(let f=0; f<4; f++){
+      const fy = f * 8;
+      cx.fillStyle='#4a2c13'; cx.fillRect(0, fy, 32, 2);      // deep shadow trench
+      cx.fillStyle='#5e381b'; cx.fillRect(0, fy+2, 32, 2);    // lower ridge
+      cx.fillStyle='#99653a'; cx.fillRect(0, fy+4, 32, 2);    // bright upper ridge
+      cx.fillStyle='#aa7547'; cx.fillRect(0, fy+6, 32, 1);    // ridge crest
+    }
+    // Soil pebbles
+    cx.fillStyle='#bcaaa4';
+    for(let i=0;i<10;i++) cx.fillRect((i*13+4)%31, (i*7+3)%31, 1, 1);
+  } else if(kind==='dirt_wet'){
+    // Deep dark chocolate moist soil with glistening specular sheen
+    cx.fillStyle='#42220d'; cx.fillRect(0,0,32,32);
+    for(let f=0; f<4; f++){
+      const fy = f * 8;
+      cx.fillStyle='#271104'; cx.fillRect(0, fy, 32, 2);      // wet trench shadow
+      cx.fillStyle='#361908'; cx.fillRect(0, fy+2, 32, 2);
+      cx.fillStyle='#673719'; cx.fillRect(0, fy+4, 32, 2);    // moist ridge
+      cx.fillStyle='#8d502b'; cx.fillRect(0, fy+6, 32, 1);
+    }
+    // Specular water glints
+    cx.fillStyle='rgba(255,255,255,0.45)';
+    cx.fillRect(6,5,2,1); cx.fillRect(22,13,2,1); cx.fillRect(14,21,2,1); cx.fillRect(28,29,2,1);
+  } else if(kind==='path'){
+    // Rounded cobblestone pavers
+    cx.fillStyle='#caa875'; cx.fillRect(0,0,32,32);
+    cx.fillStyle='#7e5f38'; // mortar grid
+    cx.fillRect(0,0,32,1); cx.fillRect(0,16,32,1); cx.fillRect(0,0,1,32); cx.fillRect(16,0,1,32);
+    // Rounded stone highlights
+    cx.fillStyle='#e5cf9f';
+    cx.fillRect(2,2,12,3); cx.fillRect(18,2,12,3); cx.fillRect(2,18,12,3); cx.fillRect(18,18,12,3);
+    cx.fillStyle='#5c4225';
+    cx.fillRect(2,13,12,2); cx.fillRect(18,13,12,2); cx.fillRect(2,29,12,2); cx.fillRect(18,29,12,2);
+  } else if(kind==='water'){
+    // Sparkling vibrant river blue
+    cx.fillStyle='#29b6f6'; cx.fillRect(0,0,32,32);
+    cx.fillStyle='#4fc3f7';
+    for(let y=2;y<32;y+=8) cx.fillRect(0,y,32,2);
+    cx.fillStyle='#81d4fa';
+    for(let i=0;i<12;i++) cx.fillRect((i*11)%28, (i*8+3)%30, 5, 1);
+    cx.fillStyle='#ffffff';
+    cx.fillRect(6,12,3,1); cx.fillRect(22,20,3,1); cx.fillRect(14,28,3,1);
+  } else if(kind==='wood'){
+    // Warm cedar timber planks
+    cx.fillStyle='#cb935a'; cx.fillRect(0,0,32,32);
+    cx.fillStyle='#794a20';
+    cx.fillRect(0,10,32,1); cx.fillRect(0,21,32,1); cx.fillRect(0,31,32,1);
+    cx.fillStyle='#e0ad74';
+    cx.fillRect(0,1,32,1); cx.fillRect(0,12,32,1); cx.fillRect(0,23,32,1);
+    cx.fillStyle='#42250d';
+    // Iron nails
+    cx.fillRect(3,5,1,1); cx.fillRect(28,5,1,1); cx.fillRect(3,16,1,1); cx.fillRect(28,16,1,1);
+  } else if(kind==='floorWood'){
+    // Honey parquet
+    cx.fillStyle='#e0a96d'; cx.fillRect(0,0,32,32);
+    cx.fillStyle='#9e6b36';
+    cx.fillRect(0,0,32,1); cx.fillRect(0,16,32,1); cx.fillRect(0,0,1,32); cx.fillRect(16,0,1,32);
+    cx.fillStyle='#f5c796';
+    cx.fillRect(2,2,12,1); cx.fillRect(18,2,12,1); cx.fillRect(2,18,12,1); cx.fillRect(18,18,12,1);
+  } else if(kind==='caveFloor'){
+    cx.fillStyle='#4e4e58'; cx.fillRect(0,0,32,32);
+    cx.fillStyle='#36363e'; for(let i=0;i<12;i++) cx.fillRect((i*9+2)%30,(i*7+3)%30,3,2);
+    cx.fillStyle='#656570'; for(let i=0;i<10;i++) cx.fillRect((i*13+5)%30,(i*11+4)%30,2,1);
+  } else if(kind==='iceFloor'){
+    cx.fillStyle='#81d4fa'; cx.fillRect(0,0,32,32);
+    cx.fillStyle='#b3e5fc'; cx.fillRect(4,6,12,2); cx.fillRect(18,20,12,2);
+    cx.fillStyle='#4ba3e3'; cx.fillRect(0,15,32,2);
+  } else if(kind==='graveyard'){
+    cx.fillStyle='#4a584e'; cx.fillRect(0,0,32,32);
+    cx.fillStyle='#364038'; for(let i=0;i<12;i++) cx.fillRect((i*9+1)%30,(i*7+2)%30,3,2);
+    cx.fillStyle='#5d6e62'; for(let i=0;i<8;i++) cx.fillRect((i*11+3)%30,(i*9+4)%30,2,1);
+  } else if(kind==='mined'){
+    cx.fillStyle='#3a3a42'; cx.fillRect(0,0,32,32);
+    cx.fillStyle='#25252b'; cx.fillRect(4,4,24,24);
+    cx.fillStyle='#4e4e58'; cx.fillRect(6,6,4,4); cx.fillRect(22,22,4,4);
+  }
+  const tex=new THREE.CanvasTexture(cv);
+  tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter;
+  tex.generateMipmaps=false;
+  tileTexCache[kind]=tex; return tex;
+}
+function texFloor(kind, y){
+  const m=new THREE.Mesh(gbox(TILE,.4,TILE),
+    new THREE.MeshLambertMaterial({map:makeTileTex(kind)}));
+  m.position.y=(y===undefined?-.2:y);
+  m.receiveShadow = true;
+  return m;
+}
+function tileMesh(id,wx,wz,dark){
+  const grp=new THREE.Group(); grp.position.set(wx,0,wz);
+  function add(geo,col,y,em){
+    const m=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color:col,emissive:em||0}));
+    m.position.y=y;
+    m.castShadow = true; m.receiveShadow = true;
+    grp.add(m);
+    return m;
+  }
+  const G2=gbox(TILE,.4,TILE);
+  switch(id){
+    case T.GRASS: grp.add(texFloor('grass')); break;
+    case T.DIRT:  grp.add(texFloor('dirt')); break;
+    case T.PATH:  grp.add(texFloor('path')); break;
+    case T.FLOOR: grp.add(texFloor('wood')); break;
+    case T.CAVEFLOOR: grp.add(texFloor('caveFloor')); break;
+    case T.MINED: grp.add(texFloor('mined')); break;
+    case T.WATER: grp.add(texFloor('water',-.25)); break;
+    case T.DOCK:  grp.add(texFloor('wood')); add(gbox(TILE,.15,TILE),0xa07a4a,.05); break;
+    case T.WATERLILY: grp.add(texFloor('water',-.25));
+                  {const p=add(new THREE.SphereGeometry(.42,8,6),0x4f9e4f,.05); p.scale.y=.4;
+                   const f=add(new THREE.SphereGeometry(.15,6,5),0xff8cbf,.18); f.scale.y=.8;}
+                  break;
+    case T.WALL:  grp.add(texFloor('grass')); add(gbox(TILE,2.2,TILE),0xae8a64,1); break;
+    case T.CAVEWALL: grp.add(texFloor('caveFloor')); add(gbox(TILE,2.6,TILE),0x55555f,1.1); break;
+    case T.FENCE: grp.add(texFloor('grass'));
+                  // slim posts + rails
+                  add(gbox(.18,1.0,.18),0x8a5a30,.3).position.x=-.6;
+                  add(gbox(.18,1.0,.18),0x8a5a30,.3).position.x= .6;
+                  add(gbox(TILE,.18,.16),0xa07a4a,.65);
+                  add(gbox(TILE,.18,.16),0xa07a4a,.25);
+                  break;
+    case T.GATE:  grp.add(texFloor('path')); break;
+    case T.TREE: {
+      grp.add(texFloor('grass'));
+      // slim trunk
+      add(gbox(.45,1.6,.45),0x6a4222,.6);
+      // canopy: 2 stacked spheres for fluffy look
+      const c1=new THREE.Mesh(new THREE.SphereGeometry(1.35,9,7),
+        new THREE.MeshLambertMaterial({color:0x3a8a40})); c1.position.y=2.2; grp.add(c1);
+      const c2=new THREE.Mesh(new THREE.SphereGeometry(.9,8,6),
+        new THREE.MeshLambertMaterial({color:0x4faa55})); c2.position.set(.35,2.9,.25); grp.add(c2);
+      const c3=new THREE.Mesh(new THREE.SphereGeometry(.7,7,6),
+        new THREE.MeshLambertMaterial({color:0x2f7038})); c3.position.set(-.45,2.6,-.3); grp.add(c3);
+      break; }
+    case T.DEADTREE: grp.add(texFloor('graveyard'));
+                  add(gbox(.4,1.8,.4),0x3a2a22,.7);
+                  // crooked branches
+                  add(gbox(1.0,.18,.18),0x3a2a22,1.6).rotation.z=.5;
+                  add(gbox(.18,.18,1.0),0x3a2a22,1.5).rotation.x=.4;
+                  break;
+    case T.HOUSE: {
+      grp.add(texFloor('grass'));
+      // walls slightly inset
+      add(gbox(TILE*.96, 2.0, TILE*.96), 0xe8c898, 1.0);
+      // pitched roof
+      const r=add(new THREE.ConeGeometry(1.85,1.2,4),0xb04a3a,2.6); r.rotation.y=Math.PI/4;
+      // chimney
+      const ch=add(gbox(.32,.65,.32),0x6a4a3a,2.85); ch.position.x=.55; ch.position.z=.45;
+      // door (front face = +Z)
+      const d=add(gbox(.5,.95,.06),0x6a3a1a,.85); d.position.z=TILE*.48;
+      // window
+      const w=add(gbox(.55,.5,.06),0xa8dcee,1.5,0x3060a0); w.position.z=TILE*.48; w.position.x=-.55;
+      // window cross-frame
+      const wf=add(gbox(.6,.06,.07),0x6a3a1a,1.5); wf.position.z=TILE*.485; wf.position.x=-.55;
+      const wf2=add(gbox(.06,.55,.07),0x6a3a1a,1.5); wf2.position.z=TILE*.485; wf2.position.x=-.55;
+      break; }
+    case T.SHOP: {
+      grp.add(texFloor('grass'));
+      add(gbox(TILE*.96, 2.0, TILE*.96), 0xf0bc78, 1.0);
+      const r=add(new THREE.ConeGeometry(1.85,1.2,4),0xc85a3a,2.6); r.rotation.y=Math.PI/4;
+      // shop awning stripes (red+white)
+      const aw=add(gbox(TILE*1.05,.18,.5),0xd23b3b,1.95); aw.position.z=TILE*.45;
+      const aw2=add(gbox(TILE*.5,.19,.51),0xfff5e0,1.95); aw2.position.z=TILE*.45; aw2.position.x=-.4;
+      // door
+      const d=add(gbox(.5,.95,.06),0x6a3a1a,.85); d.position.z=TILE*.48;
+      // sign (yellow plank)
+      const sg=add(gbox(.9,.35,.05),0xffe27a,1.5,0x806010); sg.position.z=TILE*.49;
+      break; }
+    case T.FORGE: {
+      grp.add(texFloor('path'));
+      add(gbox(TILE*.96, 2.0, TILE*.96), 0x8a7a6a, 1.0);
+      const r=add(new THREE.ConeGeometry(1.85,1.2,4),0x4a3a32,2.6); r.rotation.y=Math.PI/4;
+      // chimney (taller, with glow)
+      const ch=add(gbox(.45,1.1,.45),0x4a3a32,3.1); ch.position.x=.5;
+      const fire=add(new THREE.SphereGeometry(.32,7,6),0xff7a2b,3.7,0xff5010); fire.position.x=.5;
+      // anvil out front
+      const an=add(gbox(.7,.4,.4),0x3a3a42,.4); an.position.z=TILE*.45;
+      // door
+      const d=add(gbox(.5,.95,.06),0x4a2a1a,.85); d.position.z=TILE*.48; d.position.x=-.5;
+      break; }
+    case T.COUNTER: grp.add(texFloor('wood')); add(gbox(TILE,.8,.8),0x8a6a44,.4); break;
+    case T.MAILBOX: grp.add(texFloor('grass')); add(gbox(.3,1,.3),0x6a4a2a,.5);
+                  {const b=add(gbox(.7,.55,.9),0xc83a3a,1.2);grp.userData.mailbox=true;
+                   add(gbox(.05,.4,.05),0xffe27a,1.5,0x806010).position.x=.35;} break;
+    case T.BED:   grp.add(texFloor('floorWood')); add(gbox(TILE*.9,.5,TILE*.9),0x6a8ad8,.25);
+                  add(gbox(TILE*.9,.3,TILE*.4),0xfff5e0,.55);
+                  grp.userData.bed=true; break;
+    case T.GRAVE: grp.add(texFloor('graveyard'));
+                  // cross-shape grave
+                  add(gbox(.25,1.0,.25),0x9a9a9a,.5);
+                  add(gbox(.7,.2,.18),0x9a9a9a,.85); break;
+    case T.LANTERN: grp.add(texFloor('graveyard')); add(gbox(.2,1.4,.2),0x2a2a2a,.7);
+                  add(new THREE.SphereGeometry(.32,7,6),0xffd24a,1.6,0xaa7a10); break;
+    case T.STAIRSD: grp.add(texFloor('mined',-.25)); add(gbox(1.2,.2,1.2),0x111116,-.05);
+                  grp.userData.stairsD=true; break;
+    case T.STAIRSU: grp.add(texFloor('caveFloor')); add(gbox(1.2,.4,1.2),0x6a6a72,.1);
+                  grp.userData.stairsU=true; break;
+    case T.ORE_CU: grp.add(texFloor('caveFloor'));{const o=add(gbox(1.4,1.6,1.4),0xc87a44,1);o.userData.ore="tembaga";grp.userData.ore="tembaga";}break;
+    case T.ORE_FE: grp.add(texFloor('caveFloor'));{const o=add(gbox(1.4,1.6,1.4),0x9a9aa6,1);grp.userData.ore="besi";}break;
+    case T.ORE_CR: grp.add(texFloor('caveFloor'));{const o=add(gbox(1.3,1.7,1.3),0x6ad8d8,1,0x208080);grp.userData.ore="kristal";}break;
+    case T.ORE_AU: grp.add(texFloor('caveFloor'));{const o=add(gbox(1.4,1.6,1.4),0xffd24a,1,0x806010);grp.userData.ore="emas";}break;
+    case T.ORE_MI: grp.add(texFloor('caveFloor'));{const o=add(gbox(1.4,1.7,1.4),0xc06ad8,1,0x602080);grp.userData.ore="mithril";}break;
+    case T.PORTAL: grp.add(texFloor('path')); add(gbox(.6,.1,.6),0xffe27a,.0,0x886010);
+                  grp.userData.portal=true; break;
+    // ---- INTERIOR ----
+    case T.DOOR: grp.add(texFloor('floorWood')); add(gbox(TILE*.8,1.8,.25),0x6a3a1a,.7); break;
+    case T.FLOOR_WOOD: grp.add(texFloor('floorWood')); break;
+    case T.WALL_IN: grp.add(texFloor('floorWood')); add(gbox(TILE,2.4,TILE),0x8a6a4a,1.1);
+                    // wood plank line
+                    add(gbox(TILE*1.02,.08,TILE*1.02),0x6a4a2a,1.6); break;
+    case T.BED_NPC: grp.add(texFloor('floorWood')); add(gbox(TILE*.9,.5,TILE*.9),0xd86a8c,.25);
+                    add(gbox(TILE*.9,.3,TILE*.4),0xfff5e0,.55); grp.userData.bedNpc=true; break;
+    case T.TABLE: grp.add(texFloor('floorWood')); add(gbox(TILE*.85,.15,TILE*.85),0x6a4a2a,.85);
+                    add(gbox(.18,.85,.18),0x6a4a2a,.42); grp.userData.table=true; break;
+    case T.CHAIR: grp.add(texFloor('floorWood')); add(gbox(.5,.5,.5),0x6a4a2a,.25);
+                    add(gbox(.5,.7,.12),0x6a4a2a,.55); break;
+    case T.CHEST_HOME: grp.add(texFloor('floorWood')); add(gbox(.9,.6,.7),0x8a5a2a,.3);
+                    add(gbox(.95,.15,.75),0xffd24a,.65,0x806010); grp.userData.chestHome=true; break;
+    case T.STOVE: grp.add(texFloor('floorWood')); add(gbox(.95,.85,.85),0x3a3a42,.42);
+                    add(new THREE.SphereGeometry(.28,7,6),0xff7a2b,.95,0xaa3010); grp.userData.stove=true; break;
+    case T.BOOKSHELF: grp.add(texFloor('floorWood')); add(gbox(.85,2.0,.45),0x6a4a2a,1.0);
+                    add(gbox(.8,.18,.4),0xc83a3a,1.4); add(gbox(.8,.18,.4),0x3a7ad8,1.0);
+                    add(gbox(.8,.18,.4),0x4f9e4f,0.6); grp.userData.bookshelf=true; break;
+    case T.FLOWERPOT: grp.add(texFloor('floorWood')); add(gbox(.35,.35,.35),0x9a5a2a,.18);
+                    add(new THREE.SphereGeometry(.28,7,6),0xff7abf,.55); break;
+    // ---- ICE DUNGEON ----
+    case T.ICE_FLOOR: grp.add(texFloor('iceFloor')); break;
+    case T.ICE_WALL:  grp.add(texFloor('iceFloor')); add(gbox(TILE,2.6,TILE),0xb0d8f0,1.1,0x2050a0); break;
+    case T.ORE_SAPPHIRE: grp.add(texFloor('iceFloor'));{const o=add(gbox(1.3,1.7,1.3),0x3a7ad8,1,0x102060);grp.userData.ore="sapphire";}break;
+    case T.ORE_FROST:    grp.add(texFloor('iceFloor'));{const o=add(gbox(1.4,1.7,1.4),0xc8e8ff,1,0x4080c0);grp.userData.ore="froststeel";}break;
+    case T.ICEPORTAL: grp.add(texFloor('iceFloor')); add(gbox(.7,.15,.7),0x6ad8ff,.05,0x2080c0);
+                    grp.userData.icePortal=true; break;
+    // ---- FESTIVAL / FISHING ----
+    case T.FESTIVAL_BOOTH: grp.add(texFloor('grass')); add(gbox(TILE,1.4,TILE*.7),0xff7a2b,.7);
+                    add(gbox(TILE*1.1,.2,TILE*.8),0xffd24a,1.5,0x806010);
+                    grp.userData.booth=true; break;
+    case T.FISHING_SPOT: grp.add(texFloor('water',-.25)); add(gbox(.5,.1,.5),0xffe27a,.0,0x806010);
+                    grp.userData.fishing=true; break;
+    default: grp.add(texFloor('grass'));
+  }
+  return grp;
+}
+
+/* =========================================================================
+   HARVEST MOON ARCHITECTURAL MODELS & FARM CLUTTER
+   ========================================================================= */
+function buildFarmhouse(cx, cz){
+  const grp = new THREE.Group();
+  grp.position.set(cx, 0, cz);
+  function add(geo, mat, y, rx, ry, rz){
+    const m = new THREE.Mesh(geo, mat);
+    m.position.y = y || 0;
+    if(rx) m.rotation.x = rx;
+    if(ry) m.rotation.y = ry;
+    if(rz) m.rotation.z = rz;
+    m.castShadow = true; m.receiveShadow = true;
+    grp.add(m);
+    return m;
+  }
+  const mWood = new THREE.MeshLambertMaterial({color: 0x5e3a20});
+  const mPlank = new THREE.MeshLambertMaterial({color: 0xf5ebd7});
+  const mRoof = new THREE.MeshLambertMaterial({color: 0xb43828});
+  const mRoofTrim = new THREE.MeshLambertMaterial({color: 0xfff8ed});
+  const mStone = new THREE.MeshLambertMaterial({color: 0x504840});
+  const mGlass = new THREE.MeshLambertMaterial({color: 0x90d4ea, transparent:true, opacity:0.85});
+  const mDoor = new THREE.MeshLambertMaterial({color: 0x6d3d1e});
+  const mGold = new THREE.MeshLambertMaterial({color: 0xffd54f, emissive: 0x775500});
+  const mLeaf = new THREE.MeshLambertMaterial({color: 0x3e8e35});
+  const mFlower1 = new THREE.MeshLambertMaterial({color: 0xff3b30});
+  const mFlower2 = new THREE.MeshLambertMaterial({color: 0xffcc00});
+  const mFlower3 = new THREE.MeshLambertMaterial({color: 0xff69b4});
+
+  // 1. Foundation Base & Main Walls (Footprint ~ 8x6)
+  add(gbox(8.4, 0.4, 6.4), mStone, 0.2);
+  add(gbox(8.0, 3.2, 6.0), mPlank, 1.8);
+
+  // 2. Corner Timber Posts & Trim
+  const postW = 0.5, postH = 3.3;
+  add(gbox(postW, postH, postW), mWood, 1.85).position.set(-3.9, 0, -2.9);
+  add(gbox(postW, postH, postW), mWood, 1.85).position.set( 3.9, 0, -2.9);
+  add(gbox(postW, postH, postW), mWood, 1.85).position.set(-3.9, 0,  2.9);
+  add(gbox(postW, postH, postW), mWood, 1.85).position.set( 3.9, 0,  2.9);
+  add(gbox(8.2, 0.18, 6.2), mWood, 1.6); // mid belt
+
+  // 3. Iconic Harvest Moon A-Frame Terracotta Roof
+  const roofS = add(gbox(8.6, 0.25, 4.2), mRoof, 4.1, 0.65, 0, 0); roofS.position.z = 1.6;
+  const roofN = add(gbox(8.6, 0.25, 4.2), mRoof, 4.1, -0.65, 0, 0); roofN.position.z = -1.6;
+  add(gbox(8.8, 0.32, 0.32), mRoofTrim, 5.35); // ridge crest
+
+  // Triangular Gable Ends
+  const gE = add(new THREE.ConeGeometry(3.2, 2.4, 3), mWood, 4.0); gE.scale.set(1, 1, 0.08); gE.position.x = 4.0;
+  const gW = add(new THREE.ConeGeometry(3.2, 2.4, 3), mWood, 4.0); gW.scale.set(1, 1, 0.08); gW.position.x = -4.0;
+
+  // Dormer Window on South Roof
+  const dormer = add(gbox(1.8, 1.3, 1.3), mPlank, 4.2); dormer.position.set(0, 0, 1.9);
+  const dormRoof = add(new THREE.ConeGeometry(1.3, 0.8, 4), mRoof, 5.0, 0, Math.PI/4, 0); dormRoof.position.set(0, 0, 1.9);
+  const dormWin = add(new THREE.CylinderGeometry(0.4, 0.4, 0.08, 10), mGlass, 4.3, Math.PI/2, 0, 0); dormWin.position.set(0, 0, 2.56);
+
+  // 4. Brick Chimney on East Roof
+  add(gbox(0.85, 2.2, 0.85), new THREE.MeshLambertMaterial({color: 0x8a3828}), 4.8).position.set(2.4, 0, -1.0);
+  add(gbox(1.05, 0.2, 1.05), mStone, 5.9).position.set(2.4, 0, -1.0);
+
+  // 5. Front Porch & Entrance
+  add(gbox(2.6, 0.25, 1.4), new THREE.MeshLambertMaterial({color: 0x8b5a2b}), 0.25).position.set(0, 0, 3.6);
+  add(gbox(2.2, 0.15, 0.6), mStone, 0.1).position.set(0, 0, 4.4); // step
+  add(gbox(3.0, 0.18, 1.6), mRoof, 2.6, 0.15, 0, 0).position.set(0, 0, 3.6); // awning
+  add(gbox(0.18, 2.3, 0.18), mWood, 1.4).position.set(-1.2, 0, 4.1);
+  add(gbox(0.18, 2.3, 0.18), mWood, 1.4).position.set( 1.2, 0, 4.1);
+
+  // Front Door
+  add(gbox(1.2, 2.0, 0.08), mDoor, 1.25).position.set(0, 0, 3.08);
+  add(new THREE.SphereGeometry(0.08, 6, 6), mGold, 1.2).position.set(0.42, 0, 3.14);
+  add(gbox(0.24, 0.32, 0.24), mGold, 2.1).position.set(0.9, 0, 3.12); // lantern
+
+  // Windows with Flower Boxes
+  function makeWin(wx){
+    add(gbox(1.4, 1.2, 0.06), mGlass, 1.7).position.set(wx, 0, 3.06);
+    add(gbox(1.5, 0.06, 0.08), mWood, 1.7).position.set(wx, 0, 3.07);
+    add(gbox(0.06, 1.3, 0.08), mWood, 1.7).position.set(wx, 0, 3.07);
+    add(gbox(0.4, 1.2, 0.05), mDoor, 1.7).position.set(wx - 0.85, 0, 3.05);
+    add(gbox(0.4, 1.2, 0.05), mDoor, 1.7).position.set(wx + 0.85, 0, 3.05);
+    // Flower planter
+    add(gbox(1.5, 0.3, 0.4), mDoor, 0.95).position.set(wx, 0, 3.25);
+    add(gbox(1.4, 0.22, 0.35), mLeaf, 1.15).position.set(wx, 0, 3.25);
+    for(let i=0; i<4; i++){
+      const flMat = i%3===0 ? mFlower1 : i%3===1 ? mFlower2 : mFlower3;
+      add(new THREE.SphereGeometry(0.12, 5, 4), flMat, 1.3).position.set(wx - 0.45 + i*0.3, 0, 3.25 + (i%2 ? 0.06 : -0.06));
+    }
+  }
+  makeWin(-2.4);
+  makeWin( 2.4);
+
+  // Side Details: Stacked Firewood on West & Rain Barrel on SW
+  for(let row=0; row<2; row++){
+    for(let col=0; col<3; col++){
+      const log = add(new THREE.CylinderGeometry(0.14, 0.14, 1.3, 6), new THREE.MeshLambertMaterial({color: 0x7c4e28}), 0.18 + row*0.25, 0, 0, Math.PI/2);
+      log.position.set(-4.2, 0, -0.6 + col*0.45);
+    }
+  }
+  add(new THREE.CylinderGeometry(0.45, 0.4, 1.0, 8), new THREE.MeshLambertMaterial({color: 0x6d4427}), 0.5).position.set(-3.7, 0, 3.2);
+
+  return grp;
+}
+
+function buildShippingBin(cx, cz){
+  const grp = new THREE.Group();
+  grp.position.set(cx, 0, cz);
+  function add(geo, mat, y, rx, ry, rz){
+    const m = new THREE.Mesh(geo, mat);
+    m.position.y = y || 0;
+    if(rx) m.rotation.x = rx;
+    if(ry) m.rotation.y = ry;
+    if(rz) m.rotation.z = rz;
+    m.castShadow = true; m.receiveShadow = true;
+    grp.add(m);
+    return m;
+  }
+  const mWood = new THREE.MeshLambertMaterial({color: 0x824e23});
+  const mWoodDark = new THREE.MeshLambertMaterial({color: 0x5e3314});
+  const mIron = new THREE.MeshLambertMaterial({color: 0x2e2e34});
+  const mGold = new THREE.MeshLambertMaterial({color: 0xffd54f, emissive: 0x664400});
+
+  // Chest body
+  add(gbox(1.6, 1.0, 1.2), mWood, 0.5);
+  // Slanted hinged lid
+  add(gbox(1.7, 0.2, 1.3), mWoodDark, 1.05, 0.15, 0, 0).position.z = -0.05;
+  // Iron reinforcement bands
+  add(gbox(0.12, 1.05, 1.25), mIron, 0.5).position.x = -0.5;
+  add(gbox(0.12, 1.05, 1.25), mIron, 0.5).position.x =  0.5;
+  add(gbox(0.14, 0.22, 1.35), mIron, 1.06, 0.15, 0, 0).position.set(-0.5, 0, -0.05);
+  add(gbox(0.14, 0.22, 1.35), mIron, 1.06, 0.15, 0, 0).position.set( 0.5, 0, -0.05);
+  // Brass lock latch
+  add(gbox(0.22, 0.28, 0.08), mGold, 0.85).position.z = 0.64;
+
+  // Mini signpost beside bin
+  add(gbox(0.1, 1.4, 0.1), mWoodDark, 0.7).position.set(1.1, 0, 0.4);
+  add(gbox(0.85, 0.4, 0.08), mWood, 1.2).position.set(1.1, 0, 0.45);
+
+  grp.userData.shippingBin = true;
+  return grp;
+}
+
+function buildShopBuilding(cx, cz){
+  const grp = new THREE.Group();
+  grp.position.set(cx, 0, cz);
+  function add(geo, mat, y, rx, ry, rz){
+    const m = new THREE.Mesh(geo, mat);
+    m.position.y = y || 0;
+    if(rx) m.rotation.x = rx;
+    if(ry) m.rotation.y = ry;
+    if(rz) m.rotation.z = rz;
+    m.castShadow = true; m.receiveShadow = true;
+    grp.add(m);
+    return m;
+  }
+  const mWall = new THREE.MeshLambertMaterial({color: 0xdfaa6d});
+  const mWood = new THREE.MeshLambertMaterial({color: 0x6e3c1a});
+  const mRoof = new THREE.MeshLambertMaterial({color: 0xc24a3a});
+  const mRed = new THREE.MeshLambertMaterial({color: 0xd32f2f});
+  const mWhite = new THREE.MeshLambertMaterial({color: 0xfff8e7});
+  const mSign = new THREE.MeshLambertMaterial({color: 0xffd54f, emissive: 0x664400});
+
+  // Base & Walls
+  add(gbox(3.8, 0.3, 5.6), mWood, 0.15);
+  add(gbox(3.6, 2.8, 5.4), mWall, 1.7);
+  // Gable Roof
+  const roof = add(new THREE.ConeGeometry(3.6, 1.8, 4), mRoof, 3.8, 0, Math.PI/4, 0);
+  roof.scale.set(0.9, 1, 1.4);
+
+  // Striped Awning
+  for(let i=0; i<6; i++){
+    const awn = add(gbox(0.55, 0.15, 1.4), i%2===0 ? mRed : mWhite, 2.4, 0.25, 0, 0);
+    awn.position.set(-1.38 + i*0.55, 0, 3.0);
+  }
+
+  // Door
+  add(gbox(1.1, 1.9, 0.08), mWood, 1.25).position.set(-0.8, 0, 2.72);
+
+  // Produce Display Stall out front
+  add(gbox(1.6, 0.75, 0.9), mWood, 0.55).position.set(0.8, 0, 3.0);
+  const crMat = new THREE.MeshLambertMaterial({color: 0xb2773b});
+  add(gbox(0.65, 0.25, 0.7), crMat, 0.98).position.set(0.45, 0, 3.0);
+  add(gbox(0.65, 0.25, 0.7), crMat, 0.98).position.set(1.15, 0, 3.0);
+  // Red tomatoes
+  for(let i=0; i<3; i++){
+    add(new THREE.SphereGeometry(0.12, 6, 5), new THREE.MeshLambertMaterial({color:0xe53935}), 1.15).position.set(0.35 + i*0.12, 0, 3.0);
+  }
+  // Orange carrots
+  for(let i=0; i<3; i++){
+    add(new THREE.ConeGeometry(0.08, 0.25, 5), new THREE.MeshLambertMaterial({color:0xf57c00}), 1.15, Math.PI/2, 0, 0).position.set(1.05 + i*0.12, 0, 3.0);
+  }
+
+  // Signboard
+  add(gbox(2.2, 0.55, 0.1), mSign, 2.9).position.set(0, 0, 2.75);
+
+  return grp;
+}
+
+function buildForgeBuilding(cx, cz){
+  const grp = new THREE.Group();
+  grp.position.set(cx, 0, cz);
+  function add(geo, mat, y, rx, ry, rz){
+    const m = new THREE.Mesh(geo, mat);
+    m.position.y = y || 0;
+    if(rx) m.rotation.x = rx;
+    if(ry) m.rotation.y = ry;
+    if(rz) m.rotation.z = rz;
+    m.castShadow = true; m.receiveShadow = true;
+    grp.add(m);
+    return m;
+  }
+  const mStone = new THREE.MeshLambertMaterial({color: 0x6e6e76});
+  const mDarkTimber = new THREE.MeshLambertMaterial({color: 0x3a2517});
+  const mSlate = new THREE.MeshLambertMaterial({color: 0x34343a});
+  const mGlow = new THREE.MeshLambertMaterial({color: 0xff7010, emissive: 0xff5500});
+  const mIron = new THREE.MeshLambertMaterial({color: 0x242428});
+
+  // Base & Stone Walls
+  add(gbox(3.8, 0.4, 5.6), mDarkTimber, 0.2);
+  add(gbox(3.6, 2.8, 5.4), mStone, 1.7);
+  // Slate Roof
+  const roof = add(new THREE.ConeGeometry(3.6, 1.9, 4), mSlate, 3.9, 0, Math.PI/4, 0);
+  roof.scale.set(0.9, 1, 1.4);
+
+  // Stone Forge Chimney & Glowing Hearth
+  add(gbox(1.2, 3.6, 1.2), mStone, 3.4).position.set(0.9, 0, -1.6);
+  add(new THREE.SphereGeometry(0.35, 7, 6), mGlow, 5.25).position.set(0.9, 0, -1.6);
+
+  // Blacksmith Door
+  add(gbox(1.1, 1.9, 0.08), mDarkTimber, 1.25).position.set(-0.8, 0, 2.72);
+
+  // Heavy Blacksmith Anvil on Tree Stump
+  add(new THREE.CylinderGeometry(0.45, 0.5, 0.65, 8), mDarkTimber, 0.35).position.set(0.8, 0, 3.3);
+  add(gbox(0.7, 0.35, 0.35), mIron, 0.85).position.set(0.8, 0, 3.3);
+  add(new THREE.ConeGeometry(0.18, 0.35, 5), mIron, 0.85, 0, 0, Math.PI/2).position.set(0.4, 0, 3.3);
+
+  // Water Quench Barrel
+  add(new THREE.CylinderGeometry(0.45, 0.42, 0.9, 8), mDarkTimber, 0.45).position.set(1.4, 0, 2.4);
+
+  return grp;
+}
+
+function buildCottage(cx, cz, style){
+  const grp = new THREE.Group();
+  grp.position.set(cx, 0, cz);
+  function add(geo, mat, y, rx, ry, rz){
+    const m = new THREE.Mesh(geo, mat);
+    m.position.y = y || 0;
+    if(rx) m.rotation.x = rx;
+    if(ry) m.rotation.y = ry;
+    if(rz) m.rotation.z = rz;
+    m.castShadow = true; m.receiveShadow = true;
+    grp.add(m);
+    return m;
+  }
+  const roofCol = style==='maya' ? 0x4a7a6a : 0x4a6a8a;
+  const mWall = new THREE.MeshLambertMaterial({color: 0xeddcc8});
+  const mWood = new THREE.MeshLambertMaterial({color: 0x5a3820});
+  const mRoof = new THREE.MeshLambertMaterial({color: roofCol});
+  const mGlass = new THREE.MeshLambertMaterial({color: 0x90d4ea, transparent:true, opacity:0.85});
+
+  // Walls & Roof
+  add(gbox(3.8, 0.3, 5.6), mWood, 0.15);
+  add(gbox(3.6, 2.6, 5.4), mWall, 1.6);
+  const roof = add(new THREE.ConeGeometry(3.6, 1.8, 4), mRoof, 3.7, 0, Math.PI/4, 0);
+  roof.scale.set(0.9, 1, 1.4);
+  add(gbox(0.65, 2.4, 0.65), mWood, 3.2).position.set(1.0, 0, -1.4); // chimney
+  add(gbox(1.0, 1.8, 0.08), mWood, 1.2).position.set(0, 0, 2.72); // door
+  add(gbox(1.0, 0.9, 0.08), mGlass, 1.6).position.set(-1.0, 0, 2.72); // window
+  add(gbox(1.1, 0.25, 0.35), mWood, 1.05).position.set(-1.0, 0, 2.85);
+
+  if(style==='maya'){
+    // Artist easel on grass
+    add(gbox(0.8, 0.9, 0.05), new THREE.MeshLambertMaterial({color: 0xffffff}), 1.1, -0.2, 0.3, 0).position.set(1.5, 0, 3.5);
+    add(gbox(0.08, 1.4, 0.08), mWood, 0.7).position.set(1.5, 0, 3.3);
+  } else if(style==='pakjoko'){
+    // Fish net rack & barrel
+    add(gbox(1.4, 1.2, 0.08), new THREE.MeshLambertMaterial({color: 0xc4b294}), 0.8).position.set(1.5, 0, 3.3);
+    add(new THREE.CylinderGeometry(0.4, 0.35, 0.7, 8), mWood, 0.35).position.set(1.5, 0, 2.2);
+  }
+
+  return grp;
+}
+
+function buildFarmClutter(name){
+  if(name!=="kebun") return;
+  const clutterLocs = [
+    {x:10, y:8, type:'weed'}, {x:11, y:9, type:'stone'}, {x:13, y:8, type:'branch'},
+    {x:14, y:9, type:'flowers'}, {x:10, y:10, type:'stone'}, {x:13, y:11, type:'weed'},
+    {x:15, y:8, type:'weed'}, {x:8, y:10, type:'stone'}, {x:12, y:10, type:'flowers'},
+    {x:9, y:11, type:'branch'}, {x:14, y:11, type:'weed'}
+  ];
+  for(const c of clutterLocs){
+    if(G.farm && G.farm.kebun && G.farm.kebun[c.x+','+c.y]) continue;
+    const wx = c.x * TILE, wz = c.y * TILE;
+    const grp = new THREE.Group(); grp.position.set(wx, 0, wz); grp.userData.farmClutter = true;
+    if(c.type==='weed'){
+      for(let i=0; i<3; i++){
+        const w = new THREE.Mesh(new THREE.SphereGeometry(0.22, 6, 5), new THREE.MeshLambertMaterial({color:0x4caf50}));
+        w.scale.set(1, 0.45, 1);
+        const ang = i * (Math.PI*2/3);
+        w.position.set(Math.cos(ang)*0.18, 0.12, Math.sin(ang)*0.18);
+        grp.add(w);
+      }
+    } else if(c.type==='stone'){
+      const s = new THREE.Mesh(new THREE.SphereGeometry(0.24, 7, 5), new THREE.MeshLambertMaterial({color:0x9e9e9e}));
+      s.scale.set(1.2, 0.65, 0.9);
+      s.position.y = 0.12;
+      grp.add(s);
+    } else if(c.type==='branch'){
+      const b = new THREE.Mesh(gbox(0.65, 0.1, 0.1), new THREE.MeshLambertMaterial({color:0x795548}));
+      b.rotation.y = 0.65; b.position.y = 0.05;
+      grp.add(b);
+    } else if(c.type==='flowers'){
+      for(let i=0; i<3; i++){
+        const fl = new THREE.Mesh(new THREE.SphereGeometry(0.14, 5, 4), new THREE.MeshLambertMaterial({color:i%2?0xffeb3b:0xffffff}));
+        fl.position.set(-0.2 + i*0.22, 0.18, (i===1?0.15:-0.1));
+        grp.add(fl);
+        const st = new THREE.Mesh(gbox(0.04, 0.2, 0.04), new THREE.MeshLambertMaterial({color:0x388e3c}));
+        st.position.set(-0.2 + i*0.22, 0.08, (i===1?0.15:-0.1));
+        grp.add(st);
+      }
+    }
+    worldGrp.add(grp);
+  }
+}
+
+/* ---------- CHIMNEY SMOKE SYSTEM ---------- */
+let chimneyPuffs = [];
+let lastChimneyPuff = 0;
+function tickChimneySmoke(dt){
+  if(dungeon || !curScene) return;
+  const now = performance.now();
+  if(now - lastChimneyPuff > 400){
+    lastChimneyPuff = now;
+    let emitPos = null;
+    if(curScene === "kebun"){
+      emitPos = new THREE.Vector3(4.0*TILE + 2.4, 6.0, 3.5*TILE - 1.0);
+    } else if(curScene === "desa"){
+      emitPos = new THREE.Vector3(2.5*TILE + 0.9, 5.6, 7.0*TILE - 1.6);
+    }
+    if(emitPos){
+      const puff = new THREE.Mesh(
+        new THREE.SphereGeometry(0.24, 6, 5),
+        new THREE.MeshLambertMaterial({color: 0xffffff, transparent: true, opacity: 0.55})
+      );
+      puff.position.copy(emitPos);
+      puff.userData = { life: 0, maxLife: 3.2, vx: -0.25 + Math.random()*0.1, vy: 0.95 + Math.random()*0.3, vz: -0.25 + Math.random()*0.1 };
+      scene.add(puff);
+      chimneyPuffs.push(puff);
+    }
+  }
+  for(let i = chimneyPuffs.length - 1; i >= 0; i--){
+    const p = chimneyPuffs[i];
+    p.userData.life += dt;
+    const progress = p.userData.life / p.userData.maxLife;
+    if(progress >= 1.0){
+      scene.remove(p);
+      chimneyPuffs.splice(i, 1);
+    } else {
+      p.position.x += p.userData.vx * dt;
+      p.position.y += p.userData.vy * dt;
+      p.position.z += p.userData.vz * dt;
+      const s = 1.0 + progress * 2.2;
+      p.scale.set(s, s, s);
+      p.material.opacity = 0.55 * (1.0 - progress);
+    }
+  }
+}
+
+function buildScene(name){
+  while(worldGrp.children.length) worldGrp.remove(worldGrp.children[0]);
+  chimneyPuffs.forEach(p => scene.remove(p)); chimneyPuffs = [];
+  npcEnts=[]; mobEnts=[]; wildEnts=[];
+  const sc=SCENES[name], map=sc.tiles;
+  scene.userData.sky.material.color.setHex(sc.bg);
+
+  for(let y=0;y<map.length;y++)for(let x=0;x<map[0].length;x++){
+    // In kebun, the farmhouse occupies x:2..6, y:2..5 -> render base grass underneath
+    if(name==="kebun" && x>=2 && x<=6 && y>=2 && y<=5){
+      worldGrp.add(tileMesh(T.GRASS, x*TILE, y*TILE, sc.dark));
+      continue;
+    }
+    // In desa, Warung Bu Sari occupies x:2..3, y:2..4
+    if(name==="desa" && x>=2 && x<=3 && y>=2 && y<=4){
+      worldGrp.add(tileMesh(T.GRASS, x*TILE, y*TILE, sc.dark));
+      continue;
+    }
+    // In desa, Bengkel Budi occupies x:2..3, y:6..8
+    if(name==="desa" && x>=2 && x<=3 && y>=6 && y<=8){
+      worldGrp.add(tileMesh(T.PATH, x*TILE, y*TILE, sc.dark));
+      continue;
+    }
+    // In desa, Rumah Maya occupies x:14..15, y:2..4
+    if(name==="desa" && x>=14 && x<=15 && y>=2 && y<=4){
+      worldGrp.add(tileMesh(T.GRASS, x*TILE, y*TILE, sc.dark));
+      continue;
+    }
+    // In desa, Rumah Pak Joko occupies x:13..14, y:8..10
+    if(name==="desa" && x>=13 && x<=14 && y>=8 && y<=10){
+      worldGrp.add(tileMesh(T.GRASS, x*TILE, y*TILE, sc.dark));
+      continue;
+    }
+    worldGrp.add(tileMesh(map[y][x],x*TILE,y*TILE,sc.dark));
+  }
+
+  // Dedicated multi-tile Harvest Moon architectural models
+  if(name==="kebun"){
+    worldGrp.add(buildFarmhouse(4.0*TILE, 3.5*TILE));
+    worldGrp.add(buildShippingBin(8.0*TILE, 6.0*TILE));
+    buildFarmClutter("kebun");
+  } else if(name==="desa"){
+    worldGrp.add(buildShopBuilding(2.5*TILE, 3.0*TILE));
+    worldGrp.add(buildForgeBuilding(2.5*TILE, 7.0*TILE));
+    worldGrp.add(buildCottage(14.5*TILE, 3.0*TILE, 'maya'));
+    worldGrp.add(buildCottage(13.5*TILE, 9.0*TILE, 'pakjoko'));
+  }
+  // farm overlays (skip indoor)
+  if(!sc.indoor) rebuildFarm(name);
+  // NPCs in this scene
+  for(const id in NPCS){ const n=NPCS[id];
+    let sx=n.sched[0][2],sy=n.sched[0][3],scn=n.sched[0][1];
+    const h=Math.floor(G.minute/60);
+    for(const s of n.sched){ if(h>=s[0]){scn=s[1];sx=s[2];sy=s[3];} }
+    // During festival, override scheduling to gather at desa booth
+    if(G.festival && !n.spirit){
+      if(name==="desa"){ scn="desa"; sx=8+((Object.keys(NPCS).indexOf(id))%4); sy=4; }
+      else if(scn==="desa") continue;
+    }
+    if(scn!==name) continue;
+    const m=buildChibi(n.skin||0xe8b48a, n.hair||0x2a1a10, n.col,
+      {tag:n.name, spirit:n.spirit, style:n.style});
+    m.position.set(sx*TILE,0,sy*TILE);
+    m.userData.npc=id; m.userData.gx=sx; m.userData.gy=sy;
+    worldGrp.add(m); npcEnts.push(m);
+  }
+  // night spirits / wild creatures (skip indoor)
+  if(!sc.indoor) spawnWild(name);
+  // Festival booth in desa
+  festBoothMesh=null;
+  if(G.festival && name==="desa"){
+    const bm=tileMesh(T.FESTIVAL_BOOTH, 8*TILE, 6*TILE, false);
+    bm.userData.booth=true; bm.userData.festBooth=true;
+    worldGrp.add(bm); festBoothMesh=bm;
+  }
+  // Festival Roh: spawn semua spirit di desa siang hari
+  if(G.festival && G.festival.key==="roh" && name==="desa"){
+    for(const id of ["jin_kebun","kuntilanak","pocong"]){
+      const n=NPCS[id];
+      const m=buildChibi(n.skin||0xe8b48a, n.hair||0x2a1a10, n.col,
+        {tag:n.name, spirit:true, style:n.style});
+      m.position.set((10+npcEnts.length)*TILE,0,7*TILE);
+      m.userData.npc=id; m.userData.gx=10+npcEnts.length; m.userData.gy=7;
+      worldGrp.add(m); npcEnts.push(m);
+    }
+  }
+  curScene=name;
+}
+
+function rebuildFarm(name){
+  // remove old farm meshes
+  worldGrp.children.filter(c=>c.userData.farm).forEach(c=>worldGrp.remove(c));
+  const fk=G.farm[name]||{};
+  for(const key in fk){
+    const [x,y]=key.split(',').map(Number); const f=fk[key];
+    const grp=new THREE.Group(); grp.position.set(x*TILE,0,y*TILE); grp.userData.farm=true;
+    // Harvest Moon Furrowed Texture for Tilled Soil
+    const soilMat = new THREE.MeshLambertMaterial({map: makeTileTex(f.wet ? 'dirt_wet' : 'dirt')});
+    const soil=new THREE.Mesh(gbox(TILE*.96,.42,TILE*.96), soilMat);
+    soil.position.y=-.18; grp.add(soil);
+    if(f.crop){
+      const c=CROPS[f.crop], p=f.stage/c.days;
+      const s=0.35+p*1.05;
+      // Vegetable round body
+      const cr=new THREE.Mesh(new THREE.SphereGeometry(s*.65,8,7),
+        new THREE.MeshLambertMaterial({color:f.stage>=c.days?c.col:0x4f9e4f}));
+      cr.position.y=s*.55; grp.add(cr);
+      // Stem
+      const st=new THREE.Mesh(gbox(.14,s*.75,.14),new THREE.MeshLambertMaterial({color:0x357a3a}));
+      st.position.y=s*.35; grp.add(st);
+      // Cute leafy tops (sprouts like Harvest Moon turnip / carrot leaves!)
+      const l1=new THREE.Mesh(new THREE.ConeGeometry(s*0.35, s*0.65, 5), new THREE.MeshLambertMaterial({color:0x43a047}));
+      l1.position.set(0, s*0.8, 0); l1.rotation.z=0.28; grp.add(l1);
+      const l2=new THREE.Mesh(new THREE.ConeGeometry(s*0.35, s*0.65, 5), new THREE.MeshLambertMaterial({color:0x388e3c}));
+      l2.position.set(0, s*0.8, 0); l2.rotation.z=-0.28; grp.add(l2);
+    }
+    worldGrp.add(grp);
+  }
+}
+
+/* ---------- WILD / SPIRIT SPAWN ---------- */
+function spawnWild(name){
+  const h=Math.floor(G.minute/60), night=(h>=19||h<5);
+  // fireflies (kunang-kunang) at night in hutan/kuburan
+  if(night && (name==="hutan"||name==="kuburan")){
+    for(let i=0;i<6;i++){
+      const f=new THREE.Mesh(new THREE.SphereGeometry(.18,5,4),
+        new THREE.MeshBasicMaterial({color:0xffe27a}));
+      f.position.set((4+Math.random()*10)*TILE,1+Math.random()*2,(2+Math.random()*7)*TILE);
+      f.userData={wild:"kunang",t:Math.random()*6};
+      worldGrp.add(f); wildEnts.push(f);
+    }
+  }
+  // mandrake in hutan (siang juga boleh)
+  if(name==="hutan"){
+    for(let i=0;i<3;i++){
+      const m=buildChibi(0xc8a070,0x4f7a2f,0x6a4a2a,{});
+      m.scale.setScalar(.4);
+      m.position.set((5+i*3)*TILE,0,(8+i)*TILE);
+      m.userData={wild:"mandrake"};
+      worldGrp.add(m); wildEnts.push(m);
+    }
+  }
+}
+
+/* =========================================================================
+   PLAYER
+   ========================================================================= */
+function spawnPlayer(){
+  playerGrp=buildChibi(G.skin,G.hair,G.shirt,{player:true, style:"player"});
+  playerGrp.position.set(G.px*TILE,0,G.py*TILE);
+  scene.add(playerGrp);
+}
+function curMap(){ return dungeon? dungeon.grid : SCENES[curScene].tiles; }
+function gridXY(){ return [Math.round(playerGrp.position.x/TILE),
+                           Math.round(playerGrp.position.z/TILE)]; }
+function canWalk(x,y){
+  const map=curMap();
+  const id=tileAt(map,x,y);
+  return !BLOCK.has(id);
+}
+
+let facing=new THREE.Vector3(0,0,1);
+function updatePlayer(dt){
+  if(busy||paused) return;
+  let mvx=0,mvz=0;
+  if(keys['w']||keys['arrowup'])    mvz=-1;
+  if(keys['s']||keys['arrowdown'])  mvz= 1;
+  if(keys['a']||keys['arrowleft'])  mvx=-1;
+  if(keys['d']||keys['arrowright']) mvx= 1;
+  const running=(keys['shift']) && G.en>0;
+  let sp=PLAYER_SPEED*(running?RUN_MULT:1);
+  const ud=playerGrp.userData;
+  if(mvx||mvz){
+    const len=Math.hypot(mvx,mvz); mvx/=len; mvz/=len;
+    // Map screen WASD relative to current AWL 3D orbit camera yaw (camYaw)
+    const sY = Math.sin(camYaw), cY = Math.cos(camYaw);
+    const wx = mvx * cY + mvz * sY;
+    const wz = -mvx * sY + mvz * cY;
+    facing.set(wx, 0, wz);
+
+    const nx=playerGrp.position.x+wx*sp*dt;
+    const nz=playerGrp.position.z+wz*sp*dt;
+    if(canWalk(Math.round(nx/TILE),Math.round(playerGrp.position.z/TILE)))
+      playerGrp.position.x=nx;
+    if(canWalk(Math.round(playerGrp.position.x/TILE),Math.round(nz/TILE)))
+      playerGrp.position.z=nz;
+    ud.t+=dt*(running?16:10);
+    tickSprite(playerGrp, dt, wx, wz, running);
+    if(Math.floor(ud.t/3)!==ud._s){ud._s=Math.floor(ud.t/3);SFX.step();}
+    if(running){ G.en=Math.max(0,G.en-5*dt); if(G.en<=0) faint("Kehabisan tenaga!"); }
+    // portal check
+    const [gx,gy]=gridXY();
+    // Clear portal-guard once player steps off the just-used portal tile
+    if(G._portalGuard && (G._portalGuard.scene!==curScene || G._portalGuard.x!==gx || G._portalGuard.y!==gy))
+      G._portalGuard=null;
+    if(!dungeon){ for(const p of (SCENES[curScene].portals||[])){
+      if(gx===p.x&&gy===p.y){
+        // Skip portal if we just arrived here from the other side
+        if(G._portalGuard && G._portalGuard.scene===curScene
+           && G._portalGuard.x===p.x && G._portalGuard.y===p.y) break;
+        if(p.to==="cave") enterDungeon("cave");
+        else if(p.to==="cave_es") enterDungeon("kuil_es");
+        else goScene(p.to,p.tx,p.ty);
+        break; } } }
+  }else{
+    tickSprite(playerGrp, dt, 0, 0, false);
+  }
+}
+
+function faint(msg){
+  busy=true; toast(msg,2200); SFX.hurt();
+  fadeOut(()=>{
+    G.scene="kebun"; G.px=7; G.py=8; dungeon=null; G.dunLevel=0;
+    G.en=Math.max(20,G.en); G.hp=Math.max(20,G.hp);
+    buildScene("kebun"); playerGrp.position.set(7*TILE,0,8*TILE);
+    fadeIn(()=>busy=false);
+  });
+}
+
+/* ---------- CAMERA (Harvest Moon: A Wonderful Life 3D Over-Shoulder Orbit) ---------- */
+function updateCamera(){
+  const t=playerGrp.position;
+  camYaw += (camTargetYaw - camYaw) * 0.14;
+  camPitch += (camTargetPitch - camPitch) * 0.14;
+  camDist += (camTargetDist - camDist) * 0.14;
+  const hDist = Math.cos(camPitch) * camDist;
+  const vDist = Math.sin(camPitch) * camDist;
+  const cam = new THREE.Vector3(
+    t.x + Math.sin(camYaw) * hDist,
+    t.y + 1.2 + vDist,
+    t.z + Math.cos(camYaw) * hDist
+  );
+  camera.position.lerp(cam, 0.18);
+  camera.lookAt(t.x, t.y + 1.35, t.z);
+  if(scene.userData && scene.userData.sun){
+    scene.userData.sun.position.set(t.x + 25, t.y + 45, t.z + 25);
+    scene.userData.sun.target.position.set(t.x, t.y, t.z);
+    scene.userData.sun.target.updateMatrixWorld();
+  }
+}
+
+/* =========================================================================
+   TIME / SKY / WEATHER
+   ========================================================================= */
+function advanceTime(dt){
+  if(paused) return;
+  const minPerSec=1440/REAL_SECONDS_PER_DAY;
+  G.minute+=minPerSec*dt;
+  if(G.minute>=1440){ // force sleep handled separately at 23:00
+    newDay(false);
+  }
+  const h=Math.floor(G.minute/60), m=Math.floor(G.minute%60);
+  if(h>=23 && !busy && !dungeon){ sleep(true); }
+  updateSky(h+m/60);
+  updateHUD();
+  // hourly NPC reschedule
+  if(h!==G._lastHour){ G._lastHour=h; rescheduleNPCs(); refreshSpirits(); }
+}
+function updateSky(hf){
+  const sk=scene.userData, day=SCENES[curScene]?SCENES[curScene].bg:0x86c5ff;
+  let c, lt, night=0;
+  if(hf<5)        {c=0x0e1430; lt=.28; night=1;}
+  else if(hf<7)   {c=0xe8965a; lt=.55;}
+  else if(hf<17)  {c=0x86c5ff; lt=1.0;}
+  else if(hf<19)  {c=0xd8704a; lt=.6;}
+  else if(hf<21)  {c=0x3a3a6a; lt=.4; night=.6;}
+  else            {c=0x0e1430; lt=.28; night=1;}
+  if(dungeon){ c=0x1a1820; lt=.5; night=0; }
+  if(SCENES[curScene]&&SCENES[curScene].dark) lt*=.7;
+  sk.sky.material.color.setHex(c);
+  scene.fog.color.setHex(dungeon?0x1a1820:c);
+  sk.amb.intensity=0.55+lt*0.32;
+  sk.sun.intensity=lt*0.7;
+  sk.sun.color.setHex(hf<7||hf>17?0xffb060:0xfff2c0);
+  if(sk.hemi) sk.hemi.intensity = 0.18 + lt*0.25;
+  sk.stars.material.opacity=night;
+}
+function newDay(slept){
+  G.day++; if(G.day>28){ G.day=1; G.season=(G.season+1)%4; if(G.season===0)G.year++; }
+  G.minute=6*60;
+  G.weather=Math.random()<(G.season===1?0.3:G.season===3?0.25:0.15)?
+    (G.season===3?"salju":"hujan"):"cerah";
+  // festival check
+  const fest=checkFestival(G.day,G.season);
+  if(fest){ G.festival=fest; G.festivalScore=0;
+    setTimeout(()=>toast("🎉 Hari ini: "+fest.nm+"! "+fest.desc, 4000), 800);
+    G.weather="cerah";
+  } else { G.festival=null; }
+  // grow crops +1 day in all scenes
+  for(const sc in G.farm){ const fk=G.farm[sc];
+    for(const k in fk){ const f=fk[k];
+      if(f.crop && f.wet && f.stage<CROPS[f.crop].days){ f.stage++; f.wet=false; }
+      else if(f.crop) f.wet=false;
+    }
+  }
+  rebuildFarm(curScene);
+  if(slept) toast("Kau tidur. Hari "+G.day+" — "+SEASONS[G.season]+(G.weather!=="cerah"?" · "+G.weather:""));
+}
+function sleep(forced){
+  if(busy)return; busy=true;
+  if(forced) toast("Sudah larut — kau tertidur...",1500);
+  fadeOut(()=>{
+    G.hp=G.maxhp; G.en=100; newDay(true);
+    autosave();
+    fadeIn(()=>busy=false);
+  });
+}
+
+/* ---------- WEATHER PARTICLES ---------- */
+let rainPts=null;
+function updateWeather(){
+  while(particleGrp.children.length) particleGrp.remove(particleGrp.children[0]);
+  rainPts=null;
+  if(G.weather==="cerah"||dungeon) return;
+  const n=500,pos=[];
+  for(let i=0;i<n;i++) pos.push((Math.random()-.5)*80, Math.random()*40, (Math.random()-.5)*80);
+  const gg=new THREE.BufferGeometry();
+  gg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  rainPts=new THREE.Points(gg,new THREE.PointsMaterial({
+    color:G.weather==="salju"?0xffffff:0x9ec8ff, size:G.weather==="salju"?.5:.3}));
+  particleGrp.add(rainPts);
+}
+function tickWeather(dt){
+  if(!rainPts) return;
+  const a=rainPts.geometry.attributes.position.array;
+  const fall=G.weather==="salju"?6:24;
+  for(let i=1;i<a.length;i+=3){ a[i]-=fall*dt; if(a[i]<0)a[i]=40; }
+  rainPts.geometry.attributes.position.needsUpdate=true;
+  rainPts.position.set(playerGrp.position.x,0,playerGrp.position.z);
+}
+
+/* =========================================================================
+   FARMING / TOOL ACTIONS
+   ========================================================================= */
+function farmKey(){ const [x,y]=gridXY();
+  // target tile in facing direction
+  const tx=x+Math.round(facing.x), ty=y+Math.round(facing.z);
+  return {x:tx,y:ty,key:tx+','+ty};
+}
+function useTool(){
+  if(busy||paused) return;
+  const t=G.tool;
+  swingAnim();
+  if(dungeon){
+    if(t===6) mineAction();
+    else if(t===7) attackAction();
+    return;
+  }
+  const map=SCENES[curScene].tiles;
+  const f=farmKey(); const id=tileAt(map,f.x,f.y);
+  G.farm[curScene]=G.farm[curScene]||{};
+  const fk=G.farm[curScene]; const cell=fk[f.key];
+  if(t===0){ // cangkul
+    if(TILLABLE.has(id) && !cell){ fk[f.key]={tilled:true,wet:false,crop:null,stage:0};
+      SFX.till(); rebuildFarm(curScene); }
+    else toast("Tak bisa dicangkul di sini.");
+  }
+  else if(t===1){ // siram
+    if(cell){ cell.wet=true; SFX.water(); spawnPuff(f.x,f.y,0x6ab0ff); rebuildFarm(curScene); }
+    else toast("Cangkul tanahnya dulu.");
+  }
+  else if(t===2){ // tanam
+    if(cell && !cell.crop){
+      const seed=SEED_LIST[G.seedSel];
+      if(takeItem("benih_"+seed)){ cell.crop=seed; cell.stage=0; SFX.plant();
+        rebuildFarm(curScene); checkPlantQuest();
+      } else toast("Tak punya benih "+seed+".");
+    } else toast(cell?"Sudah ada tanaman.":"Cangkul dulu.");
+  }
+  else if(t===3){ // panen
+    if(cell && cell.crop && cell.stage>=CROPS[cell.crop].days){
+      addItem(cell.crop,1); SFX.harvest(); spawnPuff(f.x,f.y,CROPS[cell.crop].col);
+      toast("Panen "+cell.crop+"! (+1)");
+      if(cell.crop==="lobak"&&G.quest===2){G._radH=(G._radH||0)+1; if(G._radH>=3)advanceQuest();}
+      delete fk[f.key]; rebuildFarm(curScene);
+    } else toast("Belum ada yang bisa dipanen.");
+  }
+  else if(t===4){ // kapak — tebang pohon utk kayu
+    if(id===T.TREE){ addItem("kayu",2); SFX.mine(); toast("+2 Kayu"); }
+    else toast("Tak ada pohon di depan.");
+  }
+  else if(t===5){ giveGift(); }
+  else if(t===6){ mineAction(); }
+  else if(t===7){ attackAction(); }
+}
+function swingAnim(){
+  // 3D Rigged Chibi tool swing + tool prop
+  if(playerGrp && playerGrp.userData){
+    setToolProp(playerGrp, G.tool);
+    playerGrp.userData.swingT = 0.01;
+  }
+}
+function spawnPuff(x,y,col){
+  for(let i=0;i<7;i++){
+    const p=new THREE.Mesh(new THREE.SphereGeometry(.12,4,3),
+      new THREE.MeshBasicMaterial({color:col}));
+    p.position.set(x*TILE+(Math.random()-.5),1,y*TILE+(Math.random()-.5));
+    p.userData={life:.6,vy:2+Math.random()*2}; particleGrp.add(p);
+  }
+}
+function tickPuffs(dt){
+  particleGrp.children.slice().forEach(p=>{
+    if(p.userData.life!==undefined){
+      p.userData.life-=dt; p.position.y+=p.userData.vy*dt; p.userData.vy-=6*dt;
+      p.scale.multiplyScalar(0.94);
+      if(p.userData.life<=0) particleGrp.remove(p);
+    }
+  });
+}
+
+/* =========================================================================
+   NPC: schedule + dialog + gift
+   ========================================================================= */
+function rescheduleNPCs(){
+  if(dungeon) return;
+  const h=Math.floor(G.minute/60);
+  // if a scheduled scene changed, rebuild scene NPC set
+  let needRebuild=false;
+  for(const e of npcEnts){
+    const n=NPCS[e.userData.npc]; let scn=n.sched[0][1],sx=n.sched[0][2],sy=n.sched[0][3];
+    for(const s of n.sched){ if(h>=s[0]){scn=s[1];sx=s[2];sy=s[3];} }
+    if(scn!==curScene){ needRebuild=true; }
+    else { e.userData.gx=sx; e.userData.gy=sy; }
+  }
+  if(needRebuild) buildScene(curScene);
+}
+function refreshSpirits(){
+  // remove existing wild then respawn for time-of-day
+  wildEnts.forEach(w=>worldGrp.remove(w)); wildEnts=[];
+  spawnWild(curScene);
+}
+function tickNPCs(dt){
+  for(const e of npcEnts){
+    const tx=e.userData.gx*TILE, tz=e.userData.gy*TILE;
+    const dx=tx-e.position.x, dz=tz-e.position.z, d=Math.hypot(dx,dz);
+    if(d>0.15){
+      e.position.x+=dx/d*1.8*dt; e.position.z+=dz/d*1.8*dt;
+      tickSprite(e, dt, dx/d, dz/d, false);
+    } else {
+      tickSprite(e, dt, 0, 0, false);
+    }
+  }
+  // floating fireflies & mandrake idle
+  wildEnts.forEach(w=>{
+    if(w.userData.wild==="kunang"){ w.userData.t+=dt;
+      w.position.y=1.4+Math.sin(w.userData.t*2)*.5;
+      w.position.x+=Math.sin(w.userData.t)*.01;
+      w.material.opacity=.5+.5*Math.sin(w.userData.t*4);}
+  });
+}
+function nearestNPC(){
+  let best=null,bd=2.6;
+  for(const e of npcEnts){ const d=playerGrp.position.distanceTo(e.position);
+    if(d<bd){bd=d;best=e;} } return best;
+}
+let dlgQueue=[], dlgWho="";
+function nearTile(map,ids,r){
+  r=r||1; const [gx,gy]=gridXY();
+  for(let yy=-r;yy<=r;yy++)for(let xx=-r;xx<=r;xx++){
+    if(ids.has(tileAt(map,gx+xx,gy+yy))) return true; }
+  return false;
+}
+function interact(){
+  if(busy)return;
+  // dialog advance
+  if(dlgQueue.length){ nextDialog(); return; }
+  if(dungeon){ checkStairs(); return; }
+  const map=SCENES[curScene].tiles;
+  // mailbox
+  if(nearTile(map,new Set([T.MAILBOX]),1)){
+    openDialog("Kotak Pos",["Sepucuk surat dari Paman Arsa:",
+      "\"Karsa, kebun ini kuwariskan padamu. Cangkul, sirami, tanam, lalu panen. Tidurlah di kasur dalam rumah untuk memulai hari baru.\"",
+      "\"Tapi ingat — lembah ini lebih dari yang terlihat. Jaga ia baik-baik.\"",
+      "(Quest 'Petani Pemula' dimulai — cangkul, siram & tanam 3 benih lobak!)"]);
+    if(G.quest===0) advanceQuest(); return; }
+  // Shipping bin in kebun
+  if(curScene==="kebun" && Math.hypot(playerGrp.position.x - 8.0*TILE, playerGrp.position.z - 6.0*TILE) < 2.8){
+    openShop();
+    toast("📦 Kotak Pengiriman dibuka — jual hasil panen & tambangmu di sini!");
+    return;
+  }
+  // bed (player) or NPC bed
+  if(nearTile(map,new Set([T.BED]),1)){ sleep(false); return; }
+  if(nearTile(map,new Set([T.BED_NPC]),1)){
+    openDialog("Tempat Tidur",["Tempat tidur penghuni rumah. Rapi sekali — jangan diganggu."]); return; }
+  // shop / forge
+  if(nearTile(map,new Set([T.SHOP]),1) || (curScene==="desa" && Math.hypot(playerGrp.position.x - 2.5*TILE, playerGrp.position.z - 3.0*TILE) < 3.2)){ openShop(); return; }
+  if(nearTile(map,new Set([T.FORGE]),1) || (curScene==="desa" && Math.hypot(playerGrp.position.x - 2.5*TILE, playerGrp.position.z - 7.0*TILE) < 3.2)){ openForge(); return; }
+  // Interior furniture
+  if(nearTile(map,new Set([T.CHEST_HOME]),1)){ openHomeChest(); return; }
+  if(nearTile(map,new Set([T.STOVE]),1)){ openCooking(); return; }
+  if(nearTile(map,new Set([T.BOOKSHELF]),1)){
+    openDialog("Rak Buku",[
+      "Sebuah buku tua: \"Lembah Karsa adalah lembah kehendak — apa yang kau tanam, kau panen.\"",
+      "Catatan kecil: \"Sang Hyang Naga tidur di kedalaman gua. Sang Hyang Es bersembunyi di lereng utara.\"",
+      "(Tips: tekan 1–8 untuk ganti alat. Z menyerang, F menangkap.)"]); return; }
+  if(nearTile(map,new Set([T.TABLE]),1)){
+    openDialog("Meja",["Meja kayu rapi. Mungkin penghuni rumah meninggalkan sesuatu di sini suatu saat."]); return; }
+  if(nearTile(map,new Set([T.FISHING_SPOT]),1)){ doFishing(); return; }
+  // Festival booth proximity
+  if(festBoothMesh){
+    const d=playerGrp.position.distanceTo(festBoothMesh.position);
+    if(d<3.5){ openFestivalBooth(); return; }
+  }
+  // NPC
+  const n=nearestNPC();
+  if(n){ const data=NPCS[n.userData.npc]; const id=n.userData.npc;
+    const lines=data.talks.slice(); dlgWho=id;
+    // Side quest active?
+    const sq=G.sideActive[id];
+    if(sq){
+      if(checkSideReq(sq.req)){
+        lines.unshift("("+data.name+": \"Sudah kau dapat? Boleh kulihat?\")");
+        lines.push("[Tekan G di dekatku untuk menyerahkan: "+sideReqStr(sq.req)+"]");
+      } else {
+        lines.unshift("("+data.name+": \"Ingat permintaanku ya — "+sq.t+"\")");
+        lines.push("[Belum lengkap: "+sideReqStr(sq.req)+"]");
+      }
+    } else {
+      const offer=getSideOffer(id);
+      if(offer){
+        lines.push("◆ ["+data.name+" menawarkan: "+offer.t+"]");
+        lines.push("  "+offer.d+" — Tekan G untuk menerima.");
+      }
+    }
+    if(G.affection[dlgWho]) lines.push("(Hubungan: ❤ "+G.affection[dlgWho]+"/10)");
+    openDialog(data.name,lines,dlgWho); return; }
+  toast("Tak ada yang bisa diajak interaksi di sini.");
+}
+function openDialog(who,lines,npcId){
+  dlgQueue=lines.slice(); dlgWho=npcId||"";
+  $("#dialog").style.display="block";
+  $("#dialog .who").textContent=who;
+  nextDialog();
+}
+function nextDialog(){
+  if(!dlgQueue.length){ $("#dialog").style.display="none";
+    if(dlgWho && NPCS[dlgWho]) gainAffection(dlgWho,1,true); dlgWho=""; return; }
+  $("#dialog .txt").textContent=dlgQueue.shift();
+  SFX.blip();
+}
+function gainAffection(id,n,silent){
+  G.affection[id]=Math.min(10,(G.affection[id]||0)+n);
+}
+function giveGift(){
+  const n=nearestNPC(); if(!n){ toast("Tak ada siapa pun di dekatmu."); return; }
+  const id=n.userData.npc, data=NPCS[id];
+  // give selected seed's crop if held, else first crop in inv
+  let gift=null;
+  for(const k of Object.keys(G.inv)){ if(CROPS[k]||["herba","beri","mandrake","kayu","jamur"].includes(k)){ gift=k; break; } }
+  if(!gift){ toast("Tak punya barang untuk dihadiahkan."); return; }
+  takeItem(gift,1);
+  if(gift===data.fav || (data.fav==="herba"&&gift==="herba")){
+    gainAffection(id,3); openDialog(data.name,[data.gr,"(❤ +3)"],id);
+  }else{ gainAffection(id,1); openDialog(data.name,["Terima kasih untuk "+gift+"-nya.","(❤ +1)"],id); }
+  if(n.userData.spirit||data.spirit){ if(G.quest===8 && G.captured===0){ /* gift to spirit counts as contact */ } }
+}
+
+/* =========================================================================
+   EXPANSION: COOKING / HOME CHEST / FISHING / FESTIVAL / SIDE QUESTS
+   ========================================================================= */
+function openCooking(){
+  let h=`<div class="row" style="opacity:.85">Pilih masakan. Bahan diambil dari inventori.</div>`;
+  for(const k in RECIPES){ const r=RECIPES[k];
+    const have=canAfford(0,r.ing);
+    const ingStr=Object.entries(r.ing).map(([n,c])=>(G.inv[n]||0)+"/"+c+" "+n).join(", ");
+    h+=`<div class="row"><span>🍲 ${r.nm} <small>(+${r.hp} HP, jual ${r.sell}G)</small><br><small>${ingStr}</small></span>
+      <button class="buy" onclick="cook('${k}')" ${have?"":"disabled"}>Masak</button></div>`;
+  }
+  h+=`<hr style="border-color:#ffffff22;margin:10px 0"><div class="row" style="opacity:.85">Makanan yang sudah ada (klik untuk makan):</div>`;
+  for(const k in G.inv){ if(RECIPES[k]){
+    h+=`<div class="row"><span>🍲 ${RECIPES[k].nm} ×${G.inv[k]}</span>
+      <button class="buy" onclick="eatFood('${k}')">Makan (+${RECIPES[k].hp} HP)</button></div>`; } }
+  $("#shopList").innerHTML=h; $("#pShop").querySelector('h2').textContent="🍳 Memasak (Kompor)";
+  openPanel("#pShop");
+}
+window.cook=(k)=>{ const r=RECIPES[k]; if(!canAfford(0,r.ing)){toast("Bahan kurang.");return;}
+  for(const n in r.ing) takeItem(n,r.ing[n]);
+  addItem(k,1); SFX.kaching(); toast("Selesai memasak: "+r.nm+"!"); openCooking(); };
+window.eatFood=(k)=>{ if(!hasItem(k)){return;} const r=RECIPES[k];
+  takeItem(k,1); G.hp=Math.min(G.maxhp,G.hp+r.hp); SFX.harvest();
+  toast("Makan "+r.nm+" (+"+r.hp+" HP)"); updateHUD(); openCooking(); };
+
+function openHomeChest(){
+  let h=`<div class="row" style="opacity:.85">Peti penyimpanan (sementara: tampilkan isi inventori — fitur deposit penuh dalam versi mendatang).</div>`;
+  for(const k in G.inv){ h+=`<div class="row"><span>📦 ${k}</span><span>×${G.inv[k]}</span></div>`; }
+  if(!Object.keys(G.inv).length) h+=`<div class="row">Kosong.</div>`;
+  $("#shopList").innerHTML=h; $("#pShop").querySelector('h2').textContent="🗃️ Peti Rumah";
+  openPanel("#pShop");
+}
+
+function doFishing(){
+  if(G.en<8){ toast("Tenaga tak cukup untuk memancing."); return; }
+  G.en-=8; SFX.water(); swingAnim();
+  const r=Math.random();
+  if(r<.55){ addItem("ikan",1); toast("🐟 Dapat ikan!");
+    if(G.festival && G.festival.key==="air"){ G.festivalScore++; } }
+  else if(r<.7){ addItem("herba",1); toast("🍃 Dapat herba dari air."); }
+  else { toast("Tidak ada yang nyangkut..."); }
+  updateHUD();
+}
+
+function openFestivalBooth(){
+  const f=G.festival; if(!f){ toast("Tak ada festival hari ini."); return; }
+  let h=`<div class="row"><b>${f.nm}</b></div><div class="row" style="opacity:.85">${f.desc}</div>`;
+  if(f.key==="tanam"){
+    const seedKeys=Object.keys(G.inv).filter(k=>k.startsWith("benih_"));
+    h+=`<div class="row" style="opacity:.85">Persembahkan benih untuk skor festival. Skor saat ini: <b>${G.festivalScore}</b></div>`;
+    for(const k of seedKeys){
+      h+=`<div class="row"><span>${k} ×${G.inv[k]}</span>
+        <button class="buy" onclick="submitFestival('${k}',1)">Persembahkan 1</button></div>`;
+    }
+    h+=`<div class="row"><button class="buy" onclick="claimFestival()">Klaim Hadiah</button></div>`;
+  } else if(f.key==="air"){
+    h+=`<div class="row" style="opacity:.85">Ikan yang ditangkap hari ini: <b>${G.festivalScore}</b>. Pancing di danau hutan.</div>`;
+    h+=`<div class="row"><button class="buy" onclick="claimFestival()">Klaim Hadiah</button></div>`;
+  } else if(f.key==="panen"){
+    h+=`<div class="row" style="opacity:.85">Persembahkan crop musim ini. Skor: <b>${G.festivalScore}</b></div>`;
+    const seasonName=SEASONS[G.season];
+    for(const k in G.inv){ if(CROPS[k] && CROPS[k].season===seasonName){
+      h+=`<div class="row"><span>${k} ×${G.inv[k]}</span>
+        <button class="buy" onclick="submitFestival('${k}',1)">Persembahkan 1</button></div>`; } }
+    h+=`<div class="row"><button class="buy" onclick="claimFestival()">Klaim Hadiah</button></div>`;
+  } else if(f.key==="roh"){
+    h+=`<div class="row" style="opacity:.85">Roh berkeliaran siang ini. Berikan persembahan herba/beri/bunga untuk berkah.</div>`;
+    for(const k of ["herba","beri","melati","stroberi"]){ if(G.inv[k]){
+      h+=`<div class="row"><span>${k} ×${G.inv[k]}</span>
+        <button class="buy" onclick="submitFestival('${k}',1)">Persembahkan 1</button></div>`; } }
+    h+=`<div class="row"><button class="buy" onclick="claimFestival()">Klaim Hadiah</button></div>`;
+  }
+  $("#shopList").innerHTML=h; $("#pShop").querySelector('h2').textContent="🎉 Booth Festival";
+  openPanel("#pShop");
+}
+window.submitFestival=(k,n)=>{ if(!takeItem(k,n)){toast("Tak ada barang.");return;}
+  G.festivalScore+=n; SFX.kaching(); toast("Skor +"+n+" (total "+G.festivalScore+")");
+  openFestivalBooth();
+};
+window.claimFestival=()=>{ const f=G.festival; if(!f){return;}
+  const s=G.festivalScore;
+  if(s<3){ toast("Skor terlalu rendah ("+s+"). Minimal 3."); return; }
+  let reward="";
+  if(f.key==="tanam"){ addItem("benih_bungaes",1); reward="benih bunga es";}
+  else if(f.key==="air"){ G.gold+=s*40; reward=(s*40)+" gold"; }
+  else if(f.key==="panen"){ G.gold+=s*30; addItem("benih_semangka",1); reward=(s*30)+" gold + benih semangka"; }
+  else if(f.key==="roh"){ addItem("air_keabadian",1); reward="setetes Air Keabadian"; }
+  toast("✦ Hadiah festival: "+reward,3000);
+  G.festivalScore=0; G.festival=null;
+  SFX.level(); updateHUD(); closePanels();
+};
+
+/* ---------- SIDE QUEST helpers ---------- */
+function checkSideReq(req){
+  for(const k in req) if((G.inv[k]||0)<req[k]) return false; return true;
+}
+function sideReqStr(req){ return Object.entries(req).map(([k,v])=>v+"× "+k).join(", "); }
+function getSideOffer(id){
+  if(!SIDE_QUESTS[id]) return null;
+  const idx=G.sideQ[id]||0;
+  if(idx>=SIDE_QUESTS[id].length) return null;
+  const q=SIDE_QUESTS[id][idx];
+  if((G.affection[id]||0)<q.threshold) return null;
+  return q;
+}
+function acceptSideQuest(id){
+  const offer=getSideOffer(id); if(!offer){ toast("Tak ada quest tersedia."); return; }
+  G.sideActive[id]=offer;
+  toast("Quest sampingan diterima: "+offer.t,2400);
+}
+function tryCompleteSideQuest(id){
+  const q=G.sideActive[id]; if(!q){ acceptSideQuest(id); return; }
+  if(!checkSideReq(q.req)){ toast("Belum lengkap: "+sideReqStr(q.req)); return; }
+  // pay items (unless reward.returnItem)
+  for(const k in q.req){
+    if(q.reward.returnItem===k) continue;
+    takeItem(k,q.req[k]);
+  }
+  // give reward
+  if(q.reward.gold) G.gold+=q.reward.gold;
+  if(q.reward.item) addItem(q.reward.item,1);
+  if(q.reward.aff) gainAffection(id,q.reward.aff);
+  G.sideQ[id]=(G.sideQ[id]||0)+1;
+  delete G.sideActive[id];
+  SFX.level();
+  toast("✓ "+q.t+" selesai! Hadiah: "+(q.reward.gold?q.reward.gold+"G ":"")+(q.reward.item||""),3000);
+  updateHUD();
+}
+
+/* ---------- CAPTURE (F) ---------- */
+function captureAction(){
+  if(busy)return;
+  let best=null,bd=2.6;
+  for(const w of wildEnts){ const d=playerGrp.position.distanceTo(w.position);
+    if(d<bd){bd=d;best=w;} }
+  if(!best){ // try spirit NPC
+    const n=nearestNPC();
+    if(n && (NPCS[n.userData.npc].spirit)){
+      G.captured++; toast("Kau menenangkan "+NPCS[n.userData.npc].name+"! (tertangkap dalam hati)");
+      SFX.level(); if(G.quest===8) advanceQuest(); return;
+    }
+    toast("Tak ada makhluk untuk ditangkap."); return;
+  }
+  const kind=best.userData.wild;
+  worldGrp.remove(best); wildEnts=wildEnts.filter(w=>w!==best);
+  if(kind==="kunang"){ addItem("kunang",1); toast("Menangkap Kunang-kunang! (+1)"); }
+  else if(kind==="mandrake"){ addItem("mandrake",1); toast("Mencabut Mandrake! (+1)"); }
+  G.captured++; SFX.level();
+  if(G.quest===8) advanceQuest();
+}
+
+/* =========================================================================
+   DUNGEON: procedural rooms + corridors
+   ========================================================================= */
+function genDungeon(level, type){
+  type = type || "cave";
+  const ice = (type==="kuil_es");
+  const WALL=ice?T.ICE_WALL:T.CAVEWALL;
+  const FLOOR=ice?T.ICE_FLOOR:T.CAVEFLOOR;
+  const W=DUN_W,H=DUN_H;
+  const g=Array.from({length:H},()=>Array(W).fill(WALL));
+  const rooms=[];
+  const nR=4+Math.floor(Math.random()*3);
+  for(let i=0;i<nR;i++){
+    const rw=3+Math.floor(Math.random()*4), rh=3+Math.floor(Math.random()*3);
+    const rx=1+Math.floor(Math.random()*(W-rw-2)), ry=1+Math.floor(Math.random()*(H-rh-2));
+    for(let y=ry;y<ry+rh;y++)for(let x=rx;x<rx+rw;x++) g[y][x]=FLOOR;
+    rooms.push([rx+rw/2|0, ry+rh/2|0]);
+  }
+  for(let i=1;i<rooms.length;i++){
+    let [x,y]=rooms[i-1]; const [tx,ty]=rooms[i];
+    while(x!==tx){ g[y][x]=FLOOR; x+=x<tx?1:-1; }
+    while(y!==ty){ g[y][x]=FLOOR; y+=y<ty?1:-1; }
+  }
+  // stairs
+  const [sx,sy]=rooms[0]; g[sy][sx]=T.STAIRSU;
+  const [ex,ey]=rooms[rooms.length-1];
+  g[ey][ex]= (level>=DUN_MAX)? FLOOR : T.STAIRSD;
+  // ore (sesuai tipe)
+  const oreFloors=[]; for(let y=0;y<H;y++)for(let x=0;x<W;x++)
+    if(g[y][x]===WALL && (
+      g[y+1]&&g[y+1][x]===FLOOR||g[y-1]&&g[y-1][x]===FLOOR||
+      g[y][x+1]===FLOOR||g[y][x-1]===FLOOR)) oreFloors.push([x,y]);
+  shuffle(oreFloors);
+  const oreCount=4+Math.floor(level/2);
+  for(let i=0;i<oreCount && i<oreFloors.length;i++){
+    const [x,y]=oreFloors[i]; let id;
+    const r=Math.random();
+    if(ice){
+      if(level>=8 && r<.25) id=T.ORE_FROST;
+      else if(level>=4 && r<.5) id=T.ORE_SAPPHIRE;
+      else if(level>=2 && r<.7) id=T.ORE_CR;
+      else id=T.ORE_CU;
+    } else {
+      id=T.ORE_CU;
+      if(level>=10 && r<.18) id=T.ORE_MI;
+      else if(level>=6 && r<.32) id=T.ORE_AU;
+      else if(level>=4 && r<.5) id=T.ORE_CR;
+      else if(level>=2 && r<.6) id=T.ORE_FE;
+    }
+    g[y][x]=id;
+  }
+  // build mobs
+  const mobs=[];
+  if(level>=DUN_MAX){
+    mobs.push(makeMob(ice?"__boss_ice":"__boss",ex-1,ey));
+  }else{
+    const pool=Object.keys(MOBS).filter(k=>{
+      const m=MOBS[k]; if(level<m.lv[0]||level>m.lv[1]) return false;
+      // ice dungeon prefers ice mobs; cave excludes them
+      if(ice) return !!m.ice; return !m.ice;
+    });
+    const cnt=2+Math.floor(level/2);
+    const floors=[]; for(let y=0;y<H;y++)for(let x=0;x<W;x++) if(g[y][x]===FLOOR)floors.push([x,y]);
+    shuffle(floors);
+    for(let i=0;i<cnt && i<floors.length;i++){
+      const k=pool[Math.floor(Math.random()*pool.length)]||(ice?"yuki_onna":"kelelawar");
+      const [x,y]=floors[i+2]||floors[i]; mobs.push(makeMob(k,x,y));
+    }
+  }
+  return {level,grid:g,mobs,startX:sx,startY:sy,type};
+}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];}}
+function makeMob(kind,x,y){
+  const d=kind==="__boss"?BOSS: kind==="__boss_ice"?BOSS_ICE: MOBS[kind];
+  return {kind,x,y,hp:d.hp,maxhp:d.hp,data:d,mesh:null};
+}
+function enterDungeon(typeArg){
+  busy=true;
+  const type=typeArg||"cave";
+  G.dungeonType=type;
+  fadeOut(()=>{
+    G.dunLevel=1; dungeon=genDungeon(1,type);
+    buildDungeon();
+    fadeIn(()=>busy=false);
+    if(G.quest===5 && type==="cave") advanceQuest();
+  });
+}
+function descend(down){
+  busy=true;
+  fadeOut(()=>{
+    if(down){ G.dunLevel++;
+      if(G.dungeonType==="kuil_es") G.maxDunEs=Math.max(G.maxDunEs,G.dunLevel);
+      else G.maxDun=Math.max(G.maxDun,G.dunLevel);
+      if(G.dunLevel>DUN_MAX) G.dunLevel=DUN_MAX;
+      dungeon=genDungeon(G.dunLevel,G.dungeonType);
+      if(G.quest===9 && G.dunLevel>=10 && G.dungeonType==="cave") advanceQuest();
+    }else{
+      G.dunLevel--;
+      if(G.dunLevel<1){ // exit
+        dungeon=null; G.dunLevel=0;
+        if(G.dungeonType==="kuil_es"){
+          buildScene("hutan"); playerGrp.position.set(2*TILE,0,10*TILE);
+        } else {
+          buildScene("hutan"); playerGrp.position.set(12*TILE,0,6*TILE);
+        }
+        G.dungeonType="cave";
+        fadeIn(()=>busy=false); return;
+      }
+      dungeon=genDungeon(G.dunLevel,G.dungeonType);
+    }
+    buildDungeon();
+    fadeIn(()=>busy=false);
+  });
+}
+function buildDungeon(){
+  while(worldGrp.children.length) worldGrp.remove(worldGrp.children[0]);
+  npcEnts=[]; wildEnts=[]; mobEnts=[];
+  const g=dungeon.grid;
+  scene.userData.sky.material.color.setHex(0x1a1820);
+  for(let y=0;y<g.length;y++)for(let x=0;x<g[0].length;x++)
+    worldGrp.add(tileMesh(g[y][x],x*TILE,y*TILE,true));
+  // place player at stairs-up
+  playerGrp.position.set(dungeon.startX*TILE,0,dungeon.startY*TILE);
+  // mobs
+  for(const m of dungeon.mobs){
+    const boss=m.kind==="__boss", bossIce=m.kind==="__boss_ice";
+    const tag=boss?"Sang Hyang Naga":bossIce?"Sang Hyang Es":m.kind;
+    const e=buildChibi(m.data.col,0x111111,m.data.col,{tag,spirit:true});
+    if(boss||bossIce) e.scale.setScalar(1.1);
+    e.position.set(m.x*TILE,0,m.y*TILE); m.mesh=e;
+    worldGrp.add(e); mobEnts.push(m);
+  }
+  const dunName=G.dungeonType==="kuil_es"?"Kuil Es":"Gua Sang Hyang";
+  toast(dunName+" — Level "+G.dunLevel+(G.dunLevel===DUN_MAX?" · BOSS!":""));
+  if(G.dunLevel===DUN_MAX) SFX.roar();
+}
+function checkStairs(){
+  const g=dungeon.grid; const [x,y]=gridXY();
+  const id=tileAt(g,x,y);
+  if(id===T.STAIRSD){ descend(true); }
+  else if(id===T.STAIRSU){
+    if(G.dunLevel===1){ openDialog("Mulut Gua",["Keluar dari gua kembali ke hutan?","(Tekan E lagi di tangga untuk keluar)"]);
+      descend(false);
+    } else descend(false);
+  }
+}
+function mineAction(){
+  if(!dungeon){ toast("Hanya bisa menambang di gua."); return; }
+  if(G.pick<0){ toast("Belum punya Pickaxe — buat di Bengkel Budi."); return; }
+  const g=dungeon.grid; const [x,y]=gridXY();
+  const tx=x+Math.round(facing.x), ty=y+Math.round(facing.z);
+  const id=tileAt(g,tx,ty);
+  const ore=MINEABLE[id];
+  if(!ore){ toast("Tak ada ore di depan."); return; }
+  if(PICK_TIER[G.pick].mine < ORE_MINLVL[ore]){
+    toast("Pickaxe terlalu lemah untuk "+ore+"."); return; }
+  g[ty][tx]=T.MINED; addItem(ore,1); SFX.mine();
+  spawnPuff(tx,ty,0xffd24a);
+  // rebuild that tile
+  const idx=ty*g[0].length+tx;
+  worldGrp.children[idx] && (worldGrp.remove(worldGrp.children[idx]));
+  worldGrp.add(tileMesh(T.MINED,tx*TILE,ty*TILE,true));
+  toast("+1 "+ore);
+  checkMineQuest();
+}
+function attackAction(){
+  const now=performance.now();
+  if(now-lastAttack<ATTACK_CD) return;
+  lastAttack=now; swingAnim(); SFX.swing();
+  if(G.sword<0){ toast("Belum punya pedang — buat di Bengkel Budi."); return; }
+  const dmg=SWORD_TIER[G.sword].dmg;
+  let hitAny=false;
+  for(const m of mobEnts.slice()){
+    const d=playerGrp.position.distanceTo(m.mesh.position);
+    if(d<ATTACK_RANGE){
+      m.hp-=dmg; hitAny=true; SFX.hit();
+      m.mesh.position.y=0.3; setTimeout(()=>{if(m.mesh)m.mesh.position.y=0;},120);
+      if(m.hp<=0){ killMob(m); }
+    }
+  }
+}
+function killMob(m){
+  worldGrp.remove(m.mesh); mobEnts=mobEnts.filter(x=>x!==m);
+  addItem(m.data.drop,1); G.xp+=m.data.xp; G.mobsKilled++;
+  SFX.level(); spawnPuff(Math.round(m.mesh.position.x/TILE),Math.round(m.mesh.position.z/TILE),m.data.col);
+  if(m.kind==="__boss"){
+    addItem("air_keabadian",1); addItem("mithril",5); addItem("emas",10);
+    toast("✦ SANG HYANG NAGA TUMBANG! Kau memperoleh AIR KEABADIAN ✦",4000);
+    SFX.roar();
+    if(G.quest===10) advanceQuest(); // → 11 TAMAT
+  } else if(m.kind==="__boss_ice"){
+    addItem("kristal_es",1); addItem("froststeel",5); addItem("sapphire",5);
+    toast("❄ SANG HYANG ES TUMBANG! Kau memperoleh Kristal Es ❄",4000);
+    SFX.roar();
+  } else {
+    toast("Mengalahkan "+m.kind+"! +"+m.data.xp+" XP");
+    if(G.quest===7 && G.mobsKilled>=5 && G.sword>=1) advanceQuest();
+  }
+}
+function tickMobs(dt){
+  if(!dungeon) return;
+  for(const m of mobEnts){
+    const dx=playerGrp.position.x-m.mesh.position.x;
+    const dz=playerGrp.position.z-m.mesh.position.z;
+    const d=Math.hypot(dx,dz);
+    if(d<14 && d>1.0){
+      m.mesh.position.x+=dx/d*m.data.spd*dt;
+      m.mesh.position.z+=dz/d*m.data.spd*dt;
+      tickSprite(m.mesh, dt, dx/d, dz/d, m.data.spd>2);
+    } else {
+      tickSprite(m.mesh, dt, 0, 0, false);
+    }
+    if(d<1.6){ const now=performance.now();
+      if(now-lastHit>900){ lastHit=now; G.hp-=m.data.dmg; SFX.hurt();
+        $("#fade").style.background="#c0303080"; $("#fade").style.opacity=".5";
+        setTimeout(()=>{$("#fade").style.opacity="0";$("#fade").style.background="#000";},120);
+        if(G.hp<=0) faint("Kau pingsan di kedalaman gua...");
+      }
+    }
+  }
+}
+
+/* =========================================================================
+   QUEST
+   ========================================================================= */
+function advanceQuest(){
+  G.quest++; SFX.level();
+  if(G.quest<QUESTS.length)
+    toast("✓ Quest selesai! Berikutnya: "+QUESTS[G.quest].t,2600);
+  if(G.quest===11){
+    setTimeout(()=>openDialog("✦ TAMAT ✦",[
+      "Air Keabadian berkilau di tanganmu.",
+      "Sang Hyang Naga berbisik: \"Jaga lembah ini... seperti kau menjaga kebunmu.\"",
+      "Lembah Karsa kembali damai. Kau adalah penjaganya sekarang.",
+      "— Terima kasih sudah bermain. (Kau bebas melanjutkan kehidupan di lembah.)"]),900);
+  }
+  updateHUD(); buildQuestPanel();
+}
+function checkPlantQuest(){
+  if(G.quest!==1)return;
+  G._planted=(G._planted||0)+1;
+  if(G._planted>=3) advanceQuest();
+}
+function checkMineQuest(){
+  if(G.quest===6 && (G.inv.tembaga||0)>=5 && (G.inv.besi||0)>=3) advanceQuest();
+}
+function checkGoldQuest(){ if(G.quest===3 && G.gold>=150) advanceQuest(); }
+
+/* =========================================================================
+   SHOP / FORGE / PANELS
+   ========================================================================= */
+function openPanel(id){ closePanels(); $(id).style.display="block"; }
+function closePanels(){ document.querySelectorAll('.panel').forEach(p=>p.style.display="none"); }
+function panelOpen(){ return [...document.querySelectorAll('.panel')].some(p=>p.style.display==="block"); }
+
+function openShop(){
+  let h="";
+  for(const s of SEED_LIST){ const c=CROPS[s];
+    h+=`<div class="row"><span>🌱 Benih ${s} <small>(${c.season}, ${c.days}h, jual ${c.sell}G)</small></span>
+      <button class="buy" onclick="buy('benih_${s}',${c.seed})">${c.seed} G</button></div>`; }
+  h+=`<div class="row"><span>🪵 Kayu</span><button class="buy" onclick="buy('kayu',20)">20 G</button></div>`;
+  h+=`<div class="row"><span>🥚 Telur</span><button class="buy" onclick="buy('telur',25)">25 G</button></div>`;
+  h+=`<div class="row"><span>🍃 Herba</span><button class="buy" onclick="buy('herba',30)">30 G</button></div>`;
+  h+=`<hr style="border-color:#ffffff22;margin:12px 0"><div class="row" style="opacity:.8">Jual hasil panen / hasil tambang:</div>`;
+  for(const k in G.inv){ if(SELL[k]!==undefined && !k.startsWith("benih_") && k!=="air_keabadian"){
+    h+=`<div class="row"><span>${k} ×${G.inv[k]}</span>
+      <button class="buy" onclick="sell('${k}')">Jual @${SELL[k]}G</button></div>`; } }
+  $("#shopList").innerHTML=h;
+  $("#pShop").querySelector('h2').textContent="🛒 Warung Bu Sari";
+  openPanel("#pShop");
+}
+window.buy=(k,p)=>{ if(G.gold<p){toast("Gold kurang.");return;}
+  G.gold-=p; addItem(k,1); SFX.kaching(); updateHUD(); openShop(); };
+window.sell=(k)=>{ if(!hasItem(k)){return;} const p=SELL[k];
+  takeItem(k,1); G.gold+=p; SFX.kaching(); updateHUD(); checkGoldQuest(); openShop(); };
+
+function openForge(){
+  let h=`<div class="row" style="opacity:.8">⛏️ PICKAXE — tier saat ini: <b>${G.pick<0?"belum ada":PICK_TIER[G.pick].n}</b></div>`;
+  if(G.pick+1<PICK_TIER.length){ const t=PICK_TIER[G.pick+1];
+    h+=`<div class="row"><span>Pickaxe ${t.n}<br><small>${t.g}G + ${matStr(t.mat)}</small></span>
+      <button class="buy" onclick="craftPick()">Tempa</button></div>`; }
+  h+=`<div class="row" style="opacity:.8;margin-top:10px">⚔️ PEDANG — tier saat ini: <b>${G.sword<0?"belum ada":SWORD_TIER[G.sword].n} ${G.sword>=0?"("+SWORD_TIER[G.sword].dmg+" dmg)":""}</b></div>`;
+  if(G.sword+1<SWORD_TIER.length){ const t=SWORD_TIER[G.sword+1];
+    h+=`<div class="row"><span>Pedang ${t.n} <small>(${t.dmg} dmg)</small><br><small>${t.g}G + ${matStr(t.mat)}</small></span>
+      <button class="buy" onclick="craftSword()">Tempa</button></div>`; }
+  $("#forgeList").innerHTML=h; openPanel("#pForge");
+}
+function matStr(m){ return Object.entries(m).map(([k,v])=>v+" "+k).join(", "); }
+function canAfford(g,mat){ if(G.gold<g)return false;
+  for(const k in mat) if((G.inv[k]||0)<mat[k]) return false; return true; }
+window.craftPick=()=>{ const t=PICK_TIER[G.pick+1];
+  if(!canAfford(t.g,t.mat)){toast("Material/gold kurang.");return;}
+  G.gold-=t.g; for(const k in t.mat) takeItem(k,t.mat[k]);
+  G.pick++; SFX.kaching(); toast("Pickaxe "+t.n+" ditempa!");
+  if(G.quest===4) advanceQuest(); updateHUD(); openForge(); };
+window.craftSword=()=>{ const t=SWORD_TIER[G.sword+1];
+  if(!canAfford(t.g,t.mat)){toast("Material/gold kurang.");return;}
+  G.gold-=t.g; for(const k in t.mat) takeItem(k,t.mat[k]);
+  G.sword++; SFX.kaching(); toast("Pedang "+t.n+" ditempa!");
+  if(G.quest===7 && G.sword>=1 && G.mobsKilled>=5) advanceQuest();
+  updateHUD(); openForge(); };
+
+function buildInv(){
+  let h="";
+  for(const k in G.inv){ const ic = RECIPES[k]?"🍲": CROPS[k]?"🌾": k.startsWith("benih_")?"🌱":
+    k==="kayu"?"🪵": k.match(/tembaga|besi|emas/)?"⛏️": k==="kristal"?"💎":
+    k==="mithril"?"🔮": k==="mandrake"?"🌿": k==="kunang"?"✨":
+    k==="herba"?"🍃": k==="beri"?"🫐": k==="air_keabadian"?"💧":
+    k==="sapphire"?"💙": k==="froststeel"?"❄": k==="kristal_es"?"🧊":
+    k==="ikan"?"🐟": k==="telur"?"🥚":"📦";
+    h+=`<div class="cell"><span class="ic">${ic}</span>${k.replace('benih_','b.')}<br><b>×${G.inv[k]}</b></div>`; }
+  if(!h) h="<div class='row'>Kosong.</div>";
+  $("#invGrid").innerHTML=h;
+}
+function buildQuestPanel(){
+  let h="<div class='row' style='opacity:.85'><b>Cerita Utama</b></div>";
+  QUESTS.forEach((q,i)=>{ const cls=i<G.quest?"qdone":i===G.quest?"qcur":"qlock";
+    h+=`<div class="row ${cls}"><span><b>${i+1}.</b> ${q.t}<br><small>${q.d}</small></span>
+      <span>${i<G.quest?"✓":i===G.quest?"▶":"🔒"}</span></div>`; });
+  h+="<div class='row' style='opacity:.85;margin-top:10px'><b>Quest Sampingan</b></div>";
+  for(const id in SIDE_QUESTS){ const n=NPCS[id], done=G.sideQ[id]||0;
+    const tot=SIDE_QUESTS[id].length;
+    const active=G.sideActive[id];
+    h+=`<div class="row"><span>${n.name} <small>(${done}/${tot})</small>`;
+    if(active) h+=`<br><small class="qcur">▶ ${active.t}: ${active.d}</small>`;
+    else if(done<tot){ const next=SIDE_QUESTS[id][done];
+      const lock=(G.affection[id]||0)<next.threshold;
+      h+=`<br><small class="${lock?'qlock':''}">${lock?'🔒 perlu ❤'+next.threshold:'◆ '+next.t+': '+next.d}</small>`;
+    } else h+=`<br><small class="qdone">✓ semua selesai</small>`;
+    h+=`</span></div>`;
+  }
+  $("#questList").innerHTML=h;
+}
+function buildRel(){
+  let h="";
+  for(const id in NPCS){ const n=NPCS[id], a=G.affection[id]||0;
+    h+=`<div class="row"><span>${n.spirit?"👻":"🙂"} <b>${n.name}</b> <small>(${n.role}) · suka ${n.fav}</small></span>
+      <span>${"❤".repeat(a)}${"·".repeat(10-a)} ${a}/10</span></div>`; }
+  $("#relList").innerHTML=h;
+}
+function buildMap(){
+  let h="";
+  for(const s in SCENES){ if(s==="cave_es") continue;
+    h+=`<div class="row ${s===curScene&&!dungeon?'qcur':''}">
+    <span>📍 ${SCENES[s].name}</span><span>${s===curScene&&!dungeon?"◆ kau di sini":""}</span></div>`; }
+  h+=`<div class="row ${dungeon&&G.dungeonType==='cave'?'qcur':''}"><span>🕳️ Gua Sang Hyang (15 lvl)</span>
+    <span>${dungeon&&G.dungeonType==='cave'?"◆ Level "+G.dunLevel:"maks: "+G.maxDun}</span></div>`;
+  h+=`<div class="row ${dungeon&&G.dungeonType==='kuil_es'?'qcur':''}"><span>🧊 Kuil Es Lereng (15 lvl)</span>
+    <span>${dungeon&&G.dungeonType==='kuil_es'?"◆ Level "+G.dunLevel:"maks: "+G.maxDunEs}</span></div>`;
+  if(G.festival) h+=`<div class="row qcur"><span>🎉 ${G.festival.nm}</span><span>hari ini di Desa</span></div>`;
+  $("#mapList").innerHTML=h;
+}
+function buildBatin(){
+  let h = `
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+    <div style="background:#1b2d22;border-left:4px solid #d24b4b;padding:8px 10px;border-radius:6px;font-size:12px;">
+      <b style="color:#ff8a8a">🔥 BARA (Fisik & Nyali)</b><br><small>Menolak lelah, berani menjelajah gua & bertarung.</small>
+    </div>
+    <div style="background:#1b2d22;border-left:4px solid #5d9e43;padding:8px 10px;border-radius:6px;font-size:12px;">
+      <b style="color:#86d676">🌱 AKAR (Nalar Tani)</b><br><small>Menghitung musim, nutrisi tanah, & kelangsungan hidup.</small>
+    </div>
+    <div style="background:#1b2d22;border-left:4px solid #8d6ec8;padding:8px 10px;border-radius:6px;font-size:12px;">
+      <b style="color:#c0a0ff">✨ SUKMA (Kebatinan)</b><br><small>Peka terhadap makhluk halus & bisikan Sang Hyang Naga.</small>
+    </div>
+    <div style="background:#1b2d22;border-left:4px solid #e08436;padding:8px 10px;border-radius:6px;font-size:12px;">
+      <b style="color:#ffa860">🍖 LAPAR (Insting Hidup)</b><br><small>Mengingatkan perut kosong, kantuk, & aroma masakan.</small>
+    </div>
+  </div>
+  <div class="row" style="opacity:.85"><b>Catatan Notulen Batin:</b></div>
+  <div class="row"><span>• Embun pagi menyelimuti sawah. Lembah menyambut kehadiranmu.</span></div>
+  <div class="row"><span>• Ingat pesan paman: Cangkul tanah, tanam benih, dan tidurlah di kasur saat malam.</span></div>
+  <div class="row"><span>• Semakin dalam kau menuruni gua, semakin keras bisikan naga terdengar.</span></div>
+  `;
+  $("#batinList").innerHTML = h;
+}
+$("#helpBody").innerHTML=`
+<div class="row"><span>Gerak / Lari</span><b>WASD atau Panah / SHIFT</b></div>
+<div class="row"><span>Pakai alat aktif</span><b>SPASI</b></div>
+<div class="row"><span>Bicara / Interaksi / Lanjut dialog</span><b>E</b></div>
+<div class="row"><span>Serang pedang</span><b>Z (atau alat 8 + SPASI)</b></div>
+<div class="row"><span>Tangkap makhluk</span><b>F</b></div>
+<div class="row"><span>Terima / Serahkan quest sampingan ke NPC</span><b>G</b></div>
+<div class="row"><span>Tidur (di kasur) / dipaksa jam 23</span><b>T</b></div>
+<div class="row"><span>Pilih alat 1–8 / Ganti benih</span><b>1–8 / Q,R</b></div>
+<div class="row"><span>Inventori · Quest · Peta · Hubungan</span><b>I · J · M · H</b></div>
+<div class="row"><span>Majelis Batin (Suara Sukma)</span><b>TAB</b></div>
+<div class="row"><span>Toko (warung) · Bengkel</span><b>K · U</b></div>
+<div class="row"><span>Simpan · Muat (file JSON)</span><b>F5 · F9</b></div>
+<div class="row"><span>Tutup panel</span><b>ESC</b></div>
+<div class="row" style="opacity:.7;margin-top:8px"><span>Tujuan: ikuti 11 quest hingga kalahkan Sang Hyang Naga & dapat Air Keabadian.</span></div>`;
+
+/* =========================================================================
+   SAVE / LOAD (JSON file — sesuai blueprint lembah_karsa_3d_save.json)
+   ========================================================================= */
+let memSave=null;
+function autosave(){ memSave=JSON.stringify(G); }
+function saveGame(){
+  const data=JSON.stringify(G,null,2);
+  memSave=data;
+  const blob=new Blob([data],{type:"application/json"});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download="lembah_karsa_3d_save.json"; a.click();
+  toast("Tersimpan → lembah_karsa_3d_save.json");
+}
+$("#loadFile").addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{ try{ applySave(JSON.parse(r.result)); toast("Save dimuat."); }
+    catch(err){ toast("File save tidak valid."); } };
+  r.readAsText(f);
+});
+function applySave(s){
+  Object.assign(G,s);
+  // backfill new fields if old save missing them
+  G.sideQ = G.sideQ || {bu_sari:0,budi:0,pak_joko:0,maya:0};
+  G.sideActive = G.sideActive || {};
+  G.festival = G.festival || null;
+  G.festivalScore = G.festivalScore || 0;
+  G.dungeonType = G.dungeonType || "cave";
+  G.maxDunEs = G.maxDunEs || 0;
+  dungeon=null;
+  if(s.dunLevel>0){ G.dunLevel=s.dunLevel; dungeon=genDungeon(s.dunLevel,G.dungeonType); buildDungeon(); }
+  else { buildScene(G.scene||"kebun"); playerGrp.position.set(G.px*TILE,0,G.py*TILE); }
+  // rebuild player appearance
+  scene.remove(playerGrp); spawnPlayer();
+  buildHUD(); updateHUD(); buildQuestPanel();
+}
+
+/* =========================================================================
+   HUD
+   ========================================================================= */
+function buildHUD(){
+  let h="";
+  TOOLS.forEach((t,i)=>{ h+=`<div class="slot ${i===G.tool?'active':''}" data-i="${i}">
+    ${TOOL_ICON[i]}<small>${i+1}</small></div>`; });
+  $("#hud-tool").innerHTML=h;
+}
+function updateHUD(){
+  const hh=Math.floor(G.minute/60), mm=Math.floor(G.minute%60);
+  const DOW = ["Sen","Sel","Rab","Kam","Jum","Sab","Min"][(G.day - 1) % 7];
+  const sIcons = ["🌸 Semi", "🌻 Panas", "🍁 Gugur", "❄️ Dingin"];
+  const wIcons = { cerah:"☀️ Cerah", hujan:"🌧️ Hujan", salju:"❄️ Salju" };
+  const sName = sIcons[G.season] || "🌸 Semi";
+  const wName = wIcons[G.weather] || "☀️ Cerah";
+
+  $("#clock").innerHTML=`<b>${sName}</b> · Hari ${G.day} (${DOW}) · Thn ${G.year}<br>
+    <span style="font-size:14px;color:#b85c14">⏰ ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}</span> ${wName}`;
+  $("#hpVal").textContent=Math.max(0,Math.ceil(G.hp));
+  $("#enVal").textContent=Math.max(0,Math.ceil(G.en));
+  $("#goldVal").textContent=G.gold;
+  $("#hpFill").style.width=(Math.max(0,G.hp)/G.maxhp*100)+"%";
+  $("#enFill").style.width=Math.max(0,G.en)+"%";
+
+  // Harvest Moon Stamina Face Update
+  const sFace = $("#staminaFace");
+  if(sFace){
+    if(G.en >= 70){
+      sFace.textContent = "😃";
+      sFace.style.background = "#4caf50";
+      sFace.style.borderColor = "#2e7d32";
+    } else if(G.en >= 40){
+      sFace.textContent = "🙂";
+      sFace.style.background = "#fbc02d";
+      sFace.style.borderColor = "#f57f17";
+    } else if(G.en >= 15){
+      sFace.textContent = "😓";
+      sFace.style.background = "#ff9800";
+      sFace.style.borderColor = "#e65100";
+    } else {
+      sFace.textContent = "😵";
+      sFace.style.background = "#42a5f5";
+      sFace.style.borderColor = "#1565c0";
+    }
+  }
+
+  const q=QUESTS[Math.min(G.quest,QUESTS.length-1)];
+  $("#questBox").innerHTML=`📜 <b>${G.quest+1}. ${q.t}</b><br><small>${q.d}</small>`;
+  document.querySelectorAll('.slot').forEach(s=>
+    s.classList.toggle('active',+s.dataset.i===G.tool));
+  if(playerGrp) setToolProp(playerGrp, G.tool);
+  const seed=SEED_LIST[G.seedSel];
+  if(G.tool===2){ $("#seedTag").style.display="block";
+    $("#seedTag").textContent="🌱 Benih: "+seed+" ("+(G.inv["benih_"+seed]||0)+")"; }
+  else $("#seedTag").style.display="none";
+}
+
+/* =========================================================================
+   INPUT
+   ========================================================================= */
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(["f1","f5","f9","tab"," ","arrowup","arrowdown","arrowleft","arrowright"].includes(k))e.preventDefault();
+  keys[k]=true;
+  if(!gameStarted) return;
+  if(k==='escape'){ closePanels(); $("#dialog").style.display="none"; dlgQueue=[]; return; }
+  if(panelOpen() && !['i','j','m','h','k','u','tab','f1','escape'].includes(k)) {}
+  if(k>='1'&&k<='8'){ G.tool=+k-1; updateHUD(); }
+  else if(k==='q'){ G.seedSel=(G.seedSel-1+SEED_LIST.length)%SEED_LIST.length; updateHUD(); }
+  else if(k==='r'){ G.seedSel=(G.seedSel+1)%SEED_LIST.length; updateHUD(); }
+  else if(k===' '){ if(!panelOpen()) useTool(); }
+  else if(k==='e'){ interact(); }
+  else if(k==='z'){ if(!panelOpen()){ attackAction(); } }
+  else if(k==='f'){ captureAction(); }
+  else if(k==='g'){ // accept/complete side quest with nearest NPC
+    const npc=nearestNPC();
+    if(npc){ tryCompleteSideQuest(npc.userData.npc); }
+    else toast("Tak ada NPC di dekat sini.");
+  }
+  else if(k==='t'){ const map=curMap();
+      if(!dungeon && nearTile(map,new Set([T.BED]),1)) sleep(false);
+      else toast("Harus di dekat kasur (dalam rumah) untuk tidur."); }
+  else if(k==='i'){ toggle('#pInv',buildInv); }
+  else if(k==='j'){ toggle('#pQuest',buildQuestPanel); }
+  else if(k==='m'){ toggle('#pMap',buildMap); }
+  else if(k==='h'){ toggle('#pRel',buildRel); }
+  else if(k==='tab'){ toggle('#pBatin',buildBatin); }
+  else if(k==='k'){ if($("#pShop").style.display==="block")closePanels(); }
+  else if(k==='u'){ if($("#pForge").style.display==="block")closePanels(); }
+  else if(k==='f1'){ toggle('#pHelp'); }
+  else if(k==='f5'){ saveGame(); }
+  else if(k==='f9'){ $("#loadFile").click(); }
+});
+addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false; });
+function toggle(sel,fn){ const p=$(sel);
+  if(p.style.display==="block"){ p.style.display="none"; }
+  else { closePanels(); if(fn)fn(); p.style.display="block"; } }
+$("#dialog").addEventListener('click',()=>nextDialog());
+$("#mute").addEventListener('click',()=>{ muted=!muted;
+  $("#mute").textContent=muted?"🔇 Audio":"🔊 Audio"; });
+
+/* ---------- FADE ---------- */
+function fadeOut(cb){ const f=$("#fade"); f.style.opacity="1"; setTimeout(cb,360); }
+function fadeIn(cb){ const f=$("#fade"); setTimeout(()=>{ f.style.opacity="0"; if(cb)cb(); },80); }
+function goScene(name,tx,ty){
+  busy=true;
+  fadeOut(()=>{ G.scene=name; buildScene(name);
+    playerGrp.position.set(tx*TILE,0,ty*TILE);
+    // Guard arrival tile against the return-portal there
+    G._portalGuard = {scene:name, x:tx, y:ty};
+    updateWeather();
+    fadeIn(()=>busy=false); });
+}
+
+/* =========================================================================
+   CHARGEN
+   ========================================================================= */
+const SK=[0xe8b48a,0xc89060,0x8a5a3a,0xf0d0b0,0x6a4a30];
+const HR=[0x2a1a10,0x0a0a0a,0x6a4a2a,0xc04a3a,0xe0c060,0x5a5a8a];
+const SH=[0x3a7ad8,0xd23b5b,0x4f9e4f,0xe6a93b,0x8a4ad8,0x2a2a2a];
+function fillSw(sel,arr,key,def){
+  const el=$(sel);
+  arr.forEach((c,i)=>{ const d=document.createElement('div');
+    d.className="sw"+(c===def?" on":""); d.style.background="#"+c.toString(16).padStart(6,'0');
+    d.onclick=()=>{ el.querySelectorAll('.sw').forEach(x=>x.classList.remove('on'));
+      d.classList.add('on'); G[key]=c; };
+    el.appendChild(d); });
+}
+fillSw("#cgSkin",SK,"skin",SK[0]);
+fillSw("#cgHair",HR,"hair",HR[0]);
+fillSw("#cgShirt",SH,"shirt",SH[0]);
+$("#startBtn").addEventListener('click',()=>{
+  G.name=$("#cgName").value.trim()||"Karsa";
+  $("#title").style.display="none";
+  startGame();
+});
+$("#loadModelBtn").addEventListener('click',()=>$("#glbFile").click());
+$("#glbFile").addEventListener('change',e=>{
+  const f=e.target.files[0]; if(f) loadGLBFile(f);
+});
+
+/* =========================================================================
+   MAIN LOOP
+   ========================================================================= */
+function startGame(){
+  initThree();
+  spawnPlayer();
+  buildScene("kebun");
+  buildHUD(); updateHUD(); buildQuestPanel();
+  updateWeather();
+  paused=false; gameStarted=true;
+  toast("Selamat datang di Lembah Karsa, "+G.name+"!",3000);
+  loop();
+}
+function loop(){
+  requestAnimationFrame(loop);
+  const dt=Math.min(clock.getDelta(),0.05);
+  if(gameStarted && !paused){
+    advanceTime(dt);
+    updatePlayer(dt);
+    tickNPCs(dt);
+    tickMobs(dt);
+    tickPuffs(dt);
+    tickWeather(dt);
+    tickAtmosphere(dt);
+    tickChimneySmoke(dt);
+    checkGoldQuest();
+  }
+  updateCamera();
+  renderer.render(scene,camera);
+}
+</script>
+</body>
+</html>
